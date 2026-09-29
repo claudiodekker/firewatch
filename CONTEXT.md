@@ -89,7 +89,7 @@ _Avoid_: Corrupt, invalid
 ### Records
 
 **Record**:
-One stored Nightwatch event or directory entry, carrying the wire's type, fields and a store id.
+One stored Nightwatch event of any type, including unknown ones, or an error placeholder for input that could not be read as a record; user directory entries are not records.
 _Avoid_: Row, event (for the stored thing), entry
 
 **Execution**:
@@ -109,7 +109,7 @@ A record belonging to an execution: query, exception, log, cache event, mail, no
 _Avoid_: Sub-event, detail record
 
 **Store id**:
-The integer handle of a stored record, used only to page and prune, never as a link or identity.
+The single integer handle of a stored record, unique across all types, used only to page and prune, never as a link or identity.
 _Avoid_: Primary key (as domain identity), record id
 
 **Trace**:
@@ -177,3 +177,41 @@ _Avoid_: Actors table, users event
 **Actor**:
 The user id recorded on an execution or child, resolved through the user directory.
 _Avoid_: Account, principal
+
+### Store
+
+**Store**:
+The single SQLite file holding all captured records, the user directory, drift counts and a few facts about the capture.
+_Avoid_: Database, cache, log file
+
+**Record view**:
+One of the twelve per-type views over the store's records, with typed columns named as on the wire, which are the documented query surface.
+_Avoid_: Table, model, schema table
+
+**Raw table**:
+The single table of all records that the record views read from, queryable directly for work across types.
+_Avoid_: Events table, main table
+
+**Store state**:
+The named condition of the store a reader reports when it cannot be read as usual: absent, schema mismatch, corrupt, foreign, busy or unavailable.
+_Avoid_: Health, error
+
+**Schema version**:
+The integer stamped in the store that says which shape it was created with; any other value causes a rebuild, not a migration.
+_Avoid_: Migration number, database version
+
+**Rebuild**:
+Dropping and recreating everything in the store in place when its schema version differs, which discards its data.
+_Avoid_: Migration, upgrade, reset
+
+**Dropped batch**:
+A batch of wire records Firewatch could not store and discarded without retry, recorded as a store failure.
+_Avoid_: Lost event, failed write
+
+**Store failure**:
+One line recorded beside the store when a write, rebuild or recovery failed, kept apart from the store so it survives the store's own failure.
+_Avoid_: Error log, exception
+
+**Foreign file**:
+A file at the store's path that is not a Firewatch store, which Firewatch never writes, moves or deletes.
+_Avoid_: Bad file, wrong database
