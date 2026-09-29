@@ -371,3 +371,57 @@ _Avoid_: Formatted values, converted values
 **SQL availability**:
 Whether the SQL tool's isolation can be established on this machine, stated with a closed reason and identical wherever it is reported.
 _Avoid_: SQL health, SQL support
+
+### Analysis
+
+**Occurrence**:
+One stored record of one type as a single observation in a statistic.
+_Avoid_: Sample, data point
+
+**Group**:
+All records of one type that share a group hash.
+_Avoid_: Bucket, category
+
+**Nearest rank**:
+The percentile method that returns the observed value at rank `max(1, ceil(n·p/100))` in ascending order, so the result is always an actual record's value.
+_Avoid_: Interpolated percentile, estimate
+
+**Sample floor**:
+The fewest occurrences a statistic needs before it is shown (3 for the median, 20 for p95), below which it is withheld.
+_Avoid_: Minimum sample, confidence threshold
+
+**Typical value**:
+A group's representative number: the median, or the mean below three occurrences, always stated with its basis.
+_Avoid_: Average, normal value
+
+**Change**:
+The outcome of comparing one group's measure between two sides: slower, faster, heavier, lighter, more_calls, fewer_calls, steady, new, gone, zero_baseline, or not evaluated; descriptive, never a verdict.
+_Avoid_: Regression, verdict, delta
+
+**Change rule**:
+The requirement that a value moved only if it exceeds both a 10% band and the measure's absolute noise floor.
+_Avoid_: Significance test, tolerance
+
+**Zero baseline**:
+A change for a group present on both sides whose before value is 0 and after value is above 0.
+_Avoid_: New, infinite change
+
+**Observed span**:
+The time from the first to the last start among a side's selected records, unknown below two records.
+_Avoid_: Window length, duration of the side
+
+**Volume measure**:
+A measure that grows with how long a side observed (occurrences, total duration, the queries counter), judged only when the two spans are within a factor of two.
+_Avoid_: Count measure
+
+**Direction**:
+The statement of a trend as rose, fell or held, from the medians of its first and last halves under the change rule.
+_Avoid_: Trend verdict, slope
+
+**Dominant stage**:
+The stage of an execution group with the highest mean duration.
+_Avoid_: Bottleneck, slowest phase
+
+**Slow filter**:
+The restriction of a group's records to those at or above the group's own p50 or p95, applied only when that baseline is above its floor.
+_Avoid_: Outlier filter
