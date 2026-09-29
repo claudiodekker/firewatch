@@ -595,3 +595,29 @@ _Avoid_: Basis, statistic
 **Ignored entries**:
 The count of budget entries dropped as invalid, stated beside a budget verdict.
 _Avoid_: Bad entries, skipped rules
+
+### Testing
+
+**Scenario**:
+A named test that builds a store for one question an assistant asks and walks the tool ladder as the assistant would, asserting the structured answer.
+_Avoid_: Integration test, end-to-end test
+
+**Wire fixture**:
+A committed, normalised example of one wire record type, generated from the real sensors and never edited by hand.
+_Avoid_: Sample, mock record, golden file
+
+**Synthetic record**:
+A wire record built from a wire fixture with chosen values and sent through the real ingest event, used only where the sensors cannot give exact values or volume.
+_Avoid_: Fake record, seeded row
+
+**Canary**:
+The scheduled run against the newest Nightwatch release that reports drift before a release reaches users.
+_Avoid_: Nightly, smoke test
+
+**Unverified state**:
+The condition of a Nightwatch release on a higher minor than the verified line, which every answer states and which never stops capture; patch releases of the verified minor and lower versions are not in it.
+_Avoid_: Unsupported, incompatible
+
+**Store identity**:
+The recognisable identity of the store file, remembered by a connection so that a file deleted or replaced under it is noticed and reopened.
+_Avoid_: File lock, checksum

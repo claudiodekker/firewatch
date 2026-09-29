@@ -1,0 +1,5 @@
+# Test through Nightwatch's real sensors and derive synthetic records from generated fixtures
+
+Firewatch's tests drive the real Nightwatch sensors in an in-process workbench application and read the answers through the tool ladder; a synthetic record is allowed only for exact durations, volume, many groups, deploy identities, drift shapes and other-process writers, and must derive from a committed wire fixture that a workbench command generates from the sensors and a test compares with the sensors' output on every run.
+
+The alternative was to build records by hand and keep a small suite of real sensor runs. Hand-built records would prove the analysis against records nobody proved Nightwatch writes, and a Nightwatch release that changes a field would pass every analysis test. The cost is a workbench application, a harness that adapts Nightwatch's per-process state to a test process, assertions on counts and relations rather than exact durations for real-sensor scenarios, and a fallback to a sub-process per source if one process cannot emit several kinds. The whole suite's shape hangs on this, so reversing it later means rewriting most tests.
