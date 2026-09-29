@@ -21,3 +21,17 @@ If the diff changes after the PR is open, re-run /pr to update the description.
 - With more than one PR open, give the review and merge order in the thread.
 - After a retro changes `CODING_STANDARDS.md`, re-review every open PR against it.
 - Only a PR that is green and next to merge is ready for review; keep every other PR a draft. Mark a PR draft before pushing to it, and ready again once its checks pass.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues via `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
