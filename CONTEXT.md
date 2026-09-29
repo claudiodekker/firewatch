@@ -145,7 +145,7 @@ _Avoid_: Parent, triggered by
 ### Grouping and completeness
 
 **Group hash**:
-Nightwatch's own grouping hash for a record, stored verbatim so a group here is the group Nightwatch shows.
+Nightwatch's own grouping hash for a record, stored verbatim so a group here is the group Nightwatch shows; one hash can be held by a job's dispatches and its attempts.
 _Avoid_: Fingerprint, group key
 
 **Group label**:
@@ -379,8 +379,8 @@ One stored record of one type as a single observation in a statistic.
 _Avoid_: Sample, data point
 
 **Group**:
-All records of one type that share a group hash.
-_Avoid_: Bucket, category
+The records that share one group hash, shown under its group label and named by the hash in the tools; a job's dispatches and its attempts share one hash.
+_Avoid_: Cluster, bucket, category
 
 **Nearest rank**:
 The percentile method that returns the observed value at rank `max(1, ceil(n·p/100))` in ascending order, so the result is always an actual record's value.
@@ -425,3 +425,45 @@ _Avoid_: Bottleneck, slowest phase
 **Slow filter**:
 The restriction of a group's records to those at or above the group's own p50 or p95, applied only when that baseline is above its floor.
 _Avoid_: Outlier filter
+
+### Tools and drill-down
+
+**Ladder**:
+The fixed order in which the assistant's tools are listed and linked, from the overview down to single records and schema lookups.
+_Avoid_: Menu, workflow
+
+**Overview**:
+The entry-point tool that checks every problem shape and states the store's coverage at once.
+_Avoid_: Dashboard, summary tool
+
+**Selector**:
+An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id.
+_Avoid_: Filter (a filter narrows a selection, a selector defines it)
+
+**Next call**:
+A ready-to-run tool call offered at the end of an answer, built from that answer's own values.
+_Avoid_: Suggestion, hint
+
+**Baseline**:
+The percentile of a measure over a selection, computed before other filters, against which an at-or-above filter cuts.
+_Avoid_: Average, norm
+
+**Derived bound**:
+A window bound the tool filled in from the selected records because none was given, named on the window.
+_Avoid_: Default window, implied range
+
+**Accounting**:
+The per-counter comparison of an execution's counted total with the rows captured, stated as match, fewer or more.
+_Avoid_: Reconciliation, audit
+
+**Recipe check**:
+A fingerprint's statement whether recomputing a group's recipe from a stored record reproduces that record's stored group hash: agrees, disagrees or not evaluated.
+_Avoid_: Validation, hash test
+
+**Job outcome**:
+The state of a queued job derived from its last attempt: processed, failed, retrying or pending.
+_Avoid_: Job status (that is an attempt's own field)
+
+**Wait**:
+The time between a dispatch ending, or the previous attempt ending, and the next attempt starting.
+_Avoid_: Latency, delay
