@@ -249,3 +249,73 @@ _Avoid_: Cause, prune type
 **Children outside coverage**:
 The stated condition of an execution whose children of some type lie before that type's coverage start, which is not loss and not incompleteness.
 _Avoid_: Missing children, orphaned
+
+### Answers
+
+**Answer**:
+The single fixed-shape result of a tool call: the store clock, the window, a summary, the result, coverage, blind spots and the ways to go on.
+_Avoid_: Response, output, report
+
+**Store clock**:
+The wall clock of the machine running the MCP server, shared with the writers, read once per call and stated on every answer.
+_Avoid_: Server time, current time
+
+**Window**:
+The half-open interval on records' start times over which a windowed answer is computed; an absent bound means unbounded, never recent.
+_Avoid_: Time range, period, default range
+
+**Split point**:
+An instant strictly inside a window that divides it into a before side and an after side, the record exactly at it being after.
+_Avoid_: Anchor, checkpoint
+
+**Straddling**:
+Executions of the compared type that started shortly before a split point and finished after it, which sit on the before side.
+_Avoid_: Overlap, spanning work
+
+**Coverage**:
+The stated span, size and history of the store behind an answer, present on every answer including empty ones.
+_Avoid_: Completeness, health
+
+**Structural blind spot**:
+A blind spot from the fixed catalogue, attached to every answer that examined the record types it applies to.
+_Avoid_: Limitation, caveat
+
+**Condition blind spot**:
+A blind spot measured from the store at call time (pruned or cleared history, rebuild, dropped records, drift, unverified Nightwatch version, active redaction).
+_Avoid_: Warning, alert
+
+**Empty kind**:
+The named reason an answer has nothing to show: no store, unusable store, empty store, empty window or no match.
+_Avoid_: No results, not found
+
+**Verdict**:
+The outcome of a judgement over records, exactly one of findings, clean or not evaluated, always stated with how many records were examined.
+_Avoid_: Status, result, pass/fail
+
+**Examined**:
+The number of records a verdict was judged over.
+_Avoid_: Sample size, coverage
+
+**Clean**:
+A verdict meaning nothing was found among the records captured, which says nothing about blind spots.
+_Avoid_: Healthy, ok, no problems
+
+**Not evaluated**:
+A verdict meaning a judgement could not run, with a closed reason.
+_Avoid_: Unknown, skipped, inconclusive
+
+**Withheld**:
+A statistic left out because too few records support it, given as a reason with what was had and needed.
+_Avoid_: Estimated, partial
+
+**Truncated entry**:
+The stated record of one cut in an answer (rows, size, cell cap or a producer that stopped early), naming what was shown and how to get the rest.
+_Avoid_: Truncated flag, page
+
+**Cursor**:
+An opaque string that continues a ranked or occurrence listing for the same tool, arguments and store, and fails after a clear or rebuild.
+_Avoid_: Offset, page token
+
+**Tool error**:
+A failed call reported as plain text with a closed code and no answer shape, as opposed to an empty answer.
+_Avoid_: Exception, failure answer
