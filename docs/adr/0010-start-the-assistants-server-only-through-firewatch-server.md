@@ -1,0 +1,5 @@
+# Start the assistant's server only through `firewatch:server`, never through a registered laravel/mcp handle
+
+Firewatch registers no laravel/mcp handle. The server runs only as `firewatch:server`; a process is a Firewatch process (always Off) by its command name, so it cannot capture itself; tool inspection is `firewatch:server --list`, and `mcp:start` and `mcp:inspector` are documented as never to be used with Firewatch.
+
+This is hard to reverse, because assistants' client configuration files (a committed `.mcp.json`, editor settings) embed the command name. It is surprising, because laravel/mcp's ordinary route is `Mcp::local()` plus `mcp:start`, and a reader would wonder why the stock inspector is unsupported. And it is a real trade-off: registering a handle would give the stock inspector and the framework's conventions, but any command could then start the server, the process would not be recognisable as a `firewatch:` process and would capture its own reads, and a handle appears in every application's registrar. The dedicated command costs a bespoke `--list` in place of the inspector.

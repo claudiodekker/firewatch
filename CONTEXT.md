@@ -41,7 +41,7 @@ The mode in which Firewatch disables Nightwatch and captures nothing; every Fire
 _Avoid_: Disabled, paused
 
 **Stepped aside**:
-The mode in a disallowed environment in which Firewatch registers nothing and touches no Nightwatch setting, so Nightwatch behaves as if Firewatch were absent.
+The mode in a disallowed environment in which Firewatch registers no listener, command, publish tag or MCP server and touches no Nightwatch setting, so Nightwatch behaves as if Firewatch were absent and even the doctor does not exist.
 _Avoid_: Inactive, bypassed, no-op mode
 
 **Capture environment**:
@@ -529,3 +529,25 @@ _Avoid_: Snippet, search key
 **Activity**:
 The per-store cache counters returned beside cache findings, so silence can be told from a healthy cache.
 _Avoid_: Cache stats
+
+### Diagnostics and lifecycle
+
+**Doctor**:
+The read-only command that runs a closed set of independent checks on the installation and reports each as ok, warn, fail or info, existing only where Firewatch is not stepped aside.
+_Avoid_: Health check, diagnostics tool, status command
+
+**Doctor check**:
+One line of the doctor's report, with an id, a status, a message and, for warn and fail, a one-line fix.
+_Avoid_: Test, probe, validation
+
+**Launch command**:
+The one command an assistant's client runs to start Firewatch's server, `php artisan firewatch:server`, from the project root.
+_Avoid_: Start command, connect command
+
+**Tool listing**:
+What the server command prints with `--list`: exactly what `tools/list` would return, without a session and without touching the store.
+_Avoid_: Inspector, tool catalogue
+
+**Server session**:
+One run of the server process from an assistant's launch to end of its input, holding no state between calls.
+_Avoid_: Connection, daemon
