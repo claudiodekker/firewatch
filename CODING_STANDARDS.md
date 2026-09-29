@@ -1,167 +1,185 @@
 # Coding Standards
 
-The reviewer reads this file. Apply every rule to each changed hunk in the diff. Skip anything the repo's tooling already enforces (Pint, PHPStan/Larastan, arch tests, ESLint, type coverage).
+The reviewer reads this file. Apply every rule to each changed hunk in the diff. Skip anything the repo's tooling already enforces (Pint, PHPStan/Larastan, arch tests).
 
-This is a Laravel package, not an app: it has no HTTP layer of its own, and its entry points are Artisan commands and MCP tools. Where the repo already has a different established convention, **follow the repo** within that area; the rule describes the intent.
+This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it observes Nightwatch through one public seam (a listener on `IngestingEvents`) and runs assistant SQL in a child process. The design lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`; these rules govern how it is implemented.
 
 ## 1. Sibling changes
 
-- A fix to one member of a **sibling set** (`Create*`/`Update*`/`Delete*` actions, jobs, MCP tools, commands, hooks or listeners of the same kind) must also cover the other members in the same diff. Grep for them. If a sibling is left alone, the PR description says why.
-- Changing a shared value (queue name, config key, enum case, a function's signature) updates every place it is used, not just the one in the ticket.
+- A fix to one member of a **sibling set** (MCP tools, detectors, doctor checks, commands, listeners of the same kind, record types with their view and contract-table entry) must also cover the other members in the same diff. Grep for them. If a sibling is left alone, the PR description says why.
+- Changing a shared value (config key, enum case, a function's signature) updates every place it is used, not just the one in the issue.
+- A closed set of the design (detector shapes, blind-spot ids, error codes, doctor check ids, drift kinds, empty kinds, store states, config keys) changes only by changing its contract, and the test that pins it changes in the same diff.
 
-## 2. Actions and jobs
+## 2. Actions
 
-The class type tells you where code runs: Actions run in the caller (a command or MCP tool), jobs run on the queue.
-
-- Actions (`src/Actions`) are the use cases a command or tool triggers, with one public `handle()` method. They only change state: write or update records, record activity, dispatch jobs. No slow or failure-prone work: no provisioning, third-party writes, file processing or cleanup.
-- Jobs (`src/Jobs`) are queued, retryable work, and the job's `handle()` holds that work's logic. Don't wrap a single Action in a thin job: if the work belongs on the queue, it belongs in the job. A job may call Actions for shared state changes, not to hold its main logic.
-- Jobs are safe to retry: running `handle()` twice gives the same result.
-- Commands and tests run queued work with `Job::dispatchSync()` or by calling `handle()` directly. They don't need an Action for that.
-- An Action may make a synchronous external call only when the caller can't finish without the result (an id or credential needed to create the record). Keep that call small and queue everything after it. Read-only external calls that feed an output may run in the caller; cache them where possible.
-- External results come back asynchronously (webhook, polling job, status job). A command or tool never blocks waiting for them.
-- Action names are verb then entity (`CreatePost`, `SyncTags`). CRUD uses `Create`, `Update` and `Delete`; a use case that isn't plain CRUD takes its own verb (`PublishPost`, `ArchiveProject`).
+- Actions are the state-changing use cases a command, tool or the seam listener triggers (append a batch, prune, clear, drop or rebuild the store), each with one public `handle()` method. Only Actions write to the store: the writers are the seam listener (a batch, then the prune pass) and `firewatch:clear`. Reading never writes.
+- Action names are verb then entity. A use case that isn't plain create/update/delete takes its own verb.
 - Actions inject other Actions through the constructor as `protected` properties.
-- Create and Update Actions return the model.
-- Any Action or job that writes more than one row or model wraps the writes in `DB::transaction()`. Remote API calls stay outside the transaction, and jobs dispatched inside one use `afterCommit()`.
-- Side effects that must not fail the operation, such as notifications, are wrapped in `rescue()`.
+- The store is reached only through its own raw `SQLite3` connection, never Laravel's database layer (no `DB`, PDO, Eloquent or migrations), so its queries are never observed by Nightwatch (ADR 0005).
+- Every write runs in an explicit, short `BEGIN IMMEDIATE` transaction on that connection, so `DB::transaction()` is not used. A batch is one transaction; pruning and clearing work in chunks, each with its coverage marker in the same transaction (ADR 0006).
 - Enum-driven branching uses `match`.
 
 ## 3. Entry points
 
 - Artisan commands and MCP tools validate their input, call one Action or query, and return. They hold no business logic.
-- Tool and command input is validated at the boundary, and numbers such as `limit` and `page` are validated and clamped before use.
-- Output is shaped data (an array, resource or value object), never a raw model or collection. Call `->values()` after filtering a collection that becomes a JSON list.
-- Entry points don't instantiate external API clients just to build a URL or label; derive those from the model or enum.
-- Tool and command names say what they do. Errors reach the caller as a message it can act on, not a stack trace.
+- Tool and command input is validated at the boundary. Numbers such as `limit` and `window` are refused with an actionable error when out of range, never silently clamped, so the answer always reflects what was asked. A malformed time is refused, never read as unbounded.
+- An unknown, misspelt or inapplicable argument is refused with the accepted values, never ignored. Enumerated values are matched exactly.
+- Output is shaped data (an array or value object), never a raw driver result. Call `->values()` after filtering a collection that becomes a JSON list. An empty object result serializes as `{}`, not `[]`.
+- Every tool answers with the one fixed envelope. A failed call is a plain-text tool error with a closed code and no envelope, never a protocol error, stack trace or path. A valid selector that matches nothing is an empty answer, not an error.
+- Tool and command names say what they do. Errors reach the caller as a message it can act on; an install fix says "run `php artisan firewatch:doctor`".
+- Commands and the server exist only where Firewatch is not stepped aside, and every signature starts with `firewatch:`. The server starts only through `firewatch:server`; no laravel/mcp handle is registered (ADR 0010).
+- The doctor is read-only: it uses the reader connection or none and creates nothing (no store file, directory or lock file). Its checks are a closed set of independent ids; a check that throws is reported as `fail`, and `warn` and `fail` carry a one-line fix.
+
 ## 4. Queries
 
-- Every relation read by an output, value object or loop is eager-loaded, nested paths included (`post.author.profile`). Keep `Model::preventLazyLoading()` on outside production.
-- Queries with an explicit `select([...])` include every column the consumer reads. Adding a field means checking those selects.
-- `with()` constraints don't filter the parent; use `whereHas()` for that.
-- Queries behind an entry point are bounded by pagination, a limit or a date window.
-- A loop over rows doesn't query or write per row. Load the set once, match in memory, and write the changes in one query (`whereKey($ids)->update([...])`, `upsert()`).
+- Queries use bound parameters. Values are never interpolated into SQL text. The one exception is the SQL tool, whose single statement is the assistant's own (section 18).
+- Queries with an explicit column list include every column the consumer reads. Adding a field means checking those selects.
+- Queries behind an entry point are bounded by a row limit (fetch `limit + 1`, so exactly `limit` rows is a complete list) or by design to one execution, one trace or one job lineage. An absent window bound means unbounded, so the limit is what bounds the answer.
+- A loop over rows doesn't query or write per row. Load the set once, match in memory, and write the changes in one statement or one chunked transaction.
+- One tool call reads inside one deferred snapshot, so every query of one answer sees the same data.
+- Instants are bound as floats, never text. Durations are integer microseconds and computed unrounded; rounding happens only when a value is written into an answer.
+- Windows are half-open (`[since, until)`) on the record's own `started_at`. An execution-scoped analysis selects executions by their own `started_at` and reads their children whole by `execution_id`, with no window.
+- Records join on `execution_id`, `trace_id`, `group_hash` and `job_id`. Queued work joins only on `job_id`, never on trace or execution id.
 
-## 5. Models and null-safety
+## 5. Null-safety
 
-- Casts are declared with `protected function casts(): array`, with a documented array shape.
-- Relations carry generic return types, e.g. `@return BelongsTo<User, $this>`.
-- Columns holding tokens, secrets or keys are listed in `$hidden` or use `encrypted` casts.
-- A new column written via `create()`/`update()` is added to `$fillable` in the same diff.
-- Every nullable value is guarded (`?->`, `?? default`, early return) before it is dereferenced or passed to a non-nullable parameter. That covers optional relations, nullable enum casts, optional payload keys and framework/event properties.
-- Behaviour that isn't the model's own concern (slugs, public ids) goes in a trait under `Models/Concerns`.
-- Local scopes read as conditions: `wherePublished()`/`whereNotPublished()`, not `published()` or `active()`.
-- A new column doesn't duplicate one the framework already keeps: no `occurred_at` next to `created_at`.
-- A state users act on (archived, complete) is a column set by an explicit step, not inferred from matching timestamps. Age-based checks such as staleness stay separate from it.
-- Code that touches a `SoftDeletes` model or its parent in a job, command, billing path makes an explicit choice: call `withTrashed()`, or null-guard the relation.
+- Every nullable value is guarded (`?->`, `?? default`, early return) before it is dereferenced or passed to a non-nullable parameter. That covers optional payload keys, nullable columns and framework/event properties.
+- A new column doesn't duplicate one the store already keeps.
+- A stored value keeps the wire's word: a wire `0` or `''` is stored as sent, and NULL only where the wire omits the field. NULL means unknown, never zero and never clean.
 
 ## 6. Types and values
 
 - Arrays carry shapes (`array{host: string, port: int}`) or `list<T>`. Keep `mixed` out of APIs you own. A shape that keeps growing is a sign it should become a value object.
-- Fixed sets of values are backed enums with UPPER_CASE cases. Each enum owns its display text through a `label()` method, usually provided by a shared trait. Status, type and queue-name literals are replaced by enum cases or constants.
-- Variables and columns that carry a unit include it in the name, e.g. `$maxUploadMb`, `$sizeBytes`, `$timeoutSeconds`.
+- Fixed sets of values are backed enums with UPPER_CASE cases whose values are spelled exactly as the design spells them (`job-attempt`, `not_evaluated`). An enum that renders text owns it through a `label()` method. Status and type literals are replaced by enum cases or constants.
+- Variables and columns that carry a unit include it in the name, e.g. `$retentionDays`, `$sizeBytes`, `$timeoutSeconds`. Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool returns raw values.
 - Calls with several parameters of the same type use named arguments.
-- Each step that does real work (reads rows, plans, writes, hashes, calls another class) gets its own statement and a named variable. Don't nest it inside another call's argument, where a reader skims past it, e.g. `$post->update(['tags' => $this->names((new SyncTags(...))->plan())])`.
-- In apps, collections are preferred over manual loops for transformations.
-- `json_encode()` on external or user data uses `JSON_THROW_ON_ERROR`, plus `JSON_INVALID_UTF8_SUBSTITUTE` where binary data is possible.
-- Strings written to length-limited columns are truncated at the boundary.
-- External input is parsed defensively: check that a delimiter exists before `explode()` indexing, and encode values interpolated into URLs (`rawurlencode`, `route()`, `encodeURIComponent`).
+- Each step that does real work (reads rows, plans, writes, hashes, calls another class) gets its own statement and a named variable. Don't nest it inside another call's argument, where a reader skims past it.
+- `json_encode()` on external or user data uses `JSON_THROW_ON_ERROR`, plus `JSON_INVALID_UTF8_SUBSTITUTE` where binary data is possible. Record data uses the seam's flag set, so wire floats keep their fraction.
+- A string is cut only by the design's rules: 65,535 bytes at a UTF-8 boundary with the `... [truncated, N bytes total]` suffix counted in the limit, bindings and answer cells with their own caps, and a record's `data` capped as a whole. The trace and JSON-string fields are exempt. Limits are constants, and no `truncated` flag is stored.
+- External input (wire records, tool arguments) is parsed defensively: check that a key or delimiter exists before indexing.
 
-## 7. Errors and external services
+## 7. Errors and integrations
 
-- Each integration sits behind a contract with two implementations: a real one and a fake that is bound in tests. The fake accepts Mockery expectations through a shared trait, so tests use one kind of test double rather than ad-hoc mocks. `Http::preventStrayRequests()` is on in the test bootstrap.
-- Fakes return payloads copied from real API responses (fixtures). Enum-typed fields in fakes return the enum, not a string.
-- An HTTP-backed service receives its configuration (credentials, base URL) through constructor properties. It builds every request from a single protected method that returns a `PendingRequest` with:
-    - the base URL and auth
-    - `retry()` whose `when:` callback only retries transient failures such as `ConnectionException`
-    - `throw()` that turns a failed response into the service's own exception, which carries the response
-- A `throw()` callback must actually `throw` its exception (`fn (Response $response) => throw new …`). If the callback only returns the exception, Laravel ignores it and throws its generic `RequestException`.
-- Known API error codes become specific exceptions, e.g. `SlugAlreadyTakenException`.
-- Catch the specific exception. Catch `Throwable` only at a boundary that must not break its host (listeners, middleware, package hooks, log handlers), and `report()` it there.
-- Calls to external providers check for empty input first, e.g. no recipients to notify or a blank API key.
-- List and batch calls to external APIs follow pagination tokens and chunk to the provider's batch limit, with no hard-coded iteration cap.
+- Two seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process) and the clock (`Stopwatch`). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
+- Catch the specific exception. Catch `Throwable` only at a boundary that must not break its host (the Nightwatch listener, provider boot, process entry points, the tool layer), and `report()` it there.
+- Nothing is thrown into the host application. The tool layer turns an unexpected failure into the `internal` tool error, also when `app.debug` is on, because a rethrow ends the stdio process.
+- Calls that could act on nothing (an empty batch, an empty result set) check for empty input first.
 
-## 8. Jobs and long-running processes
+## 8. Long-running processes
 
-- Job settings (`$tries`, `$timeout`, `$backoff`, `$maxExceptions`) are `public`; the worker ignores protected ones.
-- Jobs that take a model set `public bool $deleteWhenMissingModels = true`, so a model deleted before the job runs drops the job instead of failing it.
-- A job takes the domain model it works on and resolves its dependencies from it (the container, or the model's own configuration), not pre-built services.
-- Queued work whose outcome users see is tracked on one record. An Action creates it as `pending` and dispatches the job with it. The job returns early if the record is already `running`, then moves it to `running`, and then to `succeeded` or `failed`. A retry runs the same record again, and `failed()` marks it failed when the queue gives up.
-- Queued jobs that call external services use a shared retry concern (escalating `backoff()` plus `retryUntil()`) rather than setting their own `$tries`/`$backoff`.
-- Delete and cleanup jobs are idempotent: a remote resource that is already gone counts as success.
-- Static properties and singletons that hold call- or job-specific data are reset between executions, because Octane and queue workers reuse the process.
+- Static properties and singletons that hold call-specific data are reset between executions, because Octane and queue workers (which run the Nightwatch listener) and the MCP server reuse the process.
+- The mode and the configuration are read once per process. A store connection is keyed by `getmypid()`: after a fork the inherited handle is abandoned unused and a new one is opened. Every write batch and reader call checks the file's identity, so a file deleted or replaced under a live connection is reopened; where no identity exists (Windows) the check does nothing and never throws.
+- The MCP server and the SQL child write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
+- Windows is supported: no code assumes POSIX (file modes, `stream_select()` on `proc_open` pipes) without a Windows path that the platform job runs (ADR 0012).
 
 ## 9. Configuration
 
 - `env()` is called only in `config/`.
-- Config values are cacheable: class-strings and scalars, never objects or closures.
-- Config is read with dot notation (`config('a.b')`).
-- New options default to the behaviour that existed before them.
+- Config values are cacheable: scalars, class-strings and arrays of them, never objects or closures.
+- Config is read only through the configuration normaliser, never with `config('firewatch.…')` elsewhere. An invalid value falls back to its default, alone, with an issue; it never throws, never stops capture and never changes the mode.
+- The closed key set is the only configuration. Limits, ceilings, thresholds, sample floors, chunk sizes and the size backstop are named constants, never settings. `FIREWATCH_ENABLED` is the only on/off switch, and the values forced onto Nightwatch are not configurable.
+- New options default to off or the least surprising behaviour and are documented in the config file with one comment line.
 
-## 10. Database
+## 10. Store
 
-- Migrations are forward-only: no `down()` method.
-- Foreign keys use `->constrained()` with an explicit `cascadeOnDelete()` or `nullOnDelete()`.
-- A column that queries filter or sort on gets an index in the same migration, composite with its parent key when the query is scoped by one (`index(['project_id', 'archived_at'])`).
-- A migration that may run against a column that already exists guards with `Schema::hasColumn()`.
-- Data backfills go in chunked, idempotent Artisan commands (resumable, e.g. `--from-id`), not in migrations.
+- The store is rebuilt, never migrated: no migration files, no `down()` methods, no backfills. On schema change, bump the schema version; the next writer drops and recreates every table, view and index in place inside one transaction. It never unlinks, renames or replaces a file other processes may hold open, and readers never create, migrate or rebuild anything.
+- Any change to the generated DDL (a contract field, a view, an index) bumps the schema version; a hash of the DDL pins it in a test.
+- A filter or sort on a common column uses an existing index. A new index, or a `data` field promoted to an indexed generated column, is added only when a real tool or detector query needs it, measured, in the same schema version.
+- Records mirror the wire: wire names verbatim, except `user_id` (the wire `user`) and `event` (a cache event's wire `type`), and the wire group hash verbatim (ADR 0003). Fields without a common column go in `data`, unknown fields are kept, and every deviation is in the one list of the record model.
+- No `STRICT` tables and no `CHECK (json_valid(...))`: a rejected insert would drop a record.
+- The store id only pages and prunes. It is never an identity, a link or a shown value. Links resolve at read time (no foreign keys), the store is append-only, and nothing is deduplicated or merged.
+- Removal is recorded, not inferred: a prune or a clear writes its coverage marker in the same transaction as the delete (a clear writes it first), and readers derive every coverage start from the markers, never from configuration (ADR 0006). Only the capturing writer prunes, after a successful batch commit, never on a read path.
+- The store file is `0600` in a `0700` directory with its own VCS ignore file, created lazily by the first writer; a read creates nothing. A file that lacks the Firewatch stamp is never written, moved or deleted; only a damaged file that bears it is moved aside.
 
 ## 11. Tests
 
 - Every behaviour change and every bug fix ships with a test. A fix's test fails without the fix.
-- A test whose expectation flips (e.g. "cannot" becomes "can") is a behaviour change, and the PR explains it.
+- Changing an existing assertion's expected value needs a stated reason in the PR.
+- The tests each design decision lists are the definition of what must be covered; boundaries are tested from both sides (19 vs 20 records, 59 vs 60 percent, exactly the change band).
 - A test reads as three phases, arrange, act and assert, separated by a blank line. Capture the result (`$result = $this->artisan(...)`) and assert on it afterwards, rather than chaining the call into its assertions.
-- Data-driven cases use `->with([...])` with named dataset keys, and the test call uses named arguments when several share a type. In PHPUnit repos, match the existing style.
-- A test checks real values in both directions (e.g. `-1250` renders as `-12,50` and parses back), not only that a round trip returns its input.
-- Tests assert user-facing text through `__('key')`, never a copy of the translated string.
-- Feature tests (`tests/Feature`) are the default: each drives one thing a user, an MCP client or the schedule triggers (a command, a tool call, a scheduled job) end to end and asserts the state it leaves. A Unit test (`tests/Unit`) covers only what a feature test can't reach (a retry, a queue failure hook, a query count, a fake's own assertions) or a very complex module, and a unit test that a feature test already covers is deleted. Both suites boot the app. A unit test file is named after the class it covers (`tests/Unit/SlugGeneratorTest.php`), not the mechanism it tests.
-- Tests build data with factories and `->for()`.
-- A test of an assertion helper (a fake's `assert*()`, a macro) has one failing case per condition the helper checks, as a dataset, so removing any condition fails a case. A test that would pass with the code under test removed is testing the framework.
-- A test's name says the behaviour it proves ("refuses to publish a post without a title"), not the mechanism ("fails").
+- Data-driven cases use `->with([...])` with named dataset keys, and the test call uses named arguments when several share a type.
+- A test checks real values in both directions, not only that a round trip returns its input.
+- Tests have five layers with one job each. A scenario test (`tests/Scenario`, the default) builds a store from real Nightwatch sensor traffic, walks the tool ladder as an assistant would and asserts the structured answer, with a positive, a negative and a blind-spot case. A feature test (`tests/Feature`) drives one thing a user, an MCP client or Nightwatch triggers (a command, an ingest, a retention pass, a spawned second process) end to end and asserts the state it leaves. A contract test (`tests/Contract`) pins Nightwatch's output, the fixtures and Firewatch's fixed text and shapes, and holds no behaviour. A unit test (`tests/Unit`) covers only what a feature test can't reach (arithmetic tables, grammars, polling, error classification), and a unit test that a feature or scenario test already covers is deleted. An arch test (`tests/Arch`) enforces an invariant, not a style preference.
+- A unit test file is named after the class it covers (`tests/Unit/<Class>Test.php`), not the mechanism it tests.
+- Telemetry comes from the real sensors driven through the workbench. A synthetic record is allowed only for exact durations or timestamps, volume, many groups, deploy identities, drift shapes and other-process writers; it derives from a committed wire fixture through the record builder and goes through the real ingest event. Nothing inserts into the store except a corruption or foreign-file test. A wire fixture is generated by the workbench command, never edited by hand.
+- A real-sensor test asserts counts, relations, verdicts and shapes, never exact instants or durations.
+- Fixed wording (blind-spot sentences, empty kinds, error messages, detector caveats, doctor messages and other user-facing text) is asserted through its language key, `__('firewatch::messages.key')`, never a copy of the translated string. Ids, error codes and closed sets are written as literals in the test, so changing one fails a test. Long text (the server instructions, tool descriptions) is asserted structurally, and limits numerically (40 words per blind spot, 150 per tool description, `tools/list` under 5,000 tokens). No snapshot files are committed.
+- JSON answers are asserted in full; the markdown rendering once per tool through the shared helper. Every `next` call an answer offers is executed and returns a non-error answer.
+- A test that would pass with the code under test removed is testing the framework.
+- A test's name says the behaviour it proves ("refuses a window before the coverage start"), not the mechanism ("fails").
+- A test that spawns a real process carries the `process` tag, and one that asserts a file mode or another POSIX-only fact carries `posix`. Real processes run with shortened deadlines passed through constructor arguments, never a real wait.
 - Deterministic tests use:
-    - `fake()->unique()` for unique columns
+    - a temporary store path per test
     - order-insensitive assertions for sets (`toEqualCanonicalizing()`)
-    - `->fresh()`/`->refresh()` after an Action has mutated a model
-    - a frozen or faked clock (`travelTo()`) rather than wall-clock time or loop-count thresholds
-- Global state a test changes (env, statics, config) is restored in teardown.
-- Event and queue side effects are asserted with `Event::fake([...])`/`Queue::fake()` plus `assertDispatched()`.
+    - a frozen or faked clock (`travelTo()`, the fake `Stopwatch`) rather than wall-clock time or loop-count thresholds
+- No test asserts timing, sleeps or belongs to a performance group. Correctness is asserted through bounds that are behaviour (bounded batches, ceilings, a deadline that returns control).
+- Global state a test changes (env, statics, config, Nightwatch's per-process state) is restored in teardown.
 
 ## 12. Methods and classes
 
-- Before writing a helper, check whether Laravel, Eloquent or an installed package already does it (`is()`, `value()`, casts, collection methods, enum serialization). When a helper is still needed, the PR says why.
+- Before writing a helper, check whether Laravel or an installed package already does it.
 - Guard clauses handle edge cases first and return early; the happy path comes last.
 - An orchestrating method reads as a short list of named steps. A phase that needs a comment to explain it becomes a named method.
-- Callers get named variants (`findOrFail()`, `firstOrCreate()`) instead of a `null` return they must branch on.
-- Verbs keep the framework's meaning: `make` builds without saving, `create` saves; `get`/`has`/`is`/`forget`/`flush` behave as they do in the framework.
+- Prefer a named method (`readOrFail()`) over a `null` return callers must branch on.
+- Verbs keep the framework's meaning: `get`/`has`/`is`/`forget`/`flush` behave as they do in the framework.
 - Parameters are ordered subject first, then options, with the `$default` argument, callbacks and variadics last.
 - Classes stay open to extension: no `final`, and members that aren't public are `protected` rather than `private`, so subclasses can override them.
-- An empty constructor body holds a single `//` line, as in Laravel's own stubs.
 - Builders and configurators return `$this`. Value objects are immutable and return `new static(...)` from each transform.
-- Exceptions carry state in public properties with fluent setters, and keep a short message. An HTTP status goes in a `$status` property, never the SPL `$code` argument.
 
 ## 13. Code hygiene
 
 - Delete code rather than commenting it out. Temporary disables ("re-enable after X") are not merged.
-- Method docblocks are one imperative line ending in a period (`Determine if…`, `Get the…`), then tags. Property docblocks are a noun phrase (`The event dispatcher instance.`). Class docblocks hold only tags (`@template`, `@mixin`, `@method`).
-- `@param`/`@return` carry the type. Add a description only for a constraint the name can't express.
+- Docblocks only for @template/@mixin, array shapes, @internal/@api, or a constraint the name can't express.
 - Inline `//` comments are kept only for a vendor quirk, a gotcha or a cross-reference. A comment that restates the next line is deleted.
-- Comments describe the domain. Comments aimed at tools or reviewers ("kills the mutant", "proves the X branch", "why this ignore exists") are removed; that belongs in the commit message.
-- A magic number becomes a named constant, not a number with a comment (`protected const EXCERPT_LENGTH = 160;`). A value used once and passed straight to a framework call stays inline (`paginate(50)`).
-- An array in `app/` or `src/` with more than one element and at least one key (props, `create([...])` attributes) puts one element per line. A validation rule list and test datasets stay on one line.
+- Comments describe the domain. Comments aimed at tools or reviewers are removed; that belongs in the commit message.
+- A magic number becomes a named constant, not a number with a comment (`protected const EXCERPT_LENGTH = 160;`). A value used once and passed straight to a framework call stays inline.
+- An array in `src/` with more than one element and at least one key puts one element per line. A validation rule list and test datasets stay on one line.
 - A blank line separates two statements when either spans several lines.
 - A guard clause stays on one line. If it doesn't fit, shorten the message rather than wrapping it.
-- Multi-line `//` comments and config `|` header blocks use Laravel's **slope**: 3 lines, each 2–4 characters shorter than the one above. Count the text after the `// ` or `| ` prefix. Reword to fit rather than padding.
 - Every `TODO` has an owner or a linked issue.
-- Every `@phpstan-ignore` names the error identifier.
+- Every `@phpstan-ignore` names the error identifier. No baseline: fix, don't baseline.
 - The diff touches only code related to the change.
 
 ## 14. Domain language and user-facing text
 
-- User-facing text is a key in a Laravel PHP lang file, grouped by a broad area (`resources/lang/{locale}/messages.php`), in every locale, read through the package namespace (`__('firewatch::messages.failed')`). A new file for a narrow topic that won't grow is folded into a broader one.
+- Long user-facing text (blind-spot sentences, tool descriptions, instructions, doctor messages) is a key in the package's `messages` language file, read through the package namespace (`__('firewatch::messages.failed')`). The file is loaded only where Firewatch is Active or Off. Tool classes override `description()` to read it, and set explicit tool names rather than relying on the default kebab-cased class name.
 - A PR that adds a domain value (an enum case, a status, a mode) whose meaning isn't in `CONTEXT.md` or an ADR adds it to `CONTEXT.md`.
+- Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction. In prose, "the `query` tool" is the SQL tool and "the `query` record type" is the record.
 
 ## 15. Packages
 
-- The public surface is explicit: internal classes are marked `@internal`, supported entry points `@api`.
-- Every framework API used exists in the lowest supported version. Newer APIs are gated behind one compatibility check whose `@see` links the upstream change.
-- User-facing changes update `CHANGELOG.md`.
+- The public surface is explicit: internal classes are marked `@internal`, supported entry points `@api`. It is the commands, the config keys, the tool names, arguments and answer shape, and the seam.
+- Every framework API used exists in the lowest supported version (PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2, SQLite 3.38.0). Newer APIs are gated behind one compatibility check whose `@see` links the upstream change. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
+- Only Nightwatch's public `IngestingEvents` event takes its output; an `@internal` Nightwatch class is not touched (ADR 0001). The verified line, the wire fixtures and the contract tests move together in one PR.
+- User-facing changes update `CHANGELOG.md`. The README's config, tool, detector and command tables equal the code.
 
+## 16. Capture and ingest
+
+- The seam listener returns `false` on every path, a failed prune pass included (ADR 0001). It holds no state and filters nothing: every record, `user` included, reaches the mapper unchanged and in order.
+- Nothing is retried, spooled or blocked on. A batch that can't be written within `busy_timeout` is dropped and recorded as one line beside the store, and the failure path itself swallows its own failure (ADR 0005).
+- Firewatch registers Nightwatch's provider and alias in every mode and writes its Nightwatch config with `config()->set` in its own `register()`, before Nightwatch's provider registers. The mode is resolved once: not on the allowlist is stepped aside, else a `firewatch:` process, disabled, or an unusable SQLite is Off, else Active. Stepped aside registers no listener, command, publish tag or MCP server.
+- A `firewatch:` process is always Off, so Firewatch never observes itself, and Off processes never prune.
+- The mapper never throws on an odd shape. It normalises each record by a JSON round trip, stores what it cannot read as an error placeholder with a `structure` drift, and drops or quarantines nothing: unknown fields stay in `data` and missing ones are NULL. Drift is counted by kind, type and field, aggregated per batch and upserted in the batch's transaction. A record's `timestamp` comes from the original array, not the round trip.
+- The contract table defines each field once (name, accepted types, destination), and the mapper, the drift checks and the views all read it.
+- Redaction and truncation happen at ingest, before the store write, never at read time.
+- Query bindings are the one second capture path. A binding belongs to its exact query or is NULL: pairing is by order within an execution, checked on `sql` and `connection`, and an entry that matches no record is skipped.
+
+## 17. Answers and analysis
+
+- Empty is not clean. Every answer states the store clock, the window, coverage and the blind spots of the record types it examined, also when empty, and no tool can switch a blind spot off.
+- A detector answers only `findings`, `clean` or `not_evaluated`, always with `examined`. Empty input is `not_evaluated`, never `clean`. A budget answers `within`, `exceeded` or `not_evaluated` and is never `within` by absence. Slowness is never a detector (ADR 0009).
+- Values the sensors never populate (four counters, two failure flags) are reported as stored and never presented as healthy; the blind spots say so.
+- An absent window bound means unbounded, never recent, except on compare (coverage start and the store clock) and trend (a derived bound the window names).
+- Coverage is read from the recorded markers. A window before the coverage start is "no data", never zero or clean; ranking, compare and trend clip to it, and detectors exclude the executions whose needed children were removed.
+- A statistic is per occurrence. Percentiles are nearest rank, computed in SQL. A statistic below its sample floor (3 for p50, 20 for p95) is NULL with a `withheld` reason, never replaced by the maximum; the budget verdict on a group is the one stated exception. Order statistics and counts decide, so one outlier never flips a change token.
+- A person is attributed only by the recorded user, a job attempt's dispatch (one hop) or a child that carried the user inside a command or task, never by trace, `caused_by`, IP or timing, and every actor answer counts what it could not attribute (ADR 0007).
+- Detectors run on the server's reader, never through the SQL tool, and their threshold is per call only, stated on the result.
+- Identifiers print in full and go back into tools unchanged.
+
+## 18. SQL access
+
+- The assistant's SQL runs only in the short-lived child that boots no framework, opens the store read-only and installs a closed authorizer: read actions on a fixed set of objects and an allow-list of functions, never a deny-list. It runs one statement through `prepare()`, never `query()` or `exec()` (ADR 0008).
+- If the isolation can't be established the tool refuses with `unavailable`; there is no in-process or degraded mode. The tool stays registered.
+- Ceilings and allow-lists are constants, never settings. The deadline is a constructor argument that defaults to the fixed 10 seconds, so tests can shorten it.
+- The parent trusts a result as complete only when the final line arrives and its row count matches; rows already streamed are returned as partial, never as complete.
+- The child script and its policy classes reference no `Illuminate` and no application class. On Windows the parent uses a mechanism that works there, with the same protocol and ceilings (ADR 0012).
