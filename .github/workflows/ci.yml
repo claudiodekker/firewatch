@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, Nightwatch ${{ matrix.nightwatch }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.4']
+        laravel: ['13.*']
+        nightwatch: ['~1.30.2']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: sqlite3
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/nightwatch:${{ matrix.nightwatch }}" --no-update --no-interaction
+          composer require "laravel/framework:${{ matrix.laravel }}" --dev --no-update --no-interaction
+          composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Lint
+        run: composer lint
+
+      - name: Test
+        run: composer test
