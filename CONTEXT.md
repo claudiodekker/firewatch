@@ -467,3 +467,65 @@ _Avoid_: Job status (that is an attempt's own field)
 **Wait**:
 The time between a dispatch ending, or the previous attempt ending, and the next attempt starting.
 _Avoid_: Latency, delay
+
+### Detectors
+
+**Detector**:
+One of a closed set of fixed-shape judgements over the store that answers with a verdict and findings.
+_Avoid_: Check, rule, alert, monitor
+
+**Finding**:
+One group a detector judged to meet its threshold, ordered worst first and carrying the detector's evidence.
+_Avoid_: Issue, violation, hit
+
+**Threshold**:
+The one tunable value of a detector, with a stated unit, range and loose default, always stated on the result.
+_Avoid_: Limit, setting, budget
+
+**Reaches**:
+The pair of figures a finding states about people, the distinct signed-in actors among its records and the records with no actor, never added.
+_Avoid_: Users affected, impact
+
+**Count mode**:
+The run of all detectors at default thresholds that yields one cheap row per detector on the overview.
+_Avoid_: Summary run, dashboard
+
+**Run (of queries)**:
+The queries of one query group inside one execution.
+_Avoid_: Burst, repetition
+
+**Typical share**:
+A request group's share of time spent in queries, the median of per-request shares from three requests, else the aggregate ratio, stated with its basis.
+_Avoid_: Average share, query time percentage
+
+**Pending dispatch**:
+A queued job with no stored attempt, aged against the store clock.
+_Avoid_: Stuck job, lost job, waiting job
+
+**Inline connection**:
+A queue connection that runs work in the dispatching process (sync, deferred, background, null), so its dispatches have no wait.
+_Avoid_: Sync queue
+
+**Terminal failure**:
+A job whose last stored attempt failed.
+_Avoid_: Dead job, permanent failure
+
+**Recovered job**:
+A job that was released at least once and whose last attempt was processed.
+_Avoid_: Flaky job
+
+**Escaped exception**:
+An exception that reached the framework's handler, as opposed to one caught and passed to report.
+_Avoid_: Unhandled crash
+
+**Message shape**:
+A log message with UUIDs, hex runs of eight or more, and digit runs replaced by placeholders, used to group lines.
+_Avoid_: Log pattern, fingerprint
+
+**Fragment**:
+The longest literal run of a message shape, the text an assistant can use to find the lines.
+_Avoid_: Snippet, search key
+
+**Activity**:
+The per-store cache counters returned beside cache findings, so silence can be told from a healthy cache.
+_Avoid_: Cache stats
