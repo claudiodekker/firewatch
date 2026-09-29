@@ -109,7 +109,7 @@ A record belonging to an execution: query, exception, log, cache event, mail, no
 _Avoid_: Sub-event, detail record
 
 **Store id**:
-The single integer handle of a stored record, unique across all types, used only to page and prune, never as a link or identity.
+The single integer handle of a stored record, unique across all types and never reused except after a drop, used only to page and prune, never as a link or identity.
 _Avoid_: Primary key (as domain identity), record id
 
 **Trace**:
@@ -171,7 +171,7 @@ The query parameter values captured at Firewatch's seam and paired to a query re
 _Avoid_: Parameters, params
 
 **User directory**:
-The small table of user id, name and username, never an event and never counted.
+The small table of user id, name, username and last-seen instant, never an event and never counted, aged out with the records.
 _Avoid_: Actors table, users event
 
 **Actor**:
@@ -215,3 +215,37 @@ _Avoid_: Error log, exception
 **Foreign file**:
 A file at the store's path that is not a Firewatch store, which Firewatch never writes, moves or deletes.
 _Avoid_: Bad file, wrong database
+
+### Retention
+
+**Retention**:
+The rules by which Firewatch removes old records to keep the store bounded: a maximum age, a maximum record count and a size backstop.
+_Avoid_: Expiry, garbage collection, rotation
+
+**Pruning**:
+The automatic removal of the oldest records, users and drift counts once a retention rule is exceeded, done only by the capturing writer.
+_Avoid_: Cleanup, eviction, purge
+
+**Size backstop**:
+The fixed-purpose live-size limit that prunes only when payloads are pathologically large, never a tuning knob.
+_Avoid_: Size cap, quota, disk limit
+
+**Clear**:
+The developer's deliberate removal of history with `firewatch:clear`: all records, or all records of one type.
+_Avoid_: Reset, wipe, flush
+
+**Drop**:
+Rebuilding the store in place as a fresh one, discarding everything including drift, failure lines and the id sequence.
+_Avoid_: Reset, recreate, delete the file
+
+**Coverage start**:
+For a record type, the newest instant before which history was removed on purpose or by retention, or the store's creation if nothing was; a window before it is "no data", never clean.
+_Avoid_: Retention horizon, data start
+
+**Coverage reason**:
+The recorded cause of a coverage start: created, cleared, cleared-type, pruned-age, pruned-cap or pruned-size.
+_Avoid_: Cause, prune type
+
+**Children outside coverage**:
+The stated condition of an execution whose children of some type lie before that type's coverage start, which is not loss and not incompleteness.
+_Avoid_: Missing children, orphaned
