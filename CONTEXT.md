@@ -551,3 +551,47 @@ _Avoid_: Inspector, tool catalogue
 **Server session**:
 One run of the server process from an assistant's launch to end of its input, holding no state between calls.
 _Avoid_: Connection, daemon
+
+### Configuration
+
+**Configuration issue**:
+A stated problem with one configuration value or budget entry, naming the key, the reason and what is used instead, which never stops capture.
+_Avoid_: Config error, validation failure
+
+**Fallback**:
+The default a key takes when its value is invalid, applied to that key alone.
+_Avoid_: Recovery, coercion
+
+**Busy timeout**:
+How long the capture side waits for a busy store before dropping the batch.
+_Avoid_: Lock timeout, write timeout
+
+### Budgets
+
+**Budget**:
+A ceiling on the duration or peak memory of one kind of execution, set by the developer.
+_Avoid_: Threshold (that is a detector's), SLA, limit
+
+**Budget entry**:
+One item of the budgets list: an execution type, optional matchers and one or two ceilings.
+_Avoid_: Rule, budget rule
+
+**Global entry**:
+The budget entry of an execution type that has no matchers and governs every execution the type's specific entries do not.
+_Avoid_: Default budget, catch-all
+
+**Governing entry**:
+The one budget entry that judges an execution or group: the first matching specific entry, else the type's global entry.
+_Avoid_: Applied rule, winning entry
+
+**Budget verdict**:
+The outcome of judging an execution or group against its governing entry, exactly one of within, exceeded or not evaluated, never within by absence.
+_Avoid_: Budget status, pass/fail
+
+**Measured on**:
+The statement of which figure a group's budget verdict used: the p95, or the maximum when the group has fewer than 20 executions.
+_Avoid_: Basis, statistic
+
+**Ignored entries**:
+The count of budget entries dropped as invalid, stated beside a budget verdict.
+_Avoid_: Bad entries, skipped rules
