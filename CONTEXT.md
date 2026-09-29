@@ -171,12 +171,12 @@ The query parameter values captured at Firewatch's seam and paired to a query re
 _Avoid_: Parameters, params
 
 **User directory**:
-The small table of user id, name, username and last-seen instant, never an event and never counted, aged out with the records.
+The small table of user id, name, username, first-seen and last-seen instants, never an event and never counted, aged out with the records.
 _Avoid_: Actors table, users event
 
 **Actor**:
-The user id recorded on an execution or child, resolved through the user directory.
-_Avoid_: Account, principal
+The person behind a user id recorded on a request, job attempt or child event, named through the user directory when a row exists.
+_Avoid_: Account, principal, customer
 
 ### Store
 
@@ -319,3 +319,25 @@ _Avoid_: Offset, page token
 **Tool error**:
 A failed call reported as plain text with a closed code and no answer shape, as opposed to an empty answer.
 _Avoid_: Exception, failure answer
+
+### Actors and attribution
+
+**Identification**:
+Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing.
+_Avoid_: Lookup, search, matching
+
+**Attribution**:
+Assigning an execution or record to an actor by a recorded user or one of the attribution links, never by inference.
+_Avoid_: Ownership, blame, tracking
+
+**Attribution link**:
+The reason an execution is attributed to an actor: direct (its own recorded user), dispatch (its dispatch names the actor) or inside (a command or scheduled task that had a child carrying the actor).
+_Avoid_: Provenance, relationship, caused by
+
+**No recorded user**:
+The state of a record whose user id is empty: a guest, a user of a non-default guard, work with no actor, or one Nightwatch could not resolve; never "not signed in".
+_Avoid_: Anonymous, guest (as a fact), signed out
+
+**Unattributable**:
+Work that no attribution link ties to the actor asked about, stated as a count next to what was attributed.
+_Avoid_: Unknown, orphan, lost
