@@ -1,0 +1,5 @@
+# Run the assistant's SQL in a framework-free child process behind a closed authorizer
+
+Every SQL tool call runs in a short-lived PHP child that boots no framework, opens the store read-only, allows only read actions on a fixed set of objects and functions through a SQLite authorizer, and is killed by its parent at a 10 second deadline; if that isolation cannot be established the tool refuses and never runs in a weaker mode.
+
+PHP has no way to interrupt a running SQLite step, so an in-process deadline checked between rows would leave a slow join, sort or aggregate freezing the stdio server; only a process boundary gives a hard kill and a memory ceiling, and a child that loads no application code also cannot reach configuration or credentials. The cost is a process spawn per call, a dependency on `proc_open` and an executable `PHP_BINARY`, and a second snapshot for coverage. The rejected alternatives are in-process execution, a fallback or degraded mode when the child cannot start, and ceilings or function lists that a setting can loosen: each removes the guarantee the tool is built on, and a loosenable ceiling is not a sandbox.

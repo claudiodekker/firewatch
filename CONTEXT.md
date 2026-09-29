@@ -341,3 +341,33 @@ _Avoid_: Anonymous, guest (as a fact), signed out
 **Unattributable**:
 Work that no attribution link ties to the actor asked about, stated as a count next to what was attributed.
 _Avoid_: Unknown, orphan, lost
+
+### SQL access
+
+**SQL tool**:
+The tool through which the assistant runs its own single read-only statement against the store and receives raw values.
+_Avoid_: Query endpoint, SQL console
+
+**SQL child**:
+The short-lived framework-free PHP process that runs one SQL tool call under fixed ceilings and is killed by its parent at the deadline.
+_Avoid_: Worker, sandbox process, subprocess
+
+**Readable set**:
+The fixed list of views, tables and table-valued functions a statement may read, described by the describe tool.
+_Avoid_: Whitelist, exposed tables, schema surface
+
+**Ceiling**:
+A fixed resource limit on one SQL call (time, memory, SQL size, output) that no setting can loosen.
+_Avoid_: Quota, budget, limit setting
+
+**Query stop**:
+The named reason a SQL result ends: complete, limit, budget, deadline, memory, aborted or error; the last four are abnormal and mark the rows partial.
+_Avoid_: Status, exit reason
+
+**Raw values**:
+Values returned by the SQL tool exactly as stored, without unit conversion or renaming.
+_Avoid_: Formatted values, converted values
+
+**SQL availability**:
+Whether the SQL tool's isolation can be established on this machine, stated with a closed reason and identical wherever it is reported.
+_Avoid_: SQL health, SQL support
