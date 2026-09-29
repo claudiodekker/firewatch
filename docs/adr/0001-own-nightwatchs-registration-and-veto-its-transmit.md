@@ -1,0 +1,5 @@
+# Own Nightwatch's registration and veto its transmit through IngestingEvents
+
+Firewatch does not run beside Nightwatch: it suppresses Nightwatch's discovery with its own `dont-discover`, registers Nightwatch's provider and facade alias itself, forces the configuration Nightwatch snapshots at register time, and takes records by vetoing the public `IngestingEvents` event, with a dead token and address as a second guard. A single switch, `FIREWATCH_ENABLED`, drives `nightwatch.enabled`, and `NIGHTWATCH_*` variables for those keys are ignored.
+
+Alternatives were replacing the `@internal` `Core::$ingest`, a local TCP server, or a tee, and leaving Nightwatch's switch to the application. They were rejected because the first breaks on any Nightwatch refactor and crashes the host, the second needs a second process and does not stop transmission, and the last two could send data to the hosted service, which the tool exists to prevent. The choice is hard to reverse (install layout, config ownership and the Nightwatch floor of 1.30.2 hang on it) and looks surprising to a reader who expects a package not to take over another package's provider.
