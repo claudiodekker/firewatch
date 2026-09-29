@@ -1,12 +1,9 @@
 <?php
 
-function manifest(): array
-{
-    return json_decode(file_get_contents(__DIR__.'/../../composer.json'), associative: true, flags: JSON_THROW_ON_ERROR);
-}
+use ClaudioDekker\Firewatch\Tests\Support\PackageSource;
 
 test('the package requires exactly what the install decision lists', function () {
-    $require = manifest()['require'];
+    $require = PackageSource::manifest()['require'];
 
     expect($require)->toBe([
         'php' => '^8.3',
@@ -18,13 +15,13 @@ test('the package requires exactly what the install decision lists', function ()
 });
 
 test('the package suggests nothing', function () {
-    $manifest = manifest();
+    $manifest = PackageSource::manifest();
 
     expect($manifest)->not->toHaveKey('suggest');
 });
 
 test('the provider is auto-discovered and Nightwatch is not', function () {
-    $laravel = manifest()['extra']['laravel'];
+    $laravel = PackageSource::manifest()['extra']['laravel'];
 
     expect($laravel)->toBe([
         'providers' => ['ClaudioDekker\\Firewatch\\FirewatchServiceProvider'],

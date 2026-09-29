@@ -30,10 +30,7 @@ jobs:
           coverage: none
 
       - name: Install dependencies
-        run: |
-          composer require "laravel/nightwatch:${{ matrix.nightwatch }}" --no-update --no-interaction
-          composer require "laravel/framework:${{ matrix.laravel }}" --dev --no-update --no-interaction
-          composer update --prefer-dist --no-interaction --no-progress
+        run: composer update --prefer-dist --no-interaction --no-progress --with "laravel/framework:${{ matrix.laravel }}" --with "laravel/nightwatch:${{ matrix.nightwatch }}"
 
       - name: Lint
         run: composer lint
