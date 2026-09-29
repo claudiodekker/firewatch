@@ -109,7 +109,7 @@ A record belonging to an execution: query, exception, log, cache event, mail, no
 _Avoid_: Sub-event, detail record
 
 **Store id**:
-The single integer handle of a stored record, unique across all types and never reused except after a drop, used only to page and prune, never as a link or identity.
+The single integer handle of a stored record, unique across all types, used only to page and prune, never as a link or identity; ids restart at 1 after any rebuild (a drop, a schema-mismatch rebuild or a damaged-file replacement) and continue after a clear.
 _Avoid_: Primary key (as domain identity), record id
 
 **Trace**:
@@ -149,11 +149,11 @@ Nightwatch's own grouping hash for a record, stored verbatim so a group here is 
 _Avoid_: Fingerprint, group key
 
 **Group label**:
-The human-readable name of a group, taken from the group's latest record.
+The human-readable name of a group: a fixed display field per record type, read from the group's latest record in the window.
 _Avoid_: Group name, title
 
 **Not measured**:
-The meaning of any value the sensors never populate (four counters, mail and notification failure flags); never "clean".
+The meaning of any value the sensors never populate (four counters, mail and notification failure flags); never "clean". Answers state it through blind spots, not by a marker on the value.
 _Avoid_: Zero, none, clean, healthy
 
 **Incomplete**:
@@ -182,7 +182,7 @@ _Avoid_: Account, principal, customer
 
 **Store**:
 The single SQLite file holding all captured records, the user directory, drift counts and a few facts about the capture.
-_Avoid_: Database, cache, log file
+_Avoid_: Database (except as the name of the `database` setting), cache, log file
 
 **Record view**:
 One of the twelve per-type views over the store's records, with typed columns named as on the wire, which are the documented query surface.
@@ -193,7 +193,7 @@ The single table of all records that the record views read from, queryable direc
 _Avoid_: Events table, main table
 
 **Store state**:
-The named condition of the store a reader reports when it cannot be read as usual: absent, schema mismatch, corrupt, foreign, busy or unavailable.
+The named condition of the store a reader reports when it cannot be read as usual: absent, schema mismatch, corrupt, foreign, busy or unavailable. In answers, absent gives the no-store empty kind, and foreign, schema mismatch and an unavailable floor give an unusable store with a reason, while corrupt and busy give an unusable store with the reason unreadable.
 _Avoid_: Health, error
 
 **Schema version**:
@@ -261,7 +261,7 @@ The wall clock of the machine running the MCP server, shared with the writers, r
 _Avoid_: Server time, current time
 
 **Window**:
-The half-open interval on records' start times over which a windowed answer is computed; an absent bound means unbounded, never recent.
+The half-open interval on records' start times over which a windowed answer is computed; an absent bound means unbounded, never recent, except on compare (coverage start and the store clock) and trend (a derived bound, named on the window).
 _Avoid_: Time range, period, default range
 
 **Split point**:
@@ -313,7 +313,7 @@ The stated record of one cut in an answer (rows, size, cell cap or a producer th
 _Avoid_: Truncated flag, page
 
 **Cursor**:
-An opaque string that continues a ranked or occurrence listing for the same tool, arguments and store, and fails after a clear or rebuild.
+An opaque string that continues a ranked or occurrence listing for the same tool, arguments and store, and fails only after a rebuild of the store; a clear keeps ids and cursors valid.
 _Avoid_: Offset, page token
 
 **Tool error**:
@@ -423,7 +423,7 @@ The stage of an execution group with the highest mean duration.
 _Avoid_: Bottleneck, slowest phase
 
 **Slow filter**:
-The restriction of a group's records to those at or above the group's own p50 or p95, applied only when that baseline is above its floor.
+The restriction of a group's records to those at or above the baseline of the selection (the group's own p50 or p95 when one group is selected), applied only when that baseline is above its floor.
 _Avoid_: Outlier filter
 
 ### Tools and drill-down
@@ -589,7 +589,7 @@ The outcome of judging an execution or group against its governing entry, exactl
 _Avoid_: Budget status, pass/fail
 
 **Measured on**:
-The statement of which figure a group's budget verdict used: the p95, or the maximum when the group has fewer than 20 executions.
+The statement of which figure a verdict or compare row used: the p95, the p50 or the maximum (for a budget on a group, the maximum below 20 executions).
 _Avoid_: Basis, statistic
 
 **Ignored entries**:
@@ -615,7 +615,7 @@ The scheduled run against the newest Nightwatch release that reports drift befor
 _Avoid_: Nightly, smoke test
 
 **Unverified state**:
-The condition of a Nightwatch release on a higher minor than the verified line, which every answer states and which never stops capture; patch releases of the verified minor and lower versions are not in it.
+The condition of a Nightwatch release on a higher minor than the verified line, or a development build, which every answer states and which never stops capture; patch releases of the verified minor and lower versions are not in it.
 _Avoid_: Unsupported, incompatible
 
 **Store identity**:
