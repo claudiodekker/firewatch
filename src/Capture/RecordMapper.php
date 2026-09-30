@@ -70,7 +70,7 @@ class RecordMapper
 
         $this->check($wire, $type, $drift);
 
-        $user = $this->user($type, $wire, seenAt: $record['timestamp'] ?? null);
+        $user = $this->user($type, $wire, seenAt: $this->instant($record['timestamp'] ?? null));
 
         if ($user !== null) {
             return new MappedRecord(user: $user);
@@ -106,9 +106,9 @@ class RecordMapper
      * Get the user directory entry of a user record, or null for any other record or a user without a usable id.
      *
      * @param  array<mixed>  $wire
-     * @return array{id: string, name: mixed, username: mixed, seen_at: mixed}|null
+     * @return array{id: string, name: mixed, username: mixed, seen_at: int|float|null}|null
      */
-    protected function user(?RecordType $type, array $wire, mixed $seenAt): ?array
+    protected function user(?RecordType $type, array $wire, int|float|null $seenAt): ?array
     {
         if ($type !== RecordType::USER || ! $this->hasUsableId($wire)) {
             return null;
@@ -142,11 +142,11 @@ class RecordMapper
         $v = $wire['v'] ?? null;
 
         if ($type === null || ! $type->hasVersion($v)) {
-            $drift->record($type === null ? DriftKind::UNKNOWN_TYPE : DriftKind::UNKNOWN_VERSION, $wire['t'], $v);
+            $drift->record($type === null ? DriftKind::UNKNOWN_TYPE : DriftKind::UNKNOWN_VERSION, type: $wire['t'], v: $v);
 
             // Without a contract its fields can't be judged, but the instant still fills a column.
             if (array_key_exists('timestamp', $wire)) {
-                $this->checkField($wire, 'timestamp', accepts: ['number'], drift: $drift);
+                $this->checkField($wire, 'timestamp', accepts: $type?->acceptedTypes()['timestamp'] ?? RecordType::USER->acceptedTypes()['timestamp'], drift: $drift);
             }
 
             return;
@@ -155,7 +155,7 @@ class RecordMapper
         $this->checkFields($wire, $type, $drift);
 
         if ($type === RecordType::USER && ($wire['id'] ?? null) === '') {
-            $drift->record(DriftKind::MISSING_FIELD, $wire['t'], $v, 'id');
+            $drift->record(DriftKind::MISSING_FIELD, type: $wire['t'], v: $v, detail: 'id');
         }
     }
 
@@ -172,12 +172,12 @@ class RecordMapper
             if (array_key_exists($field, $wire)) {
                 $this->checkField($wire, $field, accepts: $accepts, drift: $drift);
             } else {
-                $drift->record(DriftKind::MISSING_FIELD, $wire['t'], $wire['v'], $field);
+                $drift->record(DriftKind::MISSING_FIELD, type: $wire['t'], v: $wire['v'], detail: $field);
             }
         }
 
         foreach (array_diff_key($wire, $acceptedTypes) as $field => $value) {
-            $drift->record(DriftKind::UNKNOWN_FIELD, $wire['t'], $wire['v'], (string) $field);
+            $drift->record(DriftKind::UNKNOWN_FIELD, type: $wire['t'], v: $wire['v'], detail: (string) $field);
         }
     }
 
@@ -196,7 +196,7 @@ class RecordMapper
             return;
         }
 
-        $drift->record(DriftKind::STRUCTURE, $wire['t'], $wire['v'] ?? null, "{$field}: expected ".implode(' or ', $accepts).", got {$jsonType}");
+        $drift->record(DriftKind::STRUCTURE, type: $wire['t'], v: $wire['v'] ?? null, detail: "{$field}: expected ".implode(' or ', $accepts).", got {$jsonType}");
     }
 
     /**
@@ -208,7 +208,7 @@ class RecordMapper
     {
         $type = is_string($record['t'] ?? null) ? $record['t'] : null;
 
-        $drift->record(DriftKind::STRUCTURE, $type, $record['v'] ?? null, $detail);
+        $drift->record(DriftKind::STRUCTURE, type: $type, v: $record['v'] ?? null, detail: $detail);
 
         $columns = array_fill_keys(Schema::COLUMNS, null);
 
@@ -314,15 +314,21 @@ class RecordMapper
      */
     protected function startedAt(?RecordType $type, mixed $timestamp, mixed $duration): int|float|null
     {
-        if (! is_int($timestamp) && ! is_float($timestamp)) {
-            return null;
+        $instant = $this->instant($timestamp);
+
+        if ($instant !== null && $type?->isStampedAtEnd() && is_numeric($duration)) {
+            return $instant - $duration / 1e6;
         }
 
-        if ($type?->isStampedAtEnd() && is_numeric($duration)) {
-            return $timestamp - $duration / 1e6;
-        }
+        return $instant;
+    }
 
-        return $timestamp;
+    /**
+     * Get a wire timestamp as an instant, or null for one that is not a number.
+     */
+    protected function instant(mixed $timestamp): int|float|null
+    {
+        return is_int($timestamp) || is_float($timestamp) ? $timestamp : null;
     }
 
     /**

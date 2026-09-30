@@ -92,7 +92,7 @@ class AppendBatch
             return;
         }
 
-        $drift = $this->installDrift();
+        $drift = $this->newBatchDrift();
         $rows = [];
         $users = [];
 
@@ -111,7 +111,9 @@ class AppendBatch
         $this->writer->transaction(function (SQLite3 $connection) use ($rows, $users, $drift, $receivedAt) {
             $this->execute($connection, static::INSERT, $rows);
             $this->execute($connection, static::UPSERT_USER, $users);
-            $this->execute($connection, static::UPSERT_DRIFT, $this->driftRows($connection, $drift, $receivedAt));
+            $driftRows = $this->driftRows($connection, $drift, $receivedAt);
+
+            $this->execute($connection, static::UPSERT_DRIFT, $driftRows);
             $this->execute($connection, static::UPSERT_META, $this->metaRows());
         });
 
@@ -121,7 +123,7 @@ class AppendBatch
     /**
      * Start a batch's drift with how Nightwatch is installed.
      */
-    protected function installDrift(): Drift
+    protected function newBatchDrift(): Drift
     {
         $drift = new Drift;
 
@@ -156,13 +158,22 @@ class AppendBatch
             $key = $this->driftKey($occurrence);
 
             if (! isset($kept[$key]) && count($kept) >= static::DRIFT_ROWS) {
-                $occurrence = [...$occurrence, 'type' => '', 'v' => '', 'detail' => static::DRIFT_OVERFLOW];
+                $occurrence = [
+                    ...$occurrence,
+                    'type' => '',
+                    'v' => '',
+                    'detail' => static::DRIFT_OVERFLOW,
+                ];
                 $key = $this->driftKey($occurrence);
             } else {
                 $kept[$key] = true;
             }
 
-            $rows[$key] ??= [...$occurrence, 'count' => 0, 'seen_at' => $receivedAt];
+            $rows[$key] ??= [
+                ...$occurrence,
+                'count' => 0,
+                'seen_at' => $receivedAt,
+            ];
             $rows[$key]['count'] += $occurrence['count'];
         }
 

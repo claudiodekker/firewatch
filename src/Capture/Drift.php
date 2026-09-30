@@ -23,7 +23,13 @@ class Drift
         $v = $this->asSent($v);
         $key = implode("\0", [$kind->value, $type, $v, $detail]);
 
-        $this->occurrences[$key] ??= ['kind' => $kind->value, 'type' => $type, 'v' => $v, 'detail' => $detail, 'count' => 0];
+        $this->occurrences[$key] ??= [
+            'kind' => $kind->value,
+            'type' => $type,
+            'v' => $v,
+            'detail' => $detail,
+            'count' => 0,
+        ];
         $this->occurrences[$key]['count']++;
     }
 

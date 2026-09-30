@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\CarbonImmutable;
+use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -235,6 +236,27 @@ it('counts one version drift per batch on an unverified Nightwatch release', fun
     ingestBatch([cacheEvent()]);
 
     expect(driftCounts())->toBe([['kind' => 'version', 'type' => '', 'v' => '', 'detail' => 'v1.31.0', 'count' => 2]]);
+});
+
+it('counts no version drift on a release of the verified line', function () {
+    installNightwatch('v1.30.9');
+
+    ingestBatch([cacheEvent()]);
+
+    expect(driftCounts())->toBe([]);
+});
+
+it('counts the drift of a batch in the batch\'s transaction', function () {
+    ingestBatch([cacheEvent()]);
+    $store = new SQLite3(app(Configuration::class)->database);
+    $store->exec("CREATE TRIGGER fail_meta BEFORE UPDATE ON meta BEGIN SELECT RAISE(ABORT, 'the disk is full'); END");
+    $store->close();
+    installNightwatch('dev-main');
+
+    ingestBatch([cacheEvent(['colour' => 'red'])]);
+
+    expect(driftCounts())->toBe([])
+        ->and(queryStore('SELECT count(*) AS records FROM records'))->toBe([['records' => 1]]);
 });
 
 it('keeps the Nightwatch release and whether it is verified from the latest batch', function () {
