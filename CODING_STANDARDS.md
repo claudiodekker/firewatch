@@ -129,7 +129,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 13. Code hygiene
 
 - Delete code rather than commenting it out. Temporary disables ("re-enable after X") are not merged.
-- Docblocks only for @template/@mixin, array shapes, @internal/@api, or a constraint the name can't express.
+- Every method and constructor has a Laravel-style docblock: one sentence saying what it does ("Resolve the store path, falling back to the default path when the value is refused."), then any @template/@mixin, array shape, @internal/@api tag or constraint the name can't express. A docblock never restates the parameter and return types.
 - Inline `//` comments are kept only for a vendor quirk, a gotcha or a cross-reference. A comment that restates the next line is deleted.
 - Comments describe the domain. Comments aimed at tools or reviewers are removed; that belongs in the commit message.
 - A magic number becomes a named constant, not a number with a comment (`protected const EXCERPT_LENGTH = 160;`). A value used once and passed straight to a framework call stays inline.
