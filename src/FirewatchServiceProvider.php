@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch;
 
+use ClaudioDekker\Firewatch\Capture\HeaderRedactor;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationIssue;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
@@ -110,6 +111,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->vetoNightwatchTransmit();
         $this->registerNightwatch();
         $this->replaceNightwatchIngest();
+        $this->redactHeaders();
     }
 
     /**
@@ -231,11 +233,28 @@ class FirewatchServiceProvider extends ServiceProvider
                 'nightwatch.sampling' => static::FULL_SAMPLING,
                 'nightwatch.filtering' => static::NO_FILTERING,
                 'nightwatch.capture_exception_source_code' => true,
+                ...$this->capture(),
                 ...$this->deployment(),
             ]),
             Mode::OFF => $config->set('nightwatch.enabled', false),
             Mode::STEPPED_ASIDE => null,
         };
+    }
+
+    /**
+     * Get the capture settings to write to Nightwatch: Firewatch's payload list replaces Nightwatch's, and headers are redacted by Firewatch's own callback.
+     *
+     * @return array<string, mixed>
+     */
+    protected function capture(): array
+    {
+        $configuration = $this->app->make(Configuration::class);
+
+        return [
+            'nightwatch.capture_request_payload' => $configuration->captureRequestPayload,
+            'nightwatch.redact_payload_fields' => $configuration->redactPayloadFields,
+            'nightwatch.redact_headers' => [],
+        ];
     }
 
     /**
@@ -296,6 +315,27 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->app->register(NightwatchServiceProvider::class);
 
         AliasLoader::getInstance()->alias('Nightwatch', Nightwatch::class);
+    }
+
+    /**
+     * Redact the configured request headers when Active, ahead of the application's own redactRequests callbacks.
+     */
+    protected function redactHeaders(): void
+    {
+        if ($this->mode !== Mode::ACTIVE) {
+            return;
+        }
+
+        $core = $this->app->bound(Core::class) ? $this->app->make(Core::class) : null;
+
+        // A missing core, or one Firewatch can't recognise, is already reported by the ingest swap.
+        if (! $core instanceof Core) {
+            return;
+        }
+
+        $redactor = new HeaderRedactor($this->app->make(Configuration::class)->redactHeaders);
+
+        $core->redactRequests($redactor);
     }
 
     /**
