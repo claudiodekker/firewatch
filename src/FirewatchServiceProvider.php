@@ -21,12 +21,18 @@ class FirewatchServiceProvider extends ServiceProvider
 
     protected const NESTED_GROUPS = ['retention', 'capture'];
 
+    /**
+     * Register the package services.
+     */
     public function register(): void
     {
         $this->registerConfiguration();
         $this->registerNightwatch();
     }
 
+    /**
+     * Bootstrap the package services.
+     */
     public function boot(): void
     {
         $this->reportConfigurationIssues();
@@ -36,6 +42,9 @@ class FirewatchServiceProvider extends ServiceProvider
         }
     }
 
+    /**
+     * Resolve the configuration once for this process.
+     */
     protected function registerConfiguration(): void
     {
         $this->mergeConfiguration();
@@ -52,6 +61,9 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->app->instance(Configuration::class, $configuration);
     }
 
+    /**
+     * Merge the package defaults under the published configuration file.
+     */
     protected function mergeConfiguration(): void
     {
         if ($this->app instanceof CachesConfiguration && $this->app->configurationIsCached()) {
@@ -73,6 +85,9 @@ class FirewatchServiceProvider extends ServiceProvider
         $config->set('firewatch', $published + $defaults);
     }
 
+    /**
+     * Register Nightwatch's provider and facade alias.
+     */
     protected function registerNightwatch(): void
     {
         // Nightwatch is in dont-discover, so this is its only registration.
@@ -81,6 +96,9 @@ class FirewatchServiceProvider extends ServiceProvider
         AliasLoader::getInstance()->alias('Nightwatch', Nightwatch::class);
     }
 
+    /**
+     * Report the configuration issues once in a console process.
+     */
     protected function reportConfigurationIssues(): void
     {
         $issues = $this->app->make(Configuration::class)->issues;

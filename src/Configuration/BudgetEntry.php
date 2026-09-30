@@ -10,6 +10,8 @@ use ClaudioDekker\Firewatch\ExecutionType;
 readonly class BudgetEntry
 {
     /**
+     * Create a new valid budget entry.
+     *
      * @param  list<string>|null  $methods
      */
     public function __construct(

@@ -67,6 +67,9 @@ class ConfigurationNormaliser
      */
     protected array $issues = [];
 
+    /**
+     * Create a new configuration normaliser.
+     */
     public function __construct(
         protected string $basePath,
         protected string $publicPath,
@@ -74,6 +77,8 @@ class ConfigurationNormaliser
     ) {}
 
     /**
+     * Resolve the raw configuration into typed values and the issues found.
+     *
      * @param  array<mixed>  $raw
      */
     public function resolve(array $raw): Configuration
@@ -116,6 +121,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Get a nested group of keys, or none when the group is not an array.
+     *
      * @param  array<mixed>  $raw
      * @return array<mixed>
      */
@@ -127,6 +134,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Read a boolean key, falling back to its default when the value is refused.
+     *
      * @param  array<mixed>  $values
      */
     protected function boolean(array $values, string $name, string $key, bool $default): bool
@@ -158,6 +167,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Read an integer key within its range, falling back to its default when the value is refused.
+     *
      * @param  array<mixed>  $values
      */
     protected function integer(array $values, string $name, string $key, int $minimum, int $maximum, int $default): int
@@ -190,6 +201,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Read a duration key, falling back to its default when the value is refused.
+     *
      * @param  array<mixed>  $values
      */
     protected function duration(array $values, string $name, string $key, string $default): string
@@ -209,6 +222,9 @@ class ConfigurationNormaliser
         return $default;
     }
 
+    /**
+     * Convert a valid duration into seconds.
+     */
     protected function durationSeconds(string $duration): int
     {
         $unit = substr($duration, -1);
@@ -218,6 +234,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Read the environments a process captures in, using local and testing when none is valid.
+     *
      * @param  array<mixed>  $raw
      * @return list<string>
      */
@@ -251,6 +269,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Read a list of fields or headers to redact, using none when the value is not a list.
+     *
      * @param  array<mixed>  $values
      * @return list<string>
      */
@@ -272,7 +292,7 @@ class ConfigurationNormaliser
     }
 
     /**
-     * Returns null when the value is neither an array nor a comma-separated string.
+     * Read a list from an array or a comma-separated string, or null when the value is neither.
      *
      * @param  Closure(string): bool  $accepts
      * @return list<string>|null
@@ -311,6 +331,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Resolve the store path, falling back to the default path when the value is refused.
+     *
      * @param  array<mixed>  $raw
      */
     protected function database(array $raw): string
@@ -340,6 +362,9 @@ class ConfigurationNormaliser
         return $this->resolvedPath($value);
     }
 
+    /**
+     * Get the reason a store path is refused, or null when it is usable.
+     */
     protected function refusedPath(string $path): ?string
     {
         $described = $this->describe($path);
@@ -355,11 +380,17 @@ class ConfigurationNormaliser
         };
     }
 
+    /**
+     * Resolve a store path against the base path unless it is absolute.
+     */
     protected function resolvedPath(string $path): string
     {
         return $this->isAbsolutePath($path) ? $path : $this->basePath.'/'.$path;
     }
 
+    /**
+     * Determine if a path is absolute, on POSIX or Windows.
+     */
     protected function isAbsolutePath(string $path): bool
     {
         return str_starts_with($path, '/')
@@ -367,6 +398,9 @@ class ConfigurationNormaliser
             || preg_match('#^[A-Za-z]:[\\\\/]#', $path) === 1;
     }
 
+    /**
+     * Determine if a path lies inside the public directory.
+     */
     protected function isUnderPublicPath(string $path): bool
     {
         $public = rtrim($this->withoutDotSegments($this->publicPath), '/').'/';
@@ -374,6 +408,9 @@ class ConfigurationNormaliser
         return str_starts_with($this->withoutDotSegments($path), $public);
     }
 
+    /**
+     * Remove the dot segments from a path without touching the filesystem.
+     */
     protected function withoutDotSegments(string $path): string
     {
         $segments = [];
@@ -392,6 +429,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Read the deploy identity, trimmed and cut at 255 bytes, or null when it is unset.
+     *
      * @param  array<mixed>  $raw
      */
     protected function deploy(array $raw): ?string
@@ -417,12 +456,17 @@ class ConfigurationNormaliser
         return mb_strcut($deploy, 0, static::MAXIMUM_DEPLOY_BYTES, 'UTF-8');
     }
 
+    /**
+     * Remove the bytes that are not valid UTF-8.
+     */
     protected function withoutInvalidUtf8(string $value): string
     {
         return (string) preg_replace('/([\x00-\x7F]|[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]|\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2})|./s', '$1', $value);
     }
 
     /**
+     * Read the valid budget entries, numbered by their place in the file.
+     *
      * @param  array<mixed>  $raw
      * @return list<BudgetEntry>
      */
@@ -466,6 +510,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Count the budget entries that were ignored as invalid.
+     *
      * @param  array<mixed>  $raw
      * @param  list<BudgetEntry>  $budgets
      */
@@ -474,6 +520,9 @@ class ConfigurationNormaliser
         return is_array($raw['budgets'] ?? null) ? count($raw['budgets']) - count($budgets) : 0;
     }
 
+    /**
+     * Get the reason a budget entry is ignored, or null when it is valid.
+     */
     protected function refusedBudgetEntry(mixed $entry): ?string
     {
         if (! is_array($entry)) {
@@ -502,6 +551,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Get the reason a budget entry holds a key its type does not allow.
+     *
      * @param  array<mixed>  $entry
      */
     protected function refusedBudgetKeys(array $entry, ExecutionType $type): ?string
@@ -525,6 +576,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Get the reason a budget entry's methods are refused.
+     *
      * @param  array<mixed>  $entry
      */
     protected function refusedMethods(array $entry): ?string
@@ -549,6 +602,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Get the reason a budget entry's path or name pattern is refused.
+     *
      * @param  array<mixed>  $entry
      */
     protected function refusedPattern(array $entry, string $matcher): ?string
@@ -561,6 +616,8 @@ class ConfigurationNormaliser
     }
 
     /**
+     * Get the reason a budget entry's duration or memory ceiling is refused.
+     *
      * @param  array<mixed>  $entry
      */
     protected function refusedCeiling(array $entry, string $ceiling, int $maximum): ?string
@@ -578,6 +635,9 @@ class ConfigurationNormaliser
         return "{$ceiling} ".$this->describe($value)." is not a number greater than 0 and at most {$maximum}";
     }
 
+    /**
+     * Describe a value for an issue's reason, quoting strings and cutting them to 60 characters.
+     */
     protected function describe(mixed $value): string
     {
         return match (true) {
