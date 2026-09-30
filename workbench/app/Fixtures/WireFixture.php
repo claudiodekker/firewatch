@@ -29,15 +29,9 @@ class WireFixture
      */
     public function produce(Producer $producer): array
     {
-        $records = $this->sensors->record($producer);
+        $record = $this->sensors->recordOf($producer);
 
-        foreach ($records as $record) {
-            if (($record['t'] ?? null) === $producer->type()->value) {
-                return $this->normalise($record);
-            }
-        }
-
-        throw new RuntimeException("The {$producer->value} producer wrote no {$producer->type()->value} record.");
+        return $this->normalise($record);
     }
 
     /**

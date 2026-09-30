@@ -17,9 +17,7 @@ const OBSERVED_CLOCK_START = 2000000000.0;
  */
 function sensorRecord(Producer $producer, ?Closure $prepare = null): array
 {
-    $records = app(Sensors::class)->record($producer, $prepare);
-
-    $record = collect($records)->firstOrFail(fn (array $record) => ($record['t'] ?? null) === $producer->type()->value);
+    $record = app(Sensors::class)->recordOf($producer, $prepare);
 
     return json_decode(json_encode($record, RecordMapper::JSON_FLAGS), associative: true, flags: JSON_THROW_ON_ERROR);
 }

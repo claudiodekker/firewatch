@@ -202,7 +202,7 @@ it('keeps an unknown field in data under its wire name, even one named like a co
 });
 
 it('stores a record of an unknown type with its common columns filled from the wire and the rest in data', function () {
-    ingest([syntheticRecord(RecordType::QUEUED_JOB)->with(['t' => 'future-type', 'timestamp' => 1767225600.25, 'duration' => 5, 'job_id' => 'job-1', 'user' => '7', 'colour' => 'red'])]);
+    ingest([syntheticRecord(RecordType::QUEUED_JOB)->with(['t' => 'future-type', 'timestamp' => 1767225600.25, 'duration' => 5, 'job_id' => 'job-1', 'user' => '7', 'colour' => 'red'])->without('name', 'connection', 'queue')]);
 
     [$record] = selectFromStore('SELECT type, started_at, duration, group_hash, trace_id, execution_id, source, job_id, user_id, deploy, server, data FROM records');
 
@@ -218,6 +218,6 @@ it('stores a record of an unknown type with its common columns filled from the w
         'user_id' => '7',
         'deploy' => '',
         'server' => 'web-1',
-        'data' => '{"execution_preview":"","execution_stage":"action","name":"Workbench\\\\App\\\\Jobs\\\\ShipOrder","connection":"database","queue":"default","colour":"red"}',
+        'data' => '{"execution_preview":"","execution_stage":"action","colour":"red"}',
     ]);
 });

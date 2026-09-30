@@ -14,7 +14,7 @@ class WireRecorder implements Ingest
     public array $records = [];
 
     /**
-     * Record a record.
+     * Keep a record the sensors wrote.
      *
      * @param  array<mixed>  $record
      */
@@ -24,7 +24,7 @@ class WireRecorder implements Ingest
     }
 
     /**
-     * Record a record written at once.
+     * Keep a record the sensors wrote at once.
      *
      * @param  array<mixed>  $record
      */

@@ -32,9 +32,10 @@ it('builds a record with the fields of its wire fixture and deterministic values
 })->with(RecordType::cases());
 
 it('resolves each placeholder to its deterministic value', function () {
-    $record = syntheticRecord(RecordType::EXCEPTION)->make();
+    $exception = syntheticRecord(RecordType::EXCEPTION)->make();
+    $request = syntheticRecord(RecordType::REQUEST)->make();
 
-    expect($record)->toMatchArray([
+    expect($exception)->toMatchArray([
         'timestamp' => 1767225600.25,
         'deploy' => '',
         'server' => 'web-1',
@@ -46,7 +47,7 @@ it('resolves each placeholder to its deterministic value', function () {
         'trace' => '[]',
         'php_version' => '1.0.0',
         'laravel_version' => '1.0.0',
-    ])->and(syntheticRecord(RecordType::REQUEST)->make())->toMatchArray([
+    ])->and($request)->toMatchArray([
         'ip' => '127.0.0.1',
         'duration' => 1000,
         'bootstrap' => 1000,

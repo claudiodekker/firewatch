@@ -7,16 +7,37 @@ use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Foundation\Application;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Facade;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Orchestra\Testbench\Foundation\Application as Testbench;
+use RuntimeException;
 use Workbench\App\Providers\WorkbenchServiceProvider;
 
 use function Orchestra\Testbench\workbench_path;
 
 class Sensors
 {
+    /**
+     * Get the first record of the producer's type the sensors write while it runs in an application of its own.
+     *
+     * @param  (Closure(Core<*>): void)|null  $prepare
+     * @return array<mixed>
+     */
+    public function recordOf(Producer $producer, ?Closure $prepare = null): array
+    {
+        $records = $this->record($producer, $prepare);
+
+        $record = Arr::first($records, fn (array $record) => ($record['t'] ?? null) === $producer->type()->value);
+
+        if ($record === null) {
+            throw new RuntimeException("The {$producer->value} producer wrote no {$producer->type()->value} record.");
+        }
+
+        return $record;
+    }
+
     /**
      * Record what the sensors write while a producer runs in an application of its own.
      *
