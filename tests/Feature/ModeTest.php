@@ -33,6 +33,9 @@ it('enables Nightwatch against the dead token and address when Active', function
         'sampling' => ['requests' => 1.0, 'commands' => 1.0, 'exceptions' => 1.0, 'scheduled_tasks' => 1.0],
         'filtering' => ['ignore_cache_events' => false, 'ignore_mail' => false, 'ignore_notifications' => false, 'ignore_outgoing_requests' => false, 'ignore_queries' => false, 'log_level' => 'debug'],
         'capture_exception_source_code' => true,
+        'capture_request_payload' => true,
+        'redact_payload_fields' => [],
+        'redact_headers' => [],
     ]);
 });
 
