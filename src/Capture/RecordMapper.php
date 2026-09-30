@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Capture;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Schema;
 use JsonException;
+use stdClass;
 
 /**
  * @internal
@@ -39,20 +40,57 @@ class RecordMapper
     ];
 
     /**
-     * Map a wire record to the columns of a stored record.
+     * Map a wire record to a stored record or a user directory entry, counting how its shape differs from the contract table.
      *
      * @param  array<mixed>  $record
+     */
+    public function map(array $record, Drift $drift): MappedRecord
+    {
+        try {
+            $wire = $this->normalise($record);
+        } catch (JsonException $exception) {
+            return $this->placeholder($record, $drift, detail: 'record: unencodable', error: $exception->getMessage());
+        }
+
+        if (! $wire instanceof stdClass) {
+            return $this->placeholder($record, $drift, detail: 'record: not an object');
+        }
+
+        $wire = (array) $wire;
+
+        if (! array_key_exists('t', $wire)) {
+            return $this->placeholder($wire, $drift, detail: 't: missing');
+        }
+
+        if (! is_string($wire['t'])) {
+            return $this->placeholder($wire, $drift, detail: 't: expected string, got '.$this->jsonType($wire['t']));
+        }
+
+        $type = RecordType::tryFrom($wire['t']);
+
+        $this->check($wire, $type, $drift);
+
+        $user = $this->user($type, $wire, seenAt: $record['timestamp'] ?? null);
+
+        if ($user !== null) {
+            return new MappedRecord(user: $user);
+        }
+
+        return new MappedRecord(record: $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null));
+    }
+
+    /**
+     * Map the wire fields of a record to the columns of a stored record.
+     *
+     * @param  array<mixed>  $wire
      * @return array<string, mixed>
      */
-    public function map(array $record): array
+    protected function columns(?RecordType $type, array $wire, mixed $timestamp): array
     {
-        $wire = $this->normalise($record);
-        $type = is_string($wire['t'] ?? null) ? RecordType::tryFrom($wire['t']) : null;
-
         [$columns, $data] = $this->split($wire, $type);
 
         // The round trip can turn a float into an integer, so the instant comes from the original array.
-        $columns['started_at'] = $this->startedAt($type, timestamp: $record['timestamp'] ?? null, duration: $columns['duration']);
+        $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, duration: $columns['duration']);
 
         if ($type !== null) {
             $columns['execution_id'] = $this->executionId($type, $columns);
@@ -65,20 +103,14 @@ class RecordMapper
     }
 
     /**
-     * Map a wire user record to its user directory entry, or null for any other record or a user without a usable id.
+     * Get the user directory entry of a user record, or null for any other record or a user without a usable id.
      *
-     * @param  array<mixed>  $record
+     * @param  array<mixed>  $wire
      * @return array{id: string, name: mixed, username: mixed, seen_at: mixed}|null
      */
-    public function user(array $record): ?array
+    protected function user(?RecordType $type, array $wire, mixed $seenAt): ?array
     {
-        if (($record['t'] ?? null) !== RecordType::USER->value) {
-            return null;
-        }
-
-        $wire = $this->normalise($record);
-
-        if (! is_string($wire['id'] ?? null) || $wire['id'] === '') {
+        if ($type !== RecordType::USER || ! $this->hasUsableId($wire)) {
             return null;
         }
 
@@ -86,21 +118,134 @@ class RecordMapper
             'id' => $wire['id'],
             'name' => $wire['name'] ?? null,
             'username' => $wire['username'] ?? null,
-            'seen_at' => $record['timestamp'] ?? null,
+            'seen_at' => $seenAt,
         ];
+    }
+
+    /**
+     * Determine if a user record carries an id the user directory can be keyed by.
+     *
+     * @param  array<mixed>  $wire
+     */
+    protected function hasUsableId(array $wire): bool
+    {
+        return is_string($wire['id'] ?? null) && $wire['id'] !== '';
+    }
+
+    /**
+     * Count how a readable record differs from the contract table.
+     *
+     * @param  array<string, mixed>  $wire
+     */
+    protected function check(array $wire, ?RecordType $type, Drift $drift): void
+    {
+        $v = $wire['v'] ?? null;
+
+        if ($type === null || ! $type->hasVersion($v)) {
+            $drift->record($type === null ? DriftKind::UNKNOWN_TYPE : DriftKind::UNKNOWN_VERSION, $wire['t'], $v);
+
+            // Without a contract its fields can't be judged, but the instant still fills a column.
+            if (array_key_exists('timestamp', $wire)) {
+                $this->checkField($wire, 'timestamp', accepts: ['number'], drift: $drift);
+            }
+
+            return;
+        }
+
+        $this->checkFields($wire, $type, $drift);
+
+        if ($type === RecordType::USER && ($wire['id'] ?? null) === '') {
+            $drift->record(DriftKind::MISSING_FIELD, $wire['t'], $v, 'id');
+        }
+    }
+
+    /**
+     * Count the fields of a record of a known type and version that are missing, of a type it does not accept, or unknown.
+     *
+     * @param  array<string, mixed>  $wire
+     */
+    protected function checkFields(array $wire, RecordType $type, Drift $drift): void
+    {
+        $acceptedTypes = $type->acceptedTypes();
+
+        foreach ($acceptedTypes as $field => $accepts) {
+            if (array_key_exists($field, $wire)) {
+                $this->checkField($wire, $field, accepts: $accepts, drift: $drift);
+            } else {
+                $drift->record(DriftKind::MISSING_FIELD, $wire['t'], $wire['v'], $field);
+            }
+        }
+
+        foreach (array_diff_key($wire, $acceptedTypes) as $field => $value) {
+            $drift->record(DriftKind::UNKNOWN_FIELD, $wire['t'], $wire['v'], (string) $field);
+        }
+    }
+
+    /**
+     * Count a field whose value is of a type the contract table does not accept.
+     *
+     * @param  array<string, mixed>  $wire
+     * @param  list<string>  $accepts
+     */
+    protected function checkField(array $wire, string $field, array $accepts, Drift $drift): void
+    {
+        $jsonType = $this->jsonType($wire[$field]);
+
+        // A JSON number may be written without a fraction.
+        if (in_array($jsonType, $accepts, strict: true) || ($jsonType === 'integer' && in_array('number', $accepts, strict: true))) {
+            return;
+        }
+
+        $drift->record(DriftKind::STRUCTURE, $wire['t'], $wire['v'] ?? null, "{$field}: expected ".implode(' or ', $accepts).", got {$jsonType}");
+    }
+
+    /**
+     * Store input that can't be read as a record as an error placeholder, and count it.
+     *
+     * @param  array<mixed>  $record
+     */
+    protected function placeholder(array $record, Drift $drift, string $detail, ?string $error = null): MappedRecord
+    {
+        $type = is_string($record['t'] ?? null) ? $record['t'] : null;
+
+        $drift->record(DriftKind::STRUCTURE, $type, $record['v'] ?? null, $detail);
+
+        $columns = array_fill_keys(Schema::COLUMNS, null);
+
+        $columns['type'] = $type;
+        $columns['data'] = json_encode(['error' => $error ?? $detail], self::JSON_FLAGS);
+
+        return new MappedRecord(record: $columns);
     }
 
     /**
      * Turn a record into the plain data Nightwatch would send, resolving its lazy values.
      *
      * @param  array<mixed>  $record
-     * @return array<mixed>
+     *
+     * @throws JsonException when the record can't be encoded
      */
-    protected function normalise(array $record): array
+    protected function normalise(array $record): mixed
     {
         $json = json_encode($record, self::JSON_FLAGS);
 
-        return (array) json_decode($json, flags: JSON_THROW_ON_ERROR);
+        return json_decode($json, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * Get the JSON type of a decoded wire value.
+     */
+    protected function jsonType(mixed $value): string
+    {
+        return match (true) {
+            $value === null => 'null',
+            is_bool($value) => 'boolean',
+            is_int($value) => 'integer',
+            is_float($value) => 'number',
+            is_string($value) => 'string',
+            is_array($value) => 'array',
+            default => 'object',
+        };
     }
 
     /**
@@ -165,11 +310,15 @@ class RecordMapper
     }
 
     /**
-     * Get the instant a record started at, moving the types Nightwatch stamps at their end back by their duration.
+     * Get the instant a record started at, moving the types Nightwatch stamps at their end back by their duration, or null for a timestamp that is not a number.
      */
-    protected function startedAt(?RecordType $type, mixed $timestamp, mixed $duration): mixed
+    protected function startedAt(?RecordType $type, mixed $timestamp, mixed $duration): int|float|null
     {
-        if ($type?->isStampedAtEnd() && is_numeric($timestamp) && is_numeric($duration)) {
+        if (! is_int($timestamp) && ! is_float($timestamp)) {
+            return null;
+        }
+
+        if ($type?->isStampedAtEnd() && is_numeric($duration)) {
             return $timestamp - $duration / 1e6;
         }
 

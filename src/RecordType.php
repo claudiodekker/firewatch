@@ -22,48 +22,48 @@ enum RecordType: string
     case USER = 'user';
 
     /**
-     * The wire fields every record carries, by the name they are stored under.
+     * The wire fields every record carries, with the name they are stored under and their accepted JSON types.
      */
     protected const ENVELOPE = [
-        't' => 'type',
-        'v' => 'v',
-        'timestamp' => 'started_at',
-        'deploy' => 'deploy',
-        'server' => 'server',
-        '_group' => 'group_hash',
-        'trace_id' => 'trace_id',
+        't' => ['type', 'string'],
+        'v' => ['v', 'integer'],
+        'timestamp' => ['started_at', 'number'],
+        'deploy' => ['deploy', 'string'],
+        'server' => ['server', 'string'],
+        '_group' => ['group_hash', 'string'],
+        'trace_id' => ['trace_id', 'string'],
     ];
 
     /**
-     * The wire fields that tie a child event to its execution, by the name they are stored under.
+     * The wire fields that tie a child event to its execution, with the name they are stored under and their accepted JSON types.
      */
     protected const EXECUTION_SCOPE = [
-        'execution_source' => 'source',
-        'execution_id' => 'execution_id',
-        'execution_preview' => null,
-        'execution_stage' => 'execution_stage',
-        'user' => 'user_id',
+        'execution_source' => ['source', 'string'],
+        'execution_id' => ['execution_id', 'string'],
+        'execution_preview' => [null, 'string'],
+        'execution_stage' => ['execution_stage', 'string'],
+        'user' => ['user_id', 'string'],
     ];
 
     /**
-     * The counters and measurements every execution carries.
+     * The counters and measurements every execution carries, with the name they are stored under and their accepted JSON types.
      */
     protected const EXECUTION_TOTALS = [
-        'exceptions' => 'exceptions',
-        'logs' => 'logs',
-        'queries' => 'queries',
-        'lazy_loads' => 'lazy_loads',
-        'jobs_queued' => 'jobs_queued',
-        'mail' => 'mail',
-        'notifications' => 'notifications',
-        'outgoing_requests' => 'outgoing_requests',
-        'files_read' => 'files_read',
-        'files_written' => 'files_written',
-        'cache_events' => 'cache_events',
-        'hydrated_models' => 'hydrated_models',
-        'peak_memory_usage' => 'peak_memory_usage',
-        'exception_preview' => 'exception_preview',
-        'context' => 'context',
+        'exceptions' => ['exceptions', 'integer'],
+        'logs' => ['logs', 'integer'],
+        'queries' => ['queries', 'integer'],
+        'lazy_loads' => ['lazy_loads', 'integer'],
+        'jobs_queued' => ['jobs_queued', 'integer'],
+        'mail' => ['mail', 'integer'],
+        'notifications' => ['notifications', 'integer'],
+        'outgoing_requests' => ['outgoing_requests', 'integer'],
+        'files_read' => ['files_read', 'integer'],
+        'files_written' => ['files_written', 'integer'],
+        'cache_events' => ['cache_events', 'integer'],
+        'hydrated_models' => ['hydrated_models', 'integer'],
+        'peak_memory_usage' => ['peak_memory_usage', 'integer'],
+        'exception_preview' => ['exception_preview', 'string'],
+        'context' => ['context', 'string'],
     ];
 
     /**
@@ -73,165 +73,204 @@ enum RecordType: string
      */
     public function fields(): array
     {
+        return array_map(fn (array $field) => $field[0], $this->contract());
+    }
+
+    /**
+     * Get the JSON types each wire field of the type accepts.
+     *
+     * @return array<string, list<string>>
+     */
+    public function acceptedTypes(): array
+    {
+        return array_map(fn (array $field) => explode('|', $field[1]), $this->contract());
+    }
+
+    /**
+     * Determine if the contract table knows the given version of the type.
+     */
+    public function hasVersion(mixed $version): bool
+    {
+        return $version === $this->version();
+    }
+
+    /**
+     * Get the version of the type the contract table was built from.
+     */
+    protected function version(): int
+    {
+        return match ($this) {
+            self::EXCEPTION => 3,
+            default => 1,
+        };
+    }
+
+    /**
+     * Get the type's contract: each wire field with the name it is stored under and its accepted JSON types, separated by "|".
+     *
+     * @return array<string, array{string|null, string}>
+     */
+    protected function contract(): array
+    {
         return match ($this) {
             self::REQUEST => [
                 ...self::ENVELOPE,
-                'user' => 'user_id',
-                'method' => 'method',
-                'url' => 'url',
-                'route_name' => 'route_name',
-                'route_methods' => 'route_methods',
-                'route_domain' => 'route_domain',
-                'route_path' => 'route_path',
-                'route_action' => 'route_action',
-                'ip' => 'ip',
-                'duration' => 'duration',
-                'status_code' => 'status_code',
-                'request_size' => 'request_size',
-                'response_size' => 'response_size',
-                'bootstrap' => 'bootstrap',
-                'before_middleware' => 'before_middleware',
-                'action' => 'action',
-                'render' => 'render',
-                'after_middleware' => 'after_middleware',
-                'sending' => 'sending',
-                'terminating' => 'terminating',
+                'user' => ['user_id', 'string'],
+                'method' => ['method', 'string'],
+                'url' => ['url', 'string'],
+                'route_name' => ['route_name', 'string'],
+                'route_methods' => ['route_methods', 'array'],
+                'route_domain' => ['route_domain', 'string'],
+                'route_path' => ['route_path', 'string'],
+                'route_action' => ['route_action', 'string'],
+                'ip' => ['ip', 'string'],
+                'duration' => ['duration', 'integer'],
+                'status_code' => ['status_code', 'integer'],
+                'request_size' => ['request_size', 'integer'],
+                'response_size' => ['response_size', 'integer'],
+                'bootstrap' => ['bootstrap', 'integer'],
+                'before_middleware' => ['before_middleware', 'integer'],
+                'action' => ['action', 'integer'],
+                'render' => ['render', 'integer'],
+                'after_middleware' => ['after_middleware', 'integer'],
+                'sending' => ['sending', 'integer'],
+                'terminating' => ['terminating', 'integer'],
                 ...self::EXECUTION_TOTALS,
-                'headers' => 'headers',
-                'payload' => 'payload',
+                'headers' => ['headers', 'string'],
+                'payload' => ['payload', 'string'],
             ],
             self::COMMAND => [
                 ...self::ENVELOPE,
-                'class' => 'class',
-                'name' => 'name',
-                'command' => 'command',
-                'exit_code' => 'exit_code',
-                'duration' => 'duration',
-                'bootstrap' => 'bootstrap',
-                'action' => 'action',
-                'terminating' => 'terminating',
+                'class' => ['class', 'string'],
+                'name' => ['name', 'string'],
+                'command' => ['command', 'string'],
+                'exit_code' => ['exit_code', 'integer'],
+                'duration' => ['duration', 'integer'],
+                'bootstrap' => ['bootstrap', 'integer'],
+                'action' => ['action', 'integer'],
+                'terminating' => ['terminating', 'integer'],
                 ...self::EXECUTION_TOTALS,
             ],
             self::JOB_ATTEMPT => [
                 ...self::ENVELOPE,
-                'user' => 'user_id',
-                'job_id' => 'job_id',
-                'attempt_id' => 'execution_id',
-                'attempt' => 'attempt',
-                'name' => 'name',
-                'connection' => 'connection',
-                'queue' => 'queue',
-                'status' => 'status',
-                'duration' => 'duration',
+                'user' => ['user_id', 'string'],
+                'job_id' => ['job_id', 'string'],
+                'attempt_id' => ['execution_id', 'string'],
+                'attempt' => ['attempt', 'integer'],
+                'name' => ['name', 'string'],
+                'connection' => ['connection', 'string'],
+                'queue' => ['queue', 'string'],
+                'status' => ['status', 'string'],
+                'duration' => ['duration', 'integer'],
                 ...self::EXECUTION_TOTALS,
             ],
             self::SCHEDULED_TASK => [
                 ...self::ENVELOPE,
-                'name' => 'name',
-                'cron' => 'cron',
-                'timezone' => 'timezone',
-                'repeat_seconds' => 'repeat_seconds',
-                'without_overlapping' => 'without_overlapping',
-                'on_one_server' => 'on_one_server',
-                'run_in_background' => 'run_in_background',
-                'even_in_maintenance_mode' => 'even_in_maintenance_mode',
-                'status' => 'status',
-                'duration' => 'duration',
+                'name' => ['name', 'string'],
+                'cron' => ['cron', 'string'],
+                'timezone' => ['timezone', 'string'],
+                'repeat_seconds' => ['repeat_seconds', 'integer'],
+                'without_overlapping' => ['without_overlapping', 'boolean'],
+                'on_one_server' => ['on_one_server', 'boolean'],
+                'run_in_background' => ['run_in_background', 'boolean'],
+                'even_in_maintenance_mode' => ['even_in_maintenance_mode', 'boolean'],
+                'status' => ['status', 'string'],
+                'duration' => ['duration', 'integer'],
                 ...self::EXECUTION_TOTALS,
             ],
             self::QUERY => [
                 ...self::ENVELOPE,
                 ...self::EXECUTION_SCOPE,
-                'sql' => 'sql',
-                'file' => 'file',
-                'line' => 'line',
-                'duration' => 'duration',
-                'connection' => 'connection',
-                'connection_type' => 'connection_type',
+                'sql' => ['sql', 'string'],
+                'file' => ['file', 'string'],
+                'line' => ['line', 'integer'],
+                'duration' => ['duration', 'integer'],
+                'connection' => ['connection', 'string'],
+                'connection_type' => ['connection_type', 'string'],
             ],
             self::EXCEPTION => [
                 ...self::ENVELOPE,
                 ...self::EXECUTION_SCOPE,
-                'class' => 'class',
-                'file' => 'file',
-                'line' => 'line',
-                'message' => 'message',
-                'code' => 'code',
-                'trace' => 'trace',
-                'handled' => 'handled',
-                'php_version' => 'php_version',
-                'laravel_version' => 'laravel_version',
+                'class' => ['class', 'string'],
+                'file' => ['file', 'string'],
+                'line' => ['line', 'integer'],
+                'message' => ['message', 'string'],
+                'code' => ['code', 'string'],
+                'trace' => ['trace', 'string'],
+                'handled' => ['handled', 'boolean'],
+                'php_version' => ['php_version', 'string'],
+                'laravel_version' => ['laravel_version', 'string'],
             ],
             self::LOG => [
-                't' => 'type',
-                'v' => 'v',
-                'timestamp' => 'started_at',
-                'deploy' => 'deploy',
-                'server' => 'server',
-                'trace_id' => 'trace_id',
+                't' => ['type', 'string'],
+                'v' => ['v', 'integer'],
+                'timestamp' => ['started_at', 'number'],
+                'deploy' => ['deploy', 'string'],
+                'server' => ['server', 'string'],
+                'trace_id' => ['trace_id', 'string'],
                 ...self::EXECUTION_SCOPE,
-                'level' => 'level',
-                'message' => 'message',
-                'context' => 'context',
-                'extra' => 'extra',
+                'level' => ['level', 'string'],
+                'message' => ['message', 'string'],
+                'context' => ['context', 'string'],
+                'extra' => ['extra', 'string'],
             ],
             self::CACHE_EVENT => [
                 ...self::ENVELOPE,
                 ...self::EXECUTION_SCOPE,
-                'store' => 'store',
-                'key' => 'key',
-                'type' => 'event',
-                'duration' => 'duration',
-                'ttl' => 'ttl',
+                'store' => ['store', 'string'],
+                'key' => ['key', 'string'],
+                'type' => ['event', 'string'],
+                'duration' => ['duration', 'integer'],
+                'ttl' => ['ttl', 'integer'],
             ],
             self::MAIL => [
                 ...self::ENVELOPE,
                 ...self::EXECUTION_SCOPE,
-                'mailer' => 'mailer',
-                'class' => 'class',
-                'subject' => 'subject',
-                'to' => 'to',
-                'cc' => 'cc',
-                'bcc' => 'bcc',
-                'attachments' => 'attachments',
-                'duration' => 'duration',
-                'failed' => 'failed',
+                'mailer' => ['mailer', 'string'],
+                'class' => ['class', 'string'],
+                'subject' => ['subject', 'string'],
+                'to' => ['to', 'integer'],
+                'cc' => ['cc', 'integer'],
+                'bcc' => ['bcc', 'integer'],
+                'attachments' => ['attachments', 'integer'],
+                'duration' => ['duration', 'integer'],
+                'failed' => ['failed', 'boolean'],
             ],
             self::NOTIFICATION => [
                 ...self::ENVELOPE,
                 ...self::EXECUTION_SCOPE,
-                'channel' => 'channel',
-                'class' => 'class',
-                'duration' => 'duration',
-                'failed' => 'failed',
+                'channel' => ['channel', 'string'],
+                'class' => ['class', 'string'],
+                'duration' => ['duration', 'integer'],
+                'failed' => ['failed', 'boolean'],
             ],
             self::OUTGOING_REQUEST => [
                 ...self::ENVELOPE,
                 ...self::EXECUTION_SCOPE,
-                'host' => 'host',
-                'method' => 'method',
-                'url' => 'url',
-                'duration' => 'duration',
-                'request_size' => 'request_size',
-                'response_size' => 'response_size',
-                'status_code' => 'status_code',
+                'host' => ['host', 'string'],
+                'method' => ['method', 'string'],
+                'url' => ['url', 'string'],
+                'duration' => ['duration', 'integer'],
+                'request_size' => ['request_size', 'integer'],
+                'response_size' => ['response_size', 'integer'],
+                'status_code' => ['status_code', 'integer'],
             ],
             self::QUEUED_JOB => [
                 ...self::ENVELOPE,
                 ...self::EXECUTION_SCOPE,
-                'job_id' => 'job_id',
-                'name' => 'name',
-                'connection' => 'connection',
-                'queue' => 'queue',
-                'duration' => 'duration',
+                'job_id' => ['job_id', 'string'],
+                'name' => ['name', 'string'],
+                'connection' => ['connection', 'string'],
+                'queue' => ['queue', 'string'],
+                'duration' => ['duration', 'integer'],
             ],
             self::USER => [
-                't' => 'type',
-                'v' => 'v',
-                'timestamp' => 'started_at',
-                'id' => 'id',
-                'name' => 'name',
-                'username' => 'username',
+                't' => ['type', 'string'],
+                'v' => ['v', 'integer'],
+                'timestamp' => ['started_at', 'number'],
+                'id' => ['id', 'string'],
+                'name' => ['name', 'string'],
+                'username' => ['username', 'string'],
             ],
         };
     }
