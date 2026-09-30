@@ -1,0 +1,9 @@
+laravel: '@testbench'
+
+providers:
+  - Workbench\App\Providers\WorkbenchServiceProvider
+
+workbench:
+  start: '/'
+  discovers:
+    web: true
