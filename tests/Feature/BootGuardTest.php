@@ -1,0 +1,104 @@
+<?php
+
+use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\NightwatchInstall;
+use Illuminate\Support\Facades\Exceptions;
+use Laravel\Nightwatch\Events\IngestingEvents;
+use Laravel\Nightwatch\NightwatchServiceProvider;
+
+it('reports once in a console process when Nightwatch\'s provider registered first', function (array $config) {
+    config()->set($config);
+    forgetProvider(FirewatchServiceProvider::class);
+
+    app()->register(FirewatchServiceProvider::class);
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Nightwatch\'s provider was registered before Firewatch\'s, so Nightwatch read its configuration before Firewatch set it. Remove `Laravel\Nightwatch\NightwatchServiceProvider` from your providers and run `php artisan package:discover`.');
+})->with([
+    'Active' => ['config' => []],
+    'Off' => ['config' => ['firewatch.enabled' => false]],
+]);
+
+it('reports nothing when Firewatch registers Nightwatch\'s provider itself', function () {
+    forgetProvider(FirewatchServiceProvider::class);
+    forgetProvider(NightwatchServiceProvider::class);
+
+    app()->register(FirewatchServiceProvider::class);
+
+    Exceptions::assertNothingReported();
+});
+
+it('keeps for the process whether Nightwatch\'s provider registered first', function (bool $first) {
+    forgetProvider(FirewatchServiceProvider::class);
+
+    if (! $first) {
+        forgetProvider(NightwatchServiceProvider::class);
+    }
+
+    app()->register(FirewatchServiceProvider::class);
+
+    expect(app(NightwatchInstall::class)->registeredFirst)->toBe($first);
+})->with([
+    'first' => ['first' => true],
+    'after Firewatch' => ['first' => false],
+]);
+
+it('still vetoes every batch when Nightwatch\'s provider registered first', function () {
+    app('events')->forget(IngestingEvents::class);
+    forgetProvider(FirewatchServiceProvider::class);
+
+    app()->register(FirewatchServiceProvider::class);
+
+    expect(app('events')->until(new IngestingEvents([['t' => 'request', 'v' => 1]])))->toBeFalse();
+});
+
+it('reports only the stepped-aside notice about a provider registered first', function () {
+    config()->set('firewatch.environments', 'local');
+    forgetProvider(FirewatchServiceProvider::class);
+
+    app()->register(FirewatchServiceProvider::class);
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Firewatch is installed but stepped aside'));
+});
+
+it('stays silent about the provider order in a web process', function () {
+    (fn () => $this->isRunningInConsole = false)->call(app());
+    forgetProvider(FirewatchServiceProvider::class);
+
+    app()->register(FirewatchServiceProvider::class);
+
+    Exceptions::assertNothingReported();
+});
+
+it('keeps the installed Nightwatch version', function () {
+    registerFirewatch();
+
+    expect(app(NightwatchInstall::class)->version)->toStartWith('v1.30.');
+});
+
+it('reports a missing veto event once in a console process when Active', function () {
+    app()->bind(NightwatchInstall::class, WithoutVetoEvent::class);
+
+    registerFirewatch();
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Firewatch cannot veto Nightwatch\'s transmit'));
+});
+
+it('reports no missing veto event when Off', function () {
+    config()->set('firewatch.enabled', false);
+    app()->bind(NightwatchInstall::class, WithoutVetoEvent::class);
+
+    registerFirewatch();
+
+    Exceptions::assertNothingReported();
+});
+
+class WithoutVetoEvent extends NightwatchInstall
+{
+    protected function vetoEvent(): string
+    {
+        return 'Laravel\Nightwatch\Events\MissingEvents';
+    }
+}

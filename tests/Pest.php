@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Tests\TestCase;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Sleep;
 
 pest()->extend(TestCase::class)
@@ -28,6 +29,16 @@ function registerFirewatch(): Configuration
     app()->register(FirewatchServiceProvider::class, force: true);
 
     return app(Configuration::class);
+}
+
+/**
+ * @param  class-string<ServiceProvider>  $provider
+ */
+function forgetProvider(string $provider): void
+{
+    (function () use ($provider) {
+        unset($this->serviceProviders[$provider], $this->loadedProviders[$provider]);
+    })->call(app());
 }
 
 function setEnvironmentVariable(string $name, string $value): void
