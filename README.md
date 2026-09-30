@@ -69,7 +69,7 @@ php artisan vendor:publish --tag=firewatch-config
 
 An invalid value never stops capture: that key alone falls back to its default, and console commands report the problem once.
 
-`busy_timeout` bounds only the capture side: a batch that can't be written within it is dropped rather than stalling the request, and `0` drops it at once.
+`busy_timeout` bounds only the capture side: a batch that can't be written within it is dropped rather than stalling the request, and `0` drops it at once. A batch that can't be stored, because the store is busy past `busy_timeout`, full, corrupt, another schema version's or not a Firewatch store at all, is dropped, never retried or thrown into your application. Each dropped batch adds one line to `failures.jsonl` beside the store: `at` (Unix seconds), `kind` (`busy`, `full`, `corrupt`, `foreign`, `schema`, `io` or `other`), `code` (the SQLite result code, or null), `message` and `dropped` (its record count). The file keeps the latest 100 lines, so older drops are no longer counted there. A process reports its first dropped batch through the exception handler, and a failure to write the line or to report is swallowed.
 
 Give each store its own directory: two stores in one directory would share their companion files. The first captured batch creates the directory, readable only by its owner, with a `.gitignore` that keeps it out of commits, and the store file inside it, also readable only by its owner. Reading never creates anything. The store is a plain SQLite file, not a Laravel database connection, so capturing it records none of its own queries.
 

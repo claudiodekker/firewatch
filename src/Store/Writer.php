@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use Closure;
-use RuntimeException;
 use SQLite3;
 use Throwable;
 
@@ -93,13 +92,13 @@ class Writer
     protected function createDirectory(string $directory): void
     {
         if (! is_dir($directory) && ! @mkdir($directory, static::DIRECTORY_MODE, recursive: true) && ! is_dir($directory)) {
-            throw new RuntimeException("Firewatch could not create the store directory [{$directory}].");
+            throw new StoreFailure(FailureKind::IO, "Firewatch could not create the store directory [{$directory}].");
         }
 
         $gitignore = $directory.'/.gitignore';
 
         if (! is_file($gitignore) && @file_put_contents($gitignore, static::GITIGNORE) === false) {
-            throw new RuntimeException("Firewatch could not write [{$gitignore}].");
+            throw new StoreFailure(FailureKind::IO, "Firewatch could not write [{$gitignore}].");
         }
     }
 
@@ -113,7 +112,7 @@ class Writer
         }
 
         if (! @touch($path) || ! @chmod($path, static::FILE_MODE)) {
-            throw new RuntimeException("Firewatch could not create the store file [{$path}].");
+            throw new StoreFailure(FailureKind::IO, "Firewatch could not create the store file [{$path}].");
         }
     }
 
@@ -158,11 +157,12 @@ class Writer
     /**
      * Determine if the store carries Firewatch's stamps for this schema version.
      *
-     * @throws RuntimeException when the file is stamped by something else
+     * @throws StoreFailure when the file is another schema version's store or not a store at all
      */
     protected function isStamped(SQLite3 $connection): bool
     {
         $applicationId = $connection->querySingle('PRAGMA application_id');
+        /** @var int $userVersion */
         $userVersion = $connection->querySingle('PRAGMA user_version');
 
         if ($applicationId === Schema::APPLICATION_ID && $userVersion === Schema::VERSION) {
@@ -173,7 +173,11 @@ class Writer
             return false;
         }
 
-        throw new RuntimeException('The file at ['.$this->configuration->database.'] is not a store of this Firewatch schema.');
+        if ($applicationId === Schema::APPLICATION_ID) {
+            throw new StoreFailure(FailureKind::SCHEMA, 'The store at ['.$this->configuration->database.'] has schema version '.$userVersion.', not '.Schema::VERSION.'.');
+        }
+
+        throw new StoreFailure(FailureKind::FOREIGN, 'The file at ['.$this->configuration->database.'] is not a Firewatch store.');
     }
 
     /**
