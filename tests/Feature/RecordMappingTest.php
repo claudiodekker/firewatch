@@ -69,11 +69,12 @@ function childRecord(string $type, array $fields = []): array
     ];
 }
 
-it('stores each record type the sensors write with its common columns and its fields in data', function (Closure $traffic, string $view) {
+it('stores each record type the sensors write with its common columns and its fields in data', function (Closure $traffic, string $view, string $type) {
     $traffic();
     Nightwatch::digest();
 
     $rows = selectFromStore("SELECT * FROM {$view}");
+    $types = selectFromStore("SELECT DISTINCT r.type FROM {$view} v JOIN records r USING (id)");
     $contractFields = array_values(array_diff(array_keys($rows[0]), ['id', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'execution_source', 'job_id', 'user_id', 'deploy', 'server', 'data']));
     $data = json_decode($rows[0]['data'], associative: true);
 
@@ -81,52 +82,43 @@ it('stores each record type the sensors write with its common columns and its fi
         ->started_at->toBeFloat()
         ->trace_id->not->toBeEmpty()
         ->execution_id->not->toBeEmpty()
-        ->and(array_keys($data))->toEqualCanonicalizing($contractFields);
+        ->and(array_keys($data))->toEqualCanonicalizing($contractFields)
+        ->and(array_column($types, 'type'))->toBe([$type]);
 })->with([
-    'request' => ['traffic' => fn () => forceRequestTo('/'), 'view' => 'requests'],
-    'command' => ['traffic' => fn () => runArtisan(['command' => 'env']), 'view' => 'commands'],
+    'request' => ['traffic' => fn () => forceRequestTo('/'), 'view' => 'requests', 'type' => 'request'],
+    'command' => ['traffic' => fn () => runArtisan(['command' => 'env']), 'view' => 'commands', 'type' => 'command'],
     'job attempt' => ['traffic' => function () {
         config()->set('queue.default', 'database');
         dispatch(fn () => Cache::get('in-the-job'));
 
         runArtisan(['command' => 'queue:work', '--once' => true]);
-    }, 'view' => 'job_attempts'],
+    }, 'view' => 'job_attempts', 'type' => 'job-attempt'],
     'scheduled task' => ['traffic' => function () {
         app(Schedule::class)->call(fn () => Cache::get('in-the-task'))->everyMinute();
 
         runArtisan(['command' => 'schedule:run']);
-    }, 'view' => 'scheduled_tasks'],
-    'query' => ['traffic' => fn () => DB::select('select 1'), 'view' => 'queries'],
-    'exception' => ['traffic' => fn () => Nightwatch::report(new RuntimeException('The payment failed.')), 'view' => 'exceptions'],
-    'log' => ['traffic' => fn () => Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]), 'view' => 'logs'],
-    'cache event' => ['traffic' => fn () => Cache::get('first'), 'view' => 'cache_events'],
+    }, 'view' => 'scheduled_tasks', 'type' => 'scheduled-task'],
+    'query' => ['traffic' => fn () => DB::select('select 1'), 'view' => 'queries', 'type' => 'query'],
+    'exception' => ['traffic' => fn () => Nightwatch::report(new RuntimeException('The payment failed.')), 'view' => 'exceptions', 'type' => 'exception'],
+    'log' => ['traffic' => fn () => Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]), 'view' => 'logs', 'type' => 'log'],
+    'cache event' => ['traffic' => fn () => Cache::get('first'), 'view' => 'cache_events', 'type' => 'cache-event'],
     'mail' => ['traffic' => function () {
         config()->set('mail.default', 'array');
 
         Mail::raw('Your order shipped.', fn ($message) => $message->to('taylor@example.com')->subject('Shipped'));
-    }, 'view' => 'mail'],
-    'notification' => ['traffic' => fn () => (new AnonymousNotifiable)->notifyNow(new OrderShipped), 'view' => 'notifications'],
+    }, 'view' => 'mail', 'type' => 'mail'],
+    'notification' => ['traffic' => fn () => (new AnonymousNotifiable)->notifyNow(new OrderShipped), 'view' => 'notifications', 'type' => 'notification'],
     'outgoing request' => ['traffic' => function () {
         Http::fake(['https://example.com/ping' => Http::response('pong')]);
 
         Http::get('https://example.com/ping');
-    }, 'view' => 'outgoing_requests'],
+    }, 'view' => 'outgoing_requests', 'type' => 'outgoing-request'],
     'queued job' => ['traffic' => function () {
         config()->set('queue.default', 'database');
 
         dispatch(fn () => null);
-    }, 'view' => 'queued_jobs'],
+    }, 'view' => 'queued_jobs', 'type' => 'queued-job'],
 ]);
-
-it('reads only its own type through a record view', function () {
-    Cache::get('first');
-    Nightwatch::report(new RuntimeException('The payment failed.'));
-    Nightwatch::digest();
-
-    $types = array_column(selectFromStore('SELECT r.type FROM cache_events v JOIN records r ON r.id = v.id'), 'type');
-
-    expect($types)->toBe(['cache-event']);
-});
 
 it('links a job attempt\'s children to the attempt, which keeps the trace of its dispatch', function () {
     config()->set('queue.default', 'database');
@@ -207,6 +199,14 @@ it('starts the types Nightwatch stamps at their end one duration before their ti
     'query' => ['type' => 'query', 'startedAt' => 1767225600.25],
 ]);
 
+it('keeps the timestamp of a type Nightwatch stamps at its end when its duration is not a number', function () {
+    ingestNow(childRecord('mail', ['duration' => 'slow']));
+
+    [$record] = selectFromStore('SELECT started_at FROM records');
+
+    expect($record['started_at'])->toBe(1767225600.25);
+});
+
 it('links a fatal error, which Nightwatch sends without an execution, to its trace unless it ended a job', function (string $source, ?string $executionId) {
     ingestNow(childRecord('exception', ['execution_source' => $source, 'execution_id' => '', 'trace' => '']));
 
@@ -234,4 +234,25 @@ it('keeps an unknown field in data under its wire name, even one named like a co
     [$log] = selectFromStore("SELECT data ->> '$.duration' AS data_duration, data ->> '$.colour' AS colour, duration FROM records");
 
     expect($log)->toBe(['data_duration' => 5, 'colour' => 'red', 'duration' => null]);
+});
+
+it('stores a record of an unknown type with its common columns filled from the wire and the rest in data', function () {
+    ingestNow(childRecord('future-type', ['duration' => 5, 'job_id' => 'job-1', 'user' => '7', 'colour' => 'red']));
+
+    [$record] = selectFromStore('SELECT type, started_at, duration, group_hash, trace_id, execution_id, source, job_id, user_id, deploy, server, data FROM records');
+
+    expect($record)->toBe([
+        'type' => 'future-type',
+        'started_at' => 1767225600.25,
+        'duration' => 5,
+        'group_hash' => str_repeat('a', 32),
+        'trace_id' => 'trace-1',
+        'execution_id' => 'trace-1',
+        'source' => 'request',
+        'job_id' => 'job-1',
+        'user_id' => '7',
+        'deploy' => 'v1.2.3',
+        'server' => 'web-1',
+        'data' => '{"execution_preview":"GET /","execution_stage":"action","colour":"red"}',
+    ]);
 });

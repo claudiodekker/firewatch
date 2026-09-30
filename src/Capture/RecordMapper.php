@@ -52,7 +52,7 @@ class RecordMapper
         [$columns, $data] = $this->split($wire, $type);
 
         // The round trip can turn a float into an integer, so the instant comes from the original array.
-        $columns['started_at'] = $this->startedAt($type, $record['timestamp'] ?? null, $columns['duration']);
+        $columns['started_at'] = $this->startedAt($type, timestamp: $record['timestamp'] ?? null, duration: $columns['duration']);
 
         if ($type !== null) {
             $columns['execution_id'] = $this->executionId($type, $columns);

@@ -271,7 +271,10 @@ enum RecordType: string
      */
     public function isStampedAtEnd(): bool
     {
-        return in_array($this, [self::MAIL, self::NOTIFICATION, self::QUEUED_JOB], strict: true);
+        return match ($this) {
+            self::MAIL, self::NOTIFICATION, self::QUEUED_JOB => true,
+            default => false,
+        };
     }
 
     /**
