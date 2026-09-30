@@ -67,6 +67,8 @@ An invalid value never stops capture: that key alone falls back to its default, 
 
 Give each store its own directory: two stores in one directory would share their companion files. The first captured batch creates the directory, readable only by its owner, with a `.gitignore` that keeps it out of commits, and the store file inside it, also readable only by its owner. Reading never creates anything. The store is a plain SQLite file, not a Laravel database connection, so capturing it records none of its own queries.
 
+Every record lands in one `records` table under Nightwatch's own field names, with its type-specific fields in a JSON `data` column. Twelve views read it per type (`requests`, `commands`, `job_attempts`, `scheduled_tasks`, `queries`, `exceptions`, `logs`, `cache_events`, `mail`, `notifications`, `outgoing_requests` and `queued_jobs`), with each field as its own column. A cache event's kind is `event` rather than the wire's `type`, and `started_at` is when a record started: mail, notifications and queued jobs, which Nightwatch stamps when they end, start one duration earlier.
+
 A budget entry names an execution type (`request`, `command`, `job-attempt` or `scheduled-task`), optional matchers (`methods` and `path` for requests, `name` otherwise) and a `duration` ceiling in milliseconds, a `memory` ceiling in MB, or both:
 
 ```php

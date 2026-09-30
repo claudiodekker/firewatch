@@ -3,11 +3,14 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\Tests\TestCase;
+use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Sleep;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 pest()->extend(TestCase::class)
     ->use(LazilyRefreshDatabase::class)
@@ -76,4 +79,20 @@ function forceRequests(): void
     setEnvironmentVariable('NIGHTWATCH_FORCE_REQUEST', '1');
 
     test()->refreshApplication();
+}
+
+/**
+ * @param  array<string, mixed>  $input
+ */
+function runArtisan(array $input): void
+{
+    $kernel = app(ConsoleKernel::class);
+    $arguments = new ArrayInput($input);
+
+    // Testbench only routes the console events Nightwatch listens to when asked.
+    $kernel->rerouteSymfonyCommandEvents();
+
+    $status = $kernel->handle($arguments, new BufferedOutput);
+
+    $kernel->terminate($arguments, $status);
 }
