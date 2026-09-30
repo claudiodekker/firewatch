@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Nightwatch\Console\Sample as TaskSample;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -89,6 +91,34 @@ it('captures every execution Nightwatch\'s sample rates would drop', function (C
         Nightwatch::report(new RuntimeException('The payment failed.'));
     }, 'view' => 'exceptions'],
 ]);
+
+it('queues a job dispatched by a request Nightwatch\'s sample rate would drop as sampled, so its attempt is captured', function () {
+    configureNightwatchWith(['NIGHTWATCH_REQUEST_SAMPLE_RATE' => '0']);
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+    config()->set('queue.default', 'database');
+    Schema::create('jobs', function (Blueprint $table) {
+        $table->id();
+        $table->string('queue')->index();
+        $table->longText('payload');
+        $table->unsignedTinyInteger('attempts');
+        $table->unsignedInteger('reserved_at')->nullable();
+        $table->unsignedInteger('available_at');
+        $table->unsignedInteger('created_at');
+    });
+    Route::get('/ship', function () {
+        dispatch(fn () => null);
+
+        return 'ok';
+    });
+
+    test()->get('/ship');
+
+    // A job attempt follows the sampling decision its payload carries from the dispatching execution.
+    $payload = json_decode(DB::table('jobs')->value('payload'), associative: true, flags: JSON_THROW_ON_ERROR);
+
+    expect($payload['illuminate:log:context']['hidden']['nightwatch_should_sample'])->toBe(serialize(true));
+});
 
 it('captures the events Nightwatch\'s filtering would ignore', function (Closure $traffic, string $view) {
     configureNightwatchWith([
