@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
 /**
@@ -91,29 +92,45 @@ it('cuts a long value of a common column', function () {
     expect(storedRows('SELECT deploy FROM records'))->toBe([['deploy' => substr($deploy, 0, 65_535 - strlen($marker)).$marker]]);
 });
 
-it('keeps the fields Nightwatch sends as JSON strings whole', function (RecordType $type, string $field, string $value) {
-    ingest([syntheticRecord($type)->with([$field => $value])]);
+it('keeps a JSON string Nightwatch cut mid-value whole, even when its cut split a character', function () {
+    // Two-byte characters from an even offset put Nightwatch's odd 65,535-byte cut inside a character.
+    $context = ['order' => str_repeat('é', 40_000)];
+    $json = json_encode($context, JSON_UNESCAPED_UNICODE);
 
-    [$record] = storedRows("SELECT data ->> '$.{$field}' AS value FROM records");
+    Log::channel('nightwatch')->info('The order is large.', $context);
+    Nightwatch::digest();
 
-    expect($record['value'])->toBe($value);
-})->with([
-    'an exception trace' => fn () => [
-        'type' => RecordType::EXCEPTION,
-        'field' => 'trace',
-        'value' => traceOf([['file' => 'app/Models/Order.php:12', 'source' => str_repeat('s', 70_000), 'code' => null]]),
-    ],
-    'a JSON string Nightwatch cut mid-value' => fn () => [
-        'type' => RecordType::LOG,
-        'field' => 'context',
-        'value' => '{"order":"'.str_repeat('o', 70_000),
-    ],
-    'a JSON string holding a long string' => fn () => [
-        'type' => RecordType::LOG,
-        'field' => 'context',
-        'value' => json_encode(['order' => str_repeat('o', 70_000)]),
-    ],
-]);
+    [$log] = storedRows('SELECT context FROM logs');
+
+    expect($log['context'])->toBe(substr($json, 0, 65_534)."\u{FFFD}");
+});
+
+it('keeps an exception trace whole when Nightwatch cut it mid-value', function () {
+    $trace = '[{"file":"'.str_repeat('f', 70_000);
+
+    ingest([syntheticRecord(RecordType::EXCEPTION)->with(['trace' => $trace])]);
+
+    expect(storedRows("SELECT data ->> '$.trace' AS trace FROM records"))->toBe([['trace' => $trace]]);
+});
+
+it('marks a value Nightwatch cut inside a character, whose replacement grew it past the limit', function () {
+    Log::channel('nightwatch')->info(str_repeat('a', 65_534).'é');
+    Nightwatch::digest();
+
+    [$log] = storedRows('SELECT message FROM logs');
+    $marker = truncationMarker(65_537);
+
+    expect($log['message'])->toBe(str_repeat('a', 65_535 - strlen($marker)).$marker);
+});
+
+it('keeps a field with a numeric name under its name', function () {
+    $record = syntheticRecord(RecordType::CACHE_EVENT)->make();
+    $record['5'] = 'five';
+
+    ingest([$record]);
+
+    expect(storedRows("SELECT data ->> '$.\"5\"' AS five, data ->> '$.\"0\"' AS zero FROM records"))->toBe([['five' => 'five', 'zero' => null]]);
+});
 
 it('cuts the largest strings of data over 1 MiB to 4,096 bytes until it fits', function () {
     $message = str_repeat('m', 70_000);
@@ -154,7 +171,16 @@ it('keeps a record whose data still exceeds 1 MiB after every cut', function () 
     expect(storedRows('SELECT json(trace) AS trace FROM exceptions'))->toBe([['trace' => $trace]]);
 });
 
+it('keeps the code of a field named trace on a record that is not an exception', function () {
+    $trace = [['file' => 'app/Models/Order.php:12', 'code' => ['12' => str_repeat('x', 1_100_000)]]];
+
+    ingest([syntheticRecord(RecordType::CACHE_EVENT)->with(['trace' => $trace])]);
+
+    expect(storedRows("SELECT length(data ->> '$.trace[0].code.\"12\"') AS code FROM records"))->toBe([['code' => 1_100_000]]);
+});
+
 it('keeps data of up to 1 MiB and cuts data one byte over', function (int $over, bool $cut) {
+    // A probe record measures the data around the padding, which grows it byte for byte.
     $message = str_repeat('m', 5_000);
     ingest([syntheticRecord(RecordType::EXCEPTION)->with(['message' => $message, 'trace' => traceOf([frameWithCode(1)])])]);
     [$probe] = storedRows('SELECT length(CAST(data AS BLOB)) AS bytes FROM records');

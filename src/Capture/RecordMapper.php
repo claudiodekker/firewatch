@@ -105,7 +105,7 @@ class RecordMapper
             $columns['source'] = $type->source() ?? $columns['source'];
         }
 
-        $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields);
+        $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $type === RecordType::EXCEPTION ? 'trace' : null);
 
         return $columns;
     }
@@ -293,7 +293,10 @@ class RecordMapper
                 $columns[$name] = is_string($value) ? $this->truncator->cut($value) : $value;
             } else {
                 $data[$name] = $value;
-                $dataJsonFields = $isJson ? [...$dataJsonFields, $name] : $dataJsonFields;
+
+                if ($isJson) {
+                    $dataJsonFields[] = $name;
+                }
             }
         }
 

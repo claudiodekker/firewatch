@@ -10,44 +10,45 @@ class Truncator
     /**
      * The most bytes a string field keeps, truncation marker included.
      */
-    public const FIELD_LIMIT = 65_535;
+    public const FIELD_LIMIT_BYTES = 65_535;
 
     /**
      * The most bytes a record's serialized data keeps before its largest strings are cut.
      */
-    public const DATA_LIMIT = 1_048_576;
+    public const DATA_LIMIT_BYTES = 1_048_576;
 
     /**
      * The bytes a string is cut to when its record's data is over the limit.
      */
-    public const OVERSIZE_FIELD_LIMIT = 4_096;
+    public const OVERSIZE_FIELD_LIMIT_BYTES = 4_096;
 
     /**
      * Cut a string longer than the limit on a UTF-8 character boundary, ending it with the truncation marker.
      */
-    public function cut(string $value, int $limit = self::FIELD_LIMIT): string
+    public function cut(string $value, int $limitBytes = self::FIELD_LIMIT_BYTES): string
     {
         $bytes = strlen($value);
 
-        if ($bytes <= $limit) {
+        if ($bytes <= $limitBytes) {
             return $value;
         }
 
         $marker = "... [truncated, {$bytes} bytes total]";
 
-        return mb_strcut($value, 0, $limit - strlen($marker), 'UTF-8').$marker;
+        return mb_strcut($value, 0, $limitBytes - strlen($marker), 'UTF-8').$marker;
     }
 
     /**
-     * Serialize a record's data, cutting its strings to the field limit and, over the data limit, its largest strings further and then the trace's code snippets.
+     * Serialize a record's data, cutting its strings to the field limit and, over the data limit, its largest strings further and then the code snippets of its trace.
      *
      * @param  array<string, mixed>  $data
      * @param  list<string>  $exempt  the fields Nightwatch sent as JSON strings, which are kept whole
+     * @param  string|null  $trace  the field holding the exception trace, if the record has one
      */
-    public function serialize(array $data, array $exempt): string
+    public function serialize(array $data, array $exempt, ?string $trace = null): string
     {
         $cuttable = $this->cuttable($data, $exempt);
-        $fitted = [...$data, ...array_map(fn (string $value) => $this->cut($value), $cuttable)];
+        $fitted = array_replace($data, array_map(fn (string $value) => $this->cut($value), $cuttable));
 
         $json = $this->encode($fitted);
 
@@ -56,15 +57,15 @@ class Truncator
                 return $json;
             }
 
-            $fitted[$field] = $this->cut($data[$field], self::OVERSIZE_FIELD_LIMIT);
+            $fitted[$field] = $this->cut($data[$field], self::OVERSIZE_FIELD_LIMIT_BYTES);
             $json = $this->encode($fitted);
         }
 
-        if ($this->fits($json) || ! array_key_exists('trace', $fitted)) {
+        if ($this->fits($json) || $trace === null || ! is_array($fitted[$trace] ?? null)) {
             return $json;
         }
 
-        $fitted['trace'] = $this->withoutCode($fitted['trace']);
+        $fitted[$trace] = $this->withoutCode($fitted[$trace]);
 
         return $this->encode($fitted);
     }
@@ -94,7 +95,7 @@ class Truncator
     {
         $lengths = array_filter(
             array_map(strlen(...), $cuttable),
-            fn (int $bytes) => $bytes > self::OVERSIZE_FIELD_LIMIT,
+            fn (int $bytes) => $bytes > self::OVERSIZE_FIELD_LIMIT_BYTES,
         );
 
         arsort($lengths);
@@ -107,25 +108,27 @@ class Truncator
      */
     protected function fits(string $json): bool
     {
-        return strlen($json) <= self::DATA_LIMIT;
+        return strlen($json) <= self::DATA_LIMIT_BYTES;
     }
 
     /**
-     * Null the code snippet of every frame of a decoded trace.
+     * Get a decoded trace with the code snippet of every frame nulled.
+     *
+     * @param  array<mixed>  $trace
+     * @return array<mixed>
      */
-    protected function withoutCode(mixed $trace): mixed
+    protected function withoutCode(array $trace): array
     {
-        if (! is_array($trace)) {
-            return $trace;
-        }
-
-        foreach ($trace as $frame) {
-            if (is_object($frame) && property_exists($frame, 'code')) {
-                $frame->code = null;
+        return array_map(function (mixed $frame) {
+            if (! is_object($frame) || ! property_exists($frame, 'code')) {
+                return $frame;
             }
-        }
 
-        return $trace;
+            $frame = clone $frame;
+            $frame->code = null;
+
+            return $frame;
+        }, $trace);
     }
 
     /**
