@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
 
 /**
@@ -11,15 +12,20 @@ function runServer(string $storeDirectory, array $messages, array $env = [], arr
 {
     $input = implode('', array_map(fn (array $message) => json_encode($message, JSON_THROW_ON_ERROR)."\n", $messages));
 
+    // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers.
+    $packagesCache = sys_get_temp_dir().'/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+
     $process = new Process(
         [PHP_BINARY, ...$ini, 'vendor/bin/testbench', $command],
         cwd: dirname(__DIR__, 2),
-        env: [...$env, 'FIREWATCH_DATABASE' => $storeDirectory.'/firewatch.sqlite'],
+        env: [...$env, 'FIREWATCH_DATABASE' => $storeDirectory.'/firewatch.sqlite', 'APP_PACKAGES_CACHE' => $packagesCache],
         input: $input,
         timeout: 30,
     );
 
     $process->run();
+
+    (new Filesystem)->delete($packagesCache);
 
     return $process;
 }
