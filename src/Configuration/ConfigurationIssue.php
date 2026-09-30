@@ -4,6 +4,8 @@ namespace ClaudioDekker\Firewatch\Configuration;
 
 /**
  * @internal
+ *
+ * @phpstan-consistent-constructor
  */
 readonly class ConfigurationIssue
 {
