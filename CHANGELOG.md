@@ -11,3 +11,4 @@
 - A console process in a disallowed environment reports once that Firewatch is stepped aside. The `firewatch:server`, `firewatch:doctor` and `firewatch:clear` commands (stubs for now) and the publish tag exist only in Active and Off, and configuration issues are reported only there.
 - In Active and Off, Nightwatch's ingest is swapped for one that sends nothing, after checking by reflection that its interface and property are unchanged; otherwise a console process reports it once and Nightwatch keeps its own ingest, disabled in Off and behind the dead token and address in Active.
 - In Active, a listener on Nightwatch's `IngestingEvents` vetoes every batch, so Nightwatch's own ingest transmits nothing even when it could not be swapped.
+- A console process in Active or Off reports once when Nightwatch's provider was registered before Firewatch's, naming the fix; in Active it also reports once when the `IngestingEvents` event is missing. Neither disables anything.

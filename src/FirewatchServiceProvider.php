@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
 use ClaudioDekker\Firewatch\Console\Commands\ClearCommand;
 use ClaudioDekker\Firewatch\Console\Commands\DoctorCommand;
 use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
+use Composer\InstalledVersions;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
@@ -59,6 +60,16 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const INGEST_NOT_REPLACED = 'Firewatch left Nightwatch\'s ingest in place: ';
 
     /**
+     * The report when Nightwatch's provider was registered before Firewatch's.
+     */
+    protected const REGISTERED_FIRST = 'Nightwatch\'s provider was registered before Firewatch\'s, so Nightwatch read its configuration before Firewatch set it. Remove `Laravel\\Nightwatch\\NightwatchServiceProvider` from your providers and run `php artisan package:discover`.';
+
+    /**
+     * The report when the event the veto listens on is missing.
+     */
+    protected const VETO_EVENT_MISSING = 'Firewatch cannot veto Nightwatch\'s transmit: `%s` is missing from Nightwatch %s.';
+
+    /**
      * The mode this process resolved to.
      */
     protected Mode $mode;
@@ -68,6 +79,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->registerNightwatchInstall();
         $this->registerConfiguration();
         $this->resolveMode();
         $this->configureNightwatch();
@@ -92,6 +104,7 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         $this->reportConfigurationIssues();
+        $this->reportNightwatchInstall();
 
         $this->publishes([static::CONFIG_PATH => $this->app->configPath('firewatch.php')], 'firewatch-config');
 
@@ -100,6 +113,23 @@ class FirewatchServiceProvider extends ServiceProvider
             DoctorCommand::class,
             ClearCommand::class,
         ]);
+    }
+
+    /**
+     * Keep how Nightwatch is installed, before Firewatch registers its provider.
+     */
+    protected function registerNightwatchInstall(): void
+    {
+        // A second registration of Firewatch finds the Nightwatch provider its first one registered.
+        $registeredFirst = $this->app->getProvider(NightwatchServiceProvider::class) !== null
+            && $this->app->getProvider($this) === null;
+
+        $install = $this->app->make(NightwatchInstall::class, [
+            'version' => InstalledVersions::getPrettyVersion('laravel/nightwatch') ?? '',
+            'registeredFirst' => $registeredFirst,
+        ]);
+
+        $this->app->instance(NightwatchInstall::class, $install);
     }
 
     /**
@@ -251,5 +281,22 @@ class FirewatchServiceProvider extends ServiceProvider
         $lines = array_map(fn (ConfigurationIssue $issue) => $issue->line(), $issues);
 
         report(new RuntimeException('Firewatch configuration: '.implode("\n", $lines)));
+    }
+
+    /**
+     * Report once what the boot guards found wrong with how Nightwatch is installed.
+     */
+    protected function reportNightwatchInstall(): void
+    {
+        $install = $this->app->make(NightwatchInstall::class);
+
+        if ($install->registeredFirst) {
+            report(new RuntimeException(static::REGISTERED_FIRST));
+        }
+
+        // Only Active registers the veto.
+        if ($this->mode === Mode::ACTIVE && ! $install->hasVetoEvent()) {
+            report(new RuntimeException(sprintf(static::VETO_EVENT_MISSING, $install->vetoEvent(), $install->version)));
+        }
     }
 }
