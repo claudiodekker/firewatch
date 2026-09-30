@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch;
 
+use Closure;
 use Laravel\Nightwatch\Contracts\Ingest;
 use ReflectionClass;
 use ReflectionMethod;
@@ -16,7 +17,7 @@ use RuntimeException;
 class IngestReplacer
 {
     /**
-     * The ingest interface's method signatures that NullIngest implements.
+     * The ingest interface's method signatures that Firewatch's ingests implement.
      */
     protected const EXPECTED_SIGNATURES = [
         'write(array $record): void',
@@ -29,13 +30,15 @@ class IngestReplacer
     ];
 
     /**
-     * Replace the ingest on Nightwatch's core with one that transmits nothing.
+     * Replace the ingest on Nightwatch's core with one of Firewatch's, which transmit nothing.
      *
-     * @throws RuntimeException when the interface or the property is not what NullIngest was built against
+     * @param  Closure(): Ingest  $ingest
+     *
+     * @throws RuntimeException when the interface or the property is not what Firewatch's ingests were built against
      */
-    public function replace(object $core): void
+    public function replace(object $core, Closure $ingest): void
     {
-        // NullIngest is loaded only after this check, as a class that no longer
+        // The ingest is loaded only after this check, as a class that no longer
         // fits its interface is a fatal error. Preloading every class through
         // opcache declares it sooner, and then this guard can't protect it.
         if (! interface_exists($this->interface()) || $this->signatures() !== $this->expectedSignatures()) {
@@ -46,11 +49,11 @@ class IngestReplacer
             throw new RuntimeException('its core has no assignable ingest property');
         }
 
-        (new ReflectionProperty($core, 'ingest'))->setValue($core, new NullIngest);
+        (new ReflectionProperty($core, 'ingest'))->setValue($core, $ingest());
     }
 
     /**
-     * Get the signatures NullIngest was written against, sorted.
+     * Get the signatures Firewatch's ingests were written against, sorted.
      *
      * @return list<string>
      */
@@ -64,7 +67,7 @@ class IngestReplacer
     }
 
     /**
-     * Get the ingest interface NullIngest implements.
+     * Get the ingest interface Firewatch's ingests implement.
      *
      * @return class-string
      */

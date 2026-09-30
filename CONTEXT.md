@@ -11,15 +11,15 @@ Taking Nightwatch's records into Firewatch's store instead of letting them be tr
 _Avoid_: Tap, hook, proxy
 
 **Seam**:
-The one public point where Firewatch intercepts Nightwatch's output, the `IngestingEvents` event.
+The one point where Firewatch intercepts Nightwatch's output: Nightwatch's ingest, which Firewatch replaces with its own.
 _Avoid_: Hook point, integration point
 
 **Veto**:
-Cancelling Nightwatch's transmit of a batch by returning `false` from the seam listener; Firewatch always vetoes.
+Cancelling a transmit of Nightwatch's own ingest by returning `false` from the `IngestingEvents` listener, which guards the case where Firewatch could not replace that ingest; in Active Firewatch always vetoes.
 _Avoid_: Block, cancel, tee
 
 **Batch**:
-The ordered list of wire records Nightwatch offers at the seam in one dispatch, which may be part of an execution.
+The ordered list of wire records Firewatch's ingest stores at once, on a digest, a full buffer or an immediate write, which may be part of an execution.
 _Avoid_: Payload, digest
 
 **Sensor**:
@@ -33,7 +33,7 @@ _Avoid_: Event, message
 ### Modes and capture
 
 **Active**:
-The mode in which Firewatch captures: it enables Nightwatch, forces the capture posture and vetoes every batch.
+The mode in which Firewatch captures: it enables Nightwatch, forces the capture posture, stores every batch through its own ingest and vetoes any transmit of Nightwatch's.
 _Avoid_: On, enabled
 
 **Off**:
@@ -167,7 +167,7 @@ _Avoid_: Coverage, completeness ratio
 ### Data
 
 **Bindings**:
-The query parameter values captured at Firewatch's seam and paired to a query record, or absent when unpaired.
+The query parameter values captured from the framework's query events and paired to a query record, or absent when unpaired.
 _Avoid_: Parameters, params
 
 **User directory**:
@@ -607,7 +607,7 @@ A committed, normalised example of one wire record type, generated from the real
 _Avoid_: Sample, mock record, golden file
 
 **Synthetic record**:
-A wire record built from a wire fixture with chosen values and sent through the real ingest event, used only where the sensors cannot give exact values or volume.
+A wire record built from a wire fixture with chosen values and sent through Firewatch's real ingest, used only where the sensors cannot give exact values or volume.
 _Avoid_: Fake record, seeded row
 
 **Canary**:

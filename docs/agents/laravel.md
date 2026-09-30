@@ -30,7 +30,7 @@ Assertions
 Data
 
 - Build telemetry inside the test that uses it; `beforeEach` is for configuration only.
-- Real sensors first: drive the workbench. A synthetic record only where the sensors can't give exact durations, volume, many groups, deploy identities, drift shapes or other-process writers, built by the record builder from a committed wire fixture and sent through the real ingest event.
+- Real sensors first: drive the workbench. A synthetic record only where the sensors can't give exact durations, volume, many groups, deploy identities, drift shapes or other-process writers, built by the record builder from a committed wire fixture and sent through Firewatch's real ingest.
 - Raw SQL inserts into the store exist only in corruption and foreign-file tests.
 
 Structure

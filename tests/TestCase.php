@@ -17,12 +17,17 @@ abstract class TestCase extends Orchestra
     {
         $this->storeDirectory = sys_get_temp_dir().'/firewatch-tests/'.bin2hex(random_bytes(8));
 
+        // Firewatch resolves its configuration while it registers, before defineEnvironment() runs.
+        $this->setStorePath($this->storeDirectory.'/firewatch.sqlite');
+
         parent::setUp();
     }
 
     protected function tearDown(): void
     {
         parent::tearDown();
+
+        $this->setStorePath(null);
 
         (new Filesystem)->deleteDirectory($this->storeDirectory);
     }
@@ -34,8 +39,16 @@ abstract class TestCase extends Orchestra
         ];
     }
 
-    protected function defineEnvironment($app): void
+    protected function setStorePath(?string $path): void
     {
-        $app['config']->set('firewatch.database', $this->storeDirectory.'/firewatch.sqlite');
+        if ($path === null) {
+            unset($_SERVER['FIREWATCH_DATABASE'], $_ENV['FIREWATCH_DATABASE']);
+            putenv('FIREWATCH_DATABASE');
+
+            return;
+        }
+
+        $_SERVER['FIREWATCH_DATABASE'] = $_ENV['FIREWATCH_DATABASE'] = $path;
+        putenv("FIREWATCH_DATABASE={$path}");
     }
 }

@@ -51,6 +51,8 @@ return [
 
     'no_store' => 'No application process has written a store at :path yet: exercise the application, then ask again.',
 
+    'store_empty' => 'The store at :path holds no records: nothing was captured yet, or it was cleared. Exercise the application, then ask again.',
+
     'store_clock' => 'Store clock: :time (epoch :epoch) - pass that number as since, until or split_at to measure what happens next against what came before',
 
     /*

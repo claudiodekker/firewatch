@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\Ingest as FirewatchIngest;
 use ClaudioDekker\Firewatch\NullIngest;
 use Illuminate\Console\Application;
 use Illuminate\Contracts\Console\Kernel;
@@ -130,16 +131,16 @@ it('registers the three commands and the publish tag only when Active or Off', f
     'stepped aside' => ['config' => ['firewatch.environments' => 'local'], 'commands' => [], 'tagged' => false],
 ]);
 
-it('swaps Nightwatch\'s ingest for one that transmits nothing when Active or Off', function (array $config) {
+it('swaps Nightwatch\'s ingest for one that stores when Active and one that discards when Off', function (array $config, string $ingest) {
     config()->set($config);
     app()->register(NightwatchServiceProvider::class, force: true);
 
     registerFirewatch();
 
-    expect(app(Core::class)->ingest)->toBeInstanceOf(NullIngest::class);
+    expect(app(Core::class)->ingest)->toBeInstanceOf($ingest);
 })->with([
-    'Active' => ['config' => []],
-    'Off' => ['config' => ['firewatch.enabled' => false]],
+    'Active' => ['config' => [], 'ingest' => FirewatchIngest::class],
+    'Off' => ['config' => ['firewatch.enabled' => false], 'ingest' => NullIngest::class],
 ]);
 
 it('keeps Nightwatch\'s own ingest when stepped aside', function () {

@@ -73,13 +73,13 @@ function assignableCore(): object
 it('replaces the ingest when the interface\'s signatures match', function () {
     $core = assignableCore();
 
-    ingestReplacerFor(MatchingIngest::class)->replace($core);
+    ingestReplacerFor(MatchingIngest::class)->replace($core, fn () => new NullIngest);
 
     expect($core->ingest)->toBeInstanceOf(NullIngest::class);
 });
 
 it('refuses when the ingest interface\'s signatures changed', function (string $interface, array $expected) {
-    $replace = fn () => ingestReplacerFor($interface, $expected)->replace(assignableCore());
+    $replace = fn () => ingestReplacerFor($interface, $expected)->replace(assignableCore(), fn () => new NullIngest);
 
     expect($replace)->toThrow(RuntimeException::class, 'its ingest interface changed');
 })->with([
@@ -92,7 +92,7 @@ it('refuses when the ingest interface\'s signatures changed', function (string $
 ]);
 
 it('refuses a core whose ingest property it cannot assign', function (object $core) {
-    $replace = fn () => (new IngestReplacer)->replace($core);
+    $replace = fn () => (new IngestReplacer)->replace($core, fn () => new NullIngest);
 
     expect($replace)->toThrow(RuntimeException::class, 'its core has no assignable ingest property');
 })->with([
