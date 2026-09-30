@@ -65,6 +65,11 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const REGISTERED_FIRST = 'Nightwatch\'s provider was registered before Firewatch\'s, so Nightwatch read its configuration before Firewatch set it. Remove `Laravel\\Nightwatch\\NightwatchServiceProvider` from your providers and run `php artisan package:discover`.';
 
     /**
+     * The report when the event the veto listens on is missing.
+     */
+    protected const VETO_EVENT_MISSING = 'Firewatch cannot veto Nightwatch\'s transmit: `%s` is missing from Nightwatch %s.';
+
+    /**
      * The mode this process resolved to.
      */
     protected Mode $mode;
@@ -290,10 +295,8 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         // Only Active registers the veto.
-        $missing = $this->mode === Mode::ACTIVE ? $install->missingVetoEvent() : null;
-
-        if ($missing !== null) {
-            report($missing);
+        if ($this->mode === Mode::ACTIVE && ! $install->hasVetoEvent()) {
+            report(new RuntimeException(sprintf(static::VETO_EVENT_MISSING, $install->vetoEvent(), $install->version)));
         }
     }
 }

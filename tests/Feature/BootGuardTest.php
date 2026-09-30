@@ -78,27 +78,31 @@ it('keeps the installed Nightwatch version', function () {
 });
 
 it('reports a missing veto event once in a console process when Active', function () {
-    app()->bind(NightwatchInstall::class, WithoutVetoEvent::class);
+    bindInstallWithoutVetoEvent();
 
     registerFirewatch();
 
+    $version = app(NightwatchInstall::class)->version;
     Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Firewatch cannot veto Nightwatch\'s transmit'));
+    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === "Firewatch cannot veto Nightwatch's transmit: `Laravel\\Nightwatch\\Events\\MissingEvents` is missing from Nightwatch {$version}.");
 });
 
 it('reports no missing veto event when Off', function () {
     config()->set('firewatch.enabled', false);
-    app()->bind(NightwatchInstall::class, WithoutVetoEvent::class);
+    bindInstallWithoutVetoEvent();
 
     registerFirewatch();
 
     Exceptions::assertNothingReported();
 });
 
-class WithoutVetoEvent extends NightwatchInstall
+function bindInstallWithoutVetoEvent(): void
 {
-    protected function vetoEvent(): string
+    app()->bind(NightwatchInstall::class, fn ($app, array $parameters) => new class(...$parameters) extends NightwatchInstall
     {
-        return 'Laravel\Nightwatch\Events\MissingEvents';
-    }
+        public function vetoEvent(): string
+        {
+            return 'Laravel\Nightwatch\Events\MissingEvents';
+        }
+    });
 }

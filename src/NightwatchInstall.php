@@ -3,7 +3,6 @@
 namespace ClaudioDekker\Firewatch;
 
 use Laravel\Nightwatch\Events\IngestingEvents;
-use RuntimeException;
 
 /**
  * @internal
@@ -39,15 +38,11 @@ class NightwatchInstall
     }
 
     /**
-     * Get the report when the event the veto listens on is missing.
+     * Determine if the event the veto listens on exists.
      */
-    public function missingVetoEvent(): ?RuntimeException
+    public function hasVetoEvent(): bool
     {
-        if (class_exists($this->vetoEvent())) {
-            return null;
-        }
-
-        return new RuntimeException("Firewatch cannot veto Nightwatch's transmit: `{$this->vetoEvent()}` is missing from Nightwatch {$this->version}.");
+        return class_exists($this->vetoEvent());
     }
 
     /**
@@ -55,7 +50,7 @@ class NightwatchInstall
      *
      * @return class-string
      */
-    protected function vetoEvent(): string
+    public function vetoEvent(): string
     {
         return IngestingEvents::class;
     }
