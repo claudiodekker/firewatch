@@ -12,6 +12,7 @@ use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Core;
+use Laravel\Nightwatch\Events\IngestingEvents;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 use RuntimeException;
@@ -70,6 +71,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->registerConfiguration();
         $this->resolveMode();
         $this->configureNightwatch();
+        $this->vetoNightwatchTransmit();
         $this->registerNightwatch();
         $this->replaceNightwatchIngest();
     }
@@ -151,6 +153,19 @@ class FirewatchServiceProvider extends ServiceProvider
             Mode::OFF => $config->set('nightwatch.enabled', false),
             Mode::STEPPED_ASIDE => null,
         };
+    }
+
+    /**
+     * Cancel every transmit of Nightwatch's own ingest when Active, in case it stays in place.
+     */
+    protected function vetoNightwatchTransmit(): void
+    {
+        if ($this->mode !== Mode::ACTIVE) {
+            return;
+        }
+
+        // Registered before Nightwatch's provider, so it runs first among the listeners.
+        $this->app->make('events')->listen(IngestingEvents::class, static fn () => false);
     }
 
     /**
