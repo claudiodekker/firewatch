@@ -1,0 +1,23 @@
+{
+    "v": 1,
+    "t": "mail",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "{uuid}",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "mailer": "array",
+    "class": "",
+    "subject": "Shipped",
+    "to": 1,
+    "cc": 0,
+    "bcc": 0,
+    "attachments": 0,
+    "duration": "{duration}",
+    "failed": false
+}

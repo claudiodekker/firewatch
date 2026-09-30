@@ -1,0 +1,18 @@
+{
+    "v": 1,
+    "t": "notification",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "{uuid}",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "channel": "Workbench\\App\\Notifications\\SilentChannel",
+    "class": "Workbench\\App\\Notifications\\OrderShipped",
+    "duration": "{duration}",
+    "failed": false
+}

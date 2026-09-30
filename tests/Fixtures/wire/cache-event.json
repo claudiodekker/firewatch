@@ -1,0 +1,19 @@
+{
+    "v": 1,
+    "t": "cache-event",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "{uuid}",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "store": "array",
+    "key": "orders",
+    "type": "miss",
+    "duration": "{duration}",
+    "ttl": 0
+}

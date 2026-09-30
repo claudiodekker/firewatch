@@ -1,5 +1,6 @@
 <?php
 
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Notifications\AnonymousNotifiable;
@@ -8,7 +9,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Workbench\App\Notifications\OrderShipped;
 
@@ -35,37 +35,6 @@ function forceRequestTo(string $uri): void
     config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
 
     test()->get($uri);
-}
-
-/**
- * @param  array<string, mixed>  $record
- */
-function ingestNow(array $record): void
-{
-    app(Core::class)->ingest->writeNow($record);
-}
-
-/**
- * @param  array<string, mixed>  $fields
- * @return array<string, mixed>
- */
-function childRecord(string $type, array $fields = []): array
-{
-    return [
-        'v' => 1,
-        't' => $type,
-        'timestamp' => 1767225600.25,
-        'deploy' => 'v1.2.3',
-        'server' => 'web-1',
-        '_group' => str_repeat('a', 32),
-        'trace_id' => 'trace-1',
-        'execution_source' => 'request',
-        'execution_id' => 'trace-1',
-        'execution_preview' => 'GET /',
-        'execution_stage' => 'action',
-        'user' => '',
-        ...$fields,
-    ];
 }
 
 dataset('sensors', [
@@ -180,23 +149,23 @@ it('keeps a wire zero and an empty string as sent', function () {
     expect($request)->toBe(['lazy_loads' => 0, 'payload' => '']);
 });
 
-it('starts the types Nightwatch stamps at their end one duration before their timestamp', function (string $type, float $startedAt) {
-    ingestNow(childRecord($type, ['duration' => 250000]));
+it('starts the types Nightwatch stamps at their end one duration before their timestamp', function (RecordType $type, float $startedAt) {
+    ingest([syntheticRecord($type)->with(['timestamp' => 1767225600.25, 'duration' => 250000])]);
 
     [$record] = selectFromStore('SELECT started_at FROM records');
 
     expect($record['started_at'])->toBe($startedAt);
 })->with([
-    'mail' => ['type' => 'mail', 'startedAt' => 1767225600.0],
-    'notification' => ['type' => 'notification', 'startedAt' => 1767225600.0],
-    'queued job' => ['type' => 'queued-job', 'startedAt' => 1767225600.0],
-    'outgoing request' => ['type' => 'outgoing-request', 'startedAt' => 1767225600.25],
-    'cache event' => ['type' => 'cache-event', 'startedAt' => 1767225600.25],
-    'query' => ['type' => 'query', 'startedAt' => 1767225600.25],
+    'mail' => ['type' => RecordType::MAIL, 'startedAt' => 1767225600.0],
+    'notification' => ['type' => RecordType::NOTIFICATION, 'startedAt' => 1767225600.0],
+    'queued job' => ['type' => RecordType::QUEUED_JOB, 'startedAt' => 1767225600.0],
+    'outgoing request' => ['type' => RecordType::OUTGOING_REQUEST, 'startedAt' => 1767225600.25],
+    'cache event' => ['type' => RecordType::CACHE_EVENT, 'startedAt' => 1767225600.25],
+    'query' => ['type' => RecordType::QUERY, 'startedAt' => 1767225600.25],
 ]);
 
 it('keeps the timestamp of a type Nightwatch stamps at its end when its duration is not a number', function () {
-    ingestNow(childRecord('mail', ['duration' => 'slow']));
+    ingest([syntheticRecord(RecordType::MAIL)->with(['timestamp' => 1767225600.25, 'duration' => 'slow'])]);
 
     [$record] = selectFromStore('SELECT started_at FROM records');
 
@@ -204,7 +173,7 @@ it('keeps the timestamp of a type Nightwatch stamps at its end when its duration
 });
 
 it('links a fatal error, which Nightwatch sends without an execution, to its trace unless it ended a job', function (string $source, ?string $executionId) {
-    ingestNow(childRecord('exception', ['execution_source' => $source, 'execution_id' => '', 'trace' => '']));
+    ingest([syntheticRecord(RecordType::EXCEPTION)->with(['trace_id' => 'trace-1', 'execution_source' => $source, 'execution_id' => '', 'trace' => ''])]);
 
     [$exception] = selectFromStore('SELECT execution_id, trace FROM exceptions');
 
@@ -217,7 +186,7 @@ it('links a fatal error, which Nightwatch sends without an execution, to its tra
 ]);
 
 it('keeps a JSON-string field that is not JSON as sent', function () {
-    ingestNow(childRecord('log', ['level' => 'info', 'message' => 'Hello.', 'context' => '{"order":', 'extra' => '{}']));
+    ingest([syntheticRecord(RecordType::LOG)->with(['context' => '{"order":'])]);
 
     [$log] = selectFromStore("SELECT context, json_type(data, '$.extra') AS extra FROM logs");
 
@@ -225,7 +194,7 @@ it('keeps a JSON-string field that is not JSON as sent', function () {
 });
 
 it('keeps an unknown field in data under its wire name, even one named like a column', function () {
-    ingestNow(childRecord('log', ['level' => 'info', 'message' => 'Hello.', 'context' => '{}', 'extra' => '{}', 'duration' => 5, 'colour' => 'red']));
+    ingest([syntheticRecord(RecordType::LOG)->with(['duration' => 5, 'colour' => 'red'])]);
 
     [$log] = selectFromStore("SELECT data ->> '$.duration' AS data_duration, data ->> '$.colour' AS colour, duration FROM records");
 
@@ -233,7 +202,7 @@ it('keeps an unknown field in data under its wire name, even one named like a co
 });
 
 it('stores a record of an unknown type with its common columns filled from the wire and the rest in data', function () {
-    ingestNow(childRecord('future-type', ['duration' => 5, 'job_id' => 'job-1', 'user' => '7', 'colour' => 'red']));
+    ingest([syntheticRecord(RecordType::QUEUED_JOB)->with(['t' => 'future-type', 'timestamp' => 1767225600.25, 'duration' => 5, 'job_id' => 'job-1', 'user' => '7', 'colour' => 'red'])]);
 
     [$record] = selectFromStore('SELECT type, started_at, duration, group_hash, trace_id, execution_id, source, job_id, user_id, deploy, server, data FROM records');
 
@@ -242,13 +211,13 @@ it('stores a record of an unknown type with its common columns filled from the w
         'started_at' => 1767225600.25,
         'duration' => 5,
         'group_hash' => str_repeat('a', 32),
-        'trace_id' => 'trace-1',
-        'execution_id' => 'trace-1',
-        'source' => 'request',
+        'trace_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f',
+        'execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f',
+        'source' => 'command',
         'job_id' => 'job-1',
         'user_id' => '7',
-        'deploy' => 'v1.2.3',
+        'deploy' => '',
         'server' => 'web-1',
-        'data' => '{"execution_preview":"GET /","execution_stage":"action","colour":"red"}',
+        'data' => '{"execution_preview":"","execution_stage":"action","name":"Workbench\\\\App\\\\Jobs\\\\ShipOrder","connection":"database","queue":"default","colour":"red"}',
     ]);
 });

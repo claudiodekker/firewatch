@@ -2,6 +2,8 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use ClaudioDekker\Firewatch\Tests\TestCase;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -9,6 +11,8 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Sleep;
+use Laravel\Nightwatch\Core;
+use Laravel\Nightwatch\Facades\Nightwatch;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 
@@ -95,4 +99,21 @@ function runArtisan(array $input): void
     $status = $kernel->handle($arguments, new BufferedOutput);
 
     $kernel->terminate($arguments, $status);
+}
+
+function syntheticRecord(RecordType $type): RecordBuilder
+{
+    return new RecordBuilder($type);
+}
+
+/**
+ * @param  list<RecordBuilder|array<mixed>>  $records
+ */
+function ingest(array $records): void
+{
+    foreach ($records as $record) {
+        app(Core::class)->ingest->write($record instanceof RecordBuilder ? $record->make() : $record);
+    }
+
+    Nightwatch::digest();
 }
