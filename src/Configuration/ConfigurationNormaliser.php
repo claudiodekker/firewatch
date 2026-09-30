@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Configuration;
 
 use ClaudioDekker\Firewatch\ExecutionType;
 use Closure;
+use Illuminate\Support\Arr;
 
 /**
  * @internal
@@ -41,7 +42,11 @@ class ConfigurationNormaliser
 
     protected const DEFAULT_ENVIRONMENTS = ['local', 'testing'];
 
-    protected const ENVIRONMENT_NAME = 'an environment name (letters, digits, _ . -)';
+    protected const ENVIRONMENT_NAME_DESCRIPTION = 'an environment name (letters, digits, _ . -)';
+
+    protected const NOT_A_LIST = ' is not a list (an array or a comma-separated string)';
+
+    protected const DESCRIBED_VALUE_CHARACTERS = 60;
 
     protected const MAXIMUM_PATH_BYTES = 4096;
 
@@ -146,7 +151,8 @@ class ConfigurationNormaliser
             return static::BOOLEANS[$spelling];
         }
 
-        $this->fallBack($key, $this->describe($value).' is not a boolean (true, false, 1, 0, yes, no, on, off)', $default ? 'true' : 'false');
+        $accepted = implode(', ', array_keys(static::BOOLEANS));
+        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($value)." is not a boolean ({$accepted})", default: $default ? 'true' : 'false');
 
         return $default;
     }
@@ -167,15 +173,18 @@ class ConfigurationNormaliser
             default => '',
         };
 
-        $integer = preg_match('/^-?[0-9]+$/', $digits) === 1
-            ? filter_var($digits, FILTER_VALIDATE_INT, ['options' => ['min_range' => $minimum, 'max_range' => $maximum]])
+        $integer = preg_match('/^[0-9]+$/', $digits) === 1
+            ? filter_var(ltrim($digits, '0') ?: '0', FILTER_VALIDATE_INT, ['options' => [
+                'min_range' => $minimum,
+                'max_range' => $maximum,
+            ]])
             : false;
 
         if ($integer !== false) {
             return $integer;
         }
 
-        $this->fallBack($key, $this->describe($value)." is not an integer from {$minimum} to {$maximum}", (string) $default);
+        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($value)." is not an integer from {$minimum} to {$maximum}", default: (string) $default);
 
         return $default;
     }
@@ -195,7 +204,7 @@ class ConfigurationNormaliser
             return $value;
         }
 
-        $this->fallBack($key, $this->describe($value)." is not a duration (digits then s, m, h, d or w, for example {$default})", $default);
+        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($value)." is not a duration (digits then s, m, h, d or w, for example {$default})", default: $default);
 
         return $default;
     }
@@ -222,18 +231,18 @@ class ConfigurationNormaliser
         $environments = $this->list(
             $raw['environments'],
             key: 'environments',
+            expected: static::ENVIRONMENT_NAME_DESCRIPTION,
             accepts: fn (string $item) => preg_match('/^[A-Za-z0-9_.-]+$/', $item) === 1,
-            rule: static::ENVIRONMENT_NAME,
         );
 
         if ($environments === null) {
-            $this->fallBack('environments', $this->describe($raw['environments']).' is not a list (an array or a comma-separated string)', $default);
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'environments', reason: $this->describe($raw['environments']).static::NOT_A_LIST, default: $default);
 
             return static::DEFAULT_ENVIRONMENTS;
         }
 
         if ($environments === []) {
-            $this->fallBack('environments', 'no valid environment names', $default);
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'environments', reason: 'no valid environment names', default: $default);
 
             return static::DEFAULT_ENVIRONMENTS;
         }
@@ -251,10 +260,10 @@ class ConfigurationNormaliser
             return [];
         }
 
-        $items = $this->list($values[$name], key: $key, accepts: fn (string $item) => true, rule: 'a string');
+        $items = $this->list($values[$name], key: $key, expected: 'a string', accepts: fn (string $item) => true);
 
         if ($items === null) {
-            $this->fallBack($key, $this->describe($values[$name]).' is not a list (an array or a comma-separated string)', 'none');
+            $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($values[$name]).static::NOT_A_LIST, default: 'none');
 
             return [];
         }
@@ -268,7 +277,7 @@ class ConfigurationNormaliser
      * @param  Closure(string): bool  $accepts
      * @return list<string>|null
      */
-    protected function list(mixed $value, string $key, Closure $accepts, string $rule): ?array
+    protected function list(mixed $value, string $key, string $expected, Closure $accepts): ?array
     {
         $items = match (true) {
             is_string($value) => explode(',', $value),
@@ -290,7 +299,7 @@ class ConfigurationNormaliser
             }
 
             if ($trimmed === null || ! $accepts($trimmed)) {
-                $this->drop($key, $this->describe($item)." is not {$rule}");
+                $this->issues[] = ConfigurationIssue::droppedItem(key: $key, reason: $this->describe($item)." is not {$expected}");
 
                 continue;
             }
@@ -315,7 +324,7 @@ class ConfigurationNormaliser
         $value = $raw['database'];
 
         if (! is_string($value)) {
-            $this->fallBack('database', $this->describe($value).' is not a file path', $default);
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'database', reason: $this->describe($value).' is not a file path', default: $default);
 
             return $default;
         }
@@ -323,7 +332,7 @@ class ConfigurationNormaliser
         $reason = $this->refusedPath($value);
 
         if ($reason !== null) {
-            $this->fallBack('database', $reason, $default);
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'database', reason: $reason, default: $default);
 
             return $default;
         }
@@ -394,7 +403,7 @@ class ConfigurationNormaliser
         }
 
         if (! is_string($value)) {
-            $this->fallBack('deploy', $this->describe($value).' is not a string', 'unset');
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'deploy', reason: $this->describe($value).' is not a string', default: 'unset');
 
             return null;
         }
@@ -424,7 +433,7 @@ class ConfigurationNormaliser
         }
 
         if (! is_array($raw['budgets'])) {
-            $this->fallBack('budgets', $this->describe($raw['budgets']).' is not a list of budget entries', 'none');
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'budgets', reason: $this->describe($raw['budgets']).' is not a list of budget entries', default: 'none');
 
             return [];
         }
@@ -436,7 +445,7 @@ class ConfigurationNormaliser
             $reason = $this->refusedBudgetEntry($entry);
 
             if ($reason !== null) {
-                $this->issues[] = new ConfigurationIssue(key: "budgets[{$number}]", reason: $reason, effect: 'entry ignored');
+                $this->issues[] = ConfigurationIssue::ignoredBudgetEntry(number: $number, reason: $reason);
 
                 continue;
             }
@@ -478,7 +487,9 @@ class ConfigurationNormaliser
         $type = is_string($entry['type']) ? ExecutionType::tryFrom($entry['type']) : null;
 
         if ($type === null) {
-            return 'type '.$this->describe($entry['type']).' is not request, command, job-attempt or scheduled-task';
+            $types = array_map(fn (ExecutionType $type) => $type->value, ExecutionType::cases());
+
+            return 'type '.$this->describe($entry['type']).' is not '.Arr::join($types, ', ', ' or ');
         }
 
         return $this->refusedBudgetKeys($entry, $type)
@@ -530,7 +541,7 @@ class ConfigurationNormaliser
 
         foreach ($methods as $method) {
             if (! is_string($method) || ! in_array(strtoupper($method), static::HTTP_VERBS, true)) {
-                return 'method '.$this->describe($method).' is not GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS';
+                return 'method '.$this->describe($method).' is not '.Arr::join(static::HTTP_VERBS, ', ', ' or ');
             }
         }
 
@@ -567,20 +578,10 @@ class ConfigurationNormaliser
         return "{$ceiling} ".$this->describe($value)." is not a number greater than 0 and at most {$maximum}";
     }
 
-    protected function drop(string $key, string $reason): void
-    {
-        $this->issues[] = new ConfigurationIssue(key: $key, reason: $reason, effect: 'dropped');
-    }
-
-    protected function fallBack(string $key, string $reason, string $default): void
-    {
-        $this->issues[] = new ConfigurationIssue(key: $key, reason: $reason, effect: "using {$default}");
-    }
-
     protected function describe(mixed $value): string
     {
         return match (true) {
-            is_string($value) => json_encode(mb_substr($value, 0, 60), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR),
+            is_string($value) => json_encode(mb_substr($value, 0, static::DESCRIBED_VALUE_CHARACTERS), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR),
             $value === null => 'null',
             $value === [] => '[]',
             is_scalar($value) => var_export($value, true),

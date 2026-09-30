@@ -35,6 +35,10 @@ php artisan vendor:publish --tag=firewatch-config
 
 An invalid value never stops capture: that key alone falls back to its default, and console commands report the problem once.
 
+`busy_timeout` bounds only the capture side: a batch that can't be written within it is dropped rather than stalling the request, and `0` drops it at once.
+
+Give each store its own directory: two stores in one directory would share their companion files.
+
 A budget entry names an execution type (`request`, `command`, `job-attempt` or `scheduled-task`), optional matchers (`methods` and `path` for requests, `name` otherwise) and a `duration` ceiling in milliseconds, a `memory` ceiling in MB, or both:
 
 ```php

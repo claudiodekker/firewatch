@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationIssue;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -17,6 +18,8 @@ use RuntimeException;
 class FirewatchServiceProvider extends ServiceProvider
 {
     protected const CONFIG_PATH = __DIR__.'/../config/firewatch.php';
+
+    protected const NESTED_GROUPS = ['retention', 'capture'];
 
     public function register(): void
     {
@@ -35,17 +38,39 @@ class FirewatchServiceProvider extends ServiceProvider
 
     protected function registerConfiguration(): void
     {
-        $this->mergeConfigFrom(static::CONFIG_PATH, 'firewatch');
+        $this->mergeConfiguration();
 
+        $raw = $this->app->make('config')->get('firewatch');
         $normaliser = new ConfigurationNormaliser(
             basePath: $this->app->basePath(),
             publicPath: $this->app->publicPath(),
             storagePath: $this->app->storagePath(),
         );
 
-        $configuration = $normaliser->resolve($this->app->make('config')->get('firewatch'));
+        $configuration = $normaliser->resolve(is_array($raw) ? $raw : []);
 
         $this->app->instance(Configuration::class, $configuration);
+    }
+
+    protected function mergeConfiguration(): void
+    {
+        if ($this->app instanceof CachesConfiguration && $this->app->configurationIsCached()) {
+            return;
+        }
+
+        $config = $this->app->make('config');
+        $defaults = require static::CONFIG_PATH;
+        $published = $config->get('firewatch');
+        $published = is_array($published) ? $published : [];
+
+        // mergeConfigFrom merges the top level only; keep the package's env() for nested keys a published group leaves out.
+        foreach (static::NESTED_GROUPS as $group) {
+            if (is_array($published[$group] ?? null)) {
+                $published[$group] += $defaults[$group];
+            }
+        }
+
+        $config->set('firewatch', $published + $defaults);
     }
 
     protected function registerNightwatch(): void

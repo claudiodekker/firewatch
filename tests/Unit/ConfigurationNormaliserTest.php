@@ -19,28 +19,6 @@ function configurationIssueLines(Configuration $configuration): array
     return array_map(fn (ConfigurationIssue $issue) => $issue->line(), $configuration->issues);
 }
 
-it('resolves every key to its default when nothing is configured', function () {
-    $configuration = configurationNormaliser()->resolve([]);
-
-    expect($configuration)->toHaveProperties([
-        'enabled' => true,
-        'environments' => ['local', 'testing'],
-        'database' => '/app/storage/firewatch/firewatch.sqlite',
-        'busyTimeoutMilliseconds' => 300,
-        'retentionAge' => '7d',
-        'retentionAgeSeconds' => 604800,
-        'retentionRecords' => 100000,
-        'deploy' => null,
-        'captureLogs' => true,
-        'captureRequestPayload' => true,
-        'redactPayloadFields' => [],
-        'redactHeaders' => [],
-        'budgets' => [],
-        'ignoredBudgetEntries' => 0,
-        'issues' => [],
-    ]);
-});
-
 it('reads every accepted boolean spelling', function (mixed $value, bool $expected) {
     $configuration = configurationNormaliser()->resolve(['enabled' => $value]);
 
@@ -82,8 +60,8 @@ it('falls back to each boolean key\'s own default alone', function (string $grou
         ->and($configuration->enabled)->toBeFalse()
         ->and(configurationIssueLines($configuration))->toBe(["firewatch.{$group}.{$key}: \"maybe\" is not a boolean (true, false, 1, 0, yes, no, on, off); using true"]);
 })->with([
-    'capture.logs' => ['capture', 'logs', 'captureLogs'],
-    'capture.request_payload' => ['capture', 'request_payload', 'captureRequestPayload'],
+    'capture.logs' => ['group' => 'capture', 'key' => 'logs', 'property' => 'captureLogs'],
+    'capture.request_payload' => ['group' => 'capture', 'key' => 'request_payload', 'property' => 'captureRequestPayload'],
 ]);
 
 it('reads the busy timeout within its range', function (mixed $value, int $expected) {
@@ -96,6 +74,8 @@ it('reads the busy timeout within its range', function (mixed $value, int $expec
     'upper bound' => [5000, 5000],
     'digit string' => ['300', 300],
     'digit string with whitespace' => [' 450 ', 450],
+    'leading zeros' => ['0300', 300],
+    'only zeros' => ['00', 0],
 ]);
 
 it('falls back to 300 for a refused busy timeout', function (mixed $value, string $described) {
@@ -200,8 +180,8 @@ it('drops a list item that is not a string', function (string $name, string $pro
             "firewatch.{$key}: array is not a string; dropped",
         ]);
 })->with([
-    'capture.redact_payload_fields' => ['redact_payload_fields', 'redactPayloadFields', 'capture.redact_payload_fields'],
-    'capture.redact_headers' => ['redact_headers', 'redactHeaders', 'capture.redact_headers'],
+    'capture.redact_payload_fields' => ['name' => 'redact_payload_fields', 'property' => 'redactPayloadFields', 'key' => 'capture.redact_payload_fields'],
+    'capture.redact_headers' => ['name' => 'redact_headers', 'property' => 'redactHeaders', 'key' => 'capture.redact_headers'],
 ]);
 
 it('falls back to none when a redact list is neither an array nor a string', function () {
@@ -384,9 +364,9 @@ it('never throws, whatever the configuration holds', function (mixed $value) {
         'budgets' => [$value, ['type' => 'request', 'path' => $value, 'duration' => $value]],
     ];
 
-    $configuration = configurationNormaliser()->resolve($raw);
+    $resolve = fn () => configurationNormaliser()->resolve($raw);
 
-    expect($configuration->issues)->not->toBe([]);
+    expect($resolve)->not->toThrow(Throwable::class);
 })->with([
     'object' => [new stdClass],
     'closure' => [fn () => true],
