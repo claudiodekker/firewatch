@@ -10,6 +10,14 @@ use Laravel\Nightwatch\Records\Request;
 class HeaderRedactor
 {
     /**
+     * The registered HTTP authentication schemes an Authorization value keeps in front of its credentials, in lower case.
+     */
+    protected const SCHEMES = [
+        'basic', 'bearer', 'concealed', 'digest', 'dpop', 'gnap', 'hoba', 'mutual',
+        'negotiate', 'oauth', 'privatetoken', 'scram-sha-1', 'scram-sha-256', 'vapid',
+    ];
+
+    /**
      * Create a new header redactor instance.
      *
      * @param  list<string>  $headers  the names of the headers to redact, in any case
@@ -21,8 +29,6 @@ class HeaderRedactor
 
     /**
      * Redact the listed headers of a request record, keeping Authorization's scheme and Cookie's names.
-     *
-     * Nightwatch's redactRequests signature asks for a bool, which it ignores.
      */
     public function __invoke(Request $record): bool
     {
@@ -37,6 +43,7 @@ class HeaderRedactor
             $record->headers->set($header, $redacted);
         }
 
+        // Nightwatch's redactRequests signature asks for a bool, which it ignores.
         return true;
     }
 
@@ -53,7 +60,7 @@ class HeaderRedactor
     }
 
     /**
-     * Redact an Authorization value, keeping the scheme in front of its credentials.
+     * Redact an Authorization value, keeping a registered scheme in front of its credentials.
      */
     protected function redactAuthorization(string $value): string
     {
@@ -62,6 +69,10 @@ class HeaderRedactor
         }
 
         [$scheme, $credentials] = explode(' ', $value, 2);
+
+        if (! in_array(strtolower($scheme), static::SCHEMES, strict: true)) {
+            return $this->replace($value);
+        }
 
         return $scheme.' '.$this->replace($credentials);
     }

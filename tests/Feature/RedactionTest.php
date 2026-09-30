@@ -52,8 +52,12 @@ function storedRequest(): array
     ];
 }
 
-it('stores payload fields and headers unredacted by default', function () {
-    serveFailingCheckout();
+it('stores payload fields and headers unredacted by default, whatever Nightwatch\'s own variables say', function () {
+    serveFailingCheckout([
+        'NIGHTWATCH_CAPTURE_REQUEST_PAYLOAD' => 'false',
+        'NIGHTWATCH_REDACT_PAYLOAD_FIELDS' => 'password',
+        'NIGHTWATCH_REDACT_HEADERS' => 'Authorization,Cookie,X-XSRF-TOKEN',
+    ]);
 
     test()->withHeaders(['Authorization' => 'Bearer abc123', 'Cookie' => 'session=abc', 'X-XSRF-TOKEN' => 'xsrf'])
         ->post('/checkout', ['_token' => 'csrf', 'password' => 'secret', 'password_confirmation' => 'secret']);
@@ -92,7 +96,9 @@ it('redacts the listed headers by case-insensitive name, keeping Authorization\'
     'Authorization with a scheme' => ['header' => 'Authorization', 'value' => 'Bearer abc123', 'stored' => 'Bearer [6 bytes redacted]'],
     'Authorization without a scheme' => ['header' => 'Authorization', 'value' => 'abc123', 'stored' => '[6 bytes redacted]'],
     'Cookie' => ['header' => 'Cookie', 'value' => 'session=abc; theme=dark', 'stored' => 'session=[3 bytes redacted]; theme=[4 bytes redacted]'],
+    'an unregistered Authorization scheme' => ['header' => 'Authorization', 'value' => 'part1 part2', 'stored' => '[11 bytes redacted]'],
     'a Cookie without names' => ['header' => 'Cookie', 'value' => 'abc', 'stored' => '[3 bytes redacted]'],
+    'a Cookie with one nameless part' => ['header' => 'Cookie', 'value' => 'session=abc; theme', 'stored' => '[18 bytes redacted]'],
     'another header' => ['header' => 'x-api-key', 'value' => 'key-123', 'stored' => '[7 bytes redacted]'],
 ]);
 
@@ -115,7 +121,10 @@ it('never stores the php-auth headers', function () {
 
     test()->withServerVariables(['PHP_AUTH_USER' => 'taylor', 'PHP_AUTH_PW' => 'secret', 'PHP_AUTH_DIGEST' => 'digest'])->post('/checkout');
 
-    expect(storedRequest()['headers'])->not->toHaveKeys(['php-auth-user', 'php-auth-pw', 'php-auth-digest']);
+    $headers = storedRequest()['headers'];
+
+    expect($headers)->not->toHaveKeys(['php-auth-user', 'php-auth-pw', 'php-auth-digest'])
+        ->and($headers)->toMatchArray(['authorization' => ['Basic '.base64_encode('taylor:secret')]]);
 });
 
 it('stores no payload when capturing request payloads is turned off', function () {

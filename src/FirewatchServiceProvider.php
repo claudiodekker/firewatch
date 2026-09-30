@@ -322,10 +322,14 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function redactHeaders(): void
     {
-        $core = $this->app->bound(Core::class) ? $this->app->make(Core::class) : null;
+        if ($this->mode !== Mode::ACTIVE || ! $this->app->bound(Core::class)) {
+            return;
+        }
+
+        $core = $this->app->make(Core::class);
 
         // A core Firewatch can't recognise is already reported by the ingest swap.
-        if ($this->mode !== Mode::ACTIVE || ! $core instanceof Core) {
+        if (! $core instanceof Core) {
             return;
         }
 
