@@ -31,6 +31,8 @@ function serverReplies(Process $process): array
 {
     $lines = array_filter(explode("\n", $process->getOutput()), fn (string $line) => $line !== '');
 
+    expect($lines)->each->toBeJson();
+
     $replies = array_map(fn (string $line) => json_decode($line, associative: true, flags: JSON_THROW_ON_ERROR), $lines);
 
     expect(array_column($replies, 'jsonrpc'))->toBe(array_fill(0, count($replies), '2.0'));
