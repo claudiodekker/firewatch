@@ -68,9 +68,7 @@ it('ignores the NIGHTWATCH_ variables for the keys it writes', function (bool $e
 ]);
 
 it('resolves a firewatch: process Off by its first argument that is not an option', function (array $argv, bool $expected) {
-    $original = $_SERVER['argv'];
-    $_SERVER['argv'] = $argv;
-    $this->beforeApplicationDestroyed(fn () => $_SERVER['argv'] = $original);
+    setArgv($argv);
 
     registerFirewatch();
 
@@ -85,9 +83,7 @@ it('resolves a firewatch: process Off by its first argument that is not an optio
 ]);
 
 it('steps aside in a disallowed environment even in a firewatch: process', function () {
-    $original = $_SERVER['argv'];
-    $_SERVER['argv'] = ['artisan', 'firewatch:server'];
-    $this->beforeApplicationDestroyed(fn () => $_SERVER['argv'] = $original);
+    setArgv(['artisan', 'firewatch:server']);
     config()->set('nightwatch.enabled', true);
     config()->set('firewatch.environments', 'local');
 

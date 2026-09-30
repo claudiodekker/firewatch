@@ -10,6 +10,20 @@ Install is `composer require --dev claudiodekker/firewatch`:
 composer require --dev claudiodekker/firewatch
 ```
 
+## Connecting an assistant
+
+An assistant's client starts Firewatch's MCP server with one launch command, run in the application's environment with the project root as working directory:
+
+```bash
+php artisan firewatch:server
+```
+
+In Claude Code that is `claude mcp add firewatch -- php artisan firewatch:server`. The server speaks MCP over stdio and exits when its input ends. It is a `firewatch:` process, so it is always Off and never captures its own reads, and it opens nothing in the store until a tool asks. Only `overview` exists so far, and it answers that no store has been written yet.
+
+The server starts only through `firewatch:server`. Firewatch registers no laravel/mcp handle, so never use `mcp:start` or `mcp:inspector` with it. To see what an assistant would get from `tools/list` without a session, run `php artisan firewatch:server --list`, or `--list --json` for the full descriptions and schemas.
+
+Anything an application's providers print while the server boots goes to stderr, so it can't corrupt the protocol on stdout. Run the launch command by hand to see it; end with Ctrl-D.
+
 ## Modes
 
 Firewatch decides once per process, when it registers, how it runs:

@@ -51,3 +51,22 @@ function setEnvironmentVariable(string $name, string $value): void
         putenv($name);
     });
 }
+
+/**
+ * @param  list<string>  $argv
+ */
+function setArgv(array $argv): void
+{
+    $original = $_SERVER['argv'];
+    $outputBuffers = ob_get_level();
+    $_SERVER['argv'] = $argv;
+
+    // A firewatch:server process redirects stray output through a buffer of its own.
+    test()->beforeApplicationDestroyed(function () use ($original, $outputBuffers) {
+        $_SERVER['argv'] = $original;
+
+        while (ob_get_level() > $outputBuffers) {
+            ob_end_clean();
+        }
+    });
+}
