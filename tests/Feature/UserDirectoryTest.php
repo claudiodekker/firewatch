@@ -67,6 +67,14 @@ it('keeps when a user was first seen and takes the rest from the latest sighting
     ]);
 });
 
+it('never moves a user\'s last sighting back for a batch stored out of order', function () {
+    ingestUser(['timestamp' => 1767225900.5]);
+
+    ingestUser(['timestamp' => 1767225600.25]);
+
+    expect(readStore('SELECT last_seen FROM users'))->toBe([['last_seen' => 1767225900.5]]);
+});
+
 it('keeps a user record without a usable id as a record', function (array $fields) {
     ingestUser($fields);
 

@@ -21,12 +21,15 @@ class AppendBatch
         SQL;
 
     /**
-     * The statement that adds a user to the directory, or refreshes one it already holds.
+     * The statement that adds a user to the directory, or refreshes one it holds without moving its last sighting back.
      */
     protected const UPSERT_USER = <<<'SQL'
         INSERT INTO users (id, name, username, first_seen, last_seen)
         VALUES (:id, :name, :username, :seen_at, :seen_at)
-        ON CONFLICT (id) DO UPDATE SET name = excluded.name, username = excluded.username, last_seen = excluded.last_seen
+        ON CONFLICT (id) DO UPDATE SET
+            name = excluded.name,
+            username = excluded.username,
+            last_seen = max(coalesce(last_seen, excluded.last_seen), coalesce(excluded.last_seen, last_seen))
         SQL;
 
     /**
