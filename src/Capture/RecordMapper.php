@@ -40,6 +40,14 @@ class RecordMapper
     ];
 
     /**
+     * Create a new record mapper instance.
+     */
+    public function __construct(protected Truncator $truncator)
+    {
+        //
+    }
+
+    /**
      * Map a wire record to a stored record or a user directory entry, counting how its shape differs from the contract table.
      *
      * @param  array<mixed>  $record
@@ -87,7 +95,7 @@ class RecordMapper
      */
     protected function columns(?RecordType $type, array $wire, mixed $timestamp): array
     {
-        [$columns, $data] = $this->split($wire, $type);
+        [$columns, $data, $jsonFields] = $this->split($wire, $type);
 
         // The round trip can turn a float into an integer, so the instant comes from the original array.
         $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, duration: $columns['duration']);
@@ -97,7 +105,7 @@ class RecordMapper
             $columns['source'] = $type->source() ?? $columns['source'];
         }
 
-        $columns['data'] = json_encode((object) $data, self::JSON_FLAGS);
+        $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $type === RecordType::EXCEPTION ? 'trace' : null);
 
         return $columns;
     }
@@ -249,10 +257,10 @@ class RecordMapper
     }
 
     /**
-     * Split the wire fields into the common columns and the fields kept in data.
+     * Split the wire fields into the common columns, cut to the field limit, and the fields kept in data, with the names of those Nightwatch sent as JSON strings.
      *
      * @param  array<mixed>  $wire
-     * @return array{array<string, mixed>, array<string, mixed>}
+     * @return array{array<string, mixed>, array<string, mixed>, list<string>}
      */
     protected function split(array $wire, ?RecordType $type): array
     {
@@ -260,6 +268,7 @@ class RecordMapper
         $jsonFields = $type?->jsonFields() ?? [];
         $columns = array_fill_keys(Schema::COLUMNS, null);
         $data = [];
+        $dataJsonFields = [];
 
         foreach ($wire as $field => $value) {
             if (! array_key_exists($field, $fields)) {
@@ -274,18 +283,24 @@ class RecordMapper
                 continue;
             }
 
-            if (in_array($field, $jsonFields, strict: true)) {
+            $isJson = in_array($field, $jsonFields, strict: true);
+
+            if ($isJson) {
                 $value = $this->decode($type, $field, $value);
             }
 
             if (array_key_exists($name, $columns)) {
-                $columns[$name] = $value;
+                $columns[$name] = is_string($value) ? $this->truncator->cut($value) : $value;
             } else {
                 $data[$name] = $value;
+
+                if ($isJson) {
+                    $dataJsonFields[] = $name;
+                }
             }
         }
 
-        return [$columns, $data];
+        return [$columns, $data, $dataJsonFields];
     }
 
     /**
