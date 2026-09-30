@@ -15,10 +15,10 @@ composer require --dev claudiodekker/firewatch
 Firewatch decides once per process, when it registers, how it runs:
 
 - **Stepped aside** when the environment is not in `environments`. It registers no command, listener or publish tag and writes no Nightwatch setting, so Nightwatch behaves as if Firewatch were absent. A console process reports this once; web processes stay silent. `Command "firewatch:doctor" is not defined` means the environment is not in `FIREWATCH_ENVIRONMENTS`.
-- **Off** in a `firewatch:` command, when `enabled` is false, or when `ext-sqlite3` is missing or SQLite is older than 3.38.0. Nightwatch is disabled and nothing is captured.
-- **Active** otherwise. Nightwatch is enabled with a placeholder token and a loopback address nothing listens on.
+- **Off** in a `firewatch:` command, when `enabled` is false, or when `ext-sqlite3` is missing or SQLite is older than 3.38.0. Nightwatch is disabled, its ingest is swapped for one that sends nothing, and nothing is captured.
+- **Active** otherwise. Nightwatch is enabled and its ingest is swapped for one that sends nothing. A placeholder token and a loopback address nothing listens on stay behind it as a second guard.
 
-In Active and Off, Firewatch also swaps Nightwatch's ingest for one that sends nothing. If a Nightwatch release changes that ingest, a console process reports it once and Nightwatch keeps its own ingest: disabled in Off, and pointed at the placeholder token and address in Active.
+Firewatch checks Nightwatch's ingest before it swaps it. If a Nightwatch release changed it, a console process reports that once and Nightwatch keeps its own ingest: disabled in Off, and pointed at the placeholder token and address in Active.
 
 In Active and Off, `NIGHTWATCH_ENABLED`, `NIGHTWATCH_TOKEN` and the `NIGHTWATCH_INGEST_*` variables have no effect. Queue workers, Octane and Horizon read the mode at boot, so restart them after changing it.
 
