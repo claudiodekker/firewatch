@@ -130,6 +130,32 @@ it('replaces any other value with its type', function () {
     expect(storedBindings()[0]['bindings'])->toBe(['[stdClass]']);
 });
 
+it('stores no bindings for a query whose bindings can\'t be read, and still records it', function () {
+    $value = new class implements Stringable
+    {
+        public function __toString(): string
+        {
+            throw new RuntimeException('The value can\'t be read.');
+        }
+    };
+
+    // A driver casts the value before the query runs, so only a QueryExecuted event dispatched by hand carries one.
+    event(new QueryExecuted('select ? as probe', [$value], 0.1, DB::connection()));
+    Nightwatch::digest();
+
+    expect(storedBindings())->toBe([['sql' => 'select ? as probe', 'bindings' => null]]);
+});
+
+it('pairs each query with its own bindings after Firewatch registers again', function () {
+    registerFirewatch();
+
+    DB::select('select ? as probe', ['first']);
+    DB::select('select ? as probe', ['second']);
+    Nightwatch::digest();
+
+    expect(array_column(storedBindings(), 'bindings'))->toBe([['first'], ['second']]);
+});
+
 it('keeps bindings of up to 16,384 bytes of JSON and replaces the rest with a count once over', function (array $bindings, array $stored) {
     selectProbe($bindings);
     Nightwatch::digest();

@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Capture;
 
 use Illuminate\Database\Events\QueryExecuted;
 use Stringable;
+use Throwable;
 
 /**
  * @internal
@@ -23,7 +24,7 @@ class QueryBindings
     /**
      * The queries whose QueryExecuted event is being dispatched, innermost last.
      *
-     * @var list<array{sql: string, connection: string, bindings: list<mixed>}>
+     * @var list<array{sql: string, connection: string, bindings: list<mixed>|null}>
      */
     protected array $pending = [];
 
@@ -79,15 +80,20 @@ class QueryBindings
     }
 
     /**
-     * Get the values a query sent to its database, capped.
+     * Get the values a query sent to its database, capped, or null when they can't be read.
      *
-     * @return list<mixed>
+     * @return list<mixed>|null
      */
-    protected function bindings(QueryExecuted $event): array
+    protected function bindings(QueryExecuted $event): ?array
     {
-        $values = array_values($event->connection->prepareBindings($event->bindings));
+        // A value that fails to read leaves the query unpaired rather than failing the application's query.
+        try {
+            $values = array_values($event->connection->prepareBindings($event->bindings));
 
-        return $this->fit(array_map($this->value(...), $values));
+            return $this->fit(array_map($this->value(...), $values));
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
