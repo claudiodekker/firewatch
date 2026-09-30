@@ -1,0 +1,19 @@
+{
+    "v": 1,
+    "t": "queued-job",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "{uuid}",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "job_id": "{uuid}",
+    "name": "Workbench\\App\\Jobs\\ShipOrder",
+    "connection": "database",
+    "queue": "default",
+    "duration": "{duration}"
+}

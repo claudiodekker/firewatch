@@ -1,0 +1,23 @@
+{
+    "v": 3,
+    "t": "exception",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "{uuid}",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "class": "RuntimeException",
+    "file": "{path}",
+    "line": "{line}",
+    "message": "The payment failed.",
+    "code": "0",
+    "trace": "{trace}",
+    "handled": false,
+    "php_version": "{version}",
+    "laravel_version": "{version}"
+}

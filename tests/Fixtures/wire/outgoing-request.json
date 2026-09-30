@@ -1,0 +1,21 @@
+{
+    "v": 1,
+    "t": "outgoing-request",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "{uuid}",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "host": "example.com",
+    "method": "GET",
+    "url": "https://example.com/ping",
+    "duration": "{duration}",
+    "request_size": 0,
+    "response_size": 4,
+    "status_code": 200
+}

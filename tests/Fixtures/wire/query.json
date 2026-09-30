@@ -1,0 +1,20 @@
+{
+    "v": 1,
+    "t": "query",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "{uuid}",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "sql": "select 1",
+    "file": "{path}",
+    "line": "{line}",
+    "duration": "{duration}",
+    "connection": "testing",
+    "connection_type": "write"
+}

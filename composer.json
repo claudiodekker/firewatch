@@ -44,6 +44,7 @@
             "@php vendor/bin/pint --test",
             "@php vendor/bin/phpstan analyse --memory-limit=1G"
         ],
+        "fixtures": "@php vendor/bin/testbench workbench:fixtures --ansi",
         "build": "@php vendor/bin/testbench workbench:build --ansi",
         "serve": [
             "Composer\\Config::disableProcessTimeout",

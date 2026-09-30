@@ -3,9 +3,10 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Auth\GenericUser;
-use Laravel\Nightwatch\Core;
 
 /**
  * @return list<array<string, mixed>>
@@ -22,25 +23,6 @@ function readStore(string $sql): array
 
         return $rows;
     });
-}
-
-/**
- * @param  array<string, mixed>  $fields
- */
-function ingestUser(array $fields): void
-{
-    $record = [
-        'v' => 1,
-        't' => 'user',
-        'timestamp' => 1767225600.25,
-        'id' => '7',
-        'name' => 'Taylor',
-        'username' => 'taylor@example.com',
-        ...$fields,
-    ];
-
-    // A null field is one the wire omitted.
-    app(Core::class)->ingest->writeNow(array_filter($record, fn (mixed $value) => $value !== null));
 }
 
 it('keeps the signed-in user of a request in the user directory, not as a record', function () {
@@ -68,9 +50,9 @@ it('counts no drift for the signed-in user of a request', function () {
 });
 
 it('keeps when a user was first seen and takes the rest from the latest sighting', function () {
-    ingestUser(['timestamp' => 1767225600.25]);
+    ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 1767225600.25])]);
 
-    ingestUser(['timestamp' => 1767225900.5, 'name' => 'Taylor Otwell', 'username' => 'taylor@laravel.com']);
+    ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 1767225900.5, 'name' => 'Taylor Otwell', 'username' => 'taylor@laravel.com'])]);
 
     expect(readStore('SELECT * FROM users'))->toBe([
         ['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@laravel.com', 'first_seen' => 1767225600.25, 'last_seen' => 1767225900.5],
@@ -78,50 +60,50 @@ it('keeps when a user was first seen and takes the rest from the latest sighting
 });
 
 it('never moves a user\'s last sighting back for a batch stored out of order', function () {
-    ingestUser(['timestamp' => 1767225900.5]);
+    ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 1767225900.5])]);
 
-    ingestUser(['timestamp' => 1767225600.25]);
+    ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 1767225600.25])]);
 
     expect(readStore('SELECT last_seen FROM users'))->toBe([['last_seen' => 1767225900.5]]);
 });
 
 it('never keeps a timestamp that is not a number as a user\'s sighting', function () {
-    ingestUser(['timestamp' => 'soon']);
+    ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 'soon'])]);
 
-    ingestUser(['timestamp' => 1767225900.25]);
+    ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 1767225900.25])]);
 
     expect(readStore('SELECT first_seen, last_seen FROM users'))->toBe([['first_seen' => null, 'last_seen' => 1767225900.25]]);
 });
 
-it('keeps a user record without a usable id as a record', function (array $fields) {
-    ingestUser($fields);
+it('keeps a user record without a usable id as a record', function (RecordBuilder $user) {
+    ingest([$user]);
 
     expect(readStore('SELECT type, started_at FROM records'))->toBe([['type' => 'user', 'started_at' => 1767225600.25]])
         ->and(readStore('SELECT id FROM users'))->toBe([]);
 })->with([
-    'empty' => [['id' => '']],
-    'missing' => [['id' => null]],
-    'not a string' => [['id' => 7]],
+    'empty' => [syntheticRecord(RecordType::USER)->with(['id' => ''])],
+    'missing' => [syntheticRecord(RecordType::USER)->without('id')],
+    'not a string' => [syntheticRecord(RecordType::USER)->with(['id' => 7])],
 ]);
 
-it('counts the id of a user record without a usable id as drift', function (array $fields, string $kind, string $detail) {
-    ingestUser($fields);
+it('counts the id of a user record without a usable id as drift', function (RecordBuilder $user, string $kind, string $detail) {
+    ingest([$user]);
 
     expect(readStore('SELECT kind, type, v, detail, count FROM drift'))->toBe([['kind' => $kind, 'type' => 'user', 'v' => '1', 'detail' => $detail, 'count' => 1]]);
 })->with([
-    'empty' => ['fields' => ['id' => ''], 'kind' => 'missing_field', 'detail' => 'id'],
-    'missing' => ['fields' => ['id' => null], 'kind' => 'missing_field', 'detail' => 'id'],
-    'not a string' => ['fields' => ['id' => 7], 'kind' => 'structure', 'detail' => 'id: expected string, got integer'],
+    'empty' => ['user' => syntheticRecord(RecordType::USER)->with(['id' => '']), 'kind' => 'missing_field', 'detail' => 'id'],
+    'missing' => ['user' => syntheticRecord(RecordType::USER)->without('id'), 'kind' => 'missing_field', 'detail' => 'id'],
+    'not a string' => ['user' => syntheticRecord(RecordType::USER)->with(['id' => 7]), 'kind' => 'structure', 'detail' => 'id: expected string, got integer'],
 ]);
 
 it('keeps a user whose id is zero in the user directory', function () {
-    ingestUser(['id' => '0']);
+    ingest([syntheticRecord(RecordType::USER)->with(['id' => '0'])]);
 
     expect(readStore('SELECT id FROM users'))->toBe([['id' => '0']]);
 });
 
 it('never counts a user as a record', function () {
-    ingestUser([]);
+    ingest([syntheticRecord(RecordType::USER)]);
 
     $response = FirewatchServer::tool(Overview::class);
 

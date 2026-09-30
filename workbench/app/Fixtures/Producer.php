@@ -1,0 +1,184 @@
+<?php
+
+namespace Workbench\App\Fixtures;
+
+use ClaudioDekker\Firewatch\RecordType;
+use Illuminate\Auth\GenericUser;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
+use Laravel\Nightwatch\Facades\Nightwatch;
+use RuntimeException;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Workbench\App\Jobs\ShipOrder;
+use Workbench\App\Notifications\OrderShipped;
+
+enum Producer: string
+{
+    case REQUEST = 'request';
+    case COMMAND = 'command';
+    case JOB_ATTEMPT = 'job-attempt';
+    case SCHEDULED_TASK = 'scheduled-task';
+    case QUERY = 'query';
+    case EXCEPTION = 'exception';
+    case LOG = 'log';
+    case CACHE_EVENT = 'cache-event';
+    case MAIL = 'mail';
+    case NOTIFICATION = 'notification';
+    case OUTGOING_REQUEST = 'outgoing-request';
+    case QUEUED_JOB = 'queued-job';
+    case USER = 'user';
+
+    /**
+     * Get the wire type of the record the producer's fixture holds.
+     */
+    public function type(): RecordType
+    {
+        return RecordType::from($this->value);
+    }
+
+    /**
+     * Determine if the producer's application must record its execution as a request.
+     */
+    public function recordsRequests(): bool
+    {
+        return match ($this) {
+            self::REQUEST, self::USER => true,
+            default => false,
+        };
+    }
+
+    /**
+     * Drive the sensors of the current application so they write the producer's record.
+     */
+    public function produce(): void
+    {
+        match ($this) {
+            self::REQUEST => $this->request(),
+            self::COMMAND => $this->artisan(['command' => 'env']),
+            self::JOB_ATTEMPT => $this->jobAttempt(),
+            self::SCHEDULED_TASK => $this->scheduledTask(),
+            self::QUERY => DB::select('select 1'),
+            self::EXCEPTION => Nightwatch::report(new RuntimeException('The payment failed.')),
+            self::LOG => Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]),
+            self::CACHE_EVENT => Cache::get('orders'),
+            self::MAIL => $this->mail(),
+            self::NOTIFICATION => (new AnonymousNotifiable)->notifyNow(new OrderShipped),
+            self::OUTGOING_REQUEST => $this->outgoingRequest(),
+            self::QUEUED_JOB => $this->queuedJob(),
+            self::USER => $this->signedInRequest(),
+        };
+    }
+
+    /**
+     * Serve a request to the application's home route.
+     */
+    protected function request(): void
+    {
+        config()->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
+
+        $kernel = app(HttpKernel::class);
+        $request = Request::create('/');
+
+        $response = $kernel->handle($request);
+
+        $kernel->terminate($request, $response);
+    }
+
+    /**
+     * Serve a request to the application's home route as a signed-in user.
+     */
+    protected function signedInRequest(): void
+    {
+        Auth::guard()->setUser(new GenericUser(['id' => 7, 'name' => 'Taylor', 'email' => 'taylor@example.com']));
+
+        $this->request();
+    }
+
+    /**
+     * Run an Artisan command as the process's own command.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    protected function artisan(array $input): void
+    {
+        $kernel = app(ConsoleKernel::class);
+        $arguments = new ArrayInput($input);
+
+        // Nightwatch only hears the console events the kernel reroutes.
+        $kernel->rerouteSymfonyCommandEvents();
+
+        $status = $kernel->handle($arguments, new BufferedOutput);
+
+        $kernel->terminate($arguments, $status);
+    }
+
+    /**
+     * Work one queued job off the database queue.
+     */
+    protected function jobAttempt(): void
+    {
+        $this->queuedJob();
+
+        $this->artisan(['command' => 'queue:work', '--once' => true]);
+    }
+
+    /**
+     * Queue a job on the database queue.
+     */
+    protected function queuedJob(): void
+    {
+        config()->set('queue.default', 'database');
+
+        Schema::create('jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('queue')->index();
+            $table->longText('payload');
+            $table->unsignedTinyInteger('attempts');
+            $table->unsignedInteger('reserved_at')->nullable();
+            $table->unsignedInteger('available_at');
+            $table->unsignedInteger('created_at');
+        });
+
+        ShipOrder::dispatch();
+    }
+
+    /**
+     * Run the schedule with one task due.
+     */
+    protected function scheduledTask(): void
+    {
+        app(Schedule::class)->call(fn () => null)->name('prune-orders')->everyMinute();
+
+        $this->artisan(['command' => 'schedule:run']);
+    }
+
+    /**
+     * Send a mail.
+     */
+    protected function mail(): void
+    {
+        Mail::raw('Your order shipped.', fn ($message) => $message->to('taylor@example.com')->subject('Shipped'));
+    }
+
+    /**
+     * Send a faked outgoing request.
+     */
+    protected function outgoingRequest(): void
+    {
+        Http::fake(['https://example.com/ping' => Http::response('pong')]);
+
+        Http::get('https://example.com/ping');
+    }
+}
