@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 use RuntimeException;
@@ -52,6 +53,11 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const STEPPED_ASIDE_NOTICE = 'Firewatch is installed but stepped aside in environment `%s`; install with `composer install --no-dev` in production.';
 
     /**
+     * The start of the report when Nightwatch's ingest could not be swapped.
+     */
+    protected const INGEST_NOT_REPLACED = 'Firewatch left Nightwatch\'s ingest in place, behind the dead token and address: ';
+
+    /**
      * The mode this process resolved to.
      */
     protected Mode $mode;
@@ -65,6 +71,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->resolveMode();
         $this->configureNightwatch();
         $this->registerNightwatch();
+        $this->replaceNightwatchIngest();
     }
 
     /**
@@ -179,6 +186,28 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->app->register(NightwatchServiceProvider::class);
 
         AliasLoader::getInstance()->alias('Nightwatch', Nightwatch::class);
+    }
+
+    /**
+     * Swap Nightwatch's ingest for one that transmits nothing, unless Firewatch is stepped aside.
+     */
+    protected function replaceNightwatchIngest(): void
+    {
+        if ($this->mode === Mode::STEPPED_ASIDE) {
+            return;
+        }
+
+        if (! $this->app->bound(Core::class)) {
+            report(new RuntimeException(static::INGEST_NOT_REPLACED.'its core is not registered.'));
+
+            return;
+        }
+
+        try {
+            (new IngestReplacer)->replace($this->app->make(Core::class));
+        } catch (RuntimeException $exception) {
+            report(new RuntimeException(static::INGEST_NOT_REPLACED.$exception->getMessage().'.', previous: $exception));
+        }
     }
 
     /**

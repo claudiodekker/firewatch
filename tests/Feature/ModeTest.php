@@ -1,11 +1,14 @@
 <?php
 
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\NullIngest;
 use Illuminate\Console\Application;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Nightwatch\Core;
+use Laravel\Nightwatch\Ingest;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 
 function applicationNightwatchConfig(): array
@@ -129,4 +132,38 @@ it('registers the three commands and the publish tag only when Active or Off', f
     'Active' => ['config' => [], 'commands' => ['firewatch:server', 'firewatch:doctor', 'firewatch:clear'], 'tagged' => true],
     'Off' => ['config' => ['firewatch.enabled' => false], 'commands' => ['firewatch:server', 'firewatch:doctor', 'firewatch:clear'], 'tagged' => true],
     'stepped aside' => ['config' => ['firewatch.environments' => 'local'], 'commands' => [], 'tagged' => false],
+]);
+
+it('swaps Nightwatch\'s ingest for one that transmits nothing when Active or Off', function (array $config) {
+    config()->set($config);
+    app()->register(NightwatchServiceProvider::class, force: true);
+
+    registerFirewatch();
+
+    expect(app(Core::class)->ingest)->toBeInstanceOf(NullIngest::class);
+})->with([
+    'Active' => ['config' => []],
+    'Off' => ['config' => ['firewatch.enabled' => false]],
+]);
+
+it('keeps Nightwatch\'s own ingest when stepped aside', function () {
+    config()->set('firewatch.environments', 'local');
+    app()->register(NightwatchServiceProvider::class, force: true);
+
+    registerFirewatch();
+
+    expect(app(Core::class)->ingest)->toBeInstanceOf(Ingest::class);
+});
+
+it('reports once and keeps the dead address when the ingest cannot be swapped', function (Closure $breakCore, string $reason) {
+    $breakCore();
+
+    registerFirewatch();
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === "Firewatch left Nightwatch's ingest in place, behind the dead token and address: {$reason}.");
+    expect(config('nightwatch.ingest.uri'))->toBe('127.0.0.1:1');
+})->with([
+    'core not registered' => ['breakCore' => fn () => app()->offsetUnset(Core::class), 'reason' => 'its core is not registered'],
+    'core without an ingest property' => ['breakCore' => fn () => app()->instance(Core::class, new stdClass), 'reason' => 'its core has no assignable ingest property'],
 ]);
