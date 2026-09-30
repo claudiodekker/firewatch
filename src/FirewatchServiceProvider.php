@@ -55,7 +55,7 @@ class FirewatchServiceProvider extends ServiceProvider
     /**
      * The start of the report when Nightwatch's ingest could not be swapped.
      */
-    protected const INGEST_NOT_REPLACED = 'Firewatch left Nightwatch\'s ingest in place, behind the dead token and address: ';
+    protected const INGEST_NOT_REPLACED = 'Firewatch left Nightwatch\'s ingest in place: ';
 
     /**
      * The mode this process resolved to.
@@ -198,7 +198,7 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         if (! $this->app->bound(Core::class)) {
-            report(new RuntimeException(static::INGEST_NOT_REPLACED.'its core is not registered.'));
+            $this->reportIngestNotReplaced(new RuntimeException('its core is not registered'));
 
             return;
         }
@@ -206,8 +206,20 @@ class FirewatchServiceProvider extends ServiceProvider
         try {
             (new IngestReplacer)->replace($this->app->make(Core::class));
         } catch (RuntimeException $exception) {
-            report(new RuntimeException(static::INGEST_NOT_REPLACED.$exception->getMessage().'.', previous: $exception));
+            $this->reportIngestNotReplaced($exception);
         }
+    }
+
+    /**
+     * Report once in a console process that Nightwatch's ingest stayed in place.
+     */
+    protected function reportIngestNotReplaced(RuntimeException $reason): void
+    {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+
+        report(new RuntimeException(static::INGEST_NOT_REPLACED.$reason->getMessage().'.', previous: $reason));
     }
 
     /**

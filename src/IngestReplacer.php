@@ -35,8 +35,10 @@ class IngestReplacer
      */
     public function replace(object $core): void
     {
-        // NullIngest is only loaded after this check: a class that no longer fits its interface is a fatal error.
-        if (! interface_exists(Ingest::class) || $this->signatures() !== static::EXPECTED_SIGNATURES) {
+        // NullIngest is loaded only after this check, as a class that no longer
+        // fits its interface is a fatal error. Preloading every class through
+        // opcache declares it sooner, and then this guard can't protect it.
+        if (! interface_exists($this->interface()) || $this->signatures() !== $this->expectedSignatures()) {
             throw new RuntimeException('its ingest interface changed');
         }
 
@@ -48,36 +50,67 @@ class IngestReplacer
     }
 
     /**
+     * Get the signatures NullIngest was written against, sorted.
+     *
+     * @return list<string>
+     */
+    protected function expectedSignatures(): array
+    {
+        $signatures = static::EXPECTED_SIGNATURES;
+
+        sort($signatures);
+
+        return $signatures;
+    }
+
+    /**
+     * Get the ingest interface NullIngest implements.
+     *
+     * @return class-string
+     */
+    protected function interface(): string
+    {
+        return Ingest::class;
+    }
+
+    /**
      * Get the signatures of the ingest interface's methods.
      *
      * @return list<string>
      */
     protected function signatures(): array
     {
-        $methods = (new ReflectionClass(Ingest::class))->getMethods();
+        $methods = (new ReflectionClass($this->interface()))->getMethods();
 
-        return array_map($this->signature(...), $methods);
+        $signatures = array_map($this->signature(...), $methods);
+
+        sort($signatures);
+
+        return $signatures;
     }
 
     /**
-     * Get a method's signature as its name, parameters and return type.
+     * Get a method's signature as its modifiers, name, parameters and return type.
      */
     protected function signature(ReflectionMethod $method): string
     {
+        $static = $method->isStatic() ? 'static ' : '';
+        $reference = $method->returnsReference() ? '&' : '';
         $parameters = array_map($this->parameter(...), $method->getParameters());
 
-        return $method->getName().'('.implode(', ', $parameters).'): '.$method->getReturnType();
+        return $static.$reference.$method->getName().'('.implode(', ', $parameters).'): '.$method->getReturnType();
     }
 
     /**
-     * Get a parameter as its type, name and whether it is optional.
+     * Get a parameter as its type, passing, name and whether it is optional.
      */
     protected function parameter(ReflectionParameter $parameter): string
     {
+        $reference = $parameter->isPassedByReference() ? '&' : '';
         $variadic = $parameter->isVariadic() ? '...' : '';
         $optional = $parameter->isOptional() && ! $parameter->isVariadic() ? ' = ?' : '';
 
-        return trim($parameter->getType().' '.$variadic.'$'.$parameter->getName()).$optional;
+        return trim($parameter->getType().' '.$reference.$variadic.'$'.$parameter->getName()).$optional;
     }
 
     /**

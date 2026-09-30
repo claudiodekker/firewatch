@@ -155,15 +155,23 @@ it('keeps Nightwatch\'s own ingest when stepped aside', function () {
     expect(app(Core::class)->ingest)->toBeInstanceOf(Ingest::class);
 });
 
-it('reports once and keeps the dead address when the ingest cannot be swapped', function (Closure $breakCore, string $reason) {
+it('reports once in a console process when the ingest cannot be swapped', function (Closure $breakCore, string $reason) {
     $breakCore();
 
     registerFirewatch();
 
     Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === "Firewatch left Nightwatch's ingest in place, behind the dead token and address: {$reason}.");
-    expect(config('nightwatch.ingest.uri'))->toBe('127.0.0.1:1');
+    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === "Firewatch left Nightwatch's ingest in place: {$reason}.");
 })->with([
     'core not registered' => ['breakCore' => fn () => app()->offsetUnset(Core::class), 'reason' => 'its core is not registered'],
     'core without an ingest property' => ['breakCore' => fn () => app()->instance(Core::class, new stdClass), 'reason' => 'its core has no assignable ingest property'],
 ]);
+
+it('stays silent about an ingest it cannot swap in a web process', function () {
+    (fn () => $this->isRunningInConsole = false)->call(app());
+    app()->offsetUnset(Core::class);
+
+    registerFirewatch();
+
+    Exceptions::assertNothingReported();
+});
