@@ -57,6 +57,16 @@ it('keeps the signed-in user of a request in the user directory, not as a record
         ->and(readStore("SELECT id FROM records WHERE type = 'user'"))->toBe([]);
 });
 
+it('counts no drift for the signed-in user of a request', function () {
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+    $this->actingAs(new GenericUser(['id' => 7, 'name' => 'Taylor', 'email' => 'taylor@example.com']));
+
+    $this->get('/');
+
+    expect(readStore("SELECT kind, detail FROM drift WHERE kind <> 'version'"))->toBe([]);
+});
+
 it('keeps when a user was first seen and takes the rest from the latest sighting', function () {
     ingestUser(['timestamp' => 1767225600.25]);
 
@@ -75,6 +85,14 @@ it('never moves a user\'s last sighting back for a batch stored out of order', f
     expect(readStore('SELECT last_seen FROM users'))->toBe([['last_seen' => 1767225900.5]]);
 });
 
+it('never keeps a timestamp that is not a number as a user\'s sighting', function () {
+    ingestUser(['timestamp' => 'soon']);
+
+    ingestUser(['timestamp' => 1767225900.25]);
+
+    expect(readStore('SELECT first_seen, last_seen FROM users'))->toBe([['first_seen' => null, 'last_seen' => 1767225900.25]]);
+});
+
 it('keeps a user record without a usable id as a record', function (array $fields) {
     ingestUser($fields);
 
@@ -84,6 +102,16 @@ it('keeps a user record without a usable id as a record', function (array $field
     'empty' => [['id' => '']],
     'missing' => [['id' => null]],
     'not a string' => [['id' => 7]],
+]);
+
+it('counts the id of a user record without a usable id as drift', function (array $fields, string $kind, string $detail) {
+    ingestUser($fields);
+
+    expect(readStore('SELECT kind, type, v, detail, count FROM drift'))->toBe([['kind' => $kind, 'type' => 'user', 'v' => '1', 'detail' => $detail, 'count' => 1]]);
+})->with([
+    'empty' => ['fields' => ['id' => ''], 'kind' => 'missing_field', 'detail' => 'id'],
+    'missing' => ['fields' => ['id' => null], 'kind' => 'missing_field', 'detail' => 'id'],
+    'not a string' => ['fields' => ['id' => 7], 'kind' => 'structure', 'detail' => 'id: expected string, got integer'],
 ]);
 
 it('keeps a user whose id is zero in the user directory', function () {

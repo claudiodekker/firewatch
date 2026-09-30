@@ -68,22 +68,7 @@ function childRecord(string $type, array $fields = []): array
     ];
 }
 
-it('stores each record type the sensors write with its common columns and its fields in data', function (Closure $traffic, string $view, string $type) {
-    $traffic();
-    Nightwatch::digest();
-
-    $rows = selectFromStore("SELECT * FROM {$view}");
-    $types = selectFromStore("SELECT DISTINCT r.type FROM {$view} v JOIN records r USING (id)");
-    $contractFields = array_values(array_diff(array_keys($rows[0]), ['id', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'execution_source', 'job_id', 'user_id', 'deploy', 'server', 'data']));
-    $data = json_decode($rows[0]['data'], associative: true);
-
-    expect($rows[0])->v->not->toBeNull()
-        ->started_at->toBeFloat()
-        ->trace_id->not->toBeEmpty()
-        ->execution_id->not->toBeEmpty()
-        ->and(array_keys($data))->toEqualCanonicalizing($contractFields)
-        ->and(array_column($types, 'type'))->toBe([$type]);
-})->with([
+dataset('sensors', [
     'request' => ['traffic' => fn () => forceRequestTo('/'), 'view' => 'requests', 'type' => 'request'],
     'command' => ['traffic' => fn () => runArtisan(['command' => 'env']), 'view' => 'commands', 'type' => 'command'],
     'job attempt' => ['traffic' => function () {
@@ -118,6 +103,31 @@ it('stores each record type the sensors write with its common columns and its fi
         dispatch(fn () => null);
     }, 'view' => 'queued_jobs', 'type' => 'queued-job'],
 ]);
+
+it('stores each record type the sensors write with its common columns and its fields in data', function (Closure $traffic, string $view, string $type) {
+    $traffic();
+    Nightwatch::digest();
+
+    $rows = selectFromStore("SELECT * FROM {$view}");
+    $types = selectFromStore("SELECT DISTINCT r.type FROM {$view} v JOIN records r USING (id)");
+    $contractFields = array_values(array_diff(array_keys($rows[0]), ['id', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'execution_source', 'job_id', 'user_id', 'deploy', 'server', 'data']));
+    $data = json_decode($rows[0]['data'], associative: true);
+
+    expect($rows[0])->v->not->toBeNull()
+        ->started_at->toBeFloat()
+        ->trace_id->not->toBeEmpty()
+        ->execution_id->not->toBeEmpty()
+        ->and(array_keys($data))->toEqualCanonicalizing($contractFields)
+        ->and(array_column($types, 'type'))->toBe([$type]);
+})->with('sensors');
+
+it('counts no drift for any record type the sensors write', function (Closure $traffic, string $view, string $type) {
+    $traffic();
+
+    Nightwatch::digest();
+
+    expect(selectFromStore("SELECT kind, type, detail FROM drift WHERE kind <> 'version'"))->toBe([]);
+})->with('sensors');
 
 it('links a job attempt\'s children to the attempt, which keeps the trace of its dispatch', function () {
     config()->set('queue.default', 'database');

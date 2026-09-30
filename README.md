@@ -71,6 +71,8 @@ Every record lands in one `records` table under Nightwatch's own field names, wi
 
 Signed-in users are not records. Each one Nightwatch sees is kept once in a `users` table with its `id`, `name`, `username`, when it was `first_seen` and when it was `last_seen`; a later sighting updates everything but `first_seen`. A user record without an id stays in `records` instead.
 
+Nothing Nightwatch sends is dropped. Every difference from the fields and types Firewatch was built against is counted in a `drift` table by `kind`, record `type`, version `v` and `detail`, with how often and when it was first and last seen: a record of an unknown type (`unknown_type`) or version (`unknown_version`), a field Firewatch doesn't know (`unknown_field`, kept in `data`) or that is missing (`missing_field`, stored as NULL), a field of an unexpected type (`structure`, stored as sent), each batch captured with a Nightwatch release off the verified 1.30 line (`version`), and a process's first batch when Nightwatch's provider was registered before Firewatch's (`structure`, detail `provider order`). Input that can't be read as a record, such as one that isn't an object, has no string `t` or can't be encoded, is kept as a `records` row holding only its `type` and an `error` in `data`, and counted as `structure`. The table keeps at most 500 rows; new drift beyond that is added to one `... [overflow]` row per kind. A `meta` table keeps the Nightwatch release of the latest batch and whether it is verified.
+
 A budget entry names an execution type (`request`, `command`, `job-attempt` or `scheduled-task`), optional matchers (`methods` and `path` for requests, `name` otherwise) and a `duration` ceiling in milliseconds, a `memory` ceiling in MB, or both:
 
 ```php

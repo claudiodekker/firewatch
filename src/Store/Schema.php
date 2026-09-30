@@ -38,7 +38,7 @@ class Schema
     ];
 
     /**
-     * The statements that create the raw table, its indexes and the user directory, in order.
+     * The statements that create the raw table, its indexes, the user directory, the drift counts and the facts about the capture, in order.
      */
     protected const TABLES = [
         <<<'SQL'
@@ -76,6 +76,19 @@ class Schema
                 last_seen REAL
             )
             SQL,
+        <<<'SQL'
+            CREATE TABLE drift (
+                kind TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT '',
+                v TEXT NOT NULL DEFAULT '',
+                detail TEXT NOT NULL DEFAULT '',
+                count INTEGER NOT NULL,
+                first_seen REAL NOT NULL,
+                last_seen REAL NOT NULL,
+                PRIMARY KEY (kind, type, v, detail)
+            )
+            SQL,
+        'CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)',
     ];
 
     /**
