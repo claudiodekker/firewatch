@@ -2,49 +2,116 @@
 
 return [
 
-    // Turns Firewatch off without removing it; FIREWATCH_ENABLED is the only on/off switch.
+    /*
+    |--------------------------------------------------------------------------
+    | Firewatch Enabled
+    |--------------------------------------------------------------------------
+    |
+    | This value turns Firewatch off without removing it. It is the only
+    | on/off switch; everything Firewatch forces onto Nightwatch follows it.
+    |
+    */
+
     'enabled' => env('FIREWATCH_ENABLED', true),
 
-    // Environments Firewatch captures in, as a list or a comma-separated string; anywhere else it steps aside.
+    /*
+    |--------------------------------------------------------------------------
+    | Capture Environments
+    |--------------------------------------------------------------------------
+    |
+    | Firewatch captures only in these environments, given as a list or a
+    | comma-separated string of names. Anywhere else it steps aside and
+    | Nightwatch behaves as if Firewatch were not installed.
+    |
+    */
+
     'environments' => env('FIREWATCH_ENVIRONMENTS', 'local,testing'),
 
-    // Path of the store file, in a directory of its own; a relative path resolves against the base path.
+    /*
+    |--------------------------------------------------------------------------
+    | Store Path
+    |--------------------------------------------------------------------------
+    |
+    | This is the path of the SQLite file that holds the telemetry. Give it a
+    | directory of its own, outside the public directory. A relative path
+    | resolves against the base path of the application.
+    |
+    */
+
     'database' => env('FIREWATCH_DATABASE', storage_path('firewatch/firewatch.sqlite')),
 
-    // Milliseconds the capture side waits for a busy store before dropping the batch (0 to 5000).
+    /*
+    |--------------------------------------------------------------------------
+    | Busy Timeout
+    |--------------------------------------------------------------------------
+    |
+    | This is how many milliseconds (0 to 5000) capture waits for a busy
+    | store. A batch that can't be written in time is dropped rather than
+    | stalling the request, and 0 drops it at once.
+    |
+    */
+
     'busy_timeout' => env('FIREWATCH_BUSY_TIMEOUT', 300),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Retention
+    |--------------------------------------------------------------------------
+    |
+    | Records older than the age (digits then s, m, h, d or w) are pruned,
+    | and the store keeps at most the given number of records (1 to
+    | 10000000).
+    |
+    */
+
     'retention' => [
-
-        // Records older than this are pruned: digits then s, m, h, d or w.
         'age' => env('FIREWATCH_RETENTION_AGE', '7d'),
-
-        // The store keeps at most this many records (1 to 10000000).
         'records' => env('FIREWATCH_RETENTION_RECORDS', 100000),
-
     ],
 
-    // Deploy identity written to Nightwatch; unset leaves Nightwatch's own resolution.
+    /*
+    |--------------------------------------------------------------------------
+    | Deploy Identity
+    |--------------------------------------------------------------------------
+    |
+    | When set, this value is written to Nightwatch as the deploy identity.
+    | Left unset, Nightwatch resolves the deploy the way it always does.
+    |
+    */
+
     'deploy' => env('FIREWATCH_DEPLOY'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Capture
+    |--------------------------------------------------------------------------
+    |
+    | These options control whether logs and request payloads are captured.
+    | Redaction is relaxed, so payloads are stored as sent. You may list
+    | payload fields and request headers to redact on top of that, as a
+    | list or a comma-separated string.
+    |
+    */
+
     'capture' => [
-
-        // Captures log entries through a wrapped default log channel.
         'logs' => env('FIREWATCH_CAPTURE_LOGS', true),
-
-        // Captures request payloads; redaction is relaxed, so the store holds them as sent.
         'request_payload' => env('FIREWATCH_CAPTURE_REQUEST_PAYLOAD', true),
-
-        // Payload fields to redact on top of Nightwatch's relaxed defaults, as a list or a comma-separated string.
         'redact_payload_fields' => env('FIREWATCH_REDACT_PAYLOAD_FIELDS', ''),
-
-        // Request headers to redact on top of Nightwatch's relaxed defaults, as a list or a comma-separated string.
         'redact_headers' => env('FIREWATCH_REDACT_HEADERS', ''),
-
     ],
 
-    // Performance budgets per execution type: request, command, job-attempt or scheduled-task, with optional
-    // matchers (methods and path for requests, name otherwise) and a duration (ms) and/or memory (MB) ceiling.
+    /*
+    |--------------------------------------------------------------------------
+    | Performance Budgets
+    |--------------------------------------------------------------------------
+    |
+    | A budget is a ceiling on the cost of one kind of execution: request,
+    | command, job-attempt or scheduled-task. Match requests by methods and
+    | path, and other types by name. Give a duration ceiling in milliseconds,
+    | a memory ceiling in MB, or both.
+    |
+    */
+
     'budgets' => [
         // ['type' => 'request', 'methods' => ['POST'], 'path' => 'checkout/*', 'duration' => 800, 'memory' => 64],
         // ['type' => 'command', 'name' => 'reports:*', 'duration' => 60000],
