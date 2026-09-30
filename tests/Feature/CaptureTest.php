@@ -3,7 +3,9 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
@@ -123,6 +125,32 @@ it('stores a record written at once without waiting for a digest', function () {
     expect($types)->toBe(['exception']);
 });
 
+it('stamps a new store with Firewatch\'s application id and schema version', function () {
+    Cache::get('first');
+
+    Nightwatch::digest();
+
+    $stamps = app(Reader::class)->snapshot(fn (SQLite3 $connection) => [
+        $connection->querySingle('PRAGMA application_id'),
+        $connection->querySingle('PRAGMA user_version'),
+    ]);
+
+    expect($stamps)->toBe([0x46575443, 1]);
+});
+
+it('stores a batch without running a query through Laravel\'s database layer', function () {
+    $queries = 0;
+    Event::listen(QueryExecuted::class, function () use (&$queries) {
+        $queries++;
+    });
+    Cache::get('first');
+
+    Nightwatch::digest();
+
+    expect($queries)->toBe(0)
+        ->and(app(Reader::class)->exists())->toBeTrue();
+});
+
 it('stores nothing when Off', function () {
     config()->set('firewatch.enabled', false);
     registerFirewatch();
@@ -153,6 +181,12 @@ it('ignores what the sensors record while it stores a batch', function () {
     config()->set(['firewatch.database' => $blocked.'.parent/firewatch.sqlite', 'logging.default' => 'null']);
     registerFirewatch();
     app()->instance(ExceptionHandler::class, Exceptions::getFacadeRoot()->handler());
+    $failures = 0;
+    app(ExceptionHandler::class)->reportable(function (Throwable $exception) use (&$failures) {
+        if (++$failures === 1) {
+            Nightwatch::report($exception, handled: false);
+        }
+    });
     Cache::get('first');
     Nightwatch::digest();
     unlink($blocked.'.parent');
@@ -162,5 +196,6 @@ it('ignores what the sensors record while it stores a batch', function () {
 
     $records = storedRecords("type, json_extract(data, '$.key') AS key");
 
-    expect($records)->toBe([['type' => 'cache-event', 'key' => 'second']]);
+    expect($records)->toBe([['type' => 'cache-event', 'key' => 'second']])
+        ->and($failures)->toBe(1);
 });

@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Support\Carbon;
 use Laravel\Mcp\Response;
@@ -13,6 +14,8 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
+use SQLite3Result;
+use SQLite3Stmt;
 
 /**
  * @internal
@@ -68,18 +71,31 @@ class Overview extends Tool
             return __('firewatch::messages.no_store', ['path' => $this->configuration->database]);
         }
 
-        /** @var array{int, int} $counts */
-        $counts = $this->reader->snapshot(fn (SQLite3 $connection) => [
-            $connection->querySingle('SELECT count(*) FROM records'),
-            $connection->querySingle("SELECT count(*) FROM records WHERE type = 'request'"),
-        ]);
-
-        [$records, $requests] = $counts;
+        [$records, $requests] = $this->reader->snapshot($this->countRecords(...));
 
         if ($records === 0) {
             return __('firewatch::messages.store_empty', ['path' => $this->configuration->database]);
         }
 
         return "- **request**: {$requests}";
+    }
+
+    /**
+     * Count all records and the requests among them.
+     *
+     * @return array{int, int}
+     */
+    protected function countRecords(SQLite3 $connection): array
+    {
+        /** @var SQLite3Stmt $statement */
+        $statement = $connection->prepare('SELECT count(*), count(*) FILTER (WHERE type = :type) FROM records');
+
+        $statement->bindValue(':type', ExecutionType::REQUEST->value);
+
+        /** @var SQLite3Result $result */
+        $result = $statement->execute();
+
+        /** @var array{int, int} */
+        return $result->fetchArray(SQLITE3_NUM);
     }
 }

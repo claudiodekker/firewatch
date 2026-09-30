@@ -53,7 +53,7 @@ class AppendBatch
      */
     protected function insert(SQLite3 $connection, array $rows): void
     {
-        /** @var SQLite3Stmt $statement the connection throws rather than return false */
+        /** @var SQLite3Stmt $statement */
         $statement = $connection->prepare(static::INSERT);
 
         foreach ($rows as $row) {

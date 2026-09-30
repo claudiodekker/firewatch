@@ -2,6 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Capture;
 
+use ClaudioDekker\Firewatch\ExecutionType;
+
 /**
  * @internal
  */
@@ -43,7 +45,7 @@ class RecordMapper
     public function map(array $record): array
     {
         $wire = $this->normalise($record);
-        $isRequest = ($wire['t'] ?? null) === 'request';
+        $isRequest = ($wire['t'] ?? null) === ExecutionType::REQUEST->value;
         $data = array_diff_key($wire, array_flip(static::COLUMN_FIELDS));
 
         return [
@@ -55,7 +57,7 @@ class RecordMapper
             'group_hash' => $wire['_group'] ?? null,
             'trace_id' => $wire['trace_id'] ?? null,
             'execution_id' => $isRequest ? ($wire['trace_id'] ?? null) : ($wire['execution_id'] ?? null),
-            'source' => $isRequest ? 'request' : ($wire['execution_source'] ?? null),
+            'source' => $isRequest ? ExecutionType::REQUEST->value : ($wire['execution_source'] ?? null),
             'job_id' => $wire['job_id'] ?? null,
             'user_id' => $wire['user'] ?? null,
             'deploy' => $wire['deploy'] ?? null,

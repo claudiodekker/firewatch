@@ -70,6 +70,10 @@ class Ingest implements IngestContract
      */
     public function writeNow(array $record): void
     {
+        if ($this->storing) {
+            return;
+        }
+
         $this->store([$record]);
     }
 

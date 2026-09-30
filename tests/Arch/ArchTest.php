@@ -60,6 +60,10 @@ arch('only Firewatch\'s ingests and their replacer reach Nightwatch\'s ingest co
     ->expect([Ingest::class, IngestReplacer::class, NullIngest::class])
     ->not->toUse([...OFF_MACHINE, ...array_diff(NIGHTWATCH_INGEST, ['Laravel\\Nightwatch\\Contracts\\Ingest'])]);
 
+arch('the store is never reached through Laravel\'s database layer')
+    ->expect(['ClaudioDekker\\Firewatch\\Store', 'ClaudioDekker\\Firewatch\\Actions'])
+    ->not->toUse(['Illuminate\\Database', 'Illuminate\\Support\\Facades\\DB', 'PDO']);
+
 test('nothing in the package source calls a network or mail function', function () {
     $offences = PackageSource::offendingTokens('', fn (PhpToken $token, array $tokens, int $index) => preg_match(
         '/^(curl_|socket_|mail$|fsockopen$|pfsockopen$|stream_socket_client$)/',
