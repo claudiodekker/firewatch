@@ -2,7 +2,7 @@
 
 The reviewer reads this file. Apply every rule to each changed hunk in the diff. Skip anything the repo's tooling already enforces (Pint, PHPStan/Larastan, arch tests).
 
-This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it observes Nightwatch through one public seam (a listener on `IngestingEvents`) and runs assistant SQL in a child process. The design lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`; these rules govern how it is implemented.
+This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`; these rules govern how it is implemented.
 
 ## 1. Sibling changes
 
@@ -12,7 +12,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 2. Actions
 
-- Actions are the state-changing use cases a command, tool or the seam listener triggers (append a batch, prune, clear, drop or rebuild the store), each with one public `handle()` method. Only Actions write to the store: the writers are the seam listener (a batch, then the prune pass) and `firewatch:clear`. Reading never writes.
+- Actions are the state-changing use cases a command, tool or Firewatch's ingest triggers (append a batch, prune, clear, drop or rebuild the store), each with one public `handle()` method. Only Actions write to the store: the writers are Firewatch's ingest (a batch, then the prune pass) and `firewatch:clear`. Reading never writes.
 - Action names are verb then entity. A use case that isn't plain create/update/delete takes its own verb.
 - Actions inject other Actions through the constructor as `protected` properties.
 - The store is reached only through its own raw `SQLite3` connection, never Laravel's database layer (no `DB`, PDO, Eloquent or migrations), so its queries are never observed by Nightwatch (ADR 0005).
@@ -61,13 +61,13 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 7. Errors and integrations
 
 - Two seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process) and the clock (`Stopwatch`). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
-- Catch the specific exception. Catch `Throwable` only at a boundary that must not break its host (the Nightwatch listener, provider boot, process entry points, the tool layer), and `report()` it there.
+- Catch the specific exception. Catch `Throwable` only at a boundary that must not break its host (Firewatch's ingest, provider boot, process entry points, the tool layer), and `report()` it there.
 - Nothing is thrown into the host application. The tool layer turns an unexpected failure into the `internal` tool error, also when `app.debug` is on, because a rethrow ends the stdio process.
 - Calls that could act on nothing (an empty batch, an empty result set) check for empty input first.
 
 ## 8. Long-running processes
 
-- Static properties and singletons that hold call-specific data are reset between executions, because Octane and queue workers (which run the Nightwatch listener) and the MCP server reuse the process.
+- Static properties and singletons that hold call-specific data are reset between executions, because Octane and queue workers (which run Firewatch's ingest) and the MCP server reuse the process.
 - The mode and the configuration are read once per process. A store connection is keyed by `getmypid()`: after a fork the inherited handle is abandoned unused and a new one is opened. Every write batch and reader call checks the file's identity, so a file deleted or replaced under a live connection is reopened; where no identity exists (Windows) the check does nothing and never throws.
 - The MCP server and the SQL child write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
 - Windows is supported: no code assumes POSIX (file modes, `stream_select()` on `proc_open` pipes) without a Windows path that the platform job runs (ADR 0012).
@@ -101,7 +101,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - A test checks real values in both directions, not only that a round trip returns its input.
 - Tests have five layers with one job each. A scenario test (`tests/Scenario`, the default) builds a store from real Nightwatch sensor traffic, walks the tool ladder as an assistant would and asserts the structured answer, with a positive, a negative and a blind-spot case. A feature test (`tests/Feature`) drives one thing a user, an MCP client or Nightwatch triggers (a command, an ingest, a retention pass, a spawned second process) end to end and asserts the state it leaves. A contract test (`tests/Contract`) pins Nightwatch's output, the fixtures and Firewatch's fixed text and shapes, and holds no behaviour. A unit test (`tests/Unit`) covers only what a feature test can't reach (arithmetic tables, grammars, polling, error classification), and a unit test that a feature or scenario test already covers is deleted. An arch test (`tests/Arch`) enforces an invariant, not a style preference.
 - A unit test file is named after the class it covers (`tests/Unit/<Class>Test.php`), not the mechanism it tests.
-- Telemetry comes from the real sensors driven through the workbench. A synthetic record is allowed only for exact durations or timestamps, volume, many groups, deploy identities, drift shapes and other-process writers; it derives from a committed wire fixture through the record builder and goes through the real ingest event. Nothing inserts into the store except a corruption or foreign-file test. A wire fixture is generated by the workbench command, never edited by hand.
+- Telemetry comes from the real sensors driven through the workbench. A synthetic record is allowed only for exact durations or timestamps, volume, many groups, deploy identities, drift shapes and other-process writers; it derives from a committed wire fixture through the record builder and goes through Firewatch's real ingest. Nothing inserts into the store except a corruption or foreign-file test. A wire fixture is generated by the workbench command, never edited by hand.
 - A real-sensor test asserts counts, relations, verdicts and shapes, never exact instants or durations.
 - Fixed wording (blind-spot sentences, empty kinds, error messages, detector caveats, doctor messages and other user-facing text) is asserted through its language key, `__('firewatch::messages.key')`, never a copy of the translated string. Ids, error codes and closed sets are written as literals in the test, so changing one fails a test. Long text (the server instructions, tool descriptions) is asserted structurally, and limits numerically (40 words per blind spot, 150 per tool description, `tools/list` under 5,000 tokens). No snapshot files are committed.
 - JSON answers are asserted in full; the markdown rendering once per tool through the shared helper. Every `next` call an answer offers is executed and returns a non-error answer.
@@ -155,12 +155,13 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 - The public surface is explicit: internal classes are marked `@internal`, supported entry points `@api`. It is the commands, the config keys, the tool names, arguments and answer shape, and the seam.
 - Every framework API used exists in the lowest supported version (PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2, SQLite 3.38.0). Newer APIs are gated behind one compatibility check whose `@see` links the upstream change. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
-- Only Nightwatch's public `IngestingEvents` event takes its output. The one `@internal` Nightwatch surface touched is `Core::$ingest`, swapped for Firewatch's own `Contracts\Ingest` only after reflection confirms the interface's signatures and the property, so a changed Nightwatch leaves its ingest in place behind the dead values instead of crashing the host (ADR 0001). The verified line, the wire fixtures and the contract tests move together in one PR.
+- Nightwatch's output reaches Firewatch only through Firewatch's own ingest; the public `IngestingEvents` event only vetoes. The one `@internal` Nightwatch surface touched is `Core::$ingest`, swapped for Firewatch's own `Contracts\Ingest` only after reflection confirms the interface's signatures and the property, so a changed Nightwatch leaves its ingest in place behind the dead values instead of crashing the host (ADR 0001). The verified line, the wire fixtures and the contract tests move together in one PR.
 - User-facing changes update `CHANGELOG.md`. The README's config, tool, detector and command tables equal the code.
 
 ## 16. Capture and ingest
 
-- The seam listener returns `false` on every path, a failed prune pass included (ADR 0001). It holds no state and filters nothing: every record, `user` included, reaches the mapper unchanged and in order.
+- Firewatch's ingest holds nothing but its buffer and filters nothing: every record, `user` included, reaches the mapper unchanged and in order. A failed batch or prune pass never reaches the host, and what the sensors record while a batch is stored is ignored, as in Nightwatch's own ingest.
+- The veto listener returns `false` on every path and writes nothing (ADR 0001). It guards Nightwatch's own ingest when the swap is refused.
 - Nothing is retried, spooled or blocked on. A batch that can't be written within `busy_timeout` is dropped and recorded as one line beside the store, and the failure path itself swallows its own failure (ADR 0005).
 - Firewatch registers Nightwatch's provider and alias in every mode and writes its Nightwatch config with `config()->set` in its own `register()`, before Nightwatch's provider registers. The mode is resolved once: not on the allowlist is stepped aside, else a `firewatch:` process, disabled, or an unusable SQLite is Off, else Active. Stepped aside registers no listener, command, publish tag or MCP server.
 - A `firewatch:` process is always Off, so Firewatch never observes itself, and Off processes never prune.

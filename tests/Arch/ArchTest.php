@@ -1,5 +1,6 @@
 <?php
 
+use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\IngestReplacer;
 use ClaudioDekker\Firewatch\NullIngest;
 use ClaudioDekker\Firewatch\Tests\Support\PackageSource;
@@ -53,10 +54,10 @@ test('every command signature starts with firewatch:', function () {
 arch('nothing in the package source can leave the machine')
     ->expect('ClaudioDekker\\Firewatch')
     ->not->toUse([...OFF_MACHINE, ...NIGHTWATCH_INGEST])
-    ->ignoring([IngestReplacer::class, NullIngest::class]);
+    ->ignoring([Ingest::class, IngestReplacer::class, NullIngest::class]);
 
-arch('only the null ingest and its replacer reach Nightwatch\'s ingest contract')
-    ->expect([IngestReplacer::class, NullIngest::class])
+arch('only Firewatch\'s ingests and their replacer reach Nightwatch\'s ingest contract')
+    ->expect([Ingest::class, IngestReplacer::class, NullIngest::class])
     ->not->toUse([...OFF_MACHINE, ...array_diff(NIGHTWATCH_INGEST, ['Laravel\\Nightwatch\\Contracts\\Ingest'])]);
 
 test('nothing in the package source calls a network or mail function', function () {

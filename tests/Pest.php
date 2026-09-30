@@ -70,3 +70,10 @@ function setArgv(array $argv): void
         }
     });
 }
+
+function forceRequests(): void
+{
+    setEnvironmentVariable('NIGHTWATCH_FORCE_REQUEST', '1');
+
+    test()->refreshApplication();
+}

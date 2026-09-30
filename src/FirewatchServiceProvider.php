@@ -261,7 +261,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Swap Nightwatch's ingest for one that transmits nothing, unless Firewatch is stepped aside.
+     * Swap Nightwatch's ingest for Firewatch's, which stores in Active and discards in Off.
      */
     protected function replaceNightwatchIngest(): void
     {
@@ -276,7 +276,10 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         try {
-            (new IngestReplacer)->replace($this->app->make(Core::class));
+            (new IngestReplacer)->replace($this->app->make(Core::class), fn () => match ($this->mode) {
+                Mode::ACTIVE => $this->app->make(Ingest::class),
+                Mode::OFF => new NullIngest,
+            });
         } catch (RuntimeException $exception) {
             $this->reportIngestNotReplaced($exception);
         }

@@ -25,6 +25,7 @@ it('reads each key from its environment variable', function (string $variable, s
 ]);
 
 it('resolves the package defaults when nothing is published or set', function () {
+    $this->setStorePath(null);
     config()->set('firewatch', []);
 
     $configuration = registerFirewatch();
