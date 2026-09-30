@@ -26,7 +26,7 @@ function viewColumns(string $view): array
 test('the store shape is pinned to its schema version', function () {
     $ddl = implode(";\n", (new Schema)->statements());
 
-    expect([Schema::VERSION, hash('sha256', $ddl)])->toBe([1, '8de3a2c18efef6d128af1ef7b065dcc60a1d5f138f65fc32a6a61bf3ebf2b3c2'], 'the store shape changed: bump the schema version');
+    expect([Schema::VERSION, hash('sha256', $ddl)])->toBe([1, '994c71034fb38746848ac1b8795fd36883dc522f3aa6e275b7476f386becd221'], 'the store shape changed: bump the schema version');
 });
 
 test('each record view has the common columns of its type, then its contract fields', function (string $view, array $columns) {

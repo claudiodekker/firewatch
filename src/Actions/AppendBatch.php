@@ -21,6 +21,18 @@ class AppendBatch
         SQL;
 
     /**
+     * The statement that adds a user to the directory, or refreshes one it holds without moving its last sighting back.
+     */
+    protected const UPSERT_USER = <<<'SQL'
+        INSERT INTO users (id, name, username, first_seen, last_seen)
+        VALUES (:id, :name, :username, :seen_at, :seen_at)
+        ON CONFLICT (id) DO UPDATE SET
+            name = excluded.name,
+            username = excluded.username,
+            last_seen = max(coalesce(last_seen, excluded.last_seen), coalesce(excluded.last_seen, last_seen))
+        SQL;
+
+    /**
      * Create a new action instance.
      */
     public function __construct(
@@ -31,7 +43,7 @@ class AppendBatch
     }
 
     /**
-     * Store a batch of wire records in one transaction, in wire order.
+     * Store a batch of wire records in one transaction, in wire order, keeping users in the directory.
      *
      * @param  list<array<mixed>>  $records
      */
@@ -41,20 +53,38 @@ class AppendBatch
             return;
         }
 
-        $rows = array_map($this->mapper->map(...), $records);
+        $rows = [];
+        $users = [];
 
-        $this->writer->transaction(fn (SQLite3 $connection) => $this->insert($connection, $rows));
+        foreach ($records as $record) {
+            $user = $this->mapper->user($record);
+
+            if ($user === null) {
+                $rows[] = $this->mapper->map($record);
+            } else {
+                $users[] = $user;
+            }
+        }
+
+        $this->writer->transaction(function (SQLite3 $connection) use ($rows, $users) {
+            $this->execute($connection, static::INSERT, $rows);
+            $this->execute($connection, static::UPSERT_USER, $users);
+        });
     }
 
     /**
-     * Insert the rows through one prepared statement.
+     * Run one prepared statement once per row.
      *
      * @param  list<array<string, mixed>>  $rows
      */
-    protected function insert(SQLite3 $connection, array $rows): void
+    protected function execute(SQLite3 $connection, string $sql, array $rows): void
     {
+        if ($rows === []) {
+            return;
+        }
+
         /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare(static::INSERT);
+        $statement = $connection->prepare($sql);
 
         foreach ($rows as $row) {
             foreach ($row as $column => $value) {

@@ -65,6 +65,32 @@ class RecordMapper
     }
 
     /**
+     * Map a wire user record to its user directory entry, or null for any other record or a user without a usable id.
+     *
+     * @param  array<mixed>  $record
+     * @return array{id: string, name: mixed, username: mixed, seen_at: mixed}|null
+     */
+    public function user(array $record): ?array
+    {
+        if (($record['t'] ?? null) !== RecordType::USER->value) {
+            return null;
+        }
+
+        $wire = $this->normalise($record);
+
+        if (! is_string($wire['id'] ?? null) || $wire['id'] === '') {
+            return null;
+        }
+
+        return [
+            'id' => $wire['id'],
+            'name' => $wire['name'] ?? null,
+            'username' => $wire['username'] ?? null,
+            'seen_at' => $record['timestamp'] ?? null,
+        ];
+    }
+
+    /**
      * Turn a record into the plain data Nightwatch would send, resolving its lazy values.
      *
      * @param  array<mixed>  $record

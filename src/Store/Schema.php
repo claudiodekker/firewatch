@@ -38,7 +38,7 @@ class Schema
     ];
 
     /**
-     * The statements that create the raw table and its indexes, in order.
+     * The statements that create the raw table, its indexes and the user directory, in order.
      */
     protected const TABLES = [
         <<<'SQL'
@@ -67,6 +67,15 @@ class Schema
         'CREATE INDEX records_trace ON records (trace_id) WHERE trace_id IS NOT NULL',
         'CREATE INDEX records_job ON records (job_id) WHERE job_id IS NOT NULL',
         'CREATE INDEX records_user ON records (user_id) WHERE user_id IS NOT NULL',
+        <<<'SQL'
+            CREATE TABLE users (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                username TEXT,
+                first_seen REAL,
+                last_seen REAL
+            )
+            SQL,
     ];
 
     /**

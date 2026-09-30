@@ -1,7 +1,6 @@
 <?php
 
 use ClaudioDekker\Firewatch\Store\Reader;
-use Illuminate\Auth\GenericUser;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Cache;
@@ -162,19 +161,6 @@ it('decodes the JSON-string fields of a record', function (Closure $traffic, str
     'log context' => ['traffic' => fn () => Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]), 'view' => 'logs', 'field' => 'context', 'decoded' => 'object'],
     'log extra' => ['traffic' => fn () => Log::channel('nightwatch')->warning('The payment is slow.'), 'view' => 'logs', 'field' => 'extra', 'decoded' => 'object'],
 ]);
-
-it('keeps a user record\'s fields in data', function () {
-    forceRequests();
-    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-    test()->actingAs(new GenericUser(['id' => 7, 'name' => 'Taylor', 'email' => 'taylor@example.com']));
-
-    test()->get('/');
-
-    [$user] = selectFromStore("SELECT started_at, data FROM records WHERE type = 'user'");
-
-    expect($user['started_at'])->toBeFloat()
-        ->and(json_decode($user['data'], associative: true))->toBe(['id' => '7', 'name' => 'Taylor', 'username' => 'taylor@example.com']);
-});
 
 it('keeps a wire zero and an empty string as sent', function () {
     forceRequestTo('/');
