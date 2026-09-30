@@ -18,7 +18,7 @@ Firewatch decides once per process, when it registers, how it runs:
 - **Off** in a `firewatch:` command, when `enabled` is false, or when `ext-sqlite3` is missing or SQLite is older than 3.38.0. Nightwatch is disabled and nothing is captured.
 - **Active** otherwise. Nightwatch is enabled with a placeholder token and a loopback address nothing listens on.
 
-In Active and Off, `NIGHTWATCH_ENABLED`, `NIGHTWATCH_TOKEN` and `NIGHTWATCH_INGEST_URI` have no effect. Queue workers, Octane and Horizon read the mode at boot, so restart them after changing it.
+In Active and Off, `NIGHTWATCH_ENABLED`, `NIGHTWATCH_TOKEN` and the `NIGHTWATCH_INGEST_*` variables have no effect. Queue workers, Octane and Horizon read the mode at boot, so restart them after changing it.
 
 ## Configuration
 

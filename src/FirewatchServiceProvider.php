@@ -37,9 +37,14 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const DEAD_TOKEN = 'firewatch';
 
     /**
-     * The loopback address that no ingest agent listens on.
+     * The ingest settings: a loopback address no agent listens on, with Nightwatch's own defaults.
      */
-    protected const DEAD_INGEST_URI = '127.0.0.1:1';
+    protected const DEAD_INGEST = [
+        'uri' => '127.0.0.1:1',
+        'timeout' => 0.5,
+        'connection_timeout' => 0.5,
+        'event_buffer' => 500,
+    ];
 
     /**
      * The notice a console process reports when Firewatch steps aside.
@@ -118,7 +123,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->mode = $resolver->resolve(
             $this->app->make(Configuration::class),
             environment: $this->app->environment(),
-            argv: is_array($argv) ? array_values($argv) : [],
+            argv: is_array($argv) ? array_values(array_filter($argv, is_string(...))) : [],
             sqliteVersion: class_exists(SQLite3::class) ? SQLite3::version()['versionString'] : null,
         );
     }
@@ -134,7 +139,7 @@ class FirewatchServiceProvider extends ServiceProvider
             Mode::ACTIVE => $config->set([
                 'nightwatch.enabled' => true,
                 'nightwatch.token' => static::DEAD_TOKEN,
-                'nightwatch.ingest.uri' => static::DEAD_INGEST_URI,
+                'nightwatch.ingest' => static::DEAD_INGEST,
             ]),
             Mode::OFF => $config->set('nightwatch.enabled', false),
             Mode::STEPPED_ASIDE => null,

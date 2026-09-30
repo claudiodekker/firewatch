@@ -13,7 +13,7 @@ function applicationNightwatchConfig(): array
     return [
         'enabled' => false,
         'token' => 'application-token',
-        'ingest' => ['uri' => 'ingest.example.com:2407', 'timeout' => 0.5],
+        'ingest' => ['uri' => 'ingest.example.com:2407', 'timeout' => 3, 'connection_timeout' => 3, 'event_buffer' => 7],
     ];
 }
 
@@ -25,7 +25,7 @@ it('enables Nightwatch against the dead token and address when Active', function
     expect(config('nightwatch'))->toBe([
         'enabled' => true,
         'token' => 'firewatch',
-        'ingest' => ['uri' => '127.0.0.1:1', 'timeout' => 0.5],
+        'ingest' => ['uri' => '127.0.0.1:1', 'timeout' => 0.5, 'connection_timeout' => 0.5, 'event_buffer' => 500],
     ]);
 });
 
@@ -51,16 +51,17 @@ it('ignores the NIGHTWATCH_ variables for the keys it writes', function (bool $e
     setEnvironmentVariable('NIGHTWATCH_ENABLED', $enabled ? 'false' : 'true');
     setEnvironmentVariable('NIGHTWATCH_TOKEN', 'application-token');
     setEnvironmentVariable('NIGHTWATCH_INGEST_URI', 'ingest.example.com:2407');
+    setEnvironmentVariable('NIGHTWATCH_INGEST_EVENT_BUFFER', '7');
     config()->set('nightwatch', []);
     config()->set('firewatch.enabled', $enabled);
 
     registerFirewatch();
     app()->register(NightwatchServiceProvider::class, force: true);
 
-    expect(config()->get(['nightwatch.enabled', 'nightwatch.token', 'nightwatch.ingest.uri']))->toBe($expected);
+    expect(config()->get(['nightwatch.enabled', 'nightwatch.token', 'nightwatch.ingest.uri', 'nightwatch.ingest.event_buffer']))->toBe($expected);
 })->with([
-    'Active' => ['enabled' => true, 'expected' => ['nightwatch.enabled' => true, 'nightwatch.token' => 'firewatch', 'nightwatch.ingest.uri' => '127.0.0.1:1']],
-    'Off' => ['enabled' => false, 'expected' => ['nightwatch.enabled' => false, 'nightwatch.token' => 'application-token', 'nightwatch.ingest.uri' => 'ingest.example.com:2407']],
+    'Active' => ['enabled' => true, 'expected' => ['nightwatch.enabled' => true, 'nightwatch.token' => 'firewatch', 'nightwatch.ingest.uri' => '127.0.0.1:1', 'nightwatch.ingest.event_buffer' => 500]],
+    'Off' => ['enabled' => false, 'expected' => ['nightwatch.enabled' => false, 'nightwatch.token' => 'application-token', 'nightwatch.ingest.uri' => 'ingest.example.com:2407', 'nightwatch.ingest.event_buffer' => '7']],
 ]);
 
 it('resolves a firewatch: process Off by its first argument that is not an option', function (array $argv, bool $expected) {
@@ -112,6 +113,8 @@ it('stays silent about stepping aside in a web process', function () {
 });
 
 it('registers the three commands and the publish tag only when Active or Off', function (array $config, array $commands, bool $tagged) {
+    [$publishes, $publishGroups] = [ServiceProvider::$publishes, ServiceProvider::$publishGroups];
+    $this->beforeApplicationDestroyed(fn () => [ServiceProvider::$publishes, ServiceProvider::$publishGroups] = [$publishes, $publishGroups]);
     Application::forgetBootstrappers();
     unset(ServiceProvider::$publishes[FirewatchServiceProvider::class], ServiceProvider::$publishGroups['firewatch-config']);
     config()->set($config);

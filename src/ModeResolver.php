@@ -17,7 +17,7 @@ class ModeResolver
     /**
      * Resolve the mode of this process, in the fixed order of the design.
      *
-     * @param  list<mixed>  $argv
+     * @param  list<string>  $argv
      * @param  string|null  $sqliteVersion  null when ext-sqlite3 is missing
      */
     public function resolve(Configuration $configuration, string $environment, array $argv, ?string $sqliteVersion): Mode
@@ -36,16 +36,16 @@ class ModeResolver
     /**
      * Determine if the process runs a firewatch: command, by its first argument that is not an option.
      *
-     * @param  list<mixed>  $argv
+     * @param  list<string>  $argv
      */
     protected function isFirewatchProcess(array $argv): bool
     {
         foreach (array_slice($argv, 1) as $argument) {
-            if (is_string($argument) && str_starts_with($argument, '-')) {
+            if (str_starts_with($argument, '-')) {
                 continue;
             }
 
-            return is_string($argument) && str_starts_with($argument, 'firewatch:');
+            return str_starts_with($argument, 'firewatch:');
         }
 
         return false;
