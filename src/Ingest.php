@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Actions\AppendBatch;
+use ClaudioDekker\Firewatch\Capture\QueryBindings;
 use Laravel\Nightwatch\Contracts\Ingest as IngestContract;
 use Throwable;
 
@@ -24,6 +25,13 @@ class Ingest implements IngestContract
     protected array $buffer = [];
 
     /**
+     * The bindings paired to each buffered record, null for any record without them.
+     *
+     * @var list<list<mixed>|null>
+     */
+    protected array $bindings = [];
+
+    /**
      * Whether a full buffer is stored at once, rather than dropping its oldest record.
      */
     protected bool $digestsWhenBufferIsFull = true;
@@ -36,8 +44,10 @@ class Ingest implements IngestContract
     /**
      * Create a new ingest instance.
      */
-    public function __construct(protected AppendBatch $appendBatch)
-    {
+    public function __construct(
+        protected AppendBatch $appendBatch,
+        protected QueryBindings $queryBindings,
+    ) {
         //
     }
 
@@ -54,9 +64,11 @@ class Ingest implements IngestContract
 
         if ($this->isBufferFull()) {
             array_shift($this->buffer);
+            array_shift($this->bindings);
         }
 
         $this->buffer[] = $record;
+        $this->bindings[] = $this->queryBindings->pair($record);
 
         if ($this->digestsWhenBufferIsFull && $this->isBufferFull()) {
             $this->digest();
@@ -74,7 +86,7 @@ class Ingest implements IngestContract
             return;
         }
 
-        $this->store([$record]);
+        $this->store([$record], []);
     }
 
     /**
@@ -111,10 +123,11 @@ class Ingest implements IngestContract
         }
 
         $records = $this->buffer;
+        $bindings = $this->bindings;
 
         $this->flush();
 
-        $this->store($records);
+        $this->store($records, $bindings);
     }
 
     /**
@@ -123,6 +136,7 @@ class Ingest implements IngestContract
     public function flush(): void
     {
         $this->buffer = [];
+        $this->bindings = [];
     }
 
     /**
@@ -137,13 +151,14 @@ class Ingest implements IngestContract
      * Store a batch, keeping any failure from the host application.
      *
      * @param  list<array<mixed>>  $records
+     * @param  list<list<mixed>|null>  $bindings
      */
-    protected function store(array $records): void
+    protected function store(array $records, array $bindings): void
     {
         $this->storing = true;
 
         try {
-            $this->appendBatch->handle($records);
+            $this->appendBatch->handle($records, $bindings);
         } catch (Throwable $exception) {
             $this->report($exception);
         } finally {
