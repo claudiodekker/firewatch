@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch;
 
+use ClaudioDekker\Firewatch\Capture\DefaultLogChannel;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationIssue;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
@@ -109,6 +110,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->configureNightwatch();
         $this->vetoNightwatchTransmit();
         $this->registerNightwatch();
+        $this->captureLogs();
         $this->replaceNightwatchIngest();
     }
 
@@ -296,6 +298,20 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->app->register(NightwatchServiceProvider::class);
 
         AliasLoader::getInstance()->alias('Nightwatch', Nightwatch::class);
+    }
+
+    /**
+     * Wrap the default log channel with Nightwatch's when Active and capturing logs, so every default-channel log is captured.
+     */
+    protected function captureLogs(): void
+    {
+        if ($this->mode !== Mode::ACTIVE || ! $this->app->make(Configuration::class)->captureLogs) {
+            return;
+        }
+
+        $channel = new DefaultLogChannel($this->app->make('config'));
+
+        $channel->wrap();
     }
 
     /**
