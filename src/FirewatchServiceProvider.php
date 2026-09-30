@@ -71,11 +71,6 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const VETO_EVENT_MISSING = 'Firewatch cannot veto Nightwatch\'s transmit: `%s` is missing from Nightwatch %s.';
 
     /**
-     * The command that starts the MCP server.
-     */
-    protected const SERVER_COMMAND = 'firewatch:server';
-
-    /**
      * The mode this process resolved to.
      */
     protected Mode $mode;
@@ -180,7 +175,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function redirectStrayServerOutput(): void
     {
-        if ($this->mode === Mode::STEPPED_ASIDE || (new ModeResolver)->command($this->argv()) !== static::SERVER_COMMAND) {
+        if ($this->mode === Mode::STEPPED_ASIDE || (new ModeResolver)->command($this->argv()) !== ServerCommand::NAME) {
             return;
         }
 

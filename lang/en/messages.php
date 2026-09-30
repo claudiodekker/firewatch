@@ -64,7 +64,7 @@ return [
     |
     */
 
-    'listing' => '{1} Firewatch MCP server :version: :count tool|[2,*] Firewatch MCP server :version: :count tools',
+    'listing' => 'Firewatch MCP server :version: :count tools',
 
     'json_requires_list' => 'The --json option requires --list.',
 

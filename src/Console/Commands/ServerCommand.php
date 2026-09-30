@@ -4,9 +4,7 @@ namespace ClaudioDekker\Firewatch\Console\Commands;
 
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use Illuminate\Console\Command;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
-use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Mcp\Server\Transport\StdioTransport;
 
@@ -16,11 +14,21 @@ use Laravel\Mcp\Server\Transport\StdioTransport;
 class ServerCommand extends Command
 {
     /**
+     * The name of the command that starts the MCP server.
+     */
+    public const NAME = 'firewatch:server';
+
+    /**
+     * The length a tool's first sentence is cut at in the listing.
+     */
+    protected const LISTED_SENTENCE_LENGTH = 90;
+
+    /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'firewatch:server
+    protected $signature = self::NAME.'
                             {--list : Print what tools/list returns, without a session}
                             {--json : Print the listing as JSON}';
 
@@ -30,11 +38,6 @@ class ServerCommand extends Command
      * @var string
      */
     protected $description = 'Start the Firewatch MCP server over stdio';
-
-    /**
-     * The length a tool's first sentence is cut at in the listing.
-     */
-    protected const LISTED_SENTENCE_LENGTH = 90;
 
     /**
      * Execute the console command.
@@ -83,29 +86,25 @@ class ServerCommand extends Command
     {
         $server = $this->laravel->make(FirewatchServer::class, ['transport' => new FakeTransporter]);
 
-        $server->start();
-
-        $context = $server->createContext();
-        $implementation = $context->implementation->toArray();
-        $tools = $context->tools();
+        $listing = $server->listing();
 
         if ($this->option('json')) {
-            $listing = [
-                'server' => ['name' => $implementation['name'], 'version' => $implementation['version']],
-                'tools' => $tools->map(fn (Tool $tool) => Arr::only($tool->toArray(), ['name', 'description', 'inputSchema', 'annotations']))->all(),
-            ];
+            $json = json_encode($listing, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
-            $this->line(json_encode($listing, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+            $this->line($json);
 
             return self::SUCCESS;
         }
 
-        $width = $tools->max(fn (Tool $tool) => mb_strlen($tool->name())) ?? 0;
+        $header = __('firewatch::messages.listing', ['version' => $listing['server']['version'], 'count' => count($listing['tools'])]);
+        $width = max([0, ...array_map(fn (array $tool) => Str::length($tool['name']), $listing['tools'])]);
 
-        $this->line(trans_choice('firewatch::messages.listing', $tools->count(), ['version' => $implementation['version']]));
+        $this->line($header);
 
-        foreach ($tools as $tool) {
-            $this->line('  '.str_pad($tool->name(), $width).'  '.$this->firstSentence($tool->description()));
+        foreach ($listing['tools'] as $tool) {
+            $sentence = $this->firstSentence($tool['description']);
+
+            $this->line('  '.Str::padRight($tool['name'], $width).'  '.$sentence);
         }
 
         return self::SUCCESS;

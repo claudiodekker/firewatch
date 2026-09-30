@@ -7,12 +7,12 @@ use Symfony\Component\Process\Process;
  * @param  array<string, string>  $env
  * @param  list<string>  $ini
  */
-function runServer(string $storeDirectory, array $messages, array $env = [], array $ini = []): Process
+function runServer(string $storeDirectory, array $messages, array $env = [], array $ini = [], string $command = 'firewatch:server'): Process
 {
     $input = implode('', array_map(fn (array $message) => json_encode($message, JSON_THROW_ON_ERROR)."\n", $messages));
 
     $process = new Process(
-        [PHP_BINARY, ...$ini, 'vendor/bin/testbench', 'firewatch:server'],
+        [PHP_BINARY, ...$ini, 'vendor/bin/testbench', $command],
         cwd: dirname(__DIR__, 2),
         env: [...$env, 'FIREWATCH_DATABASE' => $storeDirectory.'/firewatch.sqlite'],
         input: $input,
@@ -32,6 +32,8 @@ function serverReplies(Process $process): array
     $lines = array_filter(explode("\n", $process->getOutput()), fn (string $line) => $line !== '');
 
     $replies = array_map(fn (string $line) => json_decode($line, associative: true, flags: JSON_THROW_ON_ERROR), $lines);
+
+    expect(array_column($replies, 'jsonrpc'))->toBe(array_fill(0, count($replies), '2.0'));
 
     return array_column($replies, null, 'id');
 }
@@ -108,6 +110,12 @@ it('prints floats shortest round-trip under a hostile precision setting', functi
 
 it('leaves stray output on stdout when stepped aside', function () {
     $process = runServer($this->storeDirectory, serverSession(), env: ['FIREWATCH_ENVIRONMENTS' => 'local', 'WORKBENCH_ECHO' => 'Stray output from a provider']);
+
+    expect($process->getOutput())->toStartWith("Stray output from a provider\n");
+})->group('process');
+
+it('leaves stray output on stdout in another firewatch: command', function () {
+    $process = runServer($this->storeDirectory, [], env: ['WORKBENCH_ECHO' => 'Stray output from a provider'], command: 'firewatch:doctor');
 
     expect($process->getOutput())->toStartWith("Stray output from a provider\n");
 })->group('process');

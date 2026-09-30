@@ -45,11 +45,13 @@ class Overview extends Tool
     {
         $now = Carbon::now();
 
-        $lines = [
-            '## overview',
-            __('firewatch::messages.no_store', ['path' => $this->configuration->database]),
-            __('firewatch::messages.store_clock', ['time' => $now->format('Y-m-d H:i:s.u'), 'epoch' => (float) $now->format('U.u')]),
-        ];
+        $noStore = __('firewatch::messages.no_store', ['path' => $this->configuration->database]);
+        $clock = __('firewatch::messages.store_clock', [
+            'time' => $now->format('Y-m-d H:i:s.u'),
+            'epoch' => (float) $now->format('U.u'),
+        ]);
+
+        $lines = ['## overview', $noStore, $clock];
 
         return Response::text(implode("\n", $lines));
     }

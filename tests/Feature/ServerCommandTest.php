@@ -16,23 +16,23 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            trans_choice('firewatch::messages.listing', 1, ['version' => firewatchVersion()]),
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 1]),
             '  overview  Entry point.',
             '',
         ]));
 });
 
-it('cuts a tool\'s first sentence at 90 characters in the listing', function (string $sentence, string $expected) {
-    app()->bind(Overview::class, fn () => new class($sentence) extends Overview
+it('lists a tool\'s first sentence, cut at 90 characters', function (string $description, string $expected) {
+    app()->bind(Overview::class, fn () => new class($description) extends Overview
     {
-        public function __construct(protected string $sentence)
+        public function __construct(protected string $text)
         {
             //
         }
 
         public function description(): string
         {
-            return $this->sentence.' The second sentence is never listed.';
+            return $this->text;
         }
     });
 
@@ -40,8 +40,12 @@ it('cuts a tool\'s first sentence at 90 characters in the listing', function (st
 
     expect(explode("\n", Artisan::output())[1])->toBe("  overview  {$expected}");
 })->with([
-    '90 characters' => ['sentence' => str_repeat('a', 89).'.', 'expected' => str_repeat('a', 89).'.'],
-    '91 characters' => ['sentence' => str_repeat('a', 90).'.', 'expected' => str_repeat('a', 89).'…'],
+    '90 characters' => ['description' => str_repeat('a', 89).'. Never listed.', 'expected' => str_repeat('a', 89).'.'],
+    '91 characters' => ['description' => str_repeat('a', 90).'. Never listed.', 'expected' => str_repeat('a', 89).'…'],
+    'ending in a question mark' => ['description' => 'What is wrong? Never listed.', 'expected' => 'What is wrong?'],
+    'ending in an exclamation mark' => ['description' => 'Start here! Never listed.', 'expected' => 'Start here!'],
+    'a full stop inside a word' => ['description' => 'Reads config.php first. Never listed.', 'expected' => 'Reads config.php first.'],
+    'no sentence end' => ['description' => 'Entry point', 'expected' => 'Entry point'],
 ]);
 
 it('lists the tools as JSON with the server name and version', function () {

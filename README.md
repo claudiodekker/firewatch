@@ -22,7 +22,7 @@ In Claude Code that is `claude mcp add firewatch -- php artisan firewatch:server
 
 The server starts only through `firewatch:server`. Firewatch registers no laravel/mcp handle, so never use `mcp:start` or `mcp:inspector` with it. To see what an assistant would get from `tools/list` without a session, run `php artisan firewatch:server --list`, or `--list --json` for the full descriptions and schemas.
 
-Anything an application's providers print while the server boots goes to stderr, so it can't corrupt the protocol on stdout. Run the launch command by hand to see it; end with Ctrl-D.
+Anything an application's providers print while the server boots goes to stderr, so it can't corrupt the protocol on stdout. Output printed before Firewatch's provider registers, from `bootstrap/app.php`, a config file or a package provider registered earlier, still reaches stdout and breaks the handshake. Run the launch command by hand to look for it; end with Ctrl-D.
 
 ## Modes
 

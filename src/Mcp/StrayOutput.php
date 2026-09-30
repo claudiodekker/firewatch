@@ -12,8 +12,7 @@ class StrayOutput
      */
     public function redirect(): void
     {
-        // The transport writes to the STDOUT stream, which bypasses output buffering;
-        // an echo, print or inline HTML from a provider or a tool does not.
+        // The transport writes to the STDOUT stream, which output buffering never sees.
         ob_start(static function (string $buffer): string {
             fwrite(STDERR, $buffer);
 
