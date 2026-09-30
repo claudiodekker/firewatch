@@ -2,6 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Store;
 
+use ClaudioDekker\Firewatch\RecordType;
+
 /**
  * @internal
  */
@@ -18,9 +20,27 @@ class Schema
     public const APPLICATION_ID = 0x46575443;
 
     /**
-     * The statements that create the schema, in order.
+     * The common columns a record fills from the wire, beside its data.
      */
-    protected const STATEMENTS = [
+    public const COLUMNS = [
+        'type',
+        'v',
+        'started_at',
+        'duration',
+        'group_hash',
+        'trace_id',
+        'execution_id',
+        'source',
+        'job_id',
+        'user_id',
+        'deploy',
+        'server',
+    ];
+
+    /**
+     * The statements that create the raw table and its indexes, in order.
+     */
+    protected const TABLES = [
         <<<'SQL'
             CREATE TABLE records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,6 +76,63 @@ class Schema
      */
     public function statements(): array
     {
-        return static::STATEMENTS;
+        $types = array_filter(RecordType::cases(), fn (RecordType $type) => $type->view() !== null);
+        $views = array_map($this->view(...), $types);
+
+        return array_values([...static::TABLES, ...$views]);
+    }
+
+    /**
+     * Get the statement that creates a type's record view, with the type's own columns named as on the wire.
+     */
+    protected function view(RecordType $type): string
+    {
+        $columns = [...$this->commonColumns($type), ...$this->dataColumns($type), 'data'];
+
+        return sprintf(
+            "CREATE VIEW %s AS SELECT %s FROM records WHERE type = '%s'",
+            $type->view(),
+            implode(', ', $columns),
+            $type->value,
+        );
+    }
+
+    /**
+     * Get the common columns that apply to a type, in the raw table's order.
+     *
+     * @return list<string>
+     */
+    protected function commonColumns(RecordType $type): array
+    {
+        $fields = $type->fields();
+        $hasDuration = in_array('duration', $fields, strict: true);
+
+        return array_values(array_filter([
+            'id',
+            'v',
+            'started_at',
+            $hasDuration ? 'duration' : null,
+            $hasDuration ? 'ended_at' : null,
+            in_array('group_hash', $fields, strict: true) ? 'group_hash' : null,
+            'trace_id',
+            'execution_id',
+            $type->source() !== null ? 'source' : 'source AS execution_source',
+            in_array('job_id', $fields, strict: true) ? 'job_id' : null,
+            'user_id',
+            'deploy',
+            'server',
+        ]));
+    }
+
+    /**
+     * Get the columns a type reads from its data, one per contract field without a common column.
+     *
+     * @return list<string>
+     */
+    protected function dataColumns(RecordType $type): array
+    {
+        $names = array_diff(array_filter($type->fields()), static::COLUMNS);
+
+        return array_values(array_map(fn (string $name) => "json_extract(data, '$.{$name}') AS \"{$name}\"", $names));
     }
 }
