@@ -51,6 +51,28 @@ class FirewatchServiceProvider extends ServiceProvider
     ];
 
     /**
+     * The sample rates that capture every execution.
+     */
+    protected const FULL_SAMPLING = [
+        'requests' => 1.0,
+        'commands' => 1.0,
+        'exceptions' => 1.0,
+        'scheduled_tasks' => 1.0,
+    ];
+
+    /**
+     * The filtering that ignores no event and no log level.
+     */
+    protected const NO_FILTERING = [
+        'ignore_cache_events' => false,
+        'ignore_mail' => false,
+        'ignore_notifications' => false,
+        'ignore_outgoing_requests' => false,
+        'ignore_queries' => false,
+        'log_level' => 'debug',
+    ];
+
+    /**
      * The notice a console process reports when Firewatch steps aside.
      */
     protected const STEPPED_ASIDE_NOTICE = 'Firewatch is installed but stepped aside in environment `%s`; install with `composer install --no-dev` in production.';
@@ -206,10 +228,26 @@ class FirewatchServiceProvider extends ServiceProvider
                 'nightwatch.enabled' => true,
                 'nightwatch.token' => static::DEAD_TOKEN,
                 'nightwatch.ingest' => static::DEAD_INGEST,
+                'nightwatch.sampling' => static::FULL_SAMPLING,
+                'nightwatch.filtering' => static::NO_FILTERING,
+                'nightwatch.capture_exception_source_code' => true,
+                ...$this->deployment(),
             ]),
             Mode::OFF => $config->set('nightwatch.enabled', false),
             Mode::STEPPED_ASIDE => null,
         };
+    }
+
+    /**
+     * Get the deploy identity to write to Nightwatch, or nothing so Nightwatch resolves its own.
+     *
+     * @return array<string, string>
+     */
+    protected function deployment(): array
+    {
+        $deploy = $this->app->make(Configuration::class)->deploy;
+
+        return $deploy === null ? [] : ['nightwatch.deployment' => $deploy];
     }
 
     /**
