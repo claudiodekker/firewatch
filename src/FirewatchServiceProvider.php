@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch;
 
+use ClaudioDekker\Firewatch\Capture\DefaultLogChannel;
 use ClaudioDekker\Firewatch\Capture\HeaderRedactor;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
@@ -114,6 +115,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->captureQueryBindings();
         $this->registerNightwatch();
         $this->releaseQueryBindings();
+        $this->captureLogs();
         $this->replaceNightwatchIngest();
         $this->redactHeaders();
     }
@@ -345,6 +347,20 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->app->register(NightwatchServiceProvider::class);
 
         AliasLoader::getInstance()->alias('Nightwatch', Nightwatch::class);
+    }
+
+    /**
+     * Wrap the default log channel with Nightwatch's when Active and capturing logs, so every default-channel log is captured.
+     */
+    protected function captureLogs(): void
+    {
+        if ($this->mode !== Mode::ACTIVE || ! $this->app->make(Configuration::class)->captureLogs) {
+            return;
+        }
+
+        $channel = new DefaultLogChannel($this->app->make('config'));
+
+        $channel->wrap();
     }
 
     /**
