@@ -34,21 +34,29 @@ class ModeResolver
     }
 
     /**
-     * Determine if the process runs a firewatch: command, by its first argument that is not an option.
+     * Get the command a process runs: its first argument that is not an option.
+     *
+     * @param  list<string>  $argv
+     */
+    public function command(array $argv): ?string
+    {
+        foreach (array_slice($argv, 1) as $argument) {
+            if (! str_starts_with($argument, '-')) {
+                return $argument;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Determine if the process runs a firewatch: command.
      *
      * @param  list<string>  $argv
      */
     protected function isFirewatchProcess(array $argv): bool
     {
-        foreach (array_slice($argv, 1) as $argument) {
-            if (str_starts_with($argument, '-')) {
-                continue;
-            }
-
-            return str_starts_with($argument, 'firewatch:');
-        }
-
-        return false;
+        return str_starts_with($this->command($argv) ?? '', 'firewatch:');
     }
 
     /**

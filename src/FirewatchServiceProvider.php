@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
 use ClaudioDekker\Firewatch\Console\Commands\ClearCommand;
 use ClaudioDekker\Firewatch\Console\Commands\DoctorCommand;
 use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
+use ClaudioDekker\Firewatch\Mcp\StrayOutput;
 use Composer\InstalledVersions;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Foundation\AliasLoader;
@@ -82,6 +83,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->registerNightwatchInstall();
         $this->registerConfiguration();
         $this->resolveMode();
+        $this->redirectStrayServerOutput();
         $this->configureNightwatch();
         $this->vetoNightwatchTransmit();
         $this->registerNightwatch();
@@ -105,6 +107,8 @@ class FirewatchServiceProvider extends ServiceProvider
 
         $this->reportConfigurationIssues();
         $this->reportNightwatchInstall();
+
+        $this->loadTranslationsFrom(__DIR__.'/../lang', 'firewatch');
 
         $this->publishes([static::CONFIG_PATH => $this->app->configPath('firewatch.php')], 'firewatch-config');
 
@@ -156,15 +160,38 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function resolveMode(): void
     {
-        $argv = $_SERVER['argv'] ?? [];
         $resolver = new ModeResolver;
 
         $this->mode = $resolver->resolve(
             $this->app->make(Configuration::class),
             environment: $this->app->environment(),
-            argv: is_array($argv) ? array_values(array_filter($argv, is_string(...))) : [],
+            argv: $this->argv(),
             sqliteVersion: class_exists(SQLite3::class) ? SQLite3::version()['versionString'] : null,
         );
+    }
+
+    /**
+     * Keep stdout to protocol messages in a server process, before other providers can print.
+     */
+    protected function redirectStrayServerOutput(): void
+    {
+        if ($this->mode === Mode::STEPPED_ASIDE || (new ModeResolver)->command($this->argv()) !== ServerCommand::NAME) {
+            return;
+        }
+
+        (new StrayOutput)->redirect();
+    }
+
+    /**
+     * Get the process's command-line arguments.
+     *
+     * @return list<string>
+     */
+    protected function argv(): array
+    {
+        $argv = $_SERVER['argv'] ?? [];
+
+        return is_array($argv) ? array_values(array_filter($argv, is_string(...))) : [];
     }
 
     /**
