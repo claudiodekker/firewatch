@@ -36,7 +36,9 @@ it('vetoes every batch when Active', function (array $records) {
 
     registerFirewatch();
 
-    expect(app('events')->until(new IngestingEvents($records)))->toBeFalse();
+    $answer = app('events')->until(new IngestingEvents($records));
+
+    expect($answer)->toBeFalse();
 })->with([
     'a request' => ['records' => [['t' => 'request', 'v' => 1]]],
     'a user' => ['records' => [['t' => 'user', 'v' => 1]]],

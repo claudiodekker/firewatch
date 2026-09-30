@@ -156,7 +156,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Cancel every transmit of Nightwatch's own ingest when Active, in case it stays in place.
+     * Veto every batch of Nightwatch's own ingest when Active, in case it stays in place.
      */
     protected function vetoNightwatchTransmit(): void
     {
@@ -164,7 +164,7 @@ class FirewatchServiceProvider extends ServiceProvider
             return;
         }
 
-        // Registered before Nightwatch's provider, so it runs first among the listeners.
+        // until() stops at the first non-null answer, so listen before Nightwatch's provider registers.
         $this->app->make('events')->listen(IngestingEvents::class, static fn () => false);
     }
 
