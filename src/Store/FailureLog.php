@@ -91,14 +91,22 @@ class FailureLog
                 chmod($path, static::FILE_MODE);
             }
 
-            flock($handle, LOCK_EX);
+            // A lock held elsewhere loses this line rather than holding up the request.
+            if (! flock($handle, LOCK_EX | LOCK_NB)) {
+                throw new RuntimeException("Firewatch could not lock [{$path}].");
+            }
 
             $lines = preg_split('/\R/', (string) stream_get_contents($handle), flags: PREG_SPLIT_NO_EMPTY) ?: [];
-            $kept = array_slice([...$lines, $line], -self::LINES);
 
-            ftruncate($handle, 0);
-            rewind($handle);
-            fwrite($handle, implode("\n", $kept)."\n");
+            // Below the cap the line is appended, so a failed write never loses the earlier lines.
+            if (count($lines) < self::LINES) {
+                fwrite($handle, $line."\n");
+            } else {
+                ftruncate($handle, 0);
+                rewind($handle);
+                fwrite($handle, implode("\n", [...array_slice($lines, 1 - self::LINES), $line])."\n");
+            }
+
             fflush($handle);
         } finally {
             fclose($handle);

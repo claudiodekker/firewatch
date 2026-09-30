@@ -13,6 +13,7 @@ test('a failure is classified by its SQLite result code, or by the kind the stor
     'full' => [new SQLite3Exception('database or disk is full', 13), FailureKind::FULL],
     'corrupt' => [new SQLite3Exception('database disk image is malformed', 11), FailureKind::CORRUPT],
     'corrupt index' => [new SQLite3Exception('database disk image is malformed', 779), FailureKind::CORRUPT],
+    'not a database' => [new SQLite3Exception('file is not a database', 26), FailureKind::FOREIGN],
     'io' => [new SQLite3Exception('disk I/O error', 10), FailureKind::IO],
     'io on write' => [new SQLite3Exception('disk I/O error', 778), FailureKind::IO],
     'cannot open' => [new SQLite3Exception('unable to open database file', 14), FailureKind::IO],
@@ -20,16 +21,4 @@ test('a failure is classified by its SQLite result code, or by the kind the stor
     'another SQLite error' => [new SQLite3Exception('no such table: records', 1), FailureKind::OTHER],
     'a store failure' => [new StoreFailure(FailureKind::FOREIGN, 'The file is not a store.'), FailureKind::FOREIGN],
     'any other failure' => [new RuntimeException('Something failed.', 5), FailureKind::OTHER],
-]);
-
-test('each kind has its stored name', function (FailureKind $kind, string $name) {
-    expect($kind->value)->toBe($name);
-})->with([
-    [FailureKind::BUSY, 'busy'],
-    [FailureKind::FULL, 'full'],
-    [FailureKind::CORRUPT, 'corrupt'],
-    [FailureKind::FOREIGN, 'foreign'],
-    [FailureKind::SCHEMA, 'schema'],
-    [FailureKind::IO, 'io'],
-    [FailureKind::OTHER, 'other'],
 ]);

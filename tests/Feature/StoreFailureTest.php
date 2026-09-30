@@ -54,12 +54,17 @@ function holdWriteLock(string $database): Closure
 
     $process = proc_open([PHP_BINARY, '-r', $script, $database], [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
 
+    $release = function () use ($process, $pipes) {
+        if (is_resource($pipes[0])) {
+            fclose($pipes[0]);
+            proc_close($process);
+        }
+    };
+    test()->beforeApplicationDestroyed($release);
+
     expect(fgets($pipes[1]))->toBe("locked\n");
 
-    return function () use ($process, $pipes) {
-        fclose($pipes[0]);
-        proc_close($process);
-    };
+    return $release;
 }
 
 function writeStoreFile(Closure $callback): void
@@ -100,11 +105,12 @@ it('drops a batch when another process holds the write lock past the busy timeou
     'at a budget of 50 ms' => 50,
 ])->group('process');
 
-it('records a store file it does not own by its kind, without a code', function (Closure $write, string $kind, string $message) {
+it('records a file that is not a store of this schema by its kind', function (Closure $write, string $kind, ?int $code, string $message) {
     $now = CarbonImmutable::parse('2026-09-30 12:00:00.250000');
     $this->travelTo($now);
-    writeStoreFile($write);
     $database = app(Configuration::class)->database;
+    mkdir(dirname($database), recursive: true);
+    $write($database);
 
     Cache::get('dropped');
     Nightwatch::digest();
@@ -112,19 +118,27 @@ it('records a store file it does not own by its kind, without a code', function 
     expect(failureLines())->toBe([[
         'at' => (float) $now->format('U.u'),
         'kind' => $kind,
-        'code' => null,
+        'code' => $code,
         'message' => sprintf($message, $database),
         'dropped' => 1,
     ]]);
 })->with([
-    'a foreign file' => [
-        'write' => fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'),
+    'a foreign SQLite file' => [
+        'write' => fn (string $database) => (new SQLite3($database))->exec('CREATE TABLE orders (id INTEGER)'),
         'kind' => 'foreign',
+        'code' => null,
         'message' => 'The file at [%s] is not a Firewatch store.',
     ],
+    'a file that is not a database' => [
+        'write' => fn (string $database) => file_put_contents($database, str_repeat('not a database ', 100)),
+        'kind' => 'foreign',
+        'code' => 26,
+        'message' => 'file is not a database',
+    ],
     'a store of another schema version' => [
-        'write' => fn (SQLite3 $connection) => $connection->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)'),
+        'write' => fn (string $database) => (new SQLite3($database))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)'),
         'kind' => 'schema',
+        'code' => null,
         'message' => 'The store at [%s] has schema version 2, not 1.',
     ],
 ]);
@@ -168,9 +182,44 @@ it('creates the failure file private to its owner', function () {
     expect(fileperms(dirname(app(Configuration::class)->database).'/failures.jsonl') & 0777)->toBe(0600);
 })->group('posix');
 
-it('swallows a failure of the failure path', function (Closure $break, bool $logged) {
+it('still reports a dropped batch when its failure line can\'t be written', function (Closure $break) {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
-    $break();
+    $failures = dirname(app(Configuration::class)->database).'/failures.jsonl';
+    $break($failures);
+
+    // Digest through the ingest itself, as Nightwatch would swallow what escapes it.
+    Cache::get('dropped');
+    app(Core::class)->ingest->digest();
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Firewatch could not store a batch of 1 records: The file at ['));
+})->with([
+    'a failure file that is a directory' => [fn (string $failures) => mkdir($failures)],
+]);
+
+it('loses a failure line rather than wait for a lock held elsewhere', function () {
+    writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
+    $failures = dirname(app(Configuration::class)->database).'/failures.jsonl';
+    $handle = fopen($failures, 'c+');
+    flock($handle, LOCK_EX);
+    test()->beforeApplicationDestroyed(fn () => fclose($handle));
+
+    Cache::get('dropped');
+    Nightwatch::digest();
+
+    expect(file_get_contents($failures))->toBe('');
+    Exceptions::assertReportedCount(1);
+});
+
+it('keeps recording dropped batches when the report throws', function () {
+    writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
+    app()->instance(ExceptionHandler::class, new class(app()) extends Handler
+    {
+        public function report(Throwable $e): void
+        {
+            throw new RuntimeException('The handler failed.');
+        }
+    });
 
     // Digest through the ingest itself, as Nightwatch would swallow what escapes it.
     Cache::get('dropped');
@@ -178,16 +227,5 @@ it('swallows a failure of the failure path', function (Closure $break, bool $log
     Cache::get('dropped again');
     app(Core::class)->ingest->digest();
 
-    expect(is_file(dirname(app(Configuration::class)->database).'/failures.jsonl'))->toBe($logged);
-})->with([
-    'a failure file that cannot be written' => [fn () => mkdir(dirname(app(Configuration::class)->database).'/failures.jsonl'), false],
-    'a report that throws' => [function () {
-        app()->instance(ExceptionHandler::class, new class(app()) extends Handler
-        {
-            public function report(Throwable $e): void
-            {
-                throw new RuntimeException('The handler failed.');
-            }
-        });
-    }, true],
-]);
+    expect(failureLines())->toHaveCount(2);
+});

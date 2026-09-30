@@ -36,6 +36,7 @@ enum FailureKind: string
             5 => self::BUSY,
             13 => self::FULL,
             11 => self::CORRUPT,
+            26 => self::FOREIGN,
             10, 14 => self::IO,
             default => self::OTHER,
         };
