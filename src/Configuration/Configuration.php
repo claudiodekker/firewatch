@@ -32,5 +32,7 @@ readonly class Configuration
         public array $budgets,
         public int $ignoredBudgetEntries,
         public array $issues,
-    ) {}
+    ) {
+        //
+    }
 }

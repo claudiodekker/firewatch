@@ -22,5 +22,7 @@ readonly class BudgetEntry
         public ?string $name,
         public int|float|null $durationMilliseconds,
         public int|float|null $memoryMegabytes,
-    ) {}
+    ) {
+        //
+    }
 }

@@ -16,7 +16,9 @@ readonly class ConfigurationIssue
         public string $key,
         public string $reason,
         public string $effect,
-    ) {}
+    ) {
+        //
+    }
 
     /**
      * Create an issue for a key that falls back to its default.

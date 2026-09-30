@@ -105,7 +105,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - A real-sensor test asserts counts, relations, verdicts and shapes, never exact instants or durations.
 - Fixed wording (blind-spot sentences, empty kinds, error messages, detector caveats, doctor messages and other user-facing text) is asserted through its language key, `__('firewatch::messages.key')`, never a copy of the translated string. Ids, error codes and closed sets are written as literals in the test, so changing one fails a test. Long text (the server instructions, tool descriptions) is asserted structurally, and limits numerically (40 words per blind spot, 150 per tool description, `tools/list` under 5,000 tokens). No snapshot files are committed.
 - JSON answers are asserted in full; the markdown rendering once per tool through the shared helper. Every `next` call an answer offers is executed and returns a non-error answer.
-- A test that would pass with the code under test removed is testing the framework.
+- A test of an assertion helper (a fake's `assert*()`, a macro) has one failing case per condition the helper checks, as a dataset, so removing any condition fails a case. A test that would pass with the code under test removed is testing the framework.
 - A test's name says the behaviour it proves ("refuses a window before the coverage start"), not the mechanism ("fails").
 - A test that spawns a real process carries the `process` tag, and one that asserts a file mode or another POSIX-only fact carries `posix`. Real processes run with shortened deadlines passed through constructor arguments, never a real wait.
 - Deterministic tests use:
@@ -117,14 +117,16 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 12. Methods and classes
 
-- Before writing a helper, check whether Laravel or an installed package already does it.
+- Before writing a helper, check whether Laravel or an installed package already does it (`is()`, `value()`, `Arr` and `Str` helpers, collection methods, enum serialization). When a helper is still needed, the PR says why.
 - Guard clauses handle edge cases first and return early; the happy path comes last.
 - An orchestrating method reads as a short list of named steps. A phase that needs a comment to explain it becomes a named method.
-- Prefer a named method (`readOrFail()`) over a `null` return callers must branch on.
-- Verbs keep the framework's meaning: `get`/`has`/`is`/`forget`/`flush` behave as they do in the framework.
+- Callers get named variants (`findOrFail()`, `readOrFail()`) instead of a `null` return they must branch on.
+- Verbs keep the framework's meaning: `make` builds without saving, `create` saves; `get`/`has`/`is`/`forget`/`flush` behave as they do in the framework.
 - Parameters are ordered subject first, then options, with the `$default` argument, callbacks and variadics last.
 - Classes stay open to extension: no `final`, and members that aren't public are `protected` rather than `private`, so subclasses can override them.
+- An empty constructor body holds a single `//` line, as in Laravel's own stubs.
 - Builders and configurators return `$this`. Value objects are immutable and return `new static(...)` from each transform.
+- Exceptions the package defines carry state in public properties with fluent setters, and keep a short message.
 
 ## 13. Code hygiene
 
@@ -132,7 +134,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - Method docblocks are one imperative line ending in a period (`Determine if…`, `Get the…`, `Create a new … instance.`), then tags. Property and constant docblocks are a noun phrase (`The event dispatcher instance.`). Class docblocks hold only tags (`@template`, `@mixin`, `@method`, `@internal`, `@api`).
 - `@param`/`@return` carry the type. Add a description only for a constraint the name can't express.
 - Inline `//` comments are kept only for a vendor quirk, a gotcha or a cross-reference. A comment that restates the next line is deleted.
-- Comments describe the domain. Comments aimed at tools or reviewers are removed; that belongs in the commit message.
+- Comments describe the domain. Comments aimed at tools or reviewers ("kills the mutant", "proves the X branch", "why this ignore exists") are removed; that belongs in the commit message.
 - A magic number becomes a named constant, not a number with a comment (`protected const EXCERPT_LENGTH = 160;`). A value used once and passed straight to a framework call stays inline.
 - An array in `src/` with more than one element and at least one key puts one element per line. A validation rule list and test datasets stay on one line.
 - A blank line separates two statements when either spans several lines.
@@ -145,6 +147,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 14. Domain language and user-facing text
 
 - Long user-facing text (blind-spot sentences, tool descriptions, instructions, doctor messages) is a key in the package's `messages` language file, read through the package namespace (`__('firewatch::messages.failed')`). The file is loaded only where Firewatch is Active or Off. Tool classes override `description()` to read it, and set explicit tool names rather than relying on the default kebab-cased class name.
+- A new language file for a narrow topic that won't grow is folded into `messages`.
 - A PR that adds a domain value (an enum case, a status, a mode) whose meaning isn't in `CONTEXT.md` or an ADR adds it to `CONTEXT.md`.
 - Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction. In prose, "the `query` tool" is the SQL tool and "the `query` record type" is the record.
 

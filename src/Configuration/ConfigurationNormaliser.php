@@ -130,7 +130,9 @@ class ConfigurationNormaliser
         protected string $basePath,
         protected string $publicPath,
         protected string $storagePath,
-    ) {}
+    ) {
+        //
+    }
 
     /**
      * Resolve the raw configuration into typed values and the issues found.
@@ -302,18 +304,19 @@ class ConfigurationNormaliser
         }
 
         $default = implode(',', static::DEFAULT_ENVIRONMENTS);
+
+        if (! $this->isList($raw['environments'])) {
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'environments', reason: $this->describe($raw['environments']).static::NOT_A_LIST, default: $default);
+
+            return static::DEFAULT_ENVIRONMENTS;
+        }
+
         $environments = $this->list(
             $raw['environments'],
             key: 'environments',
             expected: static::ENVIRONMENT_NAME_DESCRIPTION,
             accepts: fn (string $item) => preg_match('/^[A-Za-z0-9_.-]+$/', $item) === 1,
         );
-
-        if ($environments === null) {
-            $this->issues[] = ConfigurationIssue::fallBack(key: 'environments', reason: $this->describe($raw['environments']).static::NOT_A_LIST, default: $default);
-
-            return static::DEFAULT_ENVIRONMENTS;
-        }
 
         if ($environments === []) {
             $this->issues[] = ConfigurationIssue::fallBack(key: 'environments', reason: 'no valid environment names', default: $default);
@@ -336,34 +339,32 @@ class ConfigurationNormaliser
             return [];
         }
 
-        $items = $this->list($values[$name], key: $key, expected: 'a string', accepts: fn (string $item) => true);
-
-        if ($items === null) {
+        if (! $this->isList($values[$name])) {
             $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($values[$name]).static::NOT_A_LIST, default: 'none');
 
             return [];
         }
 
-        return $items;
+        return $this->list($values[$name], key: $key, expected: 'a string', accepts: fn (string $item) => true);
     }
 
     /**
-     * Read a list from an array or a comma-separated string, or null when the value is neither.
+     * Determine if a value is an array or a comma-separated string.
+     */
+    protected function isList(mixed $value): bool
+    {
+        return is_string($value) || is_array($value);
+    }
+
+    /**
+     * Read a list from an array or a comma-separated string, dropping the items that are refused.
      *
      * @param  Closure(string): bool  $accepts
-     * @return list<string>|null
+     * @return list<string>
      */
-    protected function list(mixed $value, string $key, string $expected, Closure $accepts): ?array
+    protected function list(mixed $value, string $key, string $expected, Closure $accepts): array
     {
-        $items = match (true) {
-            is_string($value) => explode(',', $value),
-            is_array($value) => $value,
-            default => null,
-        };
-
-        if ($items === null) {
-            return null;
-        }
+        $items = is_string($value) ? explode(',', $value) : (array) $value;
 
         $kept = [];
 
