@@ -1,6 +1,28 @@
 <?php
 
+use ClaudioDekker\Firewatch\IngestReplacer;
+use ClaudioDekker\Firewatch\NullIngest;
 use ClaudioDekker\Firewatch\Tests\Support\PackageSource;
+
+const OFF_MACHINE = [
+    'fsockopen',
+    'pfsockopen',
+    'stream_socket_client',
+    'GuzzleHttp',
+    'Illuminate\\Http\\Client',
+    'Illuminate\\Support\\Facades\\Http',
+    'Illuminate\\Mail',
+    'Illuminate\\Support\\Facades\\Mail',
+    'Illuminate\\Notifications',
+    'Illuminate\\Support\\Facades\\Notification',
+];
+
+const NIGHTWATCH_INGEST = [
+    'Laravel\\Nightwatch\\Console',
+    'Laravel\\Nightwatch\\Contracts\\Ingest',
+    'Laravel\\Nightwatch\\Ingest',
+    'Laravel\\Nightwatch\\SocketStreamFactory',
+];
 
 test('the package source never calls env()', function () {
     $offences = PackageSource::offendingTokens('', fn (PhpToken $token, array $tokens, int $index) => PackageSource::calledFunction($token, $tokens, $index) === 'env');
@@ -29,23 +51,13 @@ test('every command signature starts with firewatch:', function () {
 });
 
 arch('nothing in the package source can leave the machine')
-    ->expect('ClaudioDekker\Firewatch')
-    ->not->toUse([
-        'fsockopen',
-        'pfsockopen',
-        'stream_socket_client',
-        'GuzzleHttp',
-        'Illuminate\Http\Client',
-        'Illuminate\Support\Facades\Http',
-        'Illuminate\Mail',
-        'Illuminate\Support\Facades\Mail',
-        'Illuminate\Notifications',
-        'Illuminate\Support\Facades\Notification',
-        'Laravel\Nightwatch\Console',
-        'Laravel\Nightwatch\Contracts\Ingest',
-        'Laravel\Nightwatch\Ingest',
-        'Laravel\Nightwatch\SocketStreamFactory',
-    ]);
+    ->expect('ClaudioDekker\\Firewatch')
+    ->not->toUse([...OFF_MACHINE, ...NIGHTWATCH_INGEST])
+    ->ignoring([IngestReplacer::class, NullIngest::class]);
+
+arch('only the null ingest and its replacer reach Nightwatch\'s ingest contract')
+    ->expect([IngestReplacer::class, NullIngest::class])
+    ->not->toUse([...OFF_MACHINE, ...array_diff(NIGHTWATCH_INGEST, ['Laravel\\Nightwatch\\Contracts\\Ingest'])]);
 
 test('nothing in the package source calls a network or mail function', function () {
     $offences = PackageSource::offendingTokens('', fn (PhpToken $token, array $tokens, int $index) => preg_match(
