@@ -69,6 +69,8 @@ Give each store its own directory: two stores in one directory would share their
 
 Every record lands in one `records` table under Nightwatch's own field names, with its type-specific fields in a JSON `data` column. Twelve views read it per type (`requests`, `commands`, `job_attempts`, `scheduled_tasks`, `queries`, `exceptions`, `logs`, `cache_events`, `mail`, `notifications`, `outgoing_requests` and `queued_jobs`), with each field as its own column. A cache event's kind is `event` rather than the wire's `type`, and `started_at` is when a record started: mail, notifications and queued jobs, which Nightwatch stamps when they end, start one duration earlier.
 
+Signed-in users are not records. Each one Nightwatch sees is kept once in a `users` table with its `id`, `name`, `username`, when it was `first_seen` and when it was `last_seen`; a later sighting updates everything but `first_seen`. A user record without an id stays in `records` instead.
+
 A budget entry names an execution type (`request`, `command`, `job-attempt` or `scheduled-task`), optional matchers (`methods` and `path` for requests, `name` otherwise) and a `duration` ceiling in milliseconds, a `memory` ceiling in MB, or both:
 
 ```php
