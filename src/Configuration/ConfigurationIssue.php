@@ -10,7 +10,7 @@ namespace ClaudioDekker\Firewatch\Configuration;
 readonly class ConfigurationIssue
 {
     /**
-     * Create a new configuration issue.
+     * Create a new configuration issue instance.
      */
     public function __construct(
         public string $key,

@@ -78,7 +78,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - Config values are cacheable: scalars, class-strings and arrays of them, never objects or closures.
 - Config is read only through the configuration normaliser, never with `config('firewatch.…')` elsewhere. An invalid value falls back to its default, alone, with an issue; it never throws, never stops capture and never changes the mode.
 - The closed key set is the only configuration. Limits, ceilings, thresholds, sample floors, chunk sizes and the size backstop are named constants, never settings. `FIREWATCH_ENABLED` is the only on/off switch, and the values forced onto Nightwatch are not configurable.
-- New options default to off or the least surprising behaviour and are documented in the config file with one comment line.
+- New options default to off or the least surprising behaviour and are documented in the config file with a Laravel `|` header block (section 13).
 
 ## 10. Store
 
@@ -129,13 +129,15 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 13. Code hygiene
 
 - Delete code rather than commenting it out. Temporary disables ("re-enable after X") are not merged.
-- Every method and constructor has a Laravel-style docblock: one sentence saying what it does ("Resolve the store path, falling back to the default path when the value is refused."), then any @template/@mixin, array shape, @internal/@api tag or constraint the name can't express. A docblock never restates the parameter and return types.
+- Method docblocks are one imperative line ending in a period (`Determine if…`, `Get the…`, `Create a new … instance.`), then tags. Property and constant docblocks are a noun phrase (`The event dispatcher instance.`). Class docblocks hold only tags (`@template`, `@mixin`, `@method`, `@internal`, `@api`).
+- `@param`/`@return` carry the type. Add a description only for a constraint the name can't express.
 - Inline `//` comments are kept only for a vendor quirk, a gotcha or a cross-reference. A comment that restates the next line is deleted.
 - Comments describe the domain. Comments aimed at tools or reviewers are removed; that belongs in the commit message.
 - A magic number becomes a named constant, not a number with a comment (`protected const EXCERPT_LENGTH = 160;`). A value used once and passed straight to a framework call stays inline.
 - An array in `src/` with more than one element and at least one key puts one element per line. A validation rule list and test datasets stay on one line.
 - A blank line separates two statements when either spans several lines.
 - A guard clause stays on one line. If it doesn't fit, shorten the message rather than wrapping it.
+- Multi-line `//` comments and config `|` header blocks use Laravel's **slope**: 3 lines, each 2–4 characters shorter than the one above. Count the text after the `// ` or `| ` prefix. Reword to fit rather than padding.
 - Every `TODO` has an owner or a linked issue.
 - Every `@phpstan-ignore` names the error identifier. No baseline: fix, don't baseline.
 - The diff touches only code related to the change.

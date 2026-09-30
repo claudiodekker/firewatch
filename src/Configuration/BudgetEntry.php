@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\ExecutionType;
 readonly class BudgetEntry
 {
     /**
-     * Create a new valid budget entry.
+     * Create a new budget entry instance.
      *
      * @param  list<string>|null  $methods
      */

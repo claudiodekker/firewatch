@@ -7,8 +7,9 @@ return [
     | Firewatch Enabled
     |--------------------------------------------------------------------------
     |
-    | This value turns Firewatch off without removing it. It is the only
-    | on/off switch; everything Firewatch forces onto Nightwatch follows it.
+    | This value turns Firewatch off without removing the package. It is the
+    | only on/off switch, and every value it forces on Nightwatch follows
+    | it. When it is false, Firewatch records nothing into its store.
     |
     */
 
@@ -19,9 +20,9 @@ return [
     | Capture Environments
     |--------------------------------------------------------------------------
     |
-    | Firewatch captures only in these environments, given as a list or a
-    | comma-separated string of names. Anywhere else it steps aside and
-    | Nightwatch behaves as if Firewatch were not installed.
+    | Firewatch captures only in these environments, as a list or a comma-
+    | separated string of names. In any other environment it steps aside
+    | and Nightwatch behaves as if Firewatch had not been installed.
     |
     */
 
@@ -32,9 +33,9 @@ return [
     | Store Path
     |--------------------------------------------------------------------------
     |
-    | This is the path of the SQLite file that holds the telemetry. Give it a
-    | directory of its own, outside the public directory. A relative path
-    | resolves against the base path of the application.
+    | This is the path of the SQLite file that holds the telemetry. Give it
+    | its own directory, outside of the public directory. Relative paths
+    | resolve against the base path of the Laravel application in use.
     |
     */
 
@@ -45,9 +46,9 @@ return [
     | Busy Timeout
     |--------------------------------------------------------------------------
     |
-    | This is how many milliseconds (0 to 5000) capture waits for a busy
-    | store. A batch that can't be written in time is dropped rather than
-    | stalling the request, and 0 drops it at once.
+    | This value is how many milliseconds (0 to 5000) capture waits for a
+    | busy store. A batch that isn't written in time is dropped, rather
+    | than stalling the request. A value of 0 drops it straight away.
     |
     */
 
@@ -59,8 +60,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | Records older than the age (digits then s, m, h, d or w) are pruned,
-    | and the store keeps at most the given number of records (1 to
-    | 10000000).
+    | and the store keeps at most the given number of records, from 1 up
+    | to 10000000. Pruning runs after every successful capture write.
     |
     */
 
@@ -74,8 +75,9 @@ return [
     | Deploy Identity
     |--------------------------------------------------------------------------
     |
-    | When set, this value is written to Nightwatch as the deploy identity.
-    | Left unset, Nightwatch resolves the deploy the way it always does.
+    | When set, this value is written to Nightwatch as the deploy identity
+    | so answers can compare deploys. Left unset, Nightwatch resolves it
+    | the way it always does, from its own configuration and platform.
     |
     */
 
@@ -87,9 +89,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | These options control whether logs and request payloads are captured.
-    | Redaction is relaxed, so payloads are stored as sent. You may list
-    | payload fields and request headers to redact on top of that, as a
-    | list or a comma-separated string.
+    | Redaction is relaxed, so payloads are stored as sent. List payload
+    | fields and request headers here to redact them on top of that.
     |
     */
 
@@ -105,10 +106,9 @@ return [
     | Performance Budgets
     |--------------------------------------------------------------------------
     |
-    | A budget is a ceiling on the cost of one kind of execution: request,
-    | command, job-attempt or scheduled-task. Match requests by methods and
-    | path, and other types by name. Give a duration ceiling in milliseconds,
-    | a memory ceiling in MB, or both.
+    | A budget caps the cost of a request, command, job-attempt or scheduled
+    | task. Requests match by methods and path, other types by their name.
+    | Give it a duration ceiling in ms, a memory ceiling in MB, or both.
     |
     */
 

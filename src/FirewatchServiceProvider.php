@@ -17,8 +17,14 @@ use RuntimeException;
  */
 class FirewatchServiceProvider extends ServiceProvider
 {
+    /**
+     * The path of the package's configuration file.
+     */
     protected const CONFIG_PATH = __DIR__.'/../config/firewatch.php';
 
+    /**
+     * The configuration groups whose keys are merged one by one.
+     */
     protected const NESTED_GROUPS = ['retention', 'capture'];
 
     /**

@@ -8,7 +8,7 @@ namespace ClaudioDekker\Firewatch\Configuration;
 readonly class Configuration
 {
     /**
-     * Create a new resolved configuration.
+     * Create a new resolved configuration instance.
      *
      * @param  list<string>  $environments
      * @param  list<string>  $redactPayloadFields

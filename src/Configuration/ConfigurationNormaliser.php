@@ -11,6 +11,9 @@ use Illuminate\Support\Arr;
  */
 class ConfigurationNormaliser
 {
+    /**
+     * The accepted boolean spellings and the values they stand for.
+     */
     protected const BOOLEANS = [
         'true' => true,
         'false' => false,
@@ -22,6 +25,9 @@ class ConfigurationNormaliser
         'off' => false,
     ];
 
+    /**
+     * The seconds in each duration unit.
+     */
     protected const DURATION_UNIT_SECONDS = [
         's' => 1,
         'm' => 60,
@@ -30,45 +36,95 @@ class ConfigurationNormaliser
         'w' => 604800,
     ];
 
+    /**
+     * The busy timeout used when none is valid.
+     */
     protected const DEFAULT_BUSY_TIMEOUT_MILLISECONDS = 300;
 
+    /**
+     * The longest busy timeout accepted.
+     */
     protected const MAXIMUM_BUSY_TIMEOUT_MILLISECONDS = 5000;
 
+    /**
+     * The retention age used when none is valid.
+     */
     protected const DEFAULT_RETENTION_AGE = '7d';
 
+    /**
+     * The record retention used when none is valid.
+     */
     protected const DEFAULT_RETENTION_RECORDS = 100000;
 
+    /**
+     * The largest record retention accepted.
+     */
     protected const MAXIMUM_RETENTION_RECORDS = 10000000;
 
+    /**
+     * The environments used when no valid name remains.
+     */
     protected const DEFAULT_ENVIRONMENTS = ['local', 'testing'];
 
+    /**
+     * The description of a valid environment name in an issue's reason.
+     */
     protected const ENVIRONMENT_NAME_DESCRIPTION = 'an environment name (letters, digits, _ . -)';
 
+    /**
+     * The reason suffix for a list value that is neither an array nor a string.
+     */
     protected const NOT_A_LIST = ' is not a list (an array or a comma-separated string)';
 
+    /**
+     * The characters of a string value quoted in an issue's reason.
+     */
     protected const DESCRIBED_VALUE_CHARACTERS = 60;
 
+    /**
+     * The longest store path accepted, in bytes.
+     */
     protected const MAXIMUM_PATH_BYTES = 4096;
 
+    /**
+     * The length a deploy identity is cut at, in bytes.
+     */
     protected const MAXIMUM_DEPLOY_BYTES = 255;
 
+    /**
+     * The HTTP verbs a request budget may match.
+     */
     protected const HTTP_VERBS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 
+    /**
+     * The matchers a request budget entry may hold.
+     */
     protected const REQUEST_MATCHERS = ['methods', 'path'];
 
+    /**
+     * The matchers a command, job attempt or scheduled task budget entry may hold.
+     */
     protected const NAME_MATCHERS = ['name'];
 
+    /**
+     * The largest duration ceiling accepted.
+     */
     protected const MAXIMUM_DURATION_MILLISECONDS = 3600000;
 
+    /**
+     * The largest memory ceiling accepted.
+     */
     protected const MAXIMUM_MEMORY_MEGABYTES = 65536;
 
     /**
+     * The issues found while resolving the configuration.
+     *
      * @var list<ConfigurationIssue>
      */
     protected array $issues = [];
 
     /**
-     * Create a new configuration normaliser.
+     * Create a new configuration normaliser instance.
      */
     public function __construct(
         protected string $basePath,
