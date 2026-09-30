@@ -1,26 +1,6 @@
 <?php
 
-use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use Illuminate\Support\Facades\Exceptions;
-
-function registerFirewatch(): Configuration
-{
-    app()->register(FirewatchServiceProvider::class, force: true);
-
-    return app(Configuration::class);
-}
-
-function setEnvironmentVariable(string $name, string $value): void
-{
-    $_SERVER[$name] = $_ENV[$name] = $value;
-    putenv("{$name}={$value}");
-
-    test()->beforeApplicationDestroyed(function () use ($name) {
-        unset($_SERVER[$name], $_ENV[$name]);
-        putenv($name);
-    });
-}
 
 it('reads each key from its environment variable', function (string $variable, string $value, string $property, mixed $expected) {
     setEnvironmentVariable($variable, $value);
@@ -114,7 +94,7 @@ it('publishes the config file with the firewatch-config tag', function () {
 
 it('reports every configuration issue once through the exception handler in a console process', function () {
     config()->set('firewatch.busy_timeout', 'soon');
-    config()->set('firewatch.environments', 'local,prod*');
+    config()->set('firewatch.environments', 'testing,prod*');
 
     registerFirewatch();
 

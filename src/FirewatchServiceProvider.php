@@ -5,12 +5,16 @@ namespace ClaudioDekker\Firewatch;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationIssue;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
+use ClaudioDekker\Firewatch\Console\Commands\ClearCommand;
+use ClaudioDekker\Firewatch\Console\Commands\DoctorCommand;
+use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 use RuntimeException;
+use SQLite3;
 
 /**
  * @internal
@@ -28,11 +32,33 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const NESTED_GROUPS = ['retention', 'capture'];
 
     /**
+     * The Nightwatch token that no hosted service accepts.
+     */
+    protected const DEAD_TOKEN = 'firewatch';
+
+    /**
+     * The loopback address that no ingest agent listens on.
+     */
+    protected const DEAD_INGEST_URI = '127.0.0.1:1';
+
+    /**
+     * The notice a console process reports when Firewatch steps aside.
+     */
+    protected const STEPPED_ASIDE_NOTICE = 'Firewatch is installed but stepped aside in environment `%s`; install with `composer install --no-dev` in production.';
+
+    /**
+     * The mode this process resolved to.
+     */
+    protected Mode $mode;
+
+    /**
      * Register the package services.
      */
     public function register(): void
     {
         $this->registerConfiguration();
+        $this->resolveMode();
+        $this->configureNightwatch();
         $this->registerNightwatch();
     }
 
@@ -41,11 +67,25 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+
+        if ($this->mode === Mode::STEPPED_ASIDE) {
+            report(new RuntimeException(sprintf(static::STEPPED_ASIDE_NOTICE, $this->app->environment())));
+
+            return;
+        }
+
         $this->reportConfigurationIssues();
 
-        if ($this->app->runningInConsole()) {
-            $this->publishes([static::CONFIG_PATH => $this->app->configPath('firewatch.php')], 'firewatch-config');
-        }
+        $this->publishes([static::CONFIG_PATH => $this->app->configPath('firewatch.php')], 'firewatch-config');
+
+        $this->commands([
+            ServerCommand::class,
+            DoctorCommand::class,
+            ClearCommand::class,
+        ]);
     }
 
     /**
@@ -65,6 +105,40 @@ class FirewatchServiceProvider extends ServiceProvider
         $configuration = $normaliser->resolve(is_array($raw) ? $raw : []);
 
         $this->app->instance(Configuration::class, $configuration);
+    }
+
+    /**
+     * Resolve the mode once for this process.
+     */
+    protected function resolveMode(): void
+    {
+        $argv = $_SERVER['argv'] ?? [];
+        $resolver = new ModeResolver;
+
+        $this->mode = $resolver->resolve(
+            $this->app->make(Configuration::class),
+            environment: $this->app->environment(),
+            argv: is_array($argv) ? array_values($argv) : [],
+            sqliteVersion: class_exists(SQLite3::class) ? SQLite3::version()['versionString'] : null,
+        );
+    }
+
+    /**
+     * Write the mode's Nightwatch keys before Nightwatch's provider snapshots them.
+     */
+    protected function configureNightwatch(): void
+    {
+        $config = $this->app->make('config');
+
+        match ($this->mode) {
+            Mode::ACTIVE => $config->set([
+                'nightwatch.enabled' => true,
+                'nightwatch.token' => static::DEAD_TOKEN,
+                'nightwatch.ingest.uri' => static::DEAD_INGEST_URI,
+            ]),
+            Mode::OFF => $config->set('nightwatch.enabled', false),
+            Mode::STEPPED_ASIDE => null,
+        };
     }
 
     /**
@@ -103,13 +177,13 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Report the configuration issues once in a console process.
+     * Report the configuration issues once.
      */
     protected function reportConfigurationIssues(): void
     {
         $issues = $this->app->make(Configuration::class)->issues;
 
-        if ($issues === [] || ! $this->app->runningInConsole()) {
+        if ($issues === []) {
             return;
         }
 
