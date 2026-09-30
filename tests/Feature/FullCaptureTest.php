@@ -14,6 +14,12 @@ use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\Http\Middleware\Sample;
 use Laravel\Nightwatch\Records\CacheEvent;
+use Laravel\Nightwatch\Records\Mail as MailRecord;
+use Laravel\Nightwatch\Records\Notification as NotificationRecord;
+use Laravel\Nightwatch\Records\OutgoingRequest;
+use Laravel\Nightwatch\Records\Query;
+use Laravel\Nightwatch\Records\QueuedJob;
+use Workbench\App\Notifications\OrderDelayed;
 use Workbench\App\Notifications\OrderShipped;
 
 /**
@@ -45,6 +51,18 @@ function configureNightwatchWith(array $variables): void
     test()->refreshApplication();
 }
 
+function requestTo(string $uri, ?Closure $route = null): void
+{
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+
+    if ($route !== null) {
+        $route();
+    }
+
+    test()->get($uri);
+}
+
 it('captures every execution Nightwatch\'s sample rates would drop', function (Closure $traffic, string $view) {
     configureNightwatchWith([
         'NIGHTWATCH_REQUEST_SAMPLE_RATE' => '0',
@@ -58,23 +76,26 @@ it('captures every execution Nightwatch\'s sample rates would drop', function (C
 
     expect(capturedRows("SELECT count(*) AS captured FROM {$view}"))->toBe([['captured' => 1]]);
 })->with([
-    'a request' => ['traffic' => function () {
-        forceRequests();
-        config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-
-        test()->get('/');
-    }, 'view' => 'requests'],
+    'a request' => ['traffic' => fn () => requestTo('/'), 'view' => 'requests'],
     'a command' => ['traffic' => fn () => runArtisan(['command' => 'env']), 'view' => 'commands'],
     'a scheduled task' => ['traffic' => function () {
         app(Schedule::class)->call(fn () => null)->everyMinute();
 
         runArtisan(['command' => 'schedule:run']);
     }, 'view' => 'scheduled_tasks'],
+    'an exception in an unsampled execution' => ['traffic' => function () {
+        Nightwatch::dontSample();
+
+        Nightwatch::report(new RuntimeException('The payment failed.'));
+    }, 'view' => 'exceptions'],
 ]);
 
 it('captures the events Nightwatch\'s filtering would ignore', function (Closure $traffic, string $view) {
     configureNightwatchWith([
         'NIGHTWATCH_IGNORE_CACHE_EVENTS' => 'true',
+        'NIGHTWATCH_IGNORE_MAIL' => 'true',
+        'NIGHTWATCH_IGNORE_NOTIFICATIONS' => 'true',
+        'NIGHTWATCH_IGNORE_OUTGOING_REQUESTS' => 'true',
         'NIGHTWATCH_IGNORE_QUERIES' => 'true',
         'NIGHTWATCH_LOG_LEVEL' => 'emergency',
     ]);
@@ -85,80 +106,98 @@ it('captures the events Nightwatch\'s filtering would ignore', function (Closure
     expect(capturedRows("SELECT count(*) AS captured FROM {$view}"))->toBe([['captured' => 1]]);
 })->with([
     'a cache event' => ['traffic' => fn () => Cache::get('orders'), 'view' => 'cache_events'],
+    'a mail' => ['traffic' => fn () => Mail::raw('Your order shipped.', fn ($message) => $message->to('taylor@example.com')), 'view' => 'mail'],
+    'a notification' => ['traffic' => fn () => (new AnonymousNotifiable)->notifyNow(new OrderShipped), 'view' => 'notifications'],
+    'an outgoing request' => ['traffic' => function () {
+        Http::fake(['https://example.com/ping' => Http::response('pong')]);
+
+        Http::get('https://example.com/ping');
+    }, 'view' => 'outgoing_requests'],
     'a query' => ['traffic' => fn () => DB::select('select 1'), 'view' => 'queries'],
     'a debug log' => ['traffic' => fn () => Log::channel('nightwatch')->debug('The payment is slow.'), 'view' => 'logs'],
 ]);
 
-function requestTo(string $uri, Closure $route): void
-{
-    forceRequests();
-    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-    $route();
-
-    test()->get($uri);
-}
-
-it('drops what an in-code opt-out targets', function (Closure $traffic, string $dropped) {
-    Cache::get('warm-up');
-    Nightwatch::digest();
-
+it('drops what an in-code opt-out targets and keeps the rest', function (Closure $traffic, string $query, array $kept) {
     $traffic();
     Nightwatch::digest();
 
-    expect(capturedRows("SELECT count(*) AS dropped FROM {$dropped}"))->toBe([['dropped' => 0]]);
+    expect(capturedRows($query))->toBe($kept);
 })->with([
-    'ignore' => ['traffic' => fn () => Nightwatch::ignore(fn () => Cache::get('orders')), 'dropped' => "cache_events WHERE key = 'orders'"],
+    'ignore' => ['traffic' => function () {
+        Nightwatch::ignore(fn () => Cache::get('orders'));
+        Cache::get('invoices');
+    }, 'query' => 'SELECT key FROM cache_events', 'kept' => [['key' => 'invoices']]],
     'pause' => ['traffic' => function () {
         Nightwatch::pause();
         Cache::get('orders');
         Nightwatch::resume();
-    }, 'dropped' => "cache_events WHERE key = 'orders'"],
-    'dontSample' => ['traffic' => fn () => requestTo('/quiet', fn () => Route::get('/quiet', fn () => Nightwatch::dontSample())), 'dropped' => 'requests'],
-    'Sample::never on a route' => ['traffic' => fn () => requestTo('/never', fn () => Route::get('/never', fn () => 'ok')->middleware(Sample::never())), 'dropped' => 'requests'],
-    'a Sample rate of zero on a route' => ['traffic' => fn () => requestTo('/rare', fn () => Route::get('/rare', fn () => 'ok')->middleware(Sample::rate(0.0))), 'dropped' => 'requests'],
+        Cache::get('invoices');
+    }, 'query' => 'SELECT key FROM cache_events', 'kept' => [['key' => 'invoices']]],
+    'dontSample' => ['traffic' => function () {
+        requestTo('/quiet', fn () => Route::get('/quiet', fn () => Nightwatch::dontSample()));
+        requestTo('/');
+    }, 'query' => 'SELECT route_path FROM requests', 'kept' => [['route_path' => '/']]],
+    'Sample::never on a route' => ['traffic' => function () {
+        requestTo('/never', fn () => Route::get('/never', fn () => 'ok')->middleware(Sample::never()));
+        requestTo('/');
+    }, 'query' => 'SELECT route_path FROM requests', 'kept' => [['route_path' => '/']]],
+    'a Sample rate of zero on a route' => ['traffic' => function () {
+        requestTo('/rare', fn () => Route::get('/rare', fn () => 'ok')->middleware(Sample::rate(0.0)));
+        requestTo('/');
+    }, 'query' => 'SELECT route_path FROM requests', 'kept' => [['route_path' => '/']]],
     'Sample::never on a scheduled task' => ['traffic' => function () {
-        app(Schedule::class)->call(fn () => null)->everyMinute()->tap(TaskSample::never());
+        app(Schedule::class)->call(fn () => null)->name('prune-orders')->everyMinute()->tap(TaskSample::never());
+        app(Schedule::class)->call(fn () => null)->name('send-invoices')->everyMinute();
 
         runArtisan(['command' => 'schedule:run']);
-    }, 'dropped' => 'scheduled_tasks'],
+    }, 'query' => 'SELECT name FROM scheduled_tasks', 'kept' => [['name' => 'send-invoices']]],
     'rejectCacheEvents' => ['traffic' => function () {
         Nightwatch::rejectCacheEvents(fn (CacheEvent $event) => $event->key === 'orders');
 
         Cache::get('orders');
-    }, 'dropped' => "cache_events WHERE key = 'orders'"],
+        Cache::get('invoices');
+    }, 'query' => 'SELECT key FROM cache_events', 'kept' => [['key' => 'invoices']]],
     'rejectCacheKeys' => ['traffic' => function () {
         Nightwatch::rejectCacheKeys(['orders']);
 
         Cache::get('orders');
-    }, 'dropped' => "cache_events WHERE key = 'orders'"],
+        Cache::get('invoices');
+    }, 'query' => 'SELECT key FROM cache_events', 'kept' => [['key' => 'invoices']]],
     'rejectQueries' => ['traffic' => function () {
-        Nightwatch::rejectQueries(fn () => true);
+        Nightwatch::rejectQueries(fn (Query $query) => $query->sql === 'select 1');
 
         DB::select('select 1');
-    }, 'dropped' => 'queries'],
+        DB::select('select 2');
+    }, 'query' => "SELECT sql FROM queries WHERE sql LIKE 'select _'", 'kept' => [['sql' => 'select 2']]],
     'rejectMail' => ['traffic' => function () {
-        config()->set('mail.default', 'array');
-        Nightwatch::rejectMail(fn () => true);
+        Nightwatch::rejectMail(fn (MailRecord $mail) => $mail->subject === 'Shipped');
 
-        Mail::raw('Your order shipped.', fn ($message) => $message->to('taylor@example.com'));
-    }, 'dropped' => 'mail'],
+        Mail::raw('Your order shipped.', fn ($message) => $message->to('taylor@example.com')->subject('Shipped'));
+        Mail::raw('Your order is late.', fn ($message) => $message->to('taylor@example.com')->subject('Delayed'));
+    }, 'query' => 'SELECT subject FROM mail', 'kept' => [['subject' => 'Delayed']]],
     'rejectNotifications' => ['traffic' => function () {
-        Nightwatch::rejectNotifications(fn () => true);
+        Nightwatch::rejectNotifications(fn (NotificationRecord $notification) => $notification->class === OrderShipped::class);
 
         (new AnonymousNotifiable)->notifyNow(new OrderShipped);
-    }, 'dropped' => 'notifications'],
+        (new AnonymousNotifiable)->notifyNow(new OrderDelayed);
+    }, 'query' => 'SELECT class FROM notifications', 'kept' => [['class' => OrderDelayed::class]]],
     'rejectOutgoingRequests' => ['traffic' => function () {
-        Http::fake(['https://example.com/ping' => Http::response('pong')]);
-        Nightwatch::rejectOutgoingRequests(fn () => true);
+        Http::fake([
+            'https://example.com/ping' => Http::response('pong'),
+            'https://example.com/status' => Http::response('up'),
+        ]);
+        Nightwatch::rejectOutgoingRequests(fn (OutgoingRequest $request) => $request->url === 'https://example.com/ping');
 
         Http::get('https://example.com/ping');
-    }, 'dropped' => 'outgoing_requests'],
+        Http::get('https://example.com/status');
+    }, 'query' => 'SELECT url FROM outgoing_requests', 'kept' => [['url' => 'https://example.com/status']]],
     'rejectQueuedJobs' => ['traffic' => function () {
         config()->set('queue.default', 'database');
-        Nightwatch::rejectQueuedJobs(fn () => true);
+        Nightwatch::rejectQueuedJobs(fn (QueuedJob $job) => $job->queue === 'reports');
 
-        dispatch(fn () => null);
-    }, 'dropped' => 'queued_jobs'],
+        dispatch(fn () => null)->onQueue('reports');
+        dispatch(fn () => null)->onQueue('orders');
+    }, 'query' => 'SELECT queue FROM queued_jobs', 'kept' => [['queue' => 'orders']]],
 ]);
 
 it('captures the source lines of an exception\'s frames even when Nightwatch is configured not to', function () {
