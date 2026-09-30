@@ -31,7 +31,7 @@ function serverReplies(Process $process): array
 {
     $lines = array_filter(explode("\n", $process->getOutput()), fn (string $line) => $line !== '');
 
-    expect($lines)->each->toBeJson();
+    expect(array_values(array_filter($lines, fn (string $line) => ! json_validate($line))))->toBe([]);
 
     $replies = array_map(fn (string $line) => json_decode($line, associative: true, flags: JSON_THROW_ON_ERROR), $lines);
 
