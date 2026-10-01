@@ -223,7 +223,7 @@ describe('windows', function () {
     it('refuses a time the grammar does not read', function (string $argument, mixed $value, string $shown) {
         $response = FirewatchServer::tool(Overview::class, [$argument => $value]);
 
-        $response->assertHasErrors(["error: unreadable_time\n`{$argument}` value {$shown} is not a time this tool reads.\nargument: {$argument}\naccepted: epoch seconds up to 4102444800, ISO 8601 with Z or an offset, a local date or date-time (YYYY-MM-DD HH:MM:SS), a relative time such as -1d or -90 minutes (units s, m, h, d, w), or now\nexample: overview({$argument}: \"-1d\")"]);
+        $response->assertHasErrors([__('firewatch::messages.unreadable_time', ['argument' => $argument, 'value' => $shown, 'tool' => 'overview', 'maximum' => 4102444800])]);
     })->with([
         'a word' => ['since', 'yesterday', '`yesterday`'],
         'milliseconds' => ['until', '1790776800000', '`1790776800000`'],
@@ -233,7 +233,7 @@ describe('windows', function () {
     it('refuses a window that ends before it starts or is no longer than a point', function (string $since, string $until) {
         $response = FirewatchServer::tool(Overview::class, ['since' => $since, 'until' => $until]);
 
-        $response->assertHasErrors(["error: empty_window\n`since` ({$since}.000000) is not before `until` ({$until}.000000).\nargument: since\naccepted: a `since` earlier than `until`\nexample: overview(since: \"-1d\", until: \"now\")"]);
+        $response->assertHasErrors([__('firewatch::messages.empty_window', ['since' => "{$since}.000000", 'until' => "{$until}.000000", 'tool' => 'overview'])]);
     })->with([
         'before' => ['2026-09-30 15:00:00', '2026-09-30 14:00:00'],
         'equal' => ['2026-09-30 15:00:00', '2026-09-30 15:00:00'],

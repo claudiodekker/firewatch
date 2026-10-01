@@ -21,8 +21,8 @@ class TimeGrammar
      * @var array<string, int>
      */
     protected const UNITS = [
-        's' => 1, 'second' => 1, 'seconds' => 1,
-        'm' => 60, 'minute' => 60, 'minutes' => 60,
+        's' => 1, 'sec' => 1, 'second' => 1, 'seconds' => 1,
+        'm' => 60, 'min' => 60, 'minute' => 60, 'minutes' => 60,
         'h' => 3600, 'hour' => 3600, 'hours' => 3600,
         'd' => 86400, 'day' => 86400, 'days' => 86400,
         'w' => 604800, 'week' => 604800, 'weeks' => 604800,
@@ -80,11 +80,13 @@ class TimeGrammar
     {
         $seconds = self::UNITS[strtolower($match[2])] ?? null;
 
-        if ($seconds === null || (int) $match[1] === 0) {
+        if ($seconds === null || ltrim($match[1], '0') === '') {
             return null;
         }
 
-        return self::seconds($now) - (int) $match[1] * $seconds;
+        $instant = self::seconds($now) - (float) $match[1] * $seconds;
+
+        return $instant < 0 ? null : $instant;
     }
 
     /**
