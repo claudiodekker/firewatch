@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
-function liveConnection(Writer $writer): SQLite3
+function identityConnection(Writer $writer): SQLite3
 {
     return $writer->transaction(fn (SQLite3 $connection) => $connection);
 }
@@ -53,7 +53,7 @@ function identityCacheKeys(): array
 /**
  * Write one batch that holds a single cache event, through the application's own ingest.
  */
-function writeBatch(string $key): void
+function identityWriteBatch(string $key): void
 {
     Cache::get($key);
     Nightwatch::digest();
@@ -88,11 +88,11 @@ function replaceStore(string $key): void
 
 it('recreates the store lazily when it is deleted under a live writer', function () {
     $writer = identityWriter();
-    writeBatch('before');
-    $connection = liveConnection($writer);
+    identityWriteBatch('before');
+    $connection = identityConnection($writer);
     unlink(identityStorePath());
 
-    writeBatch('after');
+    identityWriteBatch('after');
 
     expect(identityCacheKeys())->toBe(['after'])
         ->and(fn () => $connection->querySingle('SELECT 1'))->toThrow(Error::class);
@@ -100,16 +100,16 @@ it('recreates the store lazily when it is deleted under a live writer', function
 
 it('writes to the replacement when the store is replaced under a live writer', function () {
     identityWriter();
-    writeBatch('before');
+    identityWriteBatch('before');
     replaceStore('replacement');
 
-    writeBatch('after');
+    identityWriteBatch('after');
 
     expect(identityCacheKeys())->toBe(['replacement', 'after']);
 })->group('posix');
 
 it('reads the replacement when the store is replaced under a live reader', function () {
-    writeBatch('before');
+    identityWriteBatch('before');
     $before = identityCacheKeys();
     replaceStore('replacement');
 
@@ -121,12 +121,12 @@ it('reads the replacement when the store is replaced under a live reader', funct
 
 it('never reopens an unchanged store', function () {
     $writer = identityWriter();
-    writeBatch('first');
-    $connection = liveConnection($writer);
+    identityWriteBatch('first');
+    $connection = identityConnection($writer);
 
-    writeBatch('second');
+    identityWriteBatch('second');
 
-    expect(liveConnection($writer))->toBe($connection)
+    expect(identityConnection($writer))->toBe($connection)
         ->and(identityCacheKeys())->toBe(['first', 'second']);
 })->group('posix');
 
@@ -135,13 +135,13 @@ it('abandons an inherited connection without closing it when the pid changes', f
     $writer = identityWriter(function () use (&$pid) {
         return $pid;
     });
-    writeBatch('inherited');
-    $inherited = liveConnection($writer);
+    identityWriteBatch('inherited');
+    $inherited = identityConnection($writer);
 
     $pid++;
-    writeBatch('forked');
+    identityWriteBatch('forked');
 
-    expect(liveConnection($writer))->not->toBe($inherited)
+    expect(identityConnection($writer))->not->toBe($inherited)
         ->and($inherited->querySingle('SELECT 1'))->toBe(1)
         ->and(identityCacheKeys())->toBe(['inherited', 'forked']);
 })->group('posix');

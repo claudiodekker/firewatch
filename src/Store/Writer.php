@@ -68,7 +68,7 @@ class Writer
     protected ?string $connectionIdentity = null;
 
     /**
-     * The connections inherited across a fork, held so their handles are never closed from the child.
+     * The connections inherited across a fork, held so that nothing closes them before the child exits.
      *
      * @var list<SQLite3>
      */
@@ -80,12 +80,14 @@ class Writer
     protected string $sqliteVersion;
 
     /**
-     * The identity of the store file, read for the open connection.
+     * Reads the identity of the store file.
      */
     protected FileIdentity $identity;
 
     /**
-     * The process id, read for the open connection.
+     * Reads the id of the process.
+     *
+     * @var Closure(): int
      */
     protected Closure $pid;
 
@@ -100,7 +102,7 @@ class Writer
     ) {
         $this->sqliteVersion = $sqliteVersion ?? SQLite3::version()['versionString'];
         $this->identity = $identity ?? new FileIdentity;
-        $this->pid = $pid ?? getmypid(...);
+        $this->pid = $pid ?? static fn (): int => getmypid() ?: 0;
     }
 
     /**
@@ -136,21 +138,26 @@ class Writer
      */
     protected function connection(): SQLite3
     {
-        if ($this->connection !== null && ($this->connectionPid !== ($this->pid)() || $this->connectionIdentity !== $this->identity->of($this->configuration->database))) {
+        $pid = ($this->pid)();
+        $identity = $this->identity->of($this->configuration->database);
+
+        if ($this->connection !== null && ($this->connectionPid !== $pid || $this->connectionIdentity !== $identity)) {
             $this->release($this->connection);
         }
 
         if ($this->connection === null) {
             $this->connection = $this->open($this->configuration->busyTimeoutMilliseconds);
-            $this->connectionPid = ($this->pid)();
-            $this->connectionIdentity = $this->identity->of($this->configuration->database);
+            $this->connectionPid = $pid;
+
+            // Read before the open, so a file swapped in after it is seen by the next batch; a store that did not exist yet was created by the open, and is read after it.
+            $this->connectionIdentity = $identity ?? $this->identity->of($this->configuration->database);
         }
 
         return $this->connection;
     }
 
     /**
-     * Let go of the open connection: a connection inherited across a fork is kept unused, as closing it from the child could corrupt the store, and any other is closed.
+     * Let go of the open connection: a connection inherited across a fork is held unused until the child exits, rather than closed from the child, and any other is closed.
      */
     protected function release(SQLite3 $connection): void
     {
