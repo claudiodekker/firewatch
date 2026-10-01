@@ -93,6 +93,27 @@ class FailureLog
     }
 
     /**
+     * Empty the file under its lock, keeping the file, and say whether there was one.
+     */
+    public function clear(): bool
+    {
+        $path = dirname($this->configuration->database).'/'.static::FILE;
+
+        if (! is_file($path) || ($handle = @fopen($path, 'r+')) === false) {
+            return false;
+        }
+
+        try {
+            flock($handle, LOCK_EX);
+            ftruncate($handle, 0);
+        } finally {
+            fclose($handle);
+        }
+
+        return true;
+    }
+
+    /**
      * Get the line that records a dropped batch.
      */
     protected function line(Throwable $exception, int $dropped): string
