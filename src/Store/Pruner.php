@@ -35,6 +35,11 @@ class Pruner
     protected const TRIM_TO = 0.9;
 
     /**
+     * The pages one incremental vacuum frees, and the freelist length above which an idle pass reclaims.
+     */
+    protected const RECLAIM_PAGES = 1024;
+
+    /**
      * Create a new pruner instance.
      */
     public function __construct(
@@ -82,6 +87,22 @@ class Pruner
     }
 
     /**
+     * Get the live bytes past which a pass trims the oldest records.
+     */
+    protected function backstopBytes(): int
+    {
+        return Writer::SIZE_BACKSTOP_BYTES;
+    }
+
+    /**
+     * Get the pages one incremental vacuum frees, and the freelist length above which an idle pass reclaims.
+     */
+    protected function reclaimPages(): int
+    {
+        return static::RECLAIM_PAGES;
+    }
+
+    /**
      * Claim the pass for this minute, or find that another process did.
      */
     protected function claim(float $now): bool
@@ -126,43 +147,117 @@ class Pruner
     {
         $cutoff = $now - $this->configuration->retentionAgeSeconds;
 
+        $deleted = false;
+
         foreach (['users', 'drift'] as $table) {
-            $this->writer->transaction(function (SQLite3 $connection) use ($table, $cutoff) {
+            $deleted = $this->writer->transaction(function (SQLite3 $connection) use ($table, $cutoff) {
                 /** @var SQLite3Stmt $statement */
                 $statement = $connection->prepare("DELETE FROM {$table} WHERE last_seen < :cutoff");
                 $statement->bindValue(':cutoff', $cutoff, SQLITE3_FLOAT);
                 $statement->execute();
-            });
+
+                return $connection->changes() > 0;
+            }) || $deleted;
         }
 
         $transactions = $this->passTransactions();
 
         while ($transactions > 0) {
-            $transactions--;
+            $removed = $this->chunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows(), 'age');
+            $deleted = $deleted || $removed > 0;
 
-            if ($this->chunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows(), 'age') < $this->chunkRows()) {
+            // A transaction that found nothing to delete does not count against the pass.
+            $transactions -= $removed > 0 ? 1 : 0;
+
+            if ($removed < $this->chunkRows()) {
                 break;
             }
         }
 
         $count = $this->count();
 
-        if ($count <= $this->configuration->retentionRecords) {
-            return;
+        if ($count > $this->configuration->retentionRecords) {
+            $excess = $count - (int) floor(static::TRIM_TO * $this->configuration->retentionRecords);
+
+            while ($transactions > 0 && $excess > 0) {
+                $transactions--;
+                $limit = min($this->chunkRows(), $excess);
+                $removed = $this->chunk('1 = 1', [], $limit, 'cap');
+                $excess -= $removed;
+                $deleted = $deleted || $removed > 0;
+
+                if ($removed < $limit) {
+                    break;
+                }
+            }
         }
 
-        $excess = $count - (int) floor(static::TRIM_TO * $this->configuration->retentionRecords);
+        $pages = $this->pages();
+        $target = (int) floor(static::TRIM_TO * $this->backstopBytes());
 
-        while ($transactions > 0 && $excess > 0) {
+        // Once over the backstop the trim goes on until the target, so the boundary does not creep.
+        $over = $this->backstopBytes() < $pages['live'] * $pages['size'];
+
+        while ($over && $transactions > 0) {
             $transactions--;
-            $limit = min($this->chunkRows(), $excess);
-            $removed = $this->chunk('1 = 1', [], $limit, 'cap');
-            $excess -= $removed;
 
-            if ($removed < $limit) {
+            // Freed pages land on the freelist at once, so the counts are read again after each committed chunk.
+            if ($this->chunk('1 = 1', [], $this->chunkRows(), 'size') === 0) {
+                break;
+            }
+
+            $deleted = true;
+
+            $pages = $this->pages();
+
+            if ($target >= $pages['live'] * $pages['size']) {
                 break;
             }
         }
+
+        $this->reclaim($deleted);
+    }
+
+    /**
+     * Give freed pages back to the file: a short vacuum when the pass deleted or the freelist is long, then, after a deleting pass, a passive checkpoint and an optimize, each best effort.
+     */
+    protected function reclaim(bool $deleted): void
+    {
+        if (! $deleted && $this->pages()['free'] <= $this->reclaimPages()) {
+            return;
+        }
+
+        $this->writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.$this->reclaimPages().')'));
+
+        if (! $deleted) {
+            return;
+        }
+
+        $this->writer->maintain(function (SQLite3 $connection) {
+            foreach (['PRAGMA wal_checkpoint(PASSIVE)', 'PRAGMA optimize'] as $statement) {
+                try {
+                    $connection->exec($statement);
+                } catch (Throwable) {
+                    //
+                }
+            }
+        });
+    }
+
+    /**
+     * Read the store's live and free pages and its page size in one snapshot.
+     *
+     * @return array{live: int, free: int, size: int}
+     */
+    protected function pages(): array
+    {
+        return $this->reader->snapshot(function (SQLite3 $connection) {
+            $total = $connection->querySingle('PRAGMA page_count');
+            $free = $connection->querySingle('PRAGMA freelist_count');
+            $size = $connection->querySingle('PRAGMA page_size');
+
+            return ['live' => (int) $total - (int) $free, 'free' => (int) $free, 'size' => (int) $size];
+        });
     }
 
     /**
