@@ -7,10 +7,13 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
+use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -91,24 +94,32 @@ class Overview extends Tool
         $timezone = config()->string('app.timezone');
         $window = Window::read($request, $now, $timezone, $this->name());
 
+        $types = RecordType::events();
+        $blindSpots = BlindSpots::for($types, storeLevel: true);
+        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
+
         try {
-            [$total, $records, $requests, $oldest, $newest] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->countRecords($connection, $window));
+            [[$total, $records, $requests, $oldest, $newest], $meta] = $this->reader->snapshot(fn (SQLite3 $connection) => [$this->countRecords($connection, $window), $this->readMeta($connection)]);
         } catch (StoreUnusable $unusable) {
             $empty = Emptiness::of($unusable, $this->configuration->database);
 
-            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable));
+            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable, $types, History::unknown(...$retention)), $blindSpots);
         }
+
+        $history = History::of($meta, $types, ...$retention);
 
         if ($total === 0) {
             $empty = Emptiness::storeEmpty($this->configuration->database);
 
-            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::EMPTY, records: 0));
+            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::EMPTY, $types, $history, records: 0), $blindSpots);
         }
+
+        $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
 
         if ($records === 0) {
             $empty = Emptiness::windowEmpty($total);
 
-            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::OK, oldest: $oldest, newest: $newest, records: $total));
+            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
         }
 
         return new Answer(
@@ -119,8 +130,28 @@ class Overview extends Tool
             __('firewatch::messages.overview_summary', ['records' => $records, 'requests' => $requests]),
             null,
             ['records' => $records, 'requests' => $requests],
-            new Coverage(CoverageState::OK, oldest: $oldest, newest: $newest, records: $total),
+            $coverage,
+            $blindSpots,
         );
+    }
+
+    /**
+     * Read the store's markers, which state from when its history is complete.
+     *
+     * @return array<string, string>
+     */
+    protected function readMeta(SQLite3 $connection): array
+    {
+        /** @var SQLite3Result $result */
+        $result = $connection->query('SELECT key, value FROM meta');
+
+        $meta = [];
+
+        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
+            $meta[(string) $row[0]] = (string) $row[1];
+        }
+
+        return $meta;
     }
 
     /**

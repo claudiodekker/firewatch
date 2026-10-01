@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use Closure;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Sleep;
 use SQLite3;
 use SQLite3Exception;
@@ -402,6 +403,7 @@ class Writer
                 $connection->exec($statement);
             }
 
+            $connection->exec("INSERT INTO meta (key, value) VALUES ('created_at', '".Date::now()->format('U.u')."')");
             $connection->exec('PRAGMA application_id = '.Schema::APPLICATION_ID);
             $connection->exec('PRAGMA user_version = '.Schema::VERSION);
         });
