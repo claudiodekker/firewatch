@@ -108,7 +108,23 @@ return [
 
     'format_argument' => 'markdown (default) or json: the same answer either way.',
 
-    'format_refused' => "error: invalid_argument\n`format` must be markdown or json; got :value.\nargument: format\naccepted: markdown or json\nexample: :tool(format: \"json\")",
+    'missing_argument' => "error: missing_argument\n`:argument` is required.\nargument: :argument\naccepted: :accepted\nexample: :example",
+
+    'invalid_argument' => "error: invalid_argument\n`:argument` must be :expected; got :value.\nargument: :argument\naccepted: :accepted\nexample: :example",
+
+    'unknown_argument' => "error: invalid_argument\n`:argument` is not an argument of :tool.\nargument: :argument\naccepted: :accepted\nexample: :example",
+
+    'inapplicable_argument' => "error: conflicting_arguments\n`:argument` does not apply to :tool.\nargument: :argument\naccepted: :accepted\nexample: :example",
+
+    'conflicting_arguments' => "error: conflicting_arguments\n`:argument` does not apply with `:with`.\nargument: :argument\naccepted: :accepted\nexample: :example",
+
+    'split_outside_window' => "error: split_outside_window\n`split_at` must lie strictly between `since` and `until`.\nargument: split_at\naccepted: a time after `since` and before `until`\nexample: :example",
+
+    'not_found' => "error: not_found\nNo record `:id` exists in the store; the identifier may have been pruned or cleared.\nargument: :argument\naccepted: :accepted\nexample: :example",
+
+    'bad_cursor' => "error: bad_cursor\n`cursor` does not belong to this call (tool, arguments or store changed); start again without it.\nargument: cursor\naccepted: the `next` cursor of the previous answer to the same call\nexample: :tool(cursor: \"<cursor from next>\")",
+
+    'internal' => "error: internal\nThe tool failed unexpectedly. Run the doctor command.",
 
     'unreadable_time' => "error: unreadable_time\n`:argument` value :value is not a time this tool reads.\nargument: :argument\naccepted: epoch seconds up to :maximum, ISO 8601 with Z or an offset, a local date or date-time (YYYY-MM-DD HH:MM:SS), a relative time such as -1d or -90 minutes (units s, m, h, d, w), or now\nexample: :tool(:argument: \"-1d\")",
 
