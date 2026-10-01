@@ -29,6 +29,13 @@ class Answer
     public readonly string $summary;
 
     /**
+     * The result and the truncated entries once the cells and the budget are bound, found when first asked for.
+     *
+     * @var array{array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}|null
+     */
+    protected ?array $bounded = null;
+
+    /**
      * Create a new answer instance.
      *
      * @param  float  $now  the store clock: Unix seconds with microseconds
@@ -77,6 +84,38 @@ class Answer
      */
     public function toArray(): array
     {
+        [$result, $truncated] = $this->bounded();
+
+        return $this->envelope($result, $truncated);
+    }
+
+    /**
+     * Get the result and the truncated entries with every cell cut to its cap and the answer cut to its budget.
+     *
+     * @return array{array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
+     */
+    protected function bounded(): array
+    {
+        if ($this->bounded === null) {
+            [$result, $truncated] = Bounds::capCells($this->result, $this->truncated);
+
+            [$fitted, $truncated] = Bounds::fitAnswer($result, $truncated, fn (array $result, array $truncated) => mb_strlen(json_encode($this->envelope($result, $truncated), RecordMapper::JSON_FLAGS)));
+
+            $this->bounded = [$fitted, Bounds::recountCaps($this->result, $fitted, $truncated)];
+        }
+
+        return $this->bounded;
+    }
+
+    /**
+     * Get the envelope for a result and truncated entries, every key in its fixed order.
+     *
+     * @param  array<string, mixed>  $result
+     * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
+     * @return array<string, mixed>
+     */
+    protected function envelope(array $result, array $truncated): array
+    {
         return [
             'tool' => $this->tool,
             'now' => $this->now,
@@ -87,11 +126,11 @@ class Answer
                 'population' => $this->empty->population,
                 'message' => $this->empty->message,
             ],
-            'result' => $this->result === [] ? new stdClass : $this->result,
+            'result' => $result === [] ? new stdClass : $result,
             'coverage' => $this->coverage->toArray(),
             'blind_spots' => $this->blindSpots,
             'notes' => $this->notes,
-            'truncated' => $this->truncated,
+            'truncated' => $truncated,
             'next' => $this->next,
         ];
     }
@@ -101,6 +140,8 @@ class Answer
      */
     public function toMarkdown(): string
     {
+        [$result, $truncated] = $this->bounded();
+
         $lines = [
             "## {$this->tool}",
             $this->summary,
@@ -112,12 +153,16 @@ class Answer
             $lines[] = $this->empty->message;
         }
 
-        array_push($lines, ...$this->resultLines());
+        array_push($lines, ...$this->resultLines($result));
 
         $lines[] = $this->coverage->line($this->timezone);
 
-        foreach ($this->truncated as $entry) {
-            $lines[] = __($entry['matched'] === null ? 'firewatch::messages.truncated_unknown' : 'firewatch::messages.truncated', $entry);
+        foreach ($truncated as $entry) {
+            $lines[] = __(match (true) {
+                $entry['reason'] === 'cap' => 'firewatch::messages.truncated_cap',
+                $entry['matched'] === null => 'firewatch::messages.truncated_unknown',
+                default => 'firewatch::messages.truncated',
+            }, $entry);
         }
 
         foreach ($this->notes as $note) {
@@ -142,13 +187,14 @@ class Answer
     /**
      * Get the result sections: a table for a list of same-shaped rows, a labelled line for anything else.
      *
+     * @param  array<string, mixed>  $result
      * @return list<string>
      */
-    protected function resultLines(): array
+    protected function resultLines(array $result): array
     {
         $lines = [];
 
-        foreach ($this->result as $label => $value) {
+        foreach ($result as $label => $value) {
             if ($this->isTable($value)) {
                 array_push($lines, '', "### {$label}", '', Markdown::table($value), '');
 
