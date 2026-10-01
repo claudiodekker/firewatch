@@ -51,8 +51,9 @@ class RecordMapper
      * Map a wire record to a stored record or a user directory entry, counting how its shape differs from the contract table.
      *
      * @param  array<mixed>  $record
+     * @param  list<mixed>|null  $bindings  the bindings paired to a query record
      */
-    public function map(array $record, Drift $drift): MappedRecord
+    public function map(array $record, Drift $drift, ?array $bindings = null): MappedRecord
     {
         try {
             $wire = $this->normalise($record);
@@ -84,18 +85,23 @@ class RecordMapper
             return new MappedRecord(user: $user);
         }
 
-        return new MappedRecord(record: $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null));
+        return new MappedRecord(record: $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings));
     }
 
     /**
      * Map the wire fields of a record to the columns of a stored record.
      *
      * @param  array<mixed>  $wire
+     * @param  list<mixed>|null  $bindings
      * @return array<string, mixed>
      */
-    protected function columns(?RecordType $type, array $wire, mixed $timestamp): array
+    protected function columns(?RecordType $type, array $wire, mixed $timestamp, ?array $bindings): array
     {
         [$columns, $data, $jsonFields] = $this->split($wire, $type);
+
+        if ($type === RecordType::QUERY) {
+            $data['bindings'] = $bindings;
+        }
 
         // The round trip can turn a float into an integer, so the instant comes from the original array.
         $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, duration: $columns['duration']);

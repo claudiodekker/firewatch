@@ -276,6 +276,19 @@ enum RecordType: string
     }
 
     /**
+     * Get the fields Firewatch adds to the type's data, which are never on the wire.
+     *
+     * @return list<string>
+     */
+    public function addedFields(): array
+    {
+        return match ($this) {
+            self::QUERY => ['bindings'],
+            default => [],
+        };
+    }
+
+    /**
      * Get the wire fields of the type that carry a JSON string, decoded before they are stored.
      *
      * @return list<string>
