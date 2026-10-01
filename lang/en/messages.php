@@ -104,6 +104,14 @@ return [
 
     'truncated' => 'Truncated: :section shows :shown of :matched (:reason). :how',
 
+    'truncated_cap' => 'Truncated: :section had cells cut at 2,000 characters, :shown in all (:reason). :how',
+
+    'cap_how' => 'Cells are cut at 2,000 characters; read the rest of a value with the query tool: substr(column, 2001, 2000).',
+
+    'size_how' => 'The answer is over its budget of 24,000 characters: narrow the call (a shorter window, a lower limit or a filter) to see the rest.',
+
+    'cell_truncated' => '... [truncated, :count characters]',
+
     'truncated_unknown' => 'Truncated: :section shows :shown of more (:reason). :how',
 
     'blind_spots' => [
