@@ -227,27 +227,13 @@ class Pruner
             return;
         }
 
-        $this->writer->maintain(function (SQLite3 $connection) use ($deleted) {
-            $connection->exec('BEGIN IMMEDIATE');
+        $this->writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.$this->reclaimPages().')'));
 
-            try {
-                $connection->exec('PRAGMA incremental_vacuum('.$this->reclaimPages().')');
-                $connection->exec('COMMIT');
-            } catch (Throwable $exception) {
-                // A connection kept across calls must not be left inside the open transaction.
-                try {
-                    $connection->exec('ROLLBACK');
-                } catch (Throwable) {
-                    //
-                }
+        if (! $deleted) {
+            return;
+        }
 
-                throw $exception;
-            }
-
-            if (! $deleted) {
-                return;
-            }
-
+        $this->writer->maintain(function (SQLite3 $connection) {
             foreach (['PRAGMA wal_checkpoint(PASSIVE)', 'PRAGMA optimize'] as $statement) {
                 try {
                     $connection->exec($statement);
