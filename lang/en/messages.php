@@ -110,6 +110,14 @@ return [
 
     'format_refused' => "error: invalid_argument\n`format` must be markdown or json; got :value.\nargument: format\naccepted: markdown or json\nexample: :tool(format: \"json\")",
 
+    'unreadable_time' => "error: unreadable_time\n`:argument` value :value is not a time this tool reads.\nargument: :argument\naccepted: epoch seconds up to :maximum, ISO 8601 with Z or an offset, a local date or date-time (YYYY-MM-DD HH:MM:SS), a relative time such as -1d or -90 minutes (units s, m, h, d, w), or now\nexample: :tool(:argument: \"-1d\")",
+
+    'empty_window' => "error: empty_window\n`since` (:since) is not before `until` (:until).\nargument: since\naccepted: a `since` earlier than `until`\nexample: :tool(since: \"-1d\", until: \"now\")",
+
+    'since_argument' => 'Start of the window, included: epoch seconds, ISO 8601, a local date or date-time, a relative time such as -1d, or now. Absent: unbounded.',
+
+    'until_argument' => 'End of the window, excluded: the same forms as since. Absent: unbounded.',
+
     'cell_null' => 'n/a',
 
     'cell_yes' => 'yes',

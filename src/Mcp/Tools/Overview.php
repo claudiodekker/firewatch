@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
+use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
@@ -12,7 +13,8 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
-use Illuminate\Support\Carbon;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -36,7 +38,9 @@ use SQLite3Stmt;
 #[IsOpenWorld(false)]
 class Overview extends Tool
 {
-    use AnswersInEnvelope;
+    use AnswersInEnvelope {
+        schema as formatSchema;
+    }
 
     /**
      * Create a new tool instance.
@@ -57,34 +61,54 @@ class Overview extends Tool
     }
 
     /**
+     * Get the arguments of the tool: the window and the format.
+     *
+     * @return array<string, mixed>
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
+            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
+            ...$this->formatSchema($schema),
+        ];
+    }
+
+    /**
      * Answer with how many records the store holds, and how many of them are requests, read in one snapshot.
      */
     public function handle(Request $request): Response|ResponseFactory
     {
-        return $this->answer($request, fn () => $this->read(Carbon::now()));
+        return $this->answer($request, fn () => $this->read($request, Date::now()->toImmutable()));
     }
 
     /**
      * Read the store and put what it holds in the envelope.
      */
-    protected function read(Carbon $now): Answer
+    protected function read(Request $request, CarbonImmutable $now): Answer
     {
         $epoch = (float) $now->format('U.u');
         $timezone = config()->string('app.timezone');
-        $window = Window::between(null, null, $timezone);
+        $window = Window::read($request, $now, $timezone, $this->name());
 
         try {
-            [$records, $requests, $oldest, $newest] = $this->reader->snapshot($this->countRecords(...));
+            [$total, $records, $requests, $oldest, $newest] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->countRecords($connection, $window));
         } catch (StoreUnusable $unusable) {
             $empty = Emptiness::of($unusable, $this->configuration->database);
 
             return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable));
         }
 
-        if ($records === 0) {
+        if ($total === 0) {
             $empty = Emptiness::storeEmpty($this->configuration->database);
 
             return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::EMPTY, records: 0));
+        }
+
+        if ($records === 0) {
+            $empty = Emptiness::windowEmpty($total);
+
+            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::OK, oldest: $oldest, newest: $newest, records: $total));
         }
 
         return new Answer(
@@ -95,26 +119,29 @@ class Overview extends Tool
             __('firewatch::messages.overview_summary', ['records' => $records, 'requests' => $requests]),
             null,
             ['records' => $records, 'requests' => $requests],
-            new Coverage(CoverageState::OK, oldest: $oldest, newest: $newest, records: $records),
+            new Coverage(CoverageState::OK, oldest: $oldest, newest: $newest, records: $total),
         );
     }
 
     /**
-     * Count all records and the requests among them, and find the span they cover.
+     * Count all records, those of the window and the requests among them, and find the span the records cover.
      *
-     * @return array{int, int, float|null, float|null}
+     * @return array{int, int, int, float|null, float|null}
      */
-    protected function countRecords(SQLite3 $connection): array
+    protected function countRecords(SQLite3 $connection, Window $window): array
     {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare('SELECT count(*), count(*) FILTER (WHERE type = :type), min(started_at), max(started_at) FROM records');
+        $condition = $window->condition();
 
+        /** @var SQLite3Stmt $statement */
+        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), count(*) FILTER (WHERE {$condition} AND type = :type), min(started_at), max(started_at) FROM records");
+
+        $window->bind($statement);
         $statement->bindValue(':type', ExecutionType::REQUEST->value);
 
         /** @var SQLite3Result $result */
         $result = $statement->execute();
 
-        /** @var array{int, int, float|null, float|null} */
+        /** @var array{int, int, int, float|null, float|null} */
         return $result->fetchArray(SQLITE3_NUM);
     }
 }

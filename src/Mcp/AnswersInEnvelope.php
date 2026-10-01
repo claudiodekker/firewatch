@@ -27,7 +27,7 @@ trait AnswersInEnvelope
     }
 
     /**
-     * Get the answer in the format the request asks for, or the refusal of a format that is none.
+     * Get the answer in the format the request asks for, or the refusal of an argument the grammar of the tool does not read.
      *
      * @param  callable(): Answer  $answer
      */
@@ -36,10 +36,12 @@ trait AnswersInEnvelope
         $argument = $request->get('format');
         $format = AnswerFormat::fromArgument($argument);
 
-        if ($format === null) {
-            return Response::error(__('firewatch::messages.format_refused', ['value' => json_encode($argument), 'tool' => $this->name()]));
-        }
+        try {
+            $format ??= throw Refusal::format($argument, $this->name());
 
-        return $answer()->response($format);
+            return $answer()->response($format);
+        } catch (Refusal $refusal) {
+            return Response::error($refusal->getMessage());
+        }
     }
 }
