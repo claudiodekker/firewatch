@@ -17,10 +17,10 @@ enum FileKind
      */
     protected const APPLICATION_ID_OFFSET = 68;
 
-    case Empty;
-    case NotSqlite;
-    case Foreign;
-    case Firewatch;
+    case EMPTY;
+    case NOT_SQLITE;
+    case FOREIGN;
+    case FIREWATCH;
 
     /**
      * Classify a file by the raw bytes of its header, which needs no working SQLite.
@@ -32,7 +32,7 @@ enum FileKind
         $handle = is_file($path) ? @fopen($path, 'rb') : false;
 
         if ($handle === false) {
-            return self::Empty;
+            return self::EMPTY;
         }
 
         $header = (string) fread($handle, self::APPLICATION_ID_OFFSET + 4);
@@ -40,15 +40,15 @@ enum FileKind
         fclose($handle);
 
         if ($header === '') {
-            return self::Empty;
+            return self::EMPTY;
         }
 
         if (! str_starts_with($header, self::MAGIC)) {
-            return self::NotSqlite;
+            return self::NOT_SQLITE;
         }
 
         $applicationId = substr($header, self::APPLICATION_ID_OFFSET, 4);
 
-        return $applicationId === pack('N', Schema::APPLICATION_ID) ? self::Firewatch : self::Foreign;
+        return $applicationId === pack('N', Schema::APPLICATION_ID) ? self::FIREWATCH : self::FOREIGN;
     }
 }

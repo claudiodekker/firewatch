@@ -36,7 +36,7 @@ class Reader
      */
     public function exists(): bool
     {
-        return FileKind::of($this->configuration->database) !== FileKind::Empty;
+        return FileKind::of($this->configuration->database) !== FileKind::EMPTY;
     }
 
     /**
@@ -80,12 +80,12 @@ class Reader
     protected function check(): void
     {
         if (version_compare($this->sqliteVersion, ModeResolver::MINIMUM_SQLITE_VERSION, '<')) {
-            throw new StoreUnusable(StoreState::Unavailable, $this->sqliteVersion);
+            throw new StoreUnusable(StoreState::UNAVAILABLE, $this->sqliteVersion);
         }
 
         match (FileKind::of($this->configuration->database)) {
-            FileKind::Empty => throw new StoreUnusable(StoreState::Absent),
-            FileKind::NotSqlite => throw new StoreUnusable(StoreState::Foreign),
+            FileKind::EMPTY => throw new StoreUnusable(StoreState::ABSENT),
+            FileKind::NOT_SQLITE => throw new StoreUnusable(StoreState::FOREIGN),
             default => null,
         };
     }
@@ -102,9 +102,9 @@ class Reader
         }
 
         throw match (true) {
-            $stamp->isFirewatch() => new StoreUnusable(StoreState::SchemaMismatch, $stamp->userVersion),
-            $stamp->isFresh() => new StoreUnusable(StoreState::Absent),
-            default => new StoreUnusable(StoreState::Foreign),
+            $stamp->isFirewatch() => new StoreUnusable(StoreState::SCHEMA_MISMATCH, $stamp->userVersion),
+            $stamp->isFresh() => new StoreUnusable(StoreState::ABSENT),
+            default => new StoreUnusable(StoreState::FOREIGN),
         };
     }
 
@@ -114,9 +114,9 @@ class Reader
     protected function unusable(SQLite3Exception $exception): ?StoreUnusable
     {
         return match (FailureKind::of($exception)) {
-            FailureKind::BUSY => new StoreUnusable(StoreState::Busy),
-            FailureKind::FOREIGN => new StoreUnusable(StoreState::Foreign),
-            FailureKind::CORRUPT => new StoreUnusable(FileKind::of($this->configuration->database) === FileKind::Firewatch ? StoreState::Corrupt : StoreState::Foreign),
+            FailureKind::BUSY => new StoreUnusable(StoreState::BUSY),
+            FailureKind::FOREIGN => new StoreUnusable(StoreState::FOREIGN),
+            FailureKind::CORRUPT => new StoreUnusable(FileKind::of($this->configuration->database) === FileKind::FIREWATCH ? StoreState::CORRUPT : StoreState::FOREIGN),
             default => null,
         };
     }

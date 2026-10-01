@@ -28,16 +28,16 @@ function sqliteFileWithApplicationId(string $path, int $applicationId): void
 it('classifies a file by its header', function (?Closure $write, FileKind $kind) {
     expect(fileKindOf($write))->toBe($kind);
 })->with([
-    'no file' => [null, FileKind::Empty],
-    'a zero-byte file' => [fn (string $path) => null, FileKind::Empty],
-    'a text file' => [fn (string $path) => file_put_contents($path, str_repeat('not a database ', 100)), FileKind::NotSqlite],
-    'a file shorter than the SQLite magic' => [fn (string $path) => file_put_contents($path, 'SQLite'), FileKind::NotSqlite],
-    'a SQLite file cut off before its application id' => [fn (string $path) => file_put_contents($path, "SQLite format 3\0".str_repeat("\0", 20)), FileKind::Foreign],
-    'a SQLite file of another application' => [fn (string $path) => sqliteFileWithApplicationId($path, 0), FileKind::Foreign],
-    'a SQLite file of another application id' => [fn (string $path) => sqliteFileWithApplicationId($path, Schema::APPLICATION_ID + 1), FileKind::Foreign],
-    'a SQLite file with Firewatch\'s application id' => [fn (string $path) => sqliteFileWithApplicationId($path, Schema::APPLICATION_ID), FileKind::Firewatch],
+    'no file' => [null, FileKind::EMPTY],
+    'a zero-byte file' => [fn (string $path) => null, FileKind::EMPTY],
+    'a text file' => [fn (string $path) => file_put_contents($path, str_repeat('not a database ', 100)), FileKind::NOT_SQLITE],
+    'a file shorter than the SQLite magic' => [fn (string $path) => file_put_contents($path, 'SQLite'), FileKind::NOT_SQLITE],
+    'a SQLite file cut off before its application id' => [fn (string $path) => file_put_contents($path, "SQLite format 3\0".str_repeat("\0", 20)), FileKind::FOREIGN],
+    'a SQLite file of another application' => [fn (string $path) => sqliteFileWithApplicationId($path, 0), FileKind::FOREIGN],
+    'a SQLite file of another application id' => [fn (string $path) => sqliteFileWithApplicationId($path, Schema::APPLICATION_ID + 1), FileKind::FOREIGN],
+    'a SQLite file with Firewatch\'s application id' => [fn (string $path) => sqliteFileWithApplicationId($path, Schema::APPLICATION_ID), FileKind::FIREWATCH],
 ]);
 
 it('reads a directory as no store', function () {
-    expect(FileKind::of(sys_get_temp_dir()))->toBe(FileKind::Empty);
+    expect(FileKind::of(sys_get_temp_dir()))->toBe(FileKind::EMPTY);
 });

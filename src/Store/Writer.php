@@ -136,7 +136,7 @@ class Writer
 
             // A store another process already replaced is not this damage, so it is not moved aside again.
             if ($this->identity->of($this->configuration->database) === $identity) {
-                if (FileKind::of($this->configuration->database) !== FileKind::Firewatch) {
+                if (FileKind::of($this->configuration->database) !== FileKind::FIREWATCH) {
                     throw $this->foreign();
                 }
 
@@ -304,7 +304,7 @@ class Writer
         $this->createDirectory(dirname($path));
         $this->createFile($path);
 
-        if (FileKind::of($path) === FileKind::NotSqlite) {
+        if (FileKind::of($path) === FileKind::NOT_SQLITE) {
             throw $this->foreign();
         }
 

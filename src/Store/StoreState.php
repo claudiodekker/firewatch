@@ -5,12 +5,12 @@ namespace ClaudioDekker\Firewatch\Store;
 /**
  * @internal
  */
-enum StoreState
+enum StoreState: string
 {
-    case Absent;
-    case SchemaMismatch;
-    case Corrupt;
-    case Foreign;
-    case Busy;
-    case Unavailable;
+    case ABSENT = 'absent';
+    case SCHEMA_MISMATCH = 'schema_mismatch';
+    case CORRUPT = 'corrupt';
+    case FOREIGN = 'foreign';
+    case BUSY = 'busy';
+    case UNAVAILABLE = 'unavailable';
 }

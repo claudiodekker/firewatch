@@ -92,12 +92,12 @@ class Overview extends Tool
         $path = $this->configuration->database;
 
         return match ($unusable->state) {
-            StoreState::Absent => __('firewatch::messages.no_store', ['path' => $path]),
-            StoreState::Foreign => __('firewatch::messages.store_unusable.foreign_file', ['path' => $path]),
-            StoreState::SchemaMismatch => __('firewatch::messages.store_unusable.'.($unusable->found < Schema::VERSION ? 'older_schema' : 'newer_schema'), ['path' => $path, 'found' => $unusable->found, 'expected' => Schema::VERSION]),
-            StoreState::Unavailable => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => $unusable->found, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]),
-            StoreState::Corrupt => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')]),
-            StoreState::Busy => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')]),
+            StoreState::ABSENT => __('firewatch::messages.no_store', ['path' => $path]),
+            StoreState::FOREIGN => __('firewatch::messages.store_unusable.foreign_file', ['path' => $path]),
+            StoreState::SCHEMA_MISMATCH => __('firewatch::messages.store_unusable.'.($unusable->found < Schema::VERSION ? 'older_schema' : 'newer_schema'), ['path' => $path, 'found' => $unusable->found, 'expected' => Schema::VERSION]),
+            StoreState::UNAVAILABLE => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => $unusable->found, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]),
+            StoreState::CORRUPT => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')]),
+            StoreState::BUSY => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')]),
         };
     }
 

@@ -1,5 +1,7 @@
 <?php
 
+use ClaudioDekker\Firewatch\Store\StoreState;
+
 test('each store state has its pinned wording', function (string $key, array $replace, string $wording) {
     expect(__("firewatch::messages.{$key}", $replace))->toBe($wording);
 })->with([
@@ -41,3 +43,9 @@ test('each store state has its pinned wording', function (string $key, array $re
     'the cause of a damaged store' => ['store_causes.corrupt', [], 'the file is damaged. The next captured batch moves it aside and starts a new one.'],
     'the cause of a busy store' => ['store_causes.busy', [], 'it stayed busy for 1000 ms, so try again.'],
 ]);
+
+test('the store states are the closed set of the design', function () {
+    $values = array_map(fn (StoreState $state) => $state->value, StoreState::cases());
+
+    expect($values)->toEqualCanonicalizing(['absent', 'schema_mismatch', 'corrupt', 'foreign', 'busy', 'unavailable']);
+});

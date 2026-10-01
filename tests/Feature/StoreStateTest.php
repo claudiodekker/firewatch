@@ -55,13 +55,13 @@ it('reports the state of a store that cannot be read as usual', function (?Closu
     expect($unusable->state)->toBe($state)
         ->and($unusable->found)->toBe($found);
 })->with([
-    'no file' => [null, StoreState::Absent, null],
-    'a zero-byte file' => [fn () => touch(stateStore()), StoreState::Absent, null],
-    'a SQLite file with nothing in it' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA journal_mode = WAL'), StoreState::Absent, null],
-    'an older schema' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0; CREATE TABLE records (id INTEGER)'), StoreState::SchemaMismatch, 0],
-    'a newer schema' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)'), StoreState::SchemaMismatch, 2],
-    'a foreign SQLite file' => [fn () => (new SQLite3(stateStore()))->exec('CREATE TABLE orders (id INTEGER)'), StoreState::Foreign, null],
-    'a file that is not a database' => [fn () => file_put_contents(stateStore(), str_repeat('not a database ', 100)), StoreState::Foreign, null],
+    'no file' => [null, StoreState::ABSENT, null],
+    'a zero-byte file' => [fn () => touch(stateStore()), StoreState::ABSENT, null],
+    'a SQLite file with nothing in it' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA journal_mode = WAL'), StoreState::ABSENT, null],
+    'an older schema' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0; CREATE TABLE records (id INTEGER)'), StoreState::SCHEMA_MISMATCH, 0],
+    'a newer schema' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)'), StoreState::SCHEMA_MISMATCH, 2],
+    'a foreign SQLite file' => [fn () => (new SQLite3(stateStore()))->exec('CREATE TABLE orders (id INTEGER)'), StoreState::FOREIGN, null],
+    'a file that is not a database' => [fn () => file_put_contents(stateStore(), str_repeat('not a database ', 100)), StoreState::FOREIGN, null],
 ]);
 
 it('reports a damaged Firewatch store as corrupt, however it is damaged', function (int $offset) {
@@ -74,7 +74,7 @@ it('reports a damaged Firewatch store as corrupt, however it is damaged', functi
 
     $unusable = stateRead();
 
-    expect($unusable->state)->toBe(StoreState::Corrupt);
+    expect($unusable->state)->toBe(StoreState::CORRUPT);
 })->with([
     'in its tables, read by the answer' => [4096],
     'in its first page, read by the check' => [100],
@@ -89,7 +89,7 @@ it('reports a damaged file of another application as foreign', function () {
     fwrite($handle, str_repeat("\xff", filesize($path) - 100));
     fclose($handle);
 
-    expect(stateRead()->state)->toBe(StoreState::Foreign);
+    expect(stateRead()->state)->toBe(StoreState::FOREIGN);
 });
 
 it('reports a store below the SQLite floor as unavailable, without opening it', function (string $version, bool $unavailable) {
@@ -97,7 +97,7 @@ it('reports a store below the SQLite floor as unavailable, without opening it', 
     $reader = new Reader(app(Configuration::class), sqliteVersion: $version);
 
     if ($unavailable) {
-        expect(stateRead($reader))->state->toBe(StoreState::Unavailable)->found->toBe($version);
+        expect(stateRead($reader))->state->toBe(StoreState::UNAVAILABLE)->found->toBe($version);
     } else {
         expect($reader->snapshot(fn (SQLite3 $connection) => $connection->querySingle('SELECT count(*) FROM records')))->toBe(1);
     }
@@ -119,7 +119,7 @@ it('reports a store that stays locked past the busy timeout as busy', function (
         protected const BUSY_TIMEOUT_MILLISECONDS = 20;
     };
 
-    expect(stateRead($reader)->state)->toBe(StoreState::Busy);
+    expect(stateRead($reader)->state)->toBe(StoreState::BUSY);
 
     $connection->exec('ROLLBACK');
 });
