@@ -229,8 +229,20 @@ class Pruner
 
         $this->writer->maintain(function (SQLite3 $connection) use ($deleted) {
             $connection->exec('BEGIN IMMEDIATE');
-            $connection->exec('PRAGMA incremental_vacuum('.$this->reclaimPages().')');
-            $connection->exec('COMMIT');
+
+            try {
+                $connection->exec('PRAGMA incremental_vacuum('.$this->reclaimPages().')');
+                $connection->exec('COMMIT');
+            } catch (Throwable $exception) {
+                // A connection kept across calls must not be left inside the open transaction.
+                try {
+                    $connection->exec('ROLLBACK');
+                } catch (Throwable) {
+                    //
+                }
+
+                throw $exception;
+            }
 
             if (! $deleted) {
                 return;
