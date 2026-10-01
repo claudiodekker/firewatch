@@ -78,10 +78,12 @@ it('hands a tool its arguments over stdio, answering in JSON beside the same JSO
     $session = serverSession();
     $session[3]['params']['arguments'] = ['format' => 'json'];
 
-    $replies = serverReplies(runServer($this->storeDirectory, $session));
+    $process = runServer($this->storeDirectory, $session);
+    $replies = serverReplies($process);
     $result = $replies[3]['result'];
 
-    expect($result['isError'])->toBeFalse()
+    expect($process->getErrorOutput())->toBe('')
+        ->and($result['isError'])->toBeFalse()
         ->and(array_keys($result['structuredContent']))->toBe(['tool', 'now', 'window', 'summary', 'empty', 'result', 'coverage', 'blind_spots', 'notes', 'truncated', 'next'])
         ->and(json_decode($result['content'][0]['text'], associative: true))->toEqual($result['structuredContent']);
 })->group('process');

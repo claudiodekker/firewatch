@@ -34,7 +34,6 @@ trait AnswersInEnvelope
     protected function answer(Request $request, callable $answer): Response|ResponseFactory
     {
         $argument = $request->get('format');
-        fwrite(STDERR, 'ARG '.json_encode([$argument, $request->all()])."\n");
         $format = AnswerFormat::fromArgument($argument);
 
         if ($format === null) {
