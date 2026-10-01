@@ -175,13 +175,12 @@ class ClearStore
     {
         $writer = $this->writer();
 
-        do {
-            $free = $writer->transaction(function (SQLite3 $connection) {
-                $connection->exec('PRAGMA incremental_vacuum('.static::RECLAIM_PAGES.')');
+        $free = (int) $writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count'));
 
-                return (int) $connection->querySingle('PRAGMA freelist_count');
-            });
-        } while ($free > 0);
+        // One step frees a fixed number of pages, so the steps needed are known and the loop always ends.
+        for ($steps = (int) ceil($free / static::RECLAIM_PAGES); $steps > 0; $steps--) {
+            $writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.static::RECLAIM_PAGES.')'));
+        }
 
         $checkpoint = $writer->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA wal_checkpoint(TRUNCATE)', entireRow: true));
 
