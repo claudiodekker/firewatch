@@ -135,6 +135,16 @@ return [
         'octane-bootstrap' => 'Under Octane the request bootstrap stage is always 0, because the worker is already booted; compare stage shares only between requests served the same way.',
     ],
 
+    'conditions' => [
+        'history-pruned' => 'History before :from was pruned (:reason); this window starts before it.',
+        'history-cleared' => 'History before :from was cleared; this window starts before it.',
+        'store-rebuilt' => 'The store was rebuilt at :at (:why); earlier data is gone.',
+        'records-dropped' => ':n records were not stored between :from and :to (last reason: :reason); results may be incomplete.',
+        'drift' => ':count :kind drift on :type, last :last; fields may be null or missing.',
+        'nightwatch-unverified' => 'Nightwatch :version is newer than the verified line :line; records may be partly interpreted.',
+        'redaction-active' => 'Some request headers or payload fields are redacted and read [N bytes redacted].',
+    ],
+
     'blind_spot' => 'Blind spot (:id): :message',
 
     'next' => 'Next:',

@@ -8,10 +8,12 @@ use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -51,6 +53,7 @@ class Overview extends Tool
     public function __construct(
         protected Configuration $configuration,
         protected Reader $reader,
+        protected Conditions $conditions,
     ) {
         //
     }
@@ -95,18 +98,20 @@ class Overview extends Tool
         $window = Window::read($request, $now, $timezone, $this->name());
 
         $types = RecordType::events();
-        $blindSpots = BlindSpots::for($types, storeLevel: true);
+        $structural = BlindSpots::for($types, storeLevel: true);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
-            [[$total, $records, $requests, $oldest, $newest], $meta] = $this->reader->snapshot(fn (SQLite3 $connection) => [$this->countRecords($connection, $window), $this->readMeta($connection)]);
+            [[$total, $records, $requests, $oldest, $newest], $facts] = $this->reader->snapshot(fn (SQLite3 $connection) => [$this->countRecords($connection, $window), StoreFacts::read($connection)]);
         } catch (StoreUnusable $unusable) {
+            $blindSpots = [...$structural, ...$this->conditions->for(null, $types, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
 
             return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable, $types, History::unknown(...$retention)), $blindSpots);
         }
 
-        $history = History::of($meta, $types, ...$retention);
+        $blindSpots = [...$structural, ...$this->conditions->for($facts, $types, $window)];
+        $history = History::of($facts->meta, $types, ...$retention);
 
         if ($total === 0) {
             $empty = Emptiness::storeEmpty($this->configuration->database);
@@ -133,25 +138,6 @@ class Overview extends Tool
             $coverage,
             $blindSpots,
         );
-    }
-
-    /**
-     * Read the store's markers, which state from when its history is complete.
-     *
-     * @return array<string, string>
-     */
-    protected function readMeta(SQLite3 $connection): array
-    {
-        /** @var SQLite3Result $result */
-        $result = $connection->query('SELECT key, value FROM meta');
-
-        $meta = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $meta[(string) $row[0]] = (string) $row[1];
-        }
-
-        return $meta;
     }
 
     /**
