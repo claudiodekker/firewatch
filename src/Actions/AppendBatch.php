@@ -82,11 +82,12 @@ class AppendBatch
     }
 
     /**
-     * Store a batch of wire records in one transaction, in wire order, keeping users in the directory and counting drift.
+     * Store a batch of wire records in one transaction, in wire order, with the bindings paired to its queries, keeping users in the directory and counting drift.
      *
      * @param  list<array<mixed>>  $records
+     * @param  array<int, list<mixed>|null>  $bindings  the bindings paired to each record, by its position in the batch
      */
-    public function handle(array $records): void
+    public function handle(array $records, array $bindings = []): void
     {
         if ($records === []) {
             return;
@@ -96,8 +97,8 @@ class AppendBatch
         $rows = [];
         $users = [];
 
-        foreach ($records as $record) {
-            $mapped = $this->mapper->map($record, $drift);
+        foreach ($records as $position => $record) {
+            $mapped = $this->mapper->map($record, $drift, bindings: $bindings[$position] ?? null);
 
             if ($mapped->user !== null) {
                 $users[] = $mapped->user;

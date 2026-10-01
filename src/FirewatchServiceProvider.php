@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Capture\DefaultLogChannel;
 use ClaudioDekker\Firewatch\Capture\HeaderRedactor;
+use ClaudioDekker\Firewatch\Capture\QueryBindings;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationIssue;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
@@ -13,6 +14,7 @@ use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use ClaudioDekker\Firewatch\Mcp\StrayOutput;
 use Composer\InstalledVersions;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Core;
@@ -110,7 +112,9 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->redirectStrayServerOutput();
         $this->configureNightwatch();
         $this->vetoNightwatchTransmit();
+        $this->captureQueryBindings();
         $this->registerNightwatch();
+        $this->releaseQueryBindings();
         $this->captureLogs();
         $this->replaceNightwatchIngest();
         $this->redactHeaders();
@@ -306,6 +310,32 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         $config->set('firewatch', $published + $defaults);
+    }
+
+    /**
+     * Hold each query's bindings when Active, from a listener that runs before Nightwatch's query listener.
+     */
+    protected function captureQueryBindings(): void
+    {
+        if ($this->mode !== Mode::ACTIVE) {
+            return;
+        }
+
+        $this->app->singleton(QueryBindings::class);
+
+        $this->app->make('events')->listen(QueryExecuted::class, fn (QueryExecuted $event) => $this->app->make(QueryBindings::class)->capture($event));
+    }
+
+    /**
+     * Forget each query's bindings when Active, from a listener that runs after Nightwatch's query listener.
+     */
+    protected function releaseQueryBindings(): void
+    {
+        if ($this->mode !== Mode::ACTIVE) {
+            return;
+        }
+
+        $this->app->make('events')->listen(QueryExecuted::class, fn () => $this->app->make(QueryBindings::class)->release());
     }
 
     /**

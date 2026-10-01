@@ -147,13 +147,13 @@ class Schema
     }
 
     /**
-     * Get the columns a type reads from its data, one per contract field without a common column.
+     * Get the columns a type reads from its data, one per contract field without a common column and one per field Firewatch adds.
      *
      * @return list<string>
      */
     protected function dataColumns(RecordType $type): array
     {
-        $names = array_diff(array_filter($type->fields()), static::COLUMNS);
+        $names = [...array_diff(array_filter($type->fields()), static::COLUMNS), ...$type->addedFields()];
 
         return array_values(array_map(fn (string $name) => "json_extract(data, '$.{$name}') AS \"{$name}\"", $names));
     }
