@@ -126,23 +126,31 @@ class Writer
     {
         $path = $this->configuration->database.'.lock';
         $budget = $this->configuration->busyTimeoutMilliseconds;
-        $deadline = now()->addMilliseconds($budget);
 
         $this->createDirectory(dirname($path));
         $handle = $this->openLockFile($path);
 
+        // The budget counts down by what was slept, so a frozen or faked clock in the host can't stretch it.
+        $remaining = $budget;
+
         try {
-            while (! flock($handle, LOCK_EX | LOCK_NB)) {
-                $remaining = now()->diffInMilliseconds($deadline);
+            while (! flock($handle, LOCK_EX | LOCK_NB, $wouldBlock)) {
+                if (! $wouldBlock) {
+                    throw new StoreFailure(FailureKind::IO, "Firewatch could not lock [{$path}].");
+                }
 
                 if ($remaining <= 0) {
                     throw new StoreFailure(FailureKind::BUSY, "Firewatch could not lock [{$path}] within {$budget} ms.");
                 }
 
-                Sleep::usleep((int) round(min($remaining, static::LOCK_POLL_MILLISECONDS) * 1_000));
+                $poll = min($remaining, static::LOCK_POLL_MILLISECONDS);
+
+                Sleep::usleep($poll * 1_000);
+
+                $remaining -= $poll;
             }
 
-            return $callback((int) max(0, round(now()->diffInMilliseconds($deadline))));
+            return $callback($remaining);
         } finally {
             flock($handle, LOCK_UN);
             fclose($handle);
@@ -159,7 +167,13 @@ class Writer
         $created = ! file_exists($path);
         $handle = @fopen($path, 'c');
 
-        if ($handle === false || ($created && ! @chmod($path, static::FILE_MODE))) {
+        if ($handle === false) {
+            throw new StoreFailure(FailureKind::IO, "Firewatch could not open [{$path}].");
+        }
+
+        if ($created && ! @chmod($path, static::FILE_MODE)) {
+            fclose($handle);
+
             throw new StoreFailure(FailureKind::IO, "Firewatch could not open [{$path}].");
         }
 
@@ -178,11 +192,18 @@ class Writer
 
         $connection = new SQLite3($path, SQLITE3_OPEN_READWRITE);
 
-        $connection->enableExceptions(true);
-        $connection->busyTimeout($busyTimeoutMilliseconds);
+        // A connection left to the exception's trace could close, and checkpoint, after the lock is released.
+        try {
+            $connection->enableExceptions(true);
+            $connection->busyTimeout($busyTimeoutMilliseconds);
 
-        $this->configure($connection);
-        $this->createSchema($connection);
+            $this->configure($connection);
+            $this->createSchema($connection);
+        } catch (Throwable $exception) {
+            $connection->close();
+
+            throw $exception;
+        }
 
         return $connection;
     }

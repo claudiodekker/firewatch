@@ -60,48 +60,55 @@ function lockFailureLines(): array
     return array_map(fn (string $line) => json_decode($line, associative: true, flags: JSON_THROW_ON_ERROR), $lines);
 }
 
-it('serializes writes through the lock file only on SQLite builds with the WAL-reset bug', function (string $version, bool $serialized) {
+it('serializes writes through the lock file on SQLite builds with the WAL-reset bug', function (string $version) {
     registerFirewatchOnSqlite($version);
     holdLockFile();
 
     Cache::get('first');
     Nightwatch::digest();
 
-    if ($serialized) {
-        expect(lockFailureLines())->toHaveCount(1)
-            ->and(lockFailureLines()[0])->toMatchArray(['kind' => 'busy', 'code' => null, 'message' => 'Firewatch could not lock ['.lockPath().'] within 300 ms.', 'dropped' => 1])
-            ->and(app(Reader::class)->exists())->toBeFalse();
-    } else {
-        expect(lockedCacheKeys())->toBe(['first']);
-    }
+    expect(lockFailureLines())->toHaveCount(1)
+        ->and(lockFailureLines()[0])->toMatchArray(['kind' => 'busy', 'code' => null, 'message' => 'Firewatch could not lock ['.lockPath().'] within 300 ms.', 'dropped' => 1])
+        ->and(app(Reader::class)->exists())->toBeFalse();
 })->with([
-    'before the first affected release' => ['3.6.23', false],
-    'the first affected release' => ['3.7.0', true],
-    'the last affected 3.44 release' => ['3.44.5', true],
-    'the 3.44 fix' => ['3.44.6', false],
-    'the first affected 3.45 release' => ['3.45.0', true],
-    'the last affected 3.50 release' => ['3.50.6', true],
-    'the 3.50 fix' => ['3.50.7', false],
-    'between the fixed 3.50 and the affected 3.51' => ['3.50.9', false],
-    'the first affected 3.51 release' => ['3.51.0', true],
-    'the last affected 3.51 release' => ['3.51.2', true],
-    'the 3.51 fix' => ['3.51.3', false],
+    'the first affected release' => '3.7.0',
+    'the last affected 3.44 release' => '3.44.5',
+    'the first affected 3.45 release' => '3.45.0',
+    'the last affected 3.50 release' => '3.50.6',
+    'the first affected 3.51 release' => '3.51.0',
+    'the last affected 3.51 release' => '3.51.2',
 ]);
 
-it('takes no lock file and keeps one connection on SQLite builds without the bug', function () {
-    registerFirewatchOnSqlite('3.51.3');
+it('writes without the lock file on SQLite builds without the bug', function (string $version) {
+    registerFirewatchOnSqlite($version);
+    holdLockFile();
 
     Cache::get('first');
     Nightwatch::digest();
-    unlink(app(Configuration::class)->database);
-    Cache::get('second');
-    Nightwatch::digest();
 
-    expect(file_exists(lockPath()))->toBeFalse()
-        ->and(app(Reader::class)->exists())->toBeFalse();
-});
+    expect(lockedCacheKeys())->toBe(['first']);
+})->with([
+    'before the first affected release' => '3.6.23',
+    'the 3.44 fix' => '3.44.6',
+    'the 3.50 fix' => '3.50.7',
+    'between the fixed 3.50 and the affected 3.51' => '3.50.9',
+    'the 3.51 fix' => '3.51.3',
+]);
 
-it('opens and closes the connection inside the lock for each batch on SQLite builds with the bug', function () {
+it('takes no lock file and keeps one connection on SQLite builds without the bug', function (string $version, bool $kept) {
+    $writer = new Writer(app(Configuration::class), sqliteVersion: $version);
+
+    $first = $writer->transaction(fn (SQLite3 $connection) => $connection);
+    $second = $writer->transaction(fn (SQLite3 $connection) => $connection);
+
+    expect($first === $second)->toBe($kept)
+        ->and(file_exists(lockPath()))->toBe(! $kept);
+})->with([
+    'without the bug' => ['3.51.3', true],
+    'with the bug' => ['3.45.0', false],
+]);
+
+it('opens a new connection inside the lock for each batch on SQLite builds with the bug', function () {
     registerFirewatchOnSqlite('3.45.0');
 
     Cache::get('first');
@@ -123,7 +130,6 @@ it('creates the lock file private to its owner', function () {
 })->group('posix');
 
 it('polls the lock every 5 ms within the busy timeout', function (int $busyTimeout, array $sleeps) {
-    $this->freezeTime();
     config()->set('firewatch.busy_timeout', $busyTimeout);
     registerFirewatchOnSqlite('3.45.0');
     holdLockFile();
@@ -154,9 +160,11 @@ it('writes once the lock is released within the busy timeout', function () {
     Sleep::assertSleptTimes(1);
 });
 
-it('gives the write what is left of the busy timeout after waiting for the lock', function (string $version, int $busyTimeout) {
-    $this->freezeTime();
-    holdLockFile();
+it('gives the write what is left of the busy timeout after waiting for the lock', function (string $version, bool $held, int $busyTimeout) {
+    if ($held) {
+        holdLockFile();
+    }
+
     Sleep::whenFakingSleep(function () {
         flock(test()->lockHandle, LOCK_UN);
     });
@@ -166,6 +174,18 @@ it('gives the write what is left of the busy timeout after waiting for the lock'
 
     expect($result)->toBe($busyTimeout);
 })->with([
-    'with the bug, after one poll' => ['3.45.0', 295],
-    'without the bug' => ['3.51.3', 300],
+    'with the bug, at once' => ['3.45.0', false, 300],
+    'with the bug, after one poll' => ['3.45.0', true, 295],
+    'without the bug' => ['3.51.3', true, 300],
 ]);
+
+it('records a lock file it can\'t open as a filesystem failure', function () {
+    registerFirewatchOnSqlite('3.45.0');
+    mkdir(lockPath(), recursive: true);
+
+    Cache::get('first');
+    Nightwatch::digest();
+
+    expect(lockFailureLines())->toHaveCount(1)
+        ->and(lockFailureLines()[0])->toMatchArray(['kind' => 'io', 'code' => null, 'message' => 'Firewatch could not open ['.lockPath().'].', 'dropped' => 1]);
+});
