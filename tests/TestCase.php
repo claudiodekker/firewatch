@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Tests;
 
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use Illuminate\Filesystem\Filesystem;
+use Laravel\Mcp\Server\McpServiceProvider;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -36,6 +37,8 @@ abstract class TestCase extends Orchestra
     {
         return [
             FirewatchServiceProvider::class,
+            // An application discovers it, and it hands a tool's arguments to its request.
+            McpServiceProvider::class,
         ];
     }
 

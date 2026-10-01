@@ -3,7 +3,9 @@
 namespace Workbench\App\Mcp;
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
+use Laravel\Mcp\ResponseFactory;
 
 class NoticingOverview extends Overview
 {
@@ -16,12 +18,12 @@ class NoticingOverview extends Overview
         return parent::description();
     }
 
-    public function handle(): Response
+    public function handle(Request $request): Response|ResponseFactory
     {
         if (getenv('WORKBENCH_NOTICE') === 'tool') {
             trigger_error('A notice inside a tool', E_USER_NOTICE);
         }
 
-        return parent::handle();
+        return parent::handle($request);
     }
 }

@@ -7,6 +7,7 @@ use Illuminate\Console\Application;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Ingest;
@@ -135,6 +136,23 @@ it('registers the three commands and the publish tag only when Active or Off', f
     'Active' => ['config' => [], 'commands' => ['firewatch:server', 'firewatch:doctor', 'firewatch:clear'], 'tagged' => true],
     'Off' => ['config' => ['firewatch.enabled' => false], 'commands' => ['firewatch:server', 'firewatch:doctor', 'firewatch:clear'], 'tagged' => true],
     'stepped aside' => ['config' => ['firewatch.environments' => 'local'], 'commands' => [], 'tagged' => false],
+]);
+
+it('loads its language file only when Active or Off', function (array $config, bool $loaded) {
+    // The first registration left a callback that adds its namespace to every translator made after it.
+    (fn () => $this->afterResolvingCallbacks = [])->call(app());
+    app()->forgetInstance('translator');
+    app()->forgetInstance('translation.loader');
+    Lang::clearResolvedInstance('translator');
+    config()->set($config);
+
+    registerFirewatch();
+
+    expect(app('translator')->has('firewatch::messages.no_store'))->toBe($loaded);
+})->with([
+    'Active' => ['config' => [], 'loaded' => true],
+    'Off' => ['config' => ['firewatch.enabled' => false], 'loaded' => true],
+    'stepped aside' => ['config' => ['firewatch.environments' => 'local'], 'loaded' => false],
 ]);
 
 it('swaps Nightwatch\'s ingest for one that stores when Active and one that discards when Off', function (array $config, string $ingest) {

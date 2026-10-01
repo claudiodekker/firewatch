@@ -68,6 +68,54 @@ return [
 
     'store_clock' => 'Store clock: :time (epoch :epoch) - pass that number as since, until or split_at to measure what happens next against what came before',
 
+    'overview_summary' => 'The store holds :records records, :requests of them requests.',
+
+    'window_empty' => 'No records fall in this window, and the store holds :population records: widen the window or move it.',
+
+    'no_match' => 'No record matched the filters (:filters), among :population records before filtering.',
+
+    'empty_summary' => [
+        'no_store' => 'Nothing to report: no store has been written yet.',
+        'store_unusable' => 'Nothing to report: the store can not be used.',
+        'store_empty' => 'Nothing to report: the store holds no records.',
+        'window_empty' => 'Nothing to report: no records fall in the window.',
+        'no_match' => 'Nothing to report: no records matched the filters.',
+    ],
+
+    'window_description' => 'Half-open on started_at: a record at since is in, a record at until is out; an absent bound is unbounded.',
+
+    'window_unbounded' => 'Window: none (unbounded)',
+
+    'window_bounded' => 'Window: since :since until :until (:timezone, half-open)',
+
+    'window_none' => 'none (unbounded)',
+
+    'window_not_windowed' => 'Not windowed: :reason',
+
+    'store_line' => 'Store: :store',
+
+    'store_to' => 'to',
+
+    'store_records' => ':count records',
+
+    'truncated' => 'Truncated: :section shows :shown of :matched (:reason). :how',
+
+    'truncated_unknown' => 'Truncated: :section shows :shown of more (:reason). :how',
+
+    'blind_spot' => 'Blind spot (:id): :message',
+
+    'next' => 'Next:',
+
+    'format_argument' => 'markdown (default) or json: the same answer either way.',
+
+    'format_refused' => "error: invalid_argument\n`format` must be markdown or json; got :value.\nargument: format\naccepted: markdown or json\nexample: :tool(format: \"json\")",
+
+    'cell_null' => 'n/a',
+
+    'cell_yes' => 'yes',
+
+    'cell_no' => 'no',
+
     /*
     |--------------------------------------------------------------------------
     | Server Command

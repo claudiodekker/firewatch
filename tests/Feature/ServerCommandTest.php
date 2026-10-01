@@ -58,7 +58,7 @@ it('lists the tools as JSON with the server name and version', function () {
                 [
                     'name' => 'overview',
                     'description' => __('firewatch::messages.tools.overview'),
-                    'inputSchema' => ['type' => 'object', 'properties' => []],
+                    'inputSchema' => ['properties' => ['format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string']], 'type' => 'object'],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
             ],

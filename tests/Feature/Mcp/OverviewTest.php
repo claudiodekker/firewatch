@@ -6,37 +6,62 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
+use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 
 it('answers that no store exists yet, with the store clock', function () {
     $this->travelTo('2026-09-30 14:00:00.250000');
     $path = app(Configuration::class)->database;
 
-    $response = FirewatchServer::tool(Overview::class);
+    $envelope = Envelope::assert(Overview::class);
 
-    $response->assertSee(implode("\n", [
-        '## overview',
-        __('firewatch::messages.store_clock', ['time' => '2026-09-30 14:00:00.250000', 'epoch' => '1790776800.25']),
-        __('firewatch::messages.no_store', ['path' => $path]),
-    ]));
+    expect($envelope)->toMatchArray([
+        'tool' => 'overview',
+        'now' => 1790776800.25,
+        'summary' => 'Nothing to report: no store has been written yet.',
+        'empty' => ['kind' => 'no_store', 'population' => null, 'message' => __('firewatch::messages.no_store', ['path' => $path])],
+        'result' => [],
+        'coverage' => ['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null],
+    ]);
 });
 
 it('answers that the store is empty when it holds no records', function () {
     $path = app(Configuration::class)->database;
     app(Writer::class)->transaction(fn () => null);
 
-    $response = FirewatchServer::tool(Overview::class);
+    $envelope = Envelope::assert(Overview::class);
 
-    $response->assertSee(__('firewatch::messages.store_empty', ['path' => $path]));
+    expect($envelope)->toMatchArray([
+        'summary' => 'Nothing to report: the store holds no records.',
+        'empty' => ['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => $path])],
+        'coverage' => ['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0],
+    ]);
 });
 
-it('counts a request the application served', function () {
+it('counts the records the store holds, and the requests among them', function () {
     forceRequests();
     config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
     $this->get('/');
 
-    $response = FirewatchServer::tool(Overview::class);
+    $envelope = Envelope::assert(Overview::class);
 
-    $response->assertSee('- **request**: 1');
+    expect($envelope['empty'])->toBeNull()
+        ->and($envelope['result']['requests'])->toBe(1)
+        ->and($envelope['result']['records'])->toBeGreaterThanOrEqual(1)
+        ->and($envelope['summary'])->toBe("The store holds {$envelope['result']['records']} records, 1 of them requests.")
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $envelope['result']['records']])
+        ->and($envelope['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($envelope['coverage']['newest_at']);
+});
+
+it('answers in JSON for a format given in any case', function () {
+    $response = FirewatchServer::tool(Overview::class, ['format' => ' JSON ']);
+
+    $response->assertStructuredContent(fn ($json) => $json->where('tool', 'overview')->etc());
+});
+
+it('refuses a format that is none', function () {
+    $response = FirewatchServer::tool(Overview::class, ['format' => 'xml']);
+
+    $response->assertHasErrors(["error: invalid_argument\n`format` must be markdown or json; got \"xml\".\nargument: format\naccepted: markdown or json\nexample: overview(format: \"json\")"]);
 });
 
 it('creates nothing where the store would be', function () {
@@ -52,9 +77,11 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
     mkdir(dirname($path), recursive: true);
     $arrange($path);
 
-    $response = FirewatchServer::tool(Overview::class);
+    $envelope = Envelope::assert(Overview::class);
 
-    $response->assertSee(__("firewatch::messages.store_unusable.{$key}", $replace($path)));
+    expect($envelope['empty'])->toBe(['kind' => 'store_unusable', 'population' => null, 'message' => __("firewatch::messages.store_unusable.{$key}", $replace($path))])
+        ->and($envelope['summary'])->toBe('Nothing to report: the store can not be used.')
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => $key, 'records' => null]);
 })->with([
     'a foreign file' => [
         fn (string $path) => (new SQLite3($path))->exec('CREATE TABLE orders (id INTEGER)'),
@@ -87,9 +114,10 @@ it('answers that a damaged store cannot be read', function () {
     fwrite($handle, str_repeat("\xff", filesize($path) - 4096));
     fclose($handle);
 
-    $response = FirewatchServer::tool(Overview::class);
+    $envelope = Envelope::assert(Overview::class);
 
-    $response->assertSee(__('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')]));
+    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')])])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'unreadable']);
 });
 
 it('answers that a busy store cannot be read yet', function () {
@@ -103,9 +131,10 @@ it('answers that a busy store cannot be read yet', function () {
         protected const BUSY_TIMEOUT_MILLISECONDS = 20;
     });
 
-    $response = FirewatchServer::tool(Overview::class);
+    $envelope = Envelope::assert(Overview::class);
 
-    $response->assertSee(__('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')]));
+    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')])])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'unreadable']);
     $connection->exec('ROLLBACK');
 });
 
@@ -114,9 +143,10 @@ it('answers that SQLite is too old to read the store', function () {
     app(Writer::class)->transaction(fn (SQLite3 $connection) => null);
     app()->instance(Reader::class, new Reader(app(Configuration::class), sqliteVersion: '3.37.2'));
 
-    $response = FirewatchServer::tool(Overview::class);
+    $envelope = Envelope::assert(Overview::class);
 
-    $response->assertSee(__('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => '3.37.2', 'minimum' => '3.38.0']));
+    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => '3.37.2', 'minimum' => '3.38.0'])])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'sqlite_too_old']);
 });
 
 it('does not touch an unusable store', function () {
