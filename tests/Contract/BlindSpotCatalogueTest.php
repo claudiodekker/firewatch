@@ -6,7 +6,7 @@ test('the structural blind spot catalogue pins its ids and sentences', function 
     expect(BlindSpots::catalogue())->toBe([
         'console-requests' => 'Requests are recorded only while the application serves HTTP; test runs and console processes record none. An empty request answer may mean the app was never exercised over HTTP.',
         'unanswered-outgoing-requests' => 'An outgoing request that received no response (timeout, connection failure) leaves no record.',
-        'payload-on-server-error-only' => 'A request\'s payload is stored only when the response status is 500, as far as verified.',
+        'payload-on-server-error-only' => 'A request\'s payload is stored only when the response status is 500.',
         'dead-counters' => 'lazy_loads, hydrated_models, files_read and files_written are always 0 because the sensors never fill them; 0 does not mean none. Use the N+1 detector on query rows.',
         'failed-flag-unpopulated' => 'The failed flag on mail and notification records is always false; failures are not recorded.',
         'mail-by-notification' => 'Mail sent by a notification is recorded as a notification, not as mail.',

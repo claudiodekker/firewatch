@@ -125,7 +125,8 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
 
     expect($envelope['empty'])->toBe(['kind' => 'store_unusable', 'population' => null, 'message' => __("firewatch::messages.store_unusable.{$key}", $replace($path))])
         ->and($envelope['summary'])->toBe('Nothing to report: the store can not be used.')
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => $key, 'records' => null]);
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => $key, 'records' => null])
+        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('console-requests', 'values-truncated');
 })->with([
     'a foreign file' => [
         fn (string $path) => (new SQLite3($path))->exec('CREATE TABLE orders (id INTEGER)'),

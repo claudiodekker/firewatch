@@ -141,6 +141,20 @@ describe('a store of another schema version', function () {
         'a newer schema' => 'PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = '.(Schema::VERSION + 1),
     ]);
 
+    it('starts its history again at the rebuild', function () {
+        $this->travelTo('2026-09-30 14:00:00');
+        $path = recoveryPath();
+        mkdir(dirname($path), recursive: true);
+        $store = new SQLite3($path);
+        $store->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0; CREATE TABLE records (id INTEGER)');
+        $store->close();
+        recoveryWriter('3.51.3');
+
+        recoveryBatch('new');
+
+        expect(app(Reader::class)->snapshot(fn (SQLite3 $connection) => $connection->querySingle("SELECT value FROM meta WHERE key = 'created_at'")))->toBe('1790776800.000000');
+    });
+
     it('is not rebuilt twice when another writer rebuilt it first', function () {
         $path = recoveryPath();
         mkdir(dirname($path), recursive: true);
