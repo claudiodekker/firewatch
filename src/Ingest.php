@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Actions\AppendBatch;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use Laravel\Nightwatch\Contracts\Ingest as IngestContract;
 use Throwable;
 
@@ -47,6 +48,7 @@ class Ingest implements IngestContract
     public function __construct(
         protected AppendBatch $appendBatch,
         protected QueryBindings $queryBindings,
+        protected FailureLog $failures,
     ) {
         //
     }
@@ -148,7 +150,7 @@ class Ingest implements IngestContract
     }
 
     /**
-     * Store a batch, keeping any failure from the host application.
+     * Store a batch, dropping and recording it on any failure, which never reaches the host application.
      *
      * @param  list<array<mixed>>  $records
      * @param  list<list<mixed>|null>  $bindings
@@ -160,21 +162,9 @@ class Ingest implements IngestContract
         try {
             $this->appendBatch->handle($records, $bindings);
         } catch (Throwable $exception) {
-            $this->report($exception);
+            $this->failures->record($exception, dropped: count($records));
         } finally {
             $this->storing = false;
-        }
-    }
-
-    /**
-     * Report a failed batch, swallowing a failure of the report itself.
-     */
-    protected function report(Throwable $exception): void
-    {
-        try {
-            report($exception);
-        } catch (Throwable) {
-            //
         }
     }
 }
