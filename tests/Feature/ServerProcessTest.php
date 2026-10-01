@@ -74,6 +74,18 @@ it('serves a session over stdio and exits at the end of its input', function () 
         ->and($replies[3]['result']['content'][0]['text'])->toStartWith("## overview\n");
 })->group('process');
 
+it('hands a tool its arguments over stdio, answering in JSON beside the same JSON as text', function () {
+    $session = serverSession();
+    $session[3]['params']['arguments'] = ['format' => 'json'];
+
+    $replies = serverReplies(runServer($this->storeDirectory, $session));
+    $result = $replies[3]['result'];
+
+    expect($result['isError'])->toBeFalse()
+        ->and(array_keys($result['structuredContent']))->toBe(['tool', 'now', 'window', 'summary', 'empty', 'result', 'coverage', 'blind_spots', 'notes', 'truncated', 'next'])
+        ->and(json_decode($result['content'][0]['text'], associative: true))->toEqual($result['structuredContent']);
+})->group('process');
+
 it('boots and answers without creating anything where the store would be', function () {
     runServer($this->storeDirectory, serverSession());
 

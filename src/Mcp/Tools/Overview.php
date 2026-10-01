@@ -4,13 +4,18 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
-use ClaudioDekker\Firewatch\ModeResolver;
+use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Coverage;
+use ClaudioDekker\Firewatch\Mcp\CoverageState;
+use ClaudioDekker\Firewatch\Mcp\Emptiness;
+use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\Schema;
-use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Support\Carbon;
+use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
+use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
@@ -31,6 +36,8 @@ use SQLite3Stmt;
 #[IsOpenWorld(false)]
 class Overview extends Tool
 {
+    use AnswersInEnvelope;
+
     /**
      * Create a new tool instance.
      */
@@ -50,73 +57,64 @@ class Overview extends Tool
     }
 
     /**
-     * Answer with the store clock and how many requests the store holds.
+     * Answer with how many records the store holds, and how many of them are requests, read in one snapshot.
      */
-    public function handle(): Response
+    public function handle(Request $request): Response|ResponseFactory
     {
-        $now = Carbon::now();
-
-        $clock = __('firewatch::messages.store_clock', [
-            'time' => $now->format('Y-m-d H:i:s.u'),
-            'epoch' => (float) $now->format('U.u'),
-        ]);
-
-        $lines = ['## overview', $clock, $this->counts()];
-
-        return Response::text(implode("\n", $lines));
+        return $this->answer($request, fn () => $this->read(Carbon::now()));
     }
 
     /**
-     * Get the empty-kind line, or the count of requests read in one snapshot.
+     * Read the store and put what it holds in the envelope.
      */
-    protected function counts(): string
+    protected function read(Carbon $now): Answer
     {
+        $epoch = (float) $now->format('U.u');
+        $timezone = config()->string('app.timezone');
+        $window = Window::between(null, null, $timezone);
+
         try {
-            [$records, $requests] = $this->reader->snapshot($this->countRecords(...));
+            [$records, $requests, $oldest, $newest] = $this->reader->snapshot($this->countRecords(...));
         } catch (StoreUnusable $unusable) {
-            return $this->unusable($unusable);
+            $empty = Emptiness::of($unusable, $this->configuration->database);
+
+            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable));
         }
 
         if ($records === 0) {
-            return __('firewatch::messages.store_empty', ['path' => $this->configuration->database]);
+            $empty = Emptiness::storeEmpty($this->configuration->database);
+
+            return new Answer('overview', $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::EMPTY, records: 0));
         }
 
-        return "- **request**: {$requests}";
+        return new Answer(
+            'overview',
+            $epoch,
+            $timezone,
+            $window,
+            __('firewatch::messages.overview_summary', ['records' => $records, 'requests' => $requests]),
+            null,
+            ['records' => $records, 'requests' => $requests],
+            new Coverage(CoverageState::OK, oldest: $oldest, newest: $newest, records: $records),
+        );
     }
 
     /**
-     * Get the line for a store that cannot be read: the no-store empty kind when it is absent, otherwise the unusable store and its reason.
-     */
-    protected function unusable(StoreUnusable $unusable): string
-    {
-        $path = $this->configuration->database;
-
-        return match ($unusable->state) {
-            StoreState::ABSENT => __('firewatch::messages.no_store', ['path' => $path]),
-            StoreState::FOREIGN => __('firewatch::messages.store_unusable.foreign_file', ['path' => $path]),
-            StoreState::SCHEMA_MISMATCH => __('firewatch::messages.store_unusable.'.($unusable->found < Schema::VERSION ? 'older_schema' : 'newer_schema'), ['path' => $path, 'found' => $unusable->found, 'expected' => Schema::VERSION]),
-            StoreState::UNAVAILABLE => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => $unusable->found, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]),
-            StoreState::CORRUPT => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')]),
-            StoreState::BUSY => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')]),
-        };
-    }
-
-    /**
-     * Count all records and the requests among them.
+     * Count all records and the requests among them, and find the span they cover.
      *
-     * @return array{int, int}
+     * @return array{int, int, float|null, float|null}
      */
     protected function countRecords(SQLite3 $connection): array
     {
         /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare('SELECT count(*), count(*) FILTER (WHERE type = :type) FROM records');
+        $statement = $connection->prepare('SELECT count(*), count(*) FILTER (WHERE type = :type), min(started_at), max(started_at) FROM records');
 
         $statement->bindValue(':type', ExecutionType::REQUEST->value);
 
         /** @var SQLite3Result $result */
         $result = $statement->execute();
 
-        /** @var array{int, int} */
+        /** @var array{int, int, float|null, float|null} */
         return $result->fetchArray(SQLITE3_NUM);
     }
 }
