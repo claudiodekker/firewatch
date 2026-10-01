@@ -128,7 +128,7 @@ describe('by age', function () {
 
     it('never moves the instant history was removed through back', function () {
         requestsStartedAt([PRUNE_CUTOFF - 1]);
-        $this->travelTo('2026-09-30 14:02:00');
+        $this->travelTo('2026-09-30 14:03:00');
         requestsStartedAt([PRUNE_CUTOFF - 5000]);
 
         expect(startedAts())->toBe([])
@@ -269,7 +269,7 @@ describe('the pass', function () {
         config()->set('firewatch.busy_timeout', 20);
         registerFirewatch();
         requestsStartedAt([PRUNE_CUTOFF + 1]);
-        $this->travelTo('2026-09-30 14:02:00');
+        $this->travelTo('2026-09-30 14:03:00');
         $connection = new SQLite3(app(Configuration::class)->database);
         $connection->busyTimeout(20);
         $connection->exec('PRAGMA journal_mode = DELETE');
@@ -299,4 +299,180 @@ describe('the pass', function () {
             ->and($lines)->toHaveCount(1)
             ->and($lines[0])->toMatchArray(['kind' => 'other', 'dropped' => 0]);
     });
+});
+
+/**
+ * @return array{live: int, free: int, total: int}
+ */
+function storePages(): array
+{
+    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
+        $total = $connection->querySingle('PRAGMA page_count');
+        $free = $connection->querySingle('PRAGMA freelist_count');
+
+        return ['live' => $total - $free, 'free' => $free, 'total' => $total];
+    });
+}
+
+function withBackstop(int $pages, int $chunk = 5, int $transactions = 20, int $reclaim = 1024): void
+{
+    app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class), $pages, $chunk, $transactions, $reclaim) extends Pruner
+    {
+        public function __construct(Writer $writer, Reader $reader, Configuration $configuration, protected int $pages, protected int $chunkRows, protected int $passTransactions, protected int $reclaimPages)
+        {
+            parent::__construct($writer, $reader, $configuration);
+        }
+
+        protected function backstopBytes(): int
+        {
+            return $this->pages * 4096;
+        }
+
+        protected function chunkRows(): int
+        {
+            return $this->chunkRows;
+        }
+
+        protected function passTransactions(): int
+        {
+            return $this->passTransactions;
+        }
+
+        protected function reclaimPages(): int
+        {
+            return $this->reclaimPages;
+        }
+    });
+
+    registerFirewatch();
+}
+
+test('every writer connection holds the store to 125% of the backstop', function () {
+    $ceiling = app(Writer::class)->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA max_page_count'));
+
+    expect($ceiling)->toBe(163840);
+});
+
+/**
+ * Fill the store with requests, and get its live pages with a pass due.
+ */
+function storeWithRequests(int $count): int
+{
+    requestsStartedAt(range(1790776001, 1790776000 + $count));
+    test()->travelTo('2026-09-30 14:03:00');
+
+    return storePages()['live'];
+}
+
+describe('the size backstop', function () {
+    it('leaves a store alone while its live bytes do not exceed the backstop', function () {
+        $live = storeWithRequests(200);
+
+        withBackstop($live);
+        app(Pruner::class)->run();
+
+        expect(startedAts())->toHaveCount(200);
+    });
+
+    it('trims the oldest records down to 90% of the backstop once live bytes exceed it', function () {
+        $live = storeWithRequests(200);
+
+        withBackstop($live - 1, chunk: 10);
+        app(Pruner::class)->run();
+
+        $target = (int) floor(0.9 * ($live - 1));
+        $startedAts = startedAts();
+
+        expect(storePages()['live'])->toBeLessThanOrEqual($target)
+            ->and(storePages()['live'])->toBeGreaterThan($target - 12)
+            ->and($startedAts)->not->toContain(1790776001.0)
+            ->and(end($startedAts))->toBe(1790776200.0)
+            ->and(pruneMeta())->toMatchArray(['pruned_by' => 'size']);
+    });
+
+    it('stops as soon as a chunk brings it under, reading the page counts again after each chunk', function () {
+        $live = storeWithRequests(200);
+
+        withBackstop($live - 1, chunk: 1, transactions: 200);
+        app(Pruner::class)->run();
+
+        $target = (int) floor(0.9 * ($live - 1));
+
+        expect(storePages()['live'])->toBeLessThanOrEqual($target)
+            ->and(storePages()['live'])->toBeGreaterThan($target - 3);
+    });
+
+    it('shares the pass transactions with the age and count trims', function () {
+        $live = storeWithRequests(200);
+
+        withBackstop(intdiv($live, 2), chunk: 2, transactions: 3);
+        app(Pruner::class)->run();
+
+        expect(startedAts())->toHaveCount(200 - 6);
+    });
+});
+
+describe('reclamation', function () {
+    it('returns freed pages to the file and checkpoints after a pass that deleted', function () {
+        requestsStartedAt(range(1790776001, 1790776300));
+        $this->travelTo('2026-09-30 14:01:01');
+        $before = storePages();
+
+        withBackstop(intdiv($before['live'], 2), chunk: 100);
+        requestsStartedAt([1790776301]);
+        $after = storePages();
+
+        expect($after['free'])->toBe(0)
+            ->and($after['total'])->toBeLessThan($before['total'])
+            ->and(filesize(app(Configuration::class)->database))->toBe($after['total'] * 4096);
+    });
+
+    it('vacuums at most the reclaim page count at a time', function () {
+        requestsStartedAt(range(1790776001, 1790776300));
+        $this->travelTo('2026-09-30 14:01:01');
+        $before = storePages();
+
+        withBackstop(intdiv($before['live'], 2), chunk: 100, reclaim: 2);
+        requestsStartedAt([1790776301]);
+
+        expect(storePages()['free'])->toBeGreaterThan(2);
+
+        $this->travelTo('2026-09-30 14:03:00');
+        $free = storePages()['free'];
+        app(Pruner::class)->run();
+
+        expect(storePages()['free'])->toBe($free - 2);
+    });
+
+    it('does nothing in an idle pass with a freelist no larger than the reclaim count', function () {
+        requestsStartedAt(range(1790776001, 1790776300));
+        $this->travelTo('2026-09-30 14:01:01');
+        $before = storePages();
+
+        withBackstop(intdiv($before['live'], 2), chunk: 100, reclaim: 2);
+        requestsStartedAt([1790776301]);
+        $free = storePages()['free'];
+
+        withBackstop(intdiv($before['live'], 2), chunk: 100, reclaim: $free);
+        $this->travelTo('2026-09-30 14:03:00');
+        app(Pruner::class)->run();
+
+        expect(storePages()['free'])->toBe($free);
+    });
+});
+
+it('drops a batch that would pass the ceiling as a full failure and never throws it', function () {
+    app()->instance(Writer::class, new class(app(Configuration::class)) extends Writer
+    {
+        public const SIZE_BACKSTOP_BYTES = 40 * 4096;
+    });
+    registerFirewatch();
+
+    requestsStartedAt(range(1790776001, 1790776400));
+
+    $lines = array_map(fn (string $line) => json_decode($line, associative: true), file(dirname(app(Configuration::class)->database).'/failures.jsonl', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES));
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0])->toMatchArray(['kind' => 'full'])
+        ->and(startedAts())->toBe([]);
 });

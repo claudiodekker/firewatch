@@ -36,6 +36,11 @@ class Writer
     protected const PAGE_SIZE = 4096;
 
     /**
+     * The live bytes past which a pruning pass trims the oldest records, a safety net rather than a setting.
+     */
+    public const SIZE_BACKSTOP_BYTES = 536870912;
+
+    /**
      * The largest size the write-ahead log is truncated back to, in bytes.
      */
     protected const JOURNAL_SIZE_LIMIT_BYTES = 33554432;
@@ -149,7 +154,20 @@ class Writer
     }
 
     /**
-     * Run the callback in one write transaction on the store, creating it first if there is none.
+     * Run the callback on the store's connection under the same lock as a write, without a transaction, for work that can't run inside one, such as a checkpoint.
+     *
+     * @template TResult
+     *
+     * @param  Closure(SQLite3): TResult  $callback
+     * @return TResult
+     */
+    public function maintain(Closure $callback): mixed
+    {
+        return $this->run($callback, transactional: false);
+    }
+
+    /**
+     * Run the callback in one write transaction on the store, creating it first if there is none, unless it is not transactional.
      *
      * @template TResult
      *
@@ -158,18 +176,31 @@ class Writer
      */
     protected function write(Closure $callback): mixed
     {
-        if (! $this->hasWalResetBug()) {
-            $connection = $this->connection();
+        return $this->run($callback, transactional: true);
+    }
 
-            return $this->transactionOn($connection, fn () => $callback($connection));
+    /**
+     * Run the callback on the store, in a write transaction or not, under the lock the SQLite release calls for.
+     *
+     * @template TResult
+     *
+     * @param  Closure(SQLite3): TResult  $callback
+     * @return TResult
+     */
+    protected function run(Closure $callback, bool $transactional): mixed
+    {
+        $run = fn (SQLite3 $connection) => $transactional ? $this->transactionOn($connection, fn () => $callback($connection)) : $callback($connection);
+
+        if (! $this->hasWalResetBug()) {
+            return $run($this->connection());
         }
 
         // A connection kept across the lock could reset the write-ahead log under another writer.
-        return $this->locked(function (int $remainingMilliseconds) use ($callback) {
+        return $this->locked(function (int $remainingMilliseconds) use ($run) {
             $connection = $this->open($remainingMilliseconds);
 
             try {
-                return $this->transactionOn($connection, fn () => $callback($connection));
+                return $run($connection);
             } finally {
                 $connection->close();
             }
@@ -365,6 +396,9 @@ class Writer
         $connection->exec('PRAGMA synchronous = NORMAL');
         $connection->exec('PRAGMA trusted_schema = 0');
         $connection->exec('PRAGMA journal_size_limit = '.static::JOURNAL_SIZE_LIMIT_BYTES);
+
+        // A burst between two passes lands, up to 125% of the backstop; a flood beyond that fails as `full`.
+        $connection->exec('PRAGMA max_page_count = '.intdiv(static::SIZE_BACKSTOP_BYTES * 5, 4 * static::PAGE_SIZE));
     }
 
     /**
@@ -475,7 +509,12 @@ class Writer
 
             $connection->exec('COMMIT');
         } catch (Throwable $exception) {
-            $connection->exec('ROLLBACK');
+            // SQLite rolls a transaction back itself when the store is full, and there is then nothing left to roll back.
+            try {
+                $connection->exec('ROLLBACK');
+            } catch (SQLite3Exception) {
+                //
+            }
 
             throw $exception;
         }
