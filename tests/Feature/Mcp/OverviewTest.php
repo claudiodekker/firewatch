@@ -22,8 +22,7 @@ it('answers that no store exists yet, with the store clock', function () {
         'summary' => 'Nothing to report: no store has been written yet.',
         'empty' => ['kind' => 'no_store', 'population' => null, 'message' => __('firewatch::messages.no_store', ['path' => $path])],
         'result' => [],
-        'coverage' => ['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null],
-    ]);
+    ])->and($envelope['coverage'])->toMatchArray(['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null]);
 });
 
 it('answers that the store is empty when it holds no records', function () {
@@ -35,8 +34,7 @@ it('answers that the store is empty when it holds no records', function () {
     expect($envelope)->toMatchArray([
         'summary' => 'Nothing to report: the store holds no records.',
         'empty' => ['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => $path])],
-        'coverage' => ['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0],
-    ]);
+    ])->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0]);
 });
 
 it('counts the records the store holds, and the requests among them', function () {
@@ -291,4 +289,74 @@ describe('windows', function () {
 
         expect($envelope['result']['requests'])->toBe(1);
     });
+});
+
+describe('coverage and blind spots', function () {
+    $types = ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'];
+    $ids = [
+        'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification',
+        'sync-jobs-unrecorded', 'vendor-defaults-unrecorded', 'exceptions-unreported', 'named-log-channels', 'memory-is-process-peak', 'query-bindings-unpaired',
+        'uninstrumented-dispatcher', 'application-opt-outs', 'values-truncated', 'octane-bootstrap',
+    ];
+
+    it('states the twelve types it read, the retention and that the history is complete from the first write', function () use ($types) {
+        $this->travelTo('2026-09-30 14:00:00.5');
+        app(Writer::class)->transaction(fn () => null);
+        $this->travelTo('2026-09-30 15:00:00');
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['coverage'])->toMatchArray([
+            'types_read' => $types,
+            'history' => ['from' => 1790776800.5, 'reason' => 'created', 'retention' => ['age_seconds' => 604800, 'records' => 100000]],
+            'straddling' => null,
+        ]);
+    });
+
+    it('stamps the store at its creation and never again', function () {
+        $this->travelTo('2026-09-30 14:00:00');
+        app(Writer::class)->transaction(fn () => null);
+        $this->travelTo('2026-09-30 16:00:00');
+        app(Writer::class)->transaction(fn () => null);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['coverage']['history']['from'])->toEqual(1790776800.0);
+    });
+
+    it('states no start for a history it cannot read, and still the retention and types', function () use ($types) {
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['coverage'])->toMatchArray([
+            'types_read' => $types,
+            'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => 604800, 'records' => 100000]],
+        ]);
+    });
+
+    it('attaches the blind spots of the types it examined to every answer, empty ones included', function (Closure $arrange) use ($ids) {
+        $this->travelTo('2026-09-30 14:00:00');
+
+        $envelope = Envelope::assert(Overview::class, $arrange());
+
+        expect(array_column($envelope['blind_spots'], 'id'))->toBe($ids)
+            ->and(array_unique(array_column($envelope['blind_spots'], 'kind')))->toBe(['structural'])
+            ->and($envelope['blind_spots'][0])->toBe(['id' => 'console-requests', 'kind' => 'structural', 'message' => __('firewatch::messages.blind_spots.console-requests')]);
+    })->with([
+        'no store' => [fn () => []],
+        'an empty store' => [function () {
+            app(Writer::class)->transaction(fn () => null);
+
+            return [];
+        }],
+        'an empty window' => [function () {
+            requestsAt(1790690400.0);
+
+            return ['since' => '-30m'];
+        }],
+        'records' => [function () {
+            requestsAt(1790690400.0);
+
+            return [];
+        }],
+    ]);
 });

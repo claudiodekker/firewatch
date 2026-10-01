@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
@@ -14,10 +15,13 @@ class Coverage
     /**
      * Create a new coverage instance.
      *
+     * @param  list<RecordType>  $typesRead  the record types the call examined
      * @param  string|null  $reason  why an unusable store is: foreign_file, newer_schema, older_schema, sqlite_too_old or unreadable
      */
     public function __construct(
         public readonly CoverageState $state,
+        public readonly array $typesRead,
+        public readonly History $history,
         public readonly ?string $reason = null,
         public readonly ?float $oldest = null,
         public readonly ?float $newest = null,
@@ -28,12 +32,14 @@ class Coverage
 
     /**
      * Get the coverage of a store that can't be read: absent, or unusable with the reason it is.
+     *
+     * @param  list<RecordType>  $typesRead
      */
-    public static function of(StoreUnusable $unusable): self
+    public static function of(StoreUnusable $unusable, array $typesRead, History $history): self
     {
         return $unusable->state === StoreState::ABSENT
-            ? new self(CoverageState::ABSENT)
-            : new self(CoverageState::UNUSABLE, self::reason($unusable));
+            ? new self(CoverageState::ABSENT, $typesRead, $history)
+            : new self(CoverageState::UNUSABLE, $typesRead, $history, self::reason($unusable));
     }
 
     /**
@@ -62,6 +68,9 @@ class Coverage
             'oldest_at' => $this->oldest,
             'newest_at' => $this->newest,
             'records' => $this->records,
+            'types_read' => array_map(fn (RecordType $type) => $type->value, $this->typesRead),
+            'history' => $this->history->toArray(),
+            'straddling' => null,
         ];
     }
 
@@ -80,6 +89,21 @@ class Coverage
             $parts[] = __('firewatch::messages.store_records', ['count' => number_format($this->records)]);
         }
 
-        return __('firewatch::messages.store_line', ['store' => implode(', ', $parts)]);
+        $line = __('firewatch::messages.store_line', ['store' => implode(', ', $parts)]);
+
+        return $this->history->from === null ? $line : $line.'; '.$this->historyLine($timezone);
+    }
+
+    /**
+     * Get the part of the store line that says from when the history is complete, and how long it is kept.
+     */
+    protected function historyLine(string $timezone): string
+    {
+        return __('firewatch::messages.store_history', [
+            'from' => Instant::format((float) $this->history->from, $timezone),
+            'reason' => $this->history->reason,
+            'age' => $this->history->retentionAge === null ? __('firewatch::messages.store_unlimited') : Markdown::duration($this->history->retentionAge),
+            'records' => $this->history->retentionRecords === null ? __('firewatch::messages.store_unlimited') : number_format($this->history->retentionRecords),
+        ]);
     }
 }

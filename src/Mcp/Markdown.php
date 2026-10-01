@@ -10,6 +10,20 @@ use ClaudioDekker\Firewatch\Capture\RecordMapper;
 class Markdown
 {
     /**
+     * Format a number of seconds in the largest of days, hours, minutes and seconds that holds it whole.
+     */
+    public static function duration(int $seconds): string
+    {
+        foreach (['d' => 86400, 'h' => 3600, 'm' => 60] as $unit => $length) {
+            if ($seconds >= $length && $seconds % $length === 0) {
+                return intdiv($seconds, $length).$unit;
+            }
+        }
+
+        return "{$seconds}s";
+    }
+
+    /**
      * Render a value as one table cell or one line: null as n/a, a boolean as yes or no, a list or object as compact JSON, with pipes escaped and line breaks flattened.
      */
     public static function cell(mixed $value): string

@@ -6,8 +6,10 @@ use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
+use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\RecordType;
 
 function answerWith(mixed ...$overrides): Answer
 {
@@ -19,7 +21,7 @@ function answerWith(mixed ...$overrides): Answer
         'summary' => 'Two requests.',
         'empty' => null,
         'result' => ['requests' => 2],
-        'coverage' => new Coverage(CoverageState::OK, oldest: 1790776000.5, newest: 1790776700.0, records: 1234),
+        'coverage' => new Coverage(CoverageState::OK, [], History::unknown(null, null), oldest: 1790776000.5, newest: 1790776700.0, records: 1234),
         ...$overrides,
     ]);
 }
@@ -79,7 +81,7 @@ it('prints the whole envelope in its fixed layout', function () {
 });
 
 it('prints only the lines that apply', function () {
-    $markdown = answerWith(coverage: new Coverage(CoverageState::ABSENT), result: [])->toMarkdown();
+    $markdown = answerWith(coverage: new Coverage(CoverageState::ABSENT, [], History::unknown(null, null)), result: [])->toMarkdown();
 
     expect($markdown)->toBe(implode("\n", [
         '## overview',
@@ -229,25 +231,44 @@ test('the store line states the coverage', function (Coverage $coverage, string 
         ->and($coverage->toArray())->toBe($json);
 })->with([
     'an absent store' => [
-        new Coverage(CoverageState::ABSENT),
+        new Coverage(CoverageState::ABSENT, [RecordType::REQUEST], History::unknown(604800, 100000)),
         'Store: absent',
-        ['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null],
+        ['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => ['request'], 'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => 604800, 'records' => 100000]], 'straddling' => null],
     ],
     'an unusable store' => [
-        new Coverage(CoverageState::UNUSABLE, 'foreign_file'),
+        new Coverage(CoverageState::UNUSABLE, [], History::unknown(null, null), 'foreign_file'),
         'Store: unusable (foreign_file)',
-        ['state' => 'unusable', 'reason' => 'foreign_file', 'oldest_at' => null, 'newest_at' => null, 'records' => null],
+        ['state' => 'unusable', 'reason' => 'foreign_file', 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => [], 'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => null, 'records' => null]], 'straddling' => null],
     ],
     'an empty store' => [
-        new Coverage(CoverageState::EMPTY, records: 0),
-        'Store: empty, 0 records',
-        ['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0],
+        new Coverage(CoverageState::EMPTY, [RecordType::LOG, RecordType::QUERY], new History(1790776000.5, 'created', 3600, 500), records: 0),
+        'Store: empty, 0 records; history complete from 2026-09-30 13:46:40.500000 (created); retention 1h, 500 records',
+        ['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0, 'types_read' => ['log', 'query'], 'history' => ['from' => 1790776000.5, 'reason' => 'created', 'retention' => ['age_seconds' => 3600, 'records' => 500]], 'straddling' => null],
     ],
     'a store with records' => [
-        new Coverage(CoverageState::OK, oldest: 1790776000.5, newest: 1790776700.0, records: 1234567),
-        'Store: ok, 2026-09-30 13:46:40.500000 to 2026-09-30 13:58:20.000000, 1,234,567 records',
-        ['state' => 'ok', 'reason' => null, 'oldest_at' => 1790776000.5, 'newest_at' => 1790776700.0, 'records' => 1234567],
+        new Coverage(CoverageState::OK, [RecordType::REQUEST], new History(1790776000.5, 'pruned-cap', 604800, 100000), oldest: 1790776000.5, newest: 1790776700.0, records: 1234567),
+        'Store: ok, 2026-09-30 13:46:40.500000 to 2026-09-30 13:58:20.000000, 1,234,567 records; history complete from 2026-09-30 13:46:40.500000 (pruned-cap); retention 7d, 100,000 records',
+        ['state' => 'ok', 'reason' => null, 'oldest_at' => 1790776000.5, 'newest_at' => 1790776700.0, 'records' => 1234567, 'types_read' => ['request'], 'history' => ['from' => 1790776000.5, 'reason' => 'pruned-cap', 'retention' => ['age_seconds' => 604800, 'records' => 100000]], 'straddling' => null],
     ],
+    'a store kept without limits' => [
+        new Coverage(CoverageState::OK, [], new History(1790776000.5, 'created', null, null), oldest: 1790776000.5, newest: 1790776700.0, records: 3),
+        'Store: ok, 2026-09-30 13:46:40.500000 to 2026-09-30 13:58:20.000000, 3 records; history complete from 2026-09-30 13:46:40.500000 (created); retention unlimited, unlimited records',
+        ['state' => 'ok', 'reason' => null, 'oldest_at' => 1790776000.5, 'newest_at' => 1790776700.0, 'records' => 3, 'types_read' => [], 'history' => ['from' => 1790776000.5, 'reason' => 'created', 'retention' => ['age_seconds' => null, 'records' => null]], 'straddling' => null],
+    ],
+]);
+
+it('formats a retention age in the largest whole unit', function (int $seconds, string $formatted) {
+    expect(Markdown::duration($seconds))->toBe($formatted);
+})->with([
+    'a week' => [604800, '7d'],
+    'two days' => [172800, '2d'],
+    'a day and an hour' => [90000, '25h'],
+    'an hour' => [3600, '1h'],
+    'ninety minutes' => [5400, '90m'],
+    'a minute' => [60, '1m'],
+    'ninety seconds' => [90, '90s'],
+    'a second' => [1, '1s'],
+    'none' => [0, '0s'],
 ]);
 
 it('answers in markdown as one text block and in JSON as structured content beside the same JSON', function () {

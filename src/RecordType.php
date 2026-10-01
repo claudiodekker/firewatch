@@ -22,6 +22,24 @@ enum RecordType: string
     case USER = 'user';
 
     /**
+     * Get the twelve record types of the events, which leaves out the user directory.
+     *
+     * @return list<self>
+     */
+    public static function events(): array
+    {
+        $events = [];
+
+        foreach (self::cases() as $type) {
+            if ($type !== self::USER) {
+                $events[] = $type;
+            }
+        }
+
+        return $events;
+    }
+
+    /**
      * The wire fields every record carries, with the name they are stored under and their accepted JSON types.
      */
     protected const ENVELOPE = [
