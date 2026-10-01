@@ -11,7 +11,7 @@ enum AnswerFormat: string
     case JSON = 'json';
 
     /**
-     * Read a tool's `format` argument, trimmed and lowercased; an absent argument is markdown, and anything else that is not a format is null.
+     * Read a tool's `format` argument, matched exactly; an absent argument is markdown, and anything else that is not a format is null.
      */
     public static function fromArgument(mixed $value): ?self
     {
@@ -19,6 +19,6 @@ enum AnswerFormat: string
             return self::MARKDOWN;
         }
 
-        return is_string($value) ? self::tryFrom(strtolower(trim($value))) : null;
+        return is_string($value) ? self::tryFrom($value) : null;
     }
 }

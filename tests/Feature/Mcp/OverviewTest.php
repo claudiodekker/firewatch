@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Support\Facades\Exceptions;
 
 it('answers that no store exists yet, with the store clock', function () {
     $this->travelTo('2026-09-30 14:00:00.250000');
@@ -53,16 +54,51 @@ it('counts the records the store holds, and the requests among them', function (
         ->and($envelope['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($envelope['coverage']['newest_at']);
 });
 
-it('answers in JSON for a format given in any case', function () {
-    $response = FirewatchServer::tool(Overview::class, ['format' => ' JSON ']);
+it('answers in JSON for a format of json', function () {
+    $response = FirewatchServer::tool(Overview::class, ['format' => 'json']);
 
     $response->assertStructuredContent(fn ($json) => $json->where('tool', 'overview')->etc());
 });
 
-it('refuses a format that is none', function () {
-    $response = FirewatchServer::tool(Overview::class, ['format' => 'xml']);
+it('refuses a format that is none, matching it exactly', function (string $format) {
+    $response = FirewatchServer::tool(Overview::class, ['format' => $format]);
 
-    $response->assertHasErrors(["error: invalid_argument\n`format` must be markdown or json; got \"xml\".\nargument: format\naccepted: markdown or json\nexample: overview(format: \"json\")"]);
+    $response->assertHasErrors(["error: invalid_argument\n`format` must be markdown or json; got \"{$format}\".\nargument: format\naccepted: markdown or json\nexample: overview(format: \"json\")"]);
+})->with(['xml', ' json ', 'JSON']);
+
+it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $code, string $sentence) {
+    $response = FirewatchServer::tool(Overview::class, [$argument => 'request']);
+
+    $response->assertHasErrors(["error: {$code}\n`{$argument}` {$sentence}\nargument: {$argument}\naccepted: since, until, format\nexample: overview(format: \"json\")"]);
+})->with([
+    'a misspelling' => ['sinse', 'invalid_argument', 'is not an argument of overview.'],
+    'an argument of another tool' => ['type', 'conflicting_arguments', 'does not apply to overview.'],
+]);
+
+it('refuses the arguments before it reads the store', function () {
+    $path = app(Configuration::class)->database;
+
+    FirewatchServer::tool(Overview::class, ['type' => 'request', 'format' => 'xml']);
+
+    expect(dirname($path))->not->toBeDirectory();
+});
+
+it('answers that it failed unexpectedly, even with debug on, and reports it once', function () {
+    config()->set('app.debug', true);
+    app()->instance(Reader::class, new class(app(Configuration::class)) extends Reader
+    {
+        public function snapshot(Closure $callback): mixed
+        {
+            throw new RuntimeException('secret detail at /var/www/app');
+        }
+    });
+
+    $response = FirewatchServer::tool(Overview::class);
+
+    $response->assertHasErrors(["error: internal\nThe tool failed unexpectedly. Run the doctor command."]);
+    $response->assertDontSee('secret');
+    Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'secret detail at /var/www/app');
+    Exceptions::assertReportedCount(1);
 });
 
 it('creates nothing where the store would be', function () {

@@ -3,15 +3,28 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
+use Throwable;
 
 /**
  * @internal
  */
 trait AnswersInEnvelope
 {
+    /**
+     * The arguments the twelve tools take among them, to tell an argument of another tool from one no tool takes.
+     *
+     * @var list<string>
+     */
+    protected const KNOWN_ARGUMENTS = [
+        'type', 'group', 'matching', 'by', 'since', 'until', 'deploy', 'limit', 'cursor', 'shape', 'threshold', 'order', 'method', 'status', 'outcome',
+        'level', 'slower_than_ms', 'at_or_above', 'execution_id', 'trace_id', 'job_id', 'user_id', 'who', 'split_at', 'deploy_before', 'deploy_after',
+        'buckets', 'sql', 'format',
+    ];
+
     /**
      * Get the argument every tool takes: the format of its answer.
      *
@@ -37,11 +50,35 @@ trait AnswersInEnvelope
         $format = AnswerFormat::fromArgument($argument);
 
         try {
+            $this->refuseUnacceptedArguments($request);
+
             $format ??= throw Refusal::format($argument, $this->name());
 
             return $answer()->response($format);
         } catch (Refusal $refusal) {
             return Response::error($refusal->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return Response::error(Refusal::internal()->getMessage());
+        }
+    }
+
+    /**
+     * Refuse the first argument of the call that the tool does not take, naming what it takes.
+     */
+    protected function refuseUnacceptedArguments(Request $request): void
+    {
+        $accepted = array_keys($this->schema(new JsonSchemaTypeFactory));
+
+        foreach (array_keys($request->all()) as $argument) {
+            if (in_array($argument, $accepted, true)) {
+                continue;
+            }
+
+            throw in_array($argument, self::KNOWN_ARGUMENTS, true)
+                ? Refusal::inapplicable($argument, $this->name(), $accepted)
+                : Refusal::unknown($argument, $this->name(), $accepted);
         }
     }
 }
