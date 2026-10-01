@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch;
 use ClaudioDekker\Firewatch\Actions\AppendBatch;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Pruner;
 use Laravel\Nightwatch\Contracts\Ingest as IngestContract;
 use Throwable;
 
@@ -49,6 +50,7 @@ class Ingest implements IngestContract
         protected AppendBatch $appendBatch,
         protected QueryBindings $queryBindings,
         protected FailureLog $failures,
+        protected Pruner $pruner,
     ) {
         //
     }
@@ -163,6 +165,16 @@ class Ingest implements IngestContract
             $this->appendBatch->handle($records, $bindings);
         } catch (Throwable $exception) {
             $this->failures->record($exception, dropped: count($records));
+
+            $this->storing = false;
+
+            return;
+        }
+
+        try {
+            $this->pruner->run();
+        } catch (Throwable $exception) {
+            $this->failures->record($exception, dropped: 0);
         } finally {
             $this->storing = false;
         }
