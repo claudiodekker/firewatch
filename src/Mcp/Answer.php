@@ -40,7 +40,7 @@ class Answer
      *
      * @param  float  $now  the store clock: Unix seconds with microseconds
      * @param  array<string, mixed>  $result  the tool's payload; a list of same-shaped rows prints as a table
-     * @param  list<array{id: string, kind: string, message: string}>  $blindSpots
+     * @param  list<array<string, mixed>>  $blindSpots  each with its id, kind and message, and a condition with its facts as fields
      * @param  list<string>  $notes
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @param  list<array{tool: string, arguments: array<string, mixed>, why: string}>  $next

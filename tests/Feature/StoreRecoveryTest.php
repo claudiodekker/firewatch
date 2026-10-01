@@ -208,7 +208,8 @@ describe('a damaged Firewatch store', function () {
             ->and(md5_file($path.'.corrupt'))->toBe($damaged)
             ->and(recoveryFailures())->toHaveCount(1)
             ->and(recoveryFailures()[0])->toMatchArray(['at' => (float) $now->format('U.u'), 'kind' => 'corrupt', 'code' => 11, 'dropped' => 0])
-            ->and(recoveryFailures()[0]['message'])->toEndWith('database disk image is malformed');
+            ->and(recoveryFailures()[0]['message'])->toEndWith('database disk image is malformed')
+            ->and(app(Reader::class)->snapshot(fn (SQLite3 $connection) => $connection->querySingle("SELECT value FROM meta WHERE key = 'rebuilt_why'")))->toBe('corrupt');
         Exceptions::assertNothingReported();
     })->with([
         'a writer that closes its connection per batch, damaged in its tables' => ['3.45.1', 4096],

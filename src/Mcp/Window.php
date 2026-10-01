@@ -56,6 +56,30 @@ class Window
     }
 
     /**
+     * Get the start of the window, or null for one with none.
+     */
+    public function since(): ?float
+    {
+        return $this->since;
+    }
+
+    /**
+     * Get the end of the window, or null for one with none.
+     */
+    public function until(): ?float
+    {
+        return $this->until;
+    }
+
+    /**
+     * Get the timezone the window is written in.
+     */
+    public function timezone(): string
+    {
+        return $this->timezone;
+    }
+
+    /**
      * Get the SQL condition that holds for the records of the window.
      */
     public function condition(): string

@@ -12,7 +12,7 @@ class NightwatchInstall
     /**
      * The Nightwatch release line the contract table was built and tested against.
      */
-    protected const VERIFIED_LINE = '1.30';
+    public const VERIFIED_LINE = '1.30';
 
     /**
      * Create a new Nightwatch install instance.

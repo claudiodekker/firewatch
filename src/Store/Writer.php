@@ -65,6 +65,11 @@ class Writer
     protected ?SQLite3 $connection = null;
 
     /**
+     * Why the next store this writer creates replaces one that was lost, until it stamps it.
+     */
+    protected ?string $rebuildReason = null;
+
+    /**
      * The process the open connection was made in.
      */
     protected ?int $connectionPid = null;
@@ -437,7 +442,17 @@ class Writer
                 $connection->exec($statement);
             }
 
-            $connection->exec("INSERT INTO meta (key, value) VALUES ('created_at', '".Date::now()->format('U.u')."')");
+            $now = Date::now()->format('U.u');
+            $connection->exec("INSERT INTO meta (key, value) VALUES ('created_at', '{$now}')");
+
+            // A store that replaces another says when and why, so answers can state that earlier data is gone.
+            $why = $stamp->isFresh() ? $this->rebuildReason : 'schema';
+
+            if ($why !== null) {
+                $connection->exec("INSERT INTO meta (key, value) VALUES ('rebuilt_at', '{$now}'), ('rebuilt_why', '{$why}')");
+            }
+
+            $this->rebuildReason = null;
             $connection->exec('PRAGMA application_id = '.Schema::APPLICATION_ID);
             $connection->exec('PRAGMA user_version = '.Schema::VERSION);
         });
@@ -482,6 +497,9 @@ class Writer
         }
 
         $this->failures->recovered($exception);
+
+        // The new store says why it starts where it does.
+        $this->rebuildReason = 'corrupt';
     }
 
     /**

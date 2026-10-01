@@ -72,6 +72,27 @@ class FailureLog
     }
 
     /**
+     * Read the dropped batches the file still holds, oldest first; a missing or unreadable file, a recovery that dropped nothing and a line that isn't a record hold none.
+     *
+     * @return list<array{at: float, kind: string, dropped: int}>
+     */
+    public function dropped(): array
+    {
+        $lines = @file(dirname($this->configuration->database).'/'.static::FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $dropped = [];
+
+        foreach ($lines ?: [] as $line) {
+            $entry = json_decode($line, associative: true);
+
+            if (is_array($entry) && is_numeric($entry['at'] ?? null) && is_string($entry['kind'] ?? null) && is_int($entry['dropped'] ?? null) && $entry['dropped'] > 0) {
+                $dropped[] = ['at' => (float) $entry['at'], 'kind' => $entry['kind'], 'dropped' => $entry['dropped']];
+            }
+        }
+
+        return $dropped;
+    }
+
+    /**
      * Get the line that records a dropped batch.
      */
     protected function line(Throwable $exception, int $dropped): string
