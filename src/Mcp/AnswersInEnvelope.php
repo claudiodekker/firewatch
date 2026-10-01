@@ -22,7 +22,8 @@ trait AnswersInEnvelope
     protected const KNOWN_ARGUMENTS = [
         'type', 'group', 'matching', 'by', 'since', 'until', 'deploy', 'limit', 'cursor', 'shape', 'threshold', 'order', 'method', 'status', 'outcome',
         'level', 'slower_than_ms', 'at_or_above', 'execution_id', 'trace_id', 'job_id', 'user_id', 'who', 'split_at', 'deploy_before', 'deploy_after',
-        'buckets', 'sql', 'format',
+        'buckets', 'sql', 'methods', 'path', 'domain', 'name', 'cron', 'timezone', 'repeat_seconds', 'connection', 'driver', 'store', 'key', 'host', 'class',
+        'format',
     ];
 
     /**

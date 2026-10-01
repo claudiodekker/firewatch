@@ -73,14 +73,23 @@ it('refuses an argument that is not the tool\'s, naming what it accepts', functi
 })->with([
     'a misspelling' => ['sinse', 'invalid_argument', 'is not an argument of overview.'],
     'an argument of another tool' => ['type', 'conflicting_arguments', 'does not apply to overview.'],
+    'an argument of fingerprint' => ['repeat_seconds', 'conflicting_arguments', 'does not apply to overview.'],
+    'a source fact of fingerprint' => ['path', 'conflicting_arguments', 'does not apply to overview.'],
 ]);
 
 it('refuses the arguments before it reads the store', function () {
-    $path = app(Configuration::class)->database;
+    app()->instance(Reader::class, new class(app(Configuration::class)) extends Reader
+    {
+        public function snapshot(Closure $callback): mixed
+        {
+            throw new RuntimeException('the store was read');
+        }
+    });
 
-    FirewatchServer::tool(Overview::class, ['type' => 'request', 'format' => 'xml']);
+    $response = FirewatchServer::tool(Overview::class, ['sinse' => 'now']);
 
-    expect(dirname($path))->not->toBeDirectory();
+    $response->assertHasErrors(["error: invalid_argument\n`sinse` is not an argument of overview.\nargument: sinse\naccepted: since, until, format\nexample: overview(format: \"json\")"]);
+    Exceptions::assertNothingReported();
 });
 
 it('answers that it failed unexpectedly, even with debug on, and reports it once', function () {
