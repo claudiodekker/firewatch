@@ -1,5 +1,6 @@
 <?php
 
+use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
@@ -32,7 +33,7 @@ function bulkyRows(int $count, string $column = 'text', int $length = 1900): arr
 
 function jsonCharacters(Answer $answer): int
 {
-    return mb_strlen(json_encode($answer->toArray()));
+    return mb_strlen(json_encode($answer->toArray(), RecordMapper::JSON_FLAGS));
 }
 
 describe('rows', function () {
@@ -195,5 +196,34 @@ describe('the answer budget', function () {
 
         expect(substr_count($answer->toMarkdown(), "\n| "))->toBe(5 + $kept + 4)
             ->and($answer->toMarkdown())->toContain("Truncated: second shows {$kept} of 30 (size). ".__('firewatch::messages.size_how'));
+    });
+
+    it('keeps an answer of exactly 24,000 characters and drops a row from one of 24,001', function () {
+        $build = function (int $padding) {
+            $rows = bulkyRows(11);
+            $rows[] = ['text' => str_repeat('y', $padding)];
+
+            return boundedAnswer(['first' => bulkyRows(1), 'second' => $rows]);
+        };
+        $overhead = jsonCharacters($build(0));
+        $padding = 24000 - $overhead;
+
+        expect($padding)->toBeBetween(0, 2000)
+            ->and(jsonCharacters($build($padding)))->toBe(24000)
+            ->and($build($padding)->toArray()['result']['second'])->toHaveCount(12)
+            ->and($build($padding + 1)->toArray()['result']['second'])->toHaveCount(11);
+    });
+
+    it('states cells cut only in the rows the budget kept', function () {
+        $long = str_repeat('x', 2001);
+        $rows = array_map(fn (int $number) => ['text' => $long], range(1, 30));
+
+        $envelope = boundedAnswer(['first' => bulkyRows(1), 'second' => $rows])->toArray();
+        $kept = count($envelope['result']['second']);
+
+        expect($kept)->toBeLessThan(30)
+            ->and($envelope['truncated'])->toHaveCount(2)
+            ->and($envelope['truncated'])->toContain(['section' => 'second', 'shown' => $kept, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how')])
+            ->and(array_column($envelope['truncated'], 'reason'))->toEqualCanonicalizing(['cap', 'size']);
     });
 });

@@ -99,7 +99,9 @@ class Answer
         if ($this->bounded === null) {
             [$result, $truncated] = Bounds::capCells($this->result, $this->truncated);
 
-            $this->bounded = Bounds::fitAnswer($result, $truncated, fn (array $result, array $truncated) => mb_strlen(json_encode($this->envelope($result, $truncated), RecordMapper::JSON_FLAGS)));
+            [$fitted, $truncated] = Bounds::fitAnswer($result, $truncated, fn (array $result, array $truncated) => mb_strlen(json_encode($this->envelope($result, $truncated), RecordMapper::JSON_FLAGS)));
+
+            $this->bounded = [$fitted, Bounds::recountCaps($this->result, $fitted, $truncated)];
         }
 
         return $this->bounded;

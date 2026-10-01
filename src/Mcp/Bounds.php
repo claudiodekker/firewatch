@@ -41,6 +41,27 @@ class Bounds
     }
 
     /**
+     * State the cells cut again for the rows the budget kept, so a row it dropped doesn't count.
+     *
+     * @param  array<string, mixed>  $original  the result before any cut
+     * @param  array<string, mixed>  $fitted  the result after the budget
+     * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
+     * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
+     */
+    public static function recountCaps(array $original, array $fitted, array $truncated): array
+    {
+        $kept = array_values(array_filter($truncated, fn (array $entry) => $entry['reason'] !== 'cap'));
+
+        foreach ($fitted as $section => $value) {
+            if (is_array($value) && array_is_list($value)) {
+                $original[$section] = array_slice($original[$section], 0, count($value));
+            }
+        }
+
+        return self::capCells($original, $kept)[1];
+    }
+
+    /**
      * Cut a value's strings to the cell cap on a character boundary, counting the cells cut.
      */
     protected static function cap(mixed $value, int &$cut): mixed
