@@ -3,7 +3,6 @@
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\Schema;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Support\Facades\Cache;
@@ -105,7 +104,7 @@ it('drops a batch when another process holds the write lock past the busy timeou
     'at a budget of 50 ms' => 50,
 ])->group('process');
 
-it('records a file that is not a store of this schema by its kind', function (Closure $write, string $kind, ?int $code, string $message) {
+it('records a file that is not a Firewatch store by its kind', function (Closure $write, string $kind, ?int $code, string $message) {
     $now = CarbonImmutable::parse('2026-09-30 12:00:00.250000');
     $this->travelTo($now);
     $database = app(Configuration::class)->database;
@@ -132,14 +131,8 @@ it('records a file that is not a store of this schema by its kind', function (Cl
     'a file that is not a database' => [
         'write' => fn (string $database) => file_put_contents($database, str_repeat('not a database ', 100)),
         'kind' => 'foreign',
-        'code' => 26,
-        'message' => 'file is not a database',
-    ],
-    'a store of another schema version' => [
-        'write' => fn (string $database) => (new SQLite3($database))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)'),
-        'kind' => 'schema',
         'code' => null,
-        'message' => 'The store at [%s] has schema version 2, not 1.',
+        'message' => 'The file at [%s] is not a Firewatch store.',
     ],
 ]);
 

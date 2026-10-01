@@ -53,6 +53,19 @@ return [
 
     'store_empty' => 'The store at :path holds no records: nothing was captured yet, or it was cleared. Exercise the application, then ask again.',
 
+    'store_unusable' => [
+        'foreign_file' => 'The file at :path is not a Firewatch store, and Firewatch will not touch it: set `database` to another path.',
+        'older_schema' => 'The store at :path was written by an older Firewatch schema (version :found, this release reads version :expected). The next captured batch rebuilds it; it holds no readable data until then.',
+        'newer_schema' => 'The store at :path was written by a newer Firewatch schema (version :found, this release reads version :expected). The next captured batch rebuilds it; it holds no readable data until then.',
+        'sqlite_too_old' => 'SQLite :version is older than the :minimum Firewatch needs, so nothing is captured and the store at :path can not be read.',
+        'unreadable' => 'The store at :path can not be read: :cause',
+    ],
+
+    'store_causes' => [
+        'corrupt' => 'the file is damaged. The next captured batch moves it aside and starts a new one.',
+        'busy' => 'it stayed busy for 1000 ms, so try again.',
+    ],
+
     'store_clock' => 'Store clock: :time (epoch :epoch) - pass that number as since, until or split_at to measure what happens next against what came before',
 
     /*

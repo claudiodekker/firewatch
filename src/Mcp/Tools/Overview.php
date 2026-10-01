@@ -4,7 +4,11 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
+use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreState;
+use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Support\Carbon;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Name;
@@ -67,17 +71,34 @@ class Overview extends Tool
      */
     protected function counts(): string
     {
-        if (! $this->reader->exists()) {
-            return __('firewatch::messages.no_store', ['path' => $this->configuration->database]);
+        try {
+            [$records, $requests] = $this->reader->snapshot($this->countRecords(...));
+        } catch (StoreUnusable $unusable) {
+            return $this->unusable($unusable);
         }
-
-        [$records, $requests] = $this->reader->snapshot($this->countRecords(...));
 
         if ($records === 0) {
             return __('firewatch::messages.store_empty', ['path' => $this->configuration->database]);
         }
 
         return "- **request**: {$requests}";
+    }
+
+    /**
+     * Get the line for a store that cannot be read: the no-store empty kind when it is absent, otherwise the unusable store and its reason.
+     */
+    protected function unusable(StoreUnusable $unusable): string
+    {
+        $path = $this->configuration->database;
+
+        return match ($unusable->state) {
+            StoreState::ABSENT => __('firewatch::messages.no_store', ['path' => $path]),
+            StoreState::FOREIGN => __('firewatch::messages.store_unusable.foreign_file', ['path' => $path]),
+            StoreState::SCHEMA_MISMATCH => __('firewatch::messages.store_unusable.'.($unusable->found < Schema::VERSION ? 'older_schema' : 'newer_schema'), ['path' => $path, 'found' => $unusable->found, 'expected' => Schema::VERSION]),
+            StoreState::UNAVAILABLE => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => $unusable->found, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]),
+            StoreState::CORRUPT => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')]),
+            StoreState::BUSY => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')]),
+        };
     }
 
     /**

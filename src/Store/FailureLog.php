@@ -60,6 +60,18 @@ class FailureLog
     }
 
     /**
+     * Record a store the writer recovered from, with nothing dropped, swallowing any failure.
+     */
+    public function recovered(Throwable $exception): void
+    {
+        try {
+            $this->append($this->line($exception, dropped: 0));
+        } catch (Throwable) {
+            //
+        }
+    }
+
+    /**
      * Get the line that records a dropped batch.
      */
     protected function line(Throwable $exception, int $dropped): string

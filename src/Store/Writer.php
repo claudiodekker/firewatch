@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use Closure;
 use Illuminate\Support\Sleep;
 use SQLite3;
+use SQLite3Exception;
 use Throwable;
 
 /**
@@ -92,6 +93,11 @@ class Writer
     protected Closure $pid;
 
     /**
+     * Records the store's recoveries.
+     */
+    protected FailureLog $failures;
+
+    /**
      * Create a new store writer instance.
      */
     public function __construct(
@@ -99,21 +105,57 @@ class Writer
         ?string $sqliteVersion = null,
         ?FileIdentity $identity = null,
         ?Closure $pid = null,
+        ?FailureLog $failures = null,
     ) {
         $this->sqliteVersion = $sqliteVersion ?? SQLite3::version()['versionString'];
         $this->identity = $identity ?? new FileIdentity;
         $this->pid = $pid ?? static fn (): int => getmypid() ?: 0;
+        $this->failures = $failures ?? new FailureLog($configuration);
     }
 
     /**
-     * Run the callback in one write transaction, creating the store first if there is none.
+     * Run the callback in one write transaction, creating the store first if there is none, and replacing it once if it turns out to be a damaged Firewatch store.
+     *
+     * @template TResult
+     *
+     * @param  Closure(SQLite3): TResult  $callback
+     * @return TResult
+     *
+     * @throws StoreFailure when the file is not a Firewatch store
+     */
+    public function transaction(Closure $callback): mixed
+    {
+        $identity = $this->identity->of($this->configuration->database);
+
+        try {
+            return $this->write($callback);
+        } catch (SQLite3Exception $exception) {
+            if (FailureKind::of($exception) !== FailureKind::CORRUPT) {
+                throw $exception;
+            }
+
+            // A store another process already replaced is not this damage, so it is not moved aside again.
+            if ($this->identity->of($this->configuration->database) === $identity) {
+                if (FileKind::of($this->configuration->database) !== FileKind::FIREWATCH) {
+                    throw $this->foreign();
+                }
+
+                $this->moveAside($exception);
+            }
+
+            return $this->write($callback);
+        }
+    }
+
+    /**
+     * Run the callback in one write transaction on the store, creating it first if there is none.
      *
      * @template TResult
      *
      * @param  Closure(SQLite3): TResult  $callback
      * @return TResult
      */
-    public function transaction(Closure $callback): mixed
+    protected function write(Closure $callback): mixed
     {
         if (! $this->hasWalResetBug()) {
             $connection = $this->connection();
@@ -262,6 +304,10 @@ class Writer
         $this->createDirectory(dirname($path));
         $this->createFile($path);
 
+        if (FileKind::of($path) === FileKind::NOT_SQLITE) {
+            throw $this->foreign();
+        }
+
         $connection = new SQLite3($path, SQLITE3_OPEN_READWRITE);
 
         // A connection left to the exception's trace could close, and checkpoint, after the lock is released.
@@ -321,23 +367,36 @@ class Writer
     }
 
     /**
-     * Create the schema and its stamps in a new store.
+     * Create the schema and its stamps in a new store, or rebuild a store of another schema version.
      */
     protected function createSchema(SQLite3 $connection): void
     {
-        if ($this->isStamped($connection)) {
+        $stamp = StoreStamp::read($connection);
+
+        if ($stamp->isCurrent()) {
             return;
         }
 
-        // The page size and auto-vacuum mode can only be set before the first table exists.
-        $connection->exec('PRAGMA page_size = '.static::PAGE_SIZE);
-        $connection->exec('PRAGMA auto_vacuum = INCREMENTAL');
-        $connection->exec('PRAGMA journal_mode = WAL');
+        if ($stamp->isFresh()) {
+            // The page size and auto-vacuum mode can only be set before the first table exists, and never change across schema versions.
+            $connection->exec('PRAGMA page_size = '.static::PAGE_SIZE);
+            $connection->exec('PRAGMA auto_vacuum = INCREMENTAL');
+            $connection->exec('PRAGMA journal_mode = WAL');
+        }
 
         $this->transactionOn($connection, function () use ($connection) {
-            if ($this->isStamped($connection)) {
+            // Another writer may have created or rebuilt the store since the first read.
+            $stamp = StoreStamp::read($connection);
+
+            if ($stamp->isCurrent()) {
                 return;
             }
+
+            if (! $stamp->isFresh() && ! $stamp->isFirewatch()) {
+                throw $this->foreign();
+            }
+
+            $this->dropEverything($connection);
 
             foreach ((new Schema)->statements() as $statement) {
                 $connection->exec($statement);
@@ -349,29 +408,52 @@ class Writer
     }
 
     /**
-     * Determine if the store carries Firewatch's stamps for this schema version.
-     *
-     * @throws StoreFailure when the file is another schema version's store or not a store at all
+     * Drop every view and table of the store, and with the tables their indexes, in place.
      */
-    protected function isStamped(SQLite3 $connection): bool
+    protected function dropEverything(SQLite3 $connection): void
     {
-        $applicationId = $connection->querySingle('PRAGMA application_id');
-        /** @var int $userVersion */
-        $userVersion = $connection->querySingle('PRAGMA user_version');
+        // Views go first, as they read the tables.
+        foreach (['view', 'table'] as $type) {
+            $drops = $connection->querySingle(<<<SQL
+                SELECT group_concat('DROP ' || upper(type) || ' "' || replace(name, '"', '""') || '"', ';')
+                FROM sqlite_master
+                WHERE type = '{$type}' AND name NOT LIKE 'sqlite\_%' ESCAPE '\\'
+                SQL);
 
-        if ($applicationId === Schema::APPLICATION_ID && $userVersion === Schema::VERSION) {
-            return true;
+            if (is_string($drops)) {
+                $connection->exec($drops);
+            }
+        }
+    }
+
+    /**
+     * Move the damaged store, its write-ahead log and its shared memory aside, replacing the copy of an earlier recovery, and record it.
+     */
+    protected function moveAside(SQLite3Exception $exception): void
+    {
+        if ($this->connection !== null) {
+            $this->release($this->connection);
         }
 
-        if ($applicationId === 0 && $userVersion === 0 && $connection->querySingle('SELECT count(*) FROM sqlite_master') === 0) {
-            return false;
+        $path = $this->configuration->database;
+
+        foreach (['', '-wal', '-shm'] as $suffix) {
+            if (is_file($path.$suffix)) {
+                @rename($path.$suffix, $path.$suffix.'.corrupt');
+            } else {
+                @unlink($path.$suffix.'.corrupt');
+            }
         }
 
-        if ($applicationId === Schema::APPLICATION_ID) {
-            throw new StoreFailure(FailureKind::SCHEMA, 'The store at ['.$this->configuration->database.'] has schema version '.$userVersion.', not '.Schema::VERSION.'.');
-        }
+        $this->failures->recovered($exception);
+    }
 
-        throw new StoreFailure(FailureKind::FOREIGN, 'The file at ['.$this->configuration->database.'] is not a Firewatch store.');
+    /**
+     * Get the failure for a file that is not a Firewatch store, which is never written to.
+     */
+    protected function foreign(): StoreFailure
+    {
+        return new StoreFailure(FailureKind::FOREIGN, 'The file at ['.$this->configuration->database.'] is not a Firewatch store.');
     }
 
     /**
