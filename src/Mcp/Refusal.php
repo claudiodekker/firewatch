@@ -98,7 +98,7 @@ class Refusal extends RuntimeException
      */
     public static function format(mixed $value, string $tool): self
     {
-        return self::invalid('format', 'markdown or json', json_encode($value), 'markdown or json', self::formatExample($tool));
+        return self::invalid('format', 'markdown or json', json_encode($value, JSON_THROW_ON_ERROR), 'markdown or json', self::formatExample($tool));
     }
 
     /**
@@ -114,7 +114,7 @@ class Refusal extends RuntimeException
      */
     public static function time(string $argument, mixed $value, string $tool): self
     {
-        $shown = '`'.(is_string($value) ? $value : json_encode($value)).'`';
+        $shown = '`'.(is_string($value) ? $value : json_encode($value, JSON_THROW_ON_ERROR)).'`';
 
         return new self(ErrorCode::UNREADABLE_TIME, __('firewatch::messages.unreadable_time', ['argument' => $argument, 'value' => $shown, 'tool' => $tool, 'maximum' => TimeGrammar::MAXIMUM_EPOCH]));
     }
