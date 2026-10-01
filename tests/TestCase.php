@@ -21,6 +21,10 @@ abstract class TestCase extends Orchestra
         // Firewatch resolves its configuration while it registers, before defineEnvironment() runs.
         $this->setStorePath($this->storeDirectory.'/firewatch.sqlite');
 
+        // Wire fixtures carry timestamps from the day they were recorded, so a test keeps them unless it sets the age itself.
+        $_SERVER['FIREWATCH_RETENTION_AGE'] = $_ENV['FIREWATCH_RETENTION_AGE'] = '36500d';
+        putenv('FIREWATCH_RETENTION_AGE=36500d');
+
         parent::setUp();
     }
 
@@ -29,6 +33,9 @@ abstract class TestCase extends Orchestra
         parent::tearDown();
 
         $this->setStorePath(null);
+
+        unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
+        putenv('FIREWATCH_RETENTION_AGE');
 
         (new Filesystem)->deleteDirectory($this->storeDirectory);
     }

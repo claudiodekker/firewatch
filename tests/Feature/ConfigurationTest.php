@@ -27,6 +27,8 @@ it('reads each key from its environment variable', function (string $variable, s
 it('resolves the package defaults when nothing is published or set', function () {
     $this->setStorePath(null);
     config()->set('firewatch', []);
+    unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
+    putenv('FIREWATCH_RETENTION_AGE');
 
     $configuration = registerFirewatch();
 
