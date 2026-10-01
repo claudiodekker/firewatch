@@ -58,16 +58,49 @@ class Writer
     protected ?SQLite3 $connection = null;
 
     /**
+     * The process the open connection was made in.
+     */
+    protected ?int $connectionPid = null;
+
+    /**
+     * The device and inode of the store file when the open connection was made, or null when it had none.
+     */
+    protected ?string $connectionIdentity = null;
+
+    /**
+     * The connections inherited across a fork, held so their handles are never closed from the child.
+     *
+     * @var list<SQLite3>
+     */
+    protected array $abandoned = [];
+
+    /**
      * The SQLite release the store is written with.
      */
     protected string $sqliteVersion;
 
     /**
+     * The identity of the store file, read for the open connection.
+     */
+    protected FileIdentity $identity;
+
+    /**
+     * The process id, read for the open connection.
+     */
+    protected Closure $pid;
+
+    /**
      * Create a new store writer instance.
      */
-    public function __construct(protected Configuration $configuration, ?string $sqliteVersion = null)
-    {
+    public function __construct(
+        protected Configuration $configuration,
+        ?string $sqliteVersion = null,
+        ?FileIdentity $identity = null,
+        ?Closure $pid = null,
+    ) {
         $this->sqliteVersion = $sqliteVersion ?? SQLite3::version()['versionString'];
+        $this->identity = $identity ?? new FileIdentity;
+        $this->pid = $pid ?? getmypid(...);
     }
 
     /**
@@ -81,7 +114,7 @@ class Writer
     public function transaction(Closure $callback): mixed
     {
         if (! $this->hasWalResetBug()) {
-            $connection = $this->connection ??= $this->open($this->configuration->busyTimeoutMilliseconds);
+            $connection = $this->connection();
 
             return $this->transactionOn($connection, fn () => $callback($connection));
         }
@@ -96,6 +129,38 @@ class Writer
                 $connection->close();
             }
         });
+    }
+
+    /**
+     * Get the open connection, making a new one when there is none, it was inherited across a fork, or the store file was deleted or replaced.
+     */
+    protected function connection(): SQLite3
+    {
+        if ($this->connection !== null && ($this->connectionPid !== ($this->pid)() || $this->connectionIdentity !== $this->identity->of($this->configuration->database))) {
+            $this->release($this->connection);
+        }
+
+        if ($this->connection === null) {
+            $this->connection = $this->open($this->configuration->busyTimeoutMilliseconds);
+            $this->connectionPid = ($this->pid)();
+            $this->connectionIdentity = $this->identity->of($this->configuration->database);
+        }
+
+        return $this->connection;
+    }
+
+    /**
+     * Let go of the open connection: a connection inherited across a fork is kept unused, as closing it from the child could corrupt the store, and any other is closed.
+     */
+    protected function release(SQLite3 $connection): void
+    {
+        if ($this->connectionPid !== ($this->pid)()) {
+            $this->abandoned[] = $connection;
+        } else {
+            $connection->close();
+        }
+
+        $this->connection = null;
     }
 
     /**
