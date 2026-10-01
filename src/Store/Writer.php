@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use Closure;
+use Illuminate\Support\Sleep;
 use SQLite3;
 use Throwable;
 
@@ -38,16 +39,35 @@ class Writer
     protected const JOURNAL_SIZE_LIMIT_BYTES = 33554432;
 
     /**
-     * The open connection, once a batch has been written.
+     * The SQLite releases with the WAL-reset bug, each from its first affected release up to the release that fixed it.
+     */
+    protected const WAL_RESET_BUG = [
+        ['3.7.0', '3.44.6'],
+        ['3.45.0', '3.50.7'],
+        ['3.51.0', '3.51.3'],
+    ];
+
+    /**
+     * The interval the lock file is polled at, in milliseconds.
+     */
+    protected const LOCK_POLL_MILLISECONDS = 5;
+
+    /**
+     * The open connection, once a batch has been written on a SQLite release without the WAL-reset bug.
      */
     protected ?SQLite3 $connection = null;
 
     /**
+     * The SQLite release the store is written with.
+     */
+    protected string $sqliteVersion;
+
+    /**
      * Create a new store writer instance.
      */
-    public function __construct(protected Configuration $configuration)
+    public function __construct(protected Configuration $configuration, ?string $sqliteVersion = null)
     {
-        //
+        $this->sqliteVersion = $sqliteVersion ?? SQLite3::version()['versionString'];
     }
 
     /**
@@ -60,15 +80,96 @@ class Writer
      */
     public function transaction(Closure $callback): mixed
     {
-        $connection = $this->connection ??= $this->open();
+        if (! $this->hasWalResetBug()) {
+            $connection = $this->connection ??= $this->open($this->configuration->busyTimeoutMilliseconds);
 
-        return $this->transactionOn($connection, fn () => $callback($connection));
+            return $this->transactionOn($connection, fn () => $callback($connection));
+        }
+
+        // A connection kept across the lock could reset the write-ahead log under another writer.
+        return $this->locked(function (int $remainingMilliseconds) use ($callback) {
+            $connection = $this->open($remainingMilliseconds);
+
+            try {
+                return $this->transactionOn($connection, fn () => $callback($connection));
+            } finally {
+                $connection->close();
+            }
+        });
     }
 
     /**
-     * Open the store, creating its directory, file and schema when they are missing.
+     * Determine if the SQLite release can reset the write-ahead log under a concurrent writer.
      */
-    protected function open(): SQLite3
+    protected function hasWalResetBug(): bool
+    {
+        foreach (static::WAL_RESET_BUG as [$affected, $fixed]) {
+            if (version_compare($this->sqliteVersion, $affected, '>=') && version_compare($this->sqliteVersion, $fixed, '<')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Run the callback holding the exclusive lock file, polled within the busy timeout, with what is left of it.
+     *
+     * @template TResult
+     *
+     * @param  Closure(int): TResult  $callback
+     * @return TResult
+     *
+     * @throws StoreFailure when the lock is not acquired within the busy timeout
+     */
+    protected function locked(Closure $callback): mixed
+    {
+        $path = $this->configuration->database.'.lock';
+        $budget = $this->configuration->busyTimeoutMilliseconds;
+        $deadline = now()->addMilliseconds($budget);
+
+        $this->createDirectory(dirname($path));
+        $handle = $this->openLockFile($path);
+
+        try {
+            while (! flock($handle, LOCK_EX | LOCK_NB)) {
+                $remaining = now()->diffInMilliseconds($deadline);
+
+                if ($remaining <= 0) {
+                    throw new StoreFailure(FailureKind::BUSY, "Firewatch could not lock [{$path}] within {$budget} ms.");
+                }
+
+                Sleep::usleep((int) round(min($remaining, static::LOCK_POLL_MILLISECONDS) * 1_000));
+            }
+
+            return $callback((int) max(0, round(now()->diffInMilliseconds($deadline))));
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
+
+    /**
+     * Open the private lock file, creating it when it is missing.
+     *
+     * @return resource
+     */
+    protected function openLockFile(string $path): mixed
+    {
+        $created = ! file_exists($path);
+        $handle = @fopen($path, 'c');
+
+        if ($handle === false || ($created && ! @chmod($path, static::FILE_MODE))) {
+            throw new StoreFailure(FailureKind::IO, "Firewatch could not open [{$path}].");
+        }
+
+        return $handle;
+    }
+
+    /**
+     * Open the store with the given busy timeout, creating its directory, file and schema when they are missing.
+     */
+    protected function open(int $busyTimeoutMilliseconds): SQLite3
     {
         $path = $this->configuration->database;
 
@@ -78,7 +179,7 @@ class Writer
         $connection = new SQLite3($path, SQLITE3_OPEN_READWRITE);
 
         $connection->enableExceptions(true);
-        $connection->busyTimeout($this->configuration->busyTimeoutMilliseconds);
+        $connection->busyTimeout($busyTimeoutMilliseconds);
 
         $this->configure($connection);
         $this->createSchema($connection);
