@@ -554,12 +554,20 @@ it('refuses a cursor that is no cursor, or of another tool or call, or from befo
     'a string that is no cursor' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => 'not a cursor']],
     'a cursor of another tool' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => Cursor::make('rank', $arguments, occCreatedAt(), ['value' => 1, 'id' => 1], null, null)]],
     'a key that is not one' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => Cursor::make('occurrences', $arguments, occCreatedAt(), ['value' => 'x', 'id' => 1], null, null)]],
+    'a key without an id' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => Cursor::make('occurrences', $arguments, occCreatedAt(), ['value' => 1], null, null)]],
+    'a key with a decimal id' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => Cursor::make('occurrences', $arguments, occCreatedAt(), ['value' => 1, 'id' => 1.5], null, null)]],
     'another order' => [fn (string $cursor, array $arguments) => [...$arguments, 'order' => 'slowest', 'cursor' => $cursor]],
     'another type' => [fn (string $cursor, array $arguments) => [...$arguments, 'type' => 'command', 'cursor' => $cursor]],
     'a rebuilt store' => [function (string $cursor, array $arguments) {
         test()->travel(1)->seconds();
         app(Writer::class)->rebuild();
         occFiveRequests();
+
+        return [...$arguments, 'cursor' => $cursor];
+    }],
+    'a rebuilt store that holds nothing yet' => [function (string $cursor, array $arguments) {
+        test()->travel(1)->seconds();
+        app(Writer::class)->rebuild();
 
         return [...$arguments, 'cursor' => $cursor];
     }],
