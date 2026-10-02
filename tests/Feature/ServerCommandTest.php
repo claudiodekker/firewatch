@@ -16,8 +16,9 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 1]),
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 2]),
             '  overview  Entry point.',
+            '  rank      Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
             '',
         ]));
 });
@@ -59,6 +60,20 @@ it('lists the tools as JSON with the server name and version', function () {
                     'name' => 'overview',
                     'description' => __('firewatch::messages.tools.overview'),
                     'inputSchema' => ['properties' => ['since' => ['description' => __('firewatch::messages.since_argument'), 'type' => 'string'], 'until' => ['description' => __('firewatch::messages.until_argument'), 'type' => 'string'], 'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string']], 'type' => 'object'],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
+                    'name' => 'rank',
+                    'description' => __('firewatch::messages.tools.rank'),
+                    'inputSchema' => ['properties' => [
+                        'type' => ['description' => __('firewatch::messages.rank_type_argument'), 'type' => 'string'],
+                        'by' => ['description' => __('firewatch::messages.rank_by_argument'), 'type' => 'string'],
+                        'since' => ['description' => __('firewatch::messages.since_argument'), 'type' => 'string'],
+                        'until' => ['description' => __('firewatch::messages.until_argument'), 'type' => 'string'],
+                        'deploy' => ['description' => __('firewatch::messages.rank_deploy_argument'), 'type' => 'string'],
+                        'limit' => ['description' => __('firewatch::messages.rank_limit_argument'), 'type' => 'integer'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object'],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
             ],

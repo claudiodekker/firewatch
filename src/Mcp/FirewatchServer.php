@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use Composer\InstalledVersions;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Name;
@@ -31,6 +32,7 @@ class FirewatchServer extends Server
      */
     protected array $tools = [
         Overview::class,
+        Rank::class,
     ];
 
     /**
