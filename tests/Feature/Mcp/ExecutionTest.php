@@ -509,7 +509,7 @@ describe('the request details', function () {
         $envelope = execAnswer();
 
         expect($envelope['result']['request']['payload']['body'])->toBe(str_repeat('x', 2000).__('firewatch::messages.cell_truncated', ['count' => 500]))
-            ->and($envelope['truncated'])->toBe([['section' => 'request', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how')]]);
+            ->and($envelope['truncated'])->toBe([['section' => 'request', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => capHow()]]);
     });
 
     it('has no request details for the other types', function (RecordType $type) {
@@ -942,7 +942,7 @@ describe('the timeline', function () {
         $shown = count($envelope['result']['timeline']);
 
         expect($shown)->toBeLessThan(100)
-            ->and($envelope['truncated'])->toBe([['section' => 'timeline', 'shown' => $shown, 'matched' => 120, 'reason' => 'size', 'how' => __('firewatch::messages.size_how')]]);
+            ->and($envelope['truncated'])->toBe([['section' => 'timeline', 'shown' => $shown, 'matched' => 120, 'reason' => 'size', 'how' => sizeHow()]]);
     });
 
     it('prints the cut timeline in markdown, with how to see the rest', function () {

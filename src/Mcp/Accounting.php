@@ -2,6 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Store\Markers;
+
 /**
  * @internal
  */
@@ -12,10 +14,9 @@ class Accounting
      *
      * @param  array<string, mixed>  $execution
      * @param  list<array<string, mixed>>  $children
-     * @param  array<string, string>  $meta
      * @return array{counters: list<array{counter: string, counted: int, captured: int, state: string}>, lines: list<string>}
      */
-    public static function of(array $execution, array $children, array $meta, string $timezone): array
+    public static function of(array $execution, array $children, Markers $meta, string $timezone): array
     {
         $held = array_count_values(array_column($children, 'type'));
         $startedAt = $execution['started_at'];
@@ -56,10 +57,8 @@ class Accounting
 
     /**
      * Get the line for children that are fewer than counted: removed history when their type's coverage starts after the execution did, otherwise incomplete.
-     *
-     * @param  array<string, string>  $meta
      */
-    protected static function missing(Counter $counter, int $captured, int $counted, array $meta, mixed $startedAt, string $timezone): string
+    protected static function missing(Counter $counter, int $captured, int $counted, Markers $meta, mixed $startedAt, string $timezone): string
     {
         $from = History::of($meta, [$counter->type()])->from;
 
