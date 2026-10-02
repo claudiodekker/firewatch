@@ -847,7 +847,7 @@ class Occurrences extends Tool
             $misfit = $type === null ? ($needsType && ! $resolvable) : ! in_array($type, $fits, true);
 
             if ($given && $misfit) {
-                throw Refusal::conflicting(argument: $argument, with: $type?->value ?? $selector, accepted: $accepted, example: self::EXAMPLE);
+                throw Refusal::conflicting(argument: $argument, with: $type === null ? $selector : $type->value, accepted: $accepted, example: self::EXAMPLE);
             }
         }
     }
