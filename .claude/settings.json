@@ -5,10 +5,17 @@
                 "source": "github",
                 "repo": "mattpocock/skills"
             }
+        },
+        "claudiodekker": {
+            "source": {
+                "source": "github",
+                "repo": "claudiodekker/skills"
+            }
         }
     },
     "enabledPlugins": {
-        "mattpocock-skills@mattpocock": true
+        "mattpocock-skills@mattpocock": true,
+        "skills@claudiodekker": true
     },
     "hooks": {
         "SessionStart": [
