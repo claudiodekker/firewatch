@@ -37,6 +37,7 @@ return [
     'tools' => [
         'overview' => 'Entry point. Answers "what is wrong in this application?": the store\'s coverage, the server-error and client-error rate, the slowest groups by total time, record counts for all twelve types and the user directory, how many executions had a signed-in actor, budget verdicts, and all eleven problem shapes checked at once. Use it first and after every change; drill into a shape with `detect`, into a group with `rank`. Windowed by since/until; without them everything stored counts. Empty is not clean: each shape is clean, has findings or is not_evaluated, with the number of records examined. Nothing is wrong only when all eleven ran and are clean.',
         'rank' => 'Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, worst first, to answer "what is slow, heavy or frequent?". Pass `type`; `by` picks the measure, p95_duration by default and occurrences for exceptions. Percentiles are null with a `withheld` object when too few records support them; when no group has enough for the percentile, the order falls back to the maximum and a note says so. Rows carry when the group was first and last seen, its deploys and its slowest execution, and failure_pct where the type has a notion of failure. Windowed by since/until; `deploy` restricts the records. Empty is not clean.',
+        'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
     ],
 
     /*
@@ -212,6 +213,46 @@ return [
     'rank_truncated_how' => 'Pass a larger `limit`, up to 100, or narrow the window.',
 
     'rank_no_route' => '(no route matched)',
+
+    'occurrences_group_argument' => 'A group id from `rank` or from a row: only its records. A job group lists its dispatches and attempts together.',
+
+    'occurrences_type_argument' => 'A record type: request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request or queued-job.',
+
+    'occurrences_execution_id_argument' => 'An execution id: the execution\'s own record and everything recorded inside it.',
+
+    'occurrences_trace_id_argument' => 'A trace id: the records of a request and of the jobs and commands it caused.',
+
+    'occurrences_job_id_argument' => 'A job id: its dispatch and every attempt.',
+
+    'occurrences_user_id_argument' => 'A user id: the records that carry that user, as recorded.',
+
+    'occurrences_order_argument' => 'recent (default), slowest, memory or queries. Records without the measure come last; memory and queries need an execution type.',
+
+    'occurrences_method_argument' => 'An HTTP method, any case. Only for request and outgoing-request.',
+
+    'occurrences_status_argument' => 'A status code: 500, a class such as 5xx, or a range such as 400-499. Only for request and outgoing-request.',
+
+    'occurrences_outcome_argument' => 'processed, failed or released for job-attempt; processed, failed or skipped for scheduled-task.',
+
+    'occurrences_level_argument' => 'A log level: that level and every worse one. Only for log.',
+
+    'occurrences_slower_than_ms_argument' => 'Only records strictly slower than this many milliseconds. Records without a duration are left out.',
+
+    'occurrences_at_or_above_argument' => 'median or p95: only records at or above that duration of the selection. Withheld with a note when the selection is too small.',
+
+    'occurrences_matching_argument' => 'A plain substring, 1 to 200 characters, ignoring ASCII case, looked for in the type\'s own fields. Needs a type.',
+
+    'occurrences_limit_argument' => 'The most rows to list, 1 to 100. Default 20.',
+
+    'occurrences_summary' => 'Listed :count record, ordered by :order.|Listed :count records, ordered by :order.',
+
+    'occurrences_truncated_how' => 'Pass a larger `limit`, up to 100, or narrow the selection.',
+
+    'occurrences_baseline_withheld' => 'The :percentile baseline has :have records and needs :needed; no record was left out for being below it.',
+
+    'occurrences_user_only' => 'Filtered by recorded user only; use `actor` for dispatch and inside links.',
+
+    'occurrences_next_group' => 'The group of the first row: how it compares with its peers.',
 
     'since_argument' => 'Start of the window, included: epoch seconds, ISO 8601, a local date or date-time, a relative time such as -1d, or now. Absent: unbounded.',
 

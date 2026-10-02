@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use Composer\InstalledVersions;
@@ -33,6 +34,7 @@ class FirewatchServer extends Server
     protected array $tools = [
         Overview::class,
         Rank::class,
+        Occurrences::class,
     ];
 
     /**
