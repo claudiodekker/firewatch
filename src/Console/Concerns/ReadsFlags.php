@@ -1,6 +1,6 @@
 <?php
 
-namespace ClaudioDekker\Firewatch\Console\Commands;
+namespace ClaudioDekker\Firewatch\Console\Concerns;
 
 /**
  * @internal

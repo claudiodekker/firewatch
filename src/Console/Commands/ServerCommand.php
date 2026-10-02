@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Console\Commands;
 
+use ClaudioDekker\Firewatch\Console\Concerns\ReadsFlags;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;

@@ -123,6 +123,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - Callers get named variants (`findOrFail()`, `readOrFail()`) instead of a `null` return they must branch on.
 - Verbs keep the framework's meaning: `make` builds without saving, `create` saves; `get`/`has`/`is`/`forget`/`flush` behave as they do in the framework.
 - Parameters are ordered subject first, then options, with the `$default` argument, callbacks and variadics last.
+- Traits live in a `Concerns` subfolder of their area (`Console/Concerns`, `Mcp/Concerns`), never beside the classes they serve.
 - Classes stay open to extension: no `final`, and members that aren't public are `protected` rather than `private`, so subclasses can override them.
 - An empty constructor body holds a single `//` line, as in Laravel's own stubs.
 - Builders and configurators return `$this`. Value objects are immutable and return `new static(...)` from each transform.

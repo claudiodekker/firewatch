@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Console\Commands;
 
 use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Console\Concerns\ReadsFlags;
 use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;

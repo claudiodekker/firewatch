@@ -1,7 +1,10 @@
 <?php
 
-namespace ClaudioDekker\Firewatch\Mcp;
+namespace ClaudioDekker\Firewatch\Mcp\Concerns;
 
+use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
+use ClaudioDekker\Firewatch\Mcp\Refusal;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Mcp\Request;
