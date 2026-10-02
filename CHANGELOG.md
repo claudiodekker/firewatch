@@ -13,3 +13,4 @@
 - Retention by age and record count, plus a size backstop, with coverage markers so answers state how far their history reaches.
 - `php artisan firewatch:server` runs the MCP server over stdio (`--list` prints its tools), with the `overview` tool. Answers share one envelope in markdown or JSON, a strict time grammar, closed error codes, size bounds, coverage, and structural and condition blind spots.
 - `php artisan firewatch:clear` removes all records or one type's records after a confirmation, and `--drop` rebuilds the store in place.
+- The `rank` tool lists the groups of one record type worst first by a measure (`p95_duration`, `occurrences`, `max_memory`, `queries` and others), over a window and an optional deploy. Percentiles are nearest rank and withheld below a sample floor.
