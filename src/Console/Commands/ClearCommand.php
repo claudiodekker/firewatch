@@ -24,7 +24,7 @@ class ClearCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'firewatch:clear {--type= : Clear only the records of one type} {--force : Skip the confirmation}';
+    protected $signature = 'firewatch:clear {--type= : Clear only the records of one type} {--drop : Rebuild the store in place, discarding everything including diagnostics} {--force : Skip the confirmation}';
 
     /**
      * The console command description.
@@ -44,12 +44,27 @@ class ClearCommand extends Command
             return self::FAILURE;
         }
 
-        if (($unusable = $clear->unusable()) !== null) {
+        if ($this->option('drop') && $type !== null) {
+            $this->error(__('firewatch::messages.clear.drop_with_type'));
+
+            return self::FAILURE;
+        }
+
+        $unusable = $clear->unusable();
+
+        // A dropped store may be damaged or of another schema version, which is what a drop is for.
+        $rebuildable = $this->option('drop') && in_array($unusable?->state, [StoreState::SCHEMA_MISMATCH, StoreState::CORRUPT], true);
+
+        if ($unusable !== null && ! $rebuildable) {
             return $this->refuse($unusable, $configuration->database);
         }
 
         if (! $this->confirmed($type, $configuration->database)) {
             return self::FAILURE;
+        }
+
+        if ($this->option('drop')) {
+            return $this->drop($clear, $unusable?->state, $configuration->database);
         }
 
         try {
@@ -69,6 +84,34 @@ class ClearCommand extends Command
         $this->line($type === null
             ? __('firewatch::messages.clear.cleared', ['records' => number_format($result['records']), 'users' => number_format($result['users']), ...$sizes])
             : __('firewatch::messages.clear.cleared_type', ['records' => number_format($result['records']), 'type' => $type->value, ...$sizes]));
+
+        if ($result['truncated']) {
+            $this->line(__('firewatch::messages.clear.log_in_use'));
+        }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Rebuild the store and say what happened.
+     */
+    protected function drop(ClearStore $clear, ?StoreState $state, string $path): int
+    {
+        try {
+            $result = $clear->drop($state);
+        } catch (Throwable $exception) {
+            if (FailureKind::of($exception) !== FailureKind::BUSY) {
+                throw $exception;
+            }
+
+            $this->error(__('firewatch::messages.clear.busy'));
+
+            return self::FAILURE;
+        }
+
+        $this->line($result['damaged']
+            ? __('firewatch::messages.clear.replaced_damaged', ['file' => basename($path).'.corrupt'])
+            : __('firewatch::messages.clear.rebuilt', ['path' => $path, 'before' => Number::fileSize($result['before'], precision: 1), 'after' => Number::fileSize($result['after'], precision: 1)]));
 
         if ($result['truncated']) {
             $this->line(__('firewatch::messages.clear.log_in_use'));
@@ -117,9 +160,11 @@ class ClearCommand extends Command
             return false;
         }
 
-        $question = $type === null
+        $question = $this->option('drop')
+            ? __('firewatch::messages.clear.confirm_drop', ['path' => $path])
+            : ($type === null
             ? __('firewatch::messages.clear.confirm', ['path' => $path])
-            : __('firewatch::messages.clear.confirm_type', ['path' => $path, 'type' => $type->value]);
+            : __('firewatch::messages.clear.confirm_type', ['path' => $path, 'type' => $type->value]));
 
         if ($this->confirm($question, false)) {
             return true;
