@@ -82,8 +82,8 @@ class Ranking
 
         return [
             'rows' => array_map($this->row(...), $groups),
-            'records' => (int) $records,
-            'withoutGroup' => (int) $withoutGroup,
+            'records' => $records,
+            'withoutGroup' => $withoutGroup,
             'untimed' => array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $this->hasDuration() ? $groups : [])),
             'orderedBy' => $orderedBy,
         ];
@@ -235,7 +235,7 @@ class Ranking
             $mb = fn (int|float|null $value) => $value === null ? null : round($value / self::MEGABYTE, 1);
             $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
 
-            $row += ['p95_memory_mb' => $mb($memory), 'max_memory_mb' => $mb($group['mem_max']), 'queries' => (int) $group['queries']];
+            $row += ['p95_memory_mb' => $mb($memory), 'max_memory_mb' => $mb($group['mem_max']), 'queries' => $group['queries'] ?? null];
         }
 
         $failed = $group['failed_of'] ?? 0;

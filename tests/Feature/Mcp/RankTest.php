@@ -389,3 +389,25 @@ it('ranks the requests the real sensor recorded', function () {
         ->and($rows[0])->toMatchArray(['label' => '/', 'method' => 'GET', 'occurrences' => 2, 'failure_pct' => 0, 'deploys' => 1])
         ->and($rows[0]['values_ms'])->toHaveCount(2);
 });
+
+it('leaves the duration of a skipped scheduled task out of the durations', function () {
+    ingest([
+        rankRecord(RecordType::SCHEDULED_TASK, 'a', 30, ['status' => 'processed']),
+        rankRecord(RecordType::SCHEDULED_TASK, 'a', 900, ['status' => 'skipped']),
+    ]);
+
+    expect(rankRows(['type' => 'scheduled-task'])[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 30.0, 'total_ms' => 30.0]);
+});
+
+it('shows the 95th percentile of memory at 20 records and falls back to the maximum below it', function () {
+    ingest([
+        ...array_map(fn (int $mb) => rankRecord(RecordType::REQUEST, 'a', 10, ['peak_memory_usage' => $mb * 1048576]), range(1, 20)),
+        ...array_map(fn (int $mb) => rankRecord(RecordType::REQUEST, 'b', 10, ['peak_memory_usage' => $mb * 1048576]), [50, 2]),
+    ]);
+
+    $rows = rankRows(['type' => 'request', 'by' => 'p95_memory']);
+
+    expect(array_column($rows, 'group'))->toBe([rankHash('a'), rankHash('b')])
+        ->and($rows[0])->toMatchArray(['p95_memory_mb' => 19.0, 'max_memory_mb' => 20.0])
+        ->and($rows[1]['p95_memory_mb'])->toBeNull();
+});
