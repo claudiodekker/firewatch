@@ -96,7 +96,10 @@ class ServerCommand extends Command
             return self::SUCCESS;
         }
 
-        $header = __('firewatch::messages.listing', ['version' => $listing['server']['version'], 'count' => count($listing['tools'])]);
+        $header = __('firewatch::messages.listing', [
+            'version' => $listing['server']['version'],
+            'count' => count($listing['tools']),
+        ]);
         $width = max([0, ...array_map(fn (array $tool) => Str::length($tool['name']), $listing['tools'])]);
 
         $this->line($header);

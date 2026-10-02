@@ -22,7 +22,11 @@ class Refusal extends RuntimeException
      */
     public static function missing(string $argument, string $accepted, string $example): self
     {
-        return new self(ErrorCode::MISSING_ARGUMENT, __('firewatch::messages.missing_argument', ['argument' => $argument, 'accepted' => $accepted, 'example' => $example]));
+        return new self(ErrorCode::MISSING_ARGUMENT, __('firewatch::messages.missing_argument', [
+            'argument' => $argument,
+            'accepted' => $accepted,
+            'example' => $example,
+        ]));
     }
 
     /**
@@ -30,7 +34,13 @@ class Refusal extends RuntimeException
      */
     public static function invalid(string $argument, string $expected, string $value, string $accepted, string $example): self
     {
-        return new self(ErrorCode::INVALID_ARGUMENT, __('firewatch::messages.invalid_argument', ['argument' => $argument, 'expected' => $expected, 'value' => $value, 'accepted' => $accepted, 'example' => $example]));
+        return new self(ErrorCode::INVALID_ARGUMENT, __('firewatch::messages.invalid_argument', [
+            'argument' => $argument,
+            'expected' => $expected,
+            'value' => $value,
+            'accepted' => $accepted,
+            'example' => $example,
+        ]));
     }
 
     /**
@@ -40,7 +50,12 @@ class Refusal extends RuntimeException
      */
     public static function unknown(string $argument, string $tool, array $accepted): self
     {
-        return new self(ErrorCode::INVALID_ARGUMENT, __('firewatch::messages.unknown_argument', ['argument' => $argument, 'tool' => $tool, 'accepted' => implode(', ', $accepted), 'example' => self::formatExample($tool)]));
+        return new self(ErrorCode::INVALID_ARGUMENT, __('firewatch::messages.unknown_argument', [
+            'argument' => $argument,
+            'tool' => $tool,
+            'accepted' => implode(', ', $accepted),
+            'example' => self::formatExample($tool),
+        ]));
     }
 
     /**
@@ -50,7 +65,12 @@ class Refusal extends RuntimeException
      */
     public static function inapplicable(string $argument, string $tool, array $accepted): self
     {
-        return new self(ErrorCode::CONFLICTING_ARGUMENTS, __('firewatch::messages.inapplicable_argument', ['argument' => $argument, 'tool' => $tool, 'accepted' => implode(', ', $accepted), 'example' => self::formatExample($tool)]));
+        return new self(ErrorCode::CONFLICTING_ARGUMENTS, __('firewatch::messages.inapplicable_argument', [
+            'argument' => $argument,
+            'tool' => $tool,
+            'accepted' => implode(', ', $accepted),
+            'example' => self::formatExample($tool),
+        ]));
     }
 
     /**
@@ -58,7 +78,12 @@ class Refusal extends RuntimeException
      */
     public static function conflicting(string $argument, string $with, string $accepted, string $example): self
     {
-        return new self(ErrorCode::CONFLICTING_ARGUMENTS, __('firewatch::messages.conflicting_arguments', ['argument' => $argument, 'with' => $with, 'accepted' => $accepted, 'example' => $example]));
+        return new self(ErrorCode::CONFLICTING_ARGUMENTS, __('firewatch::messages.conflicting_arguments', [
+            'argument' => $argument,
+            'with' => $with,
+            'accepted' => $accepted,
+            'example' => $example,
+        ]));
     }
 
     /**
@@ -74,7 +99,12 @@ class Refusal extends RuntimeException
      */
     public static function notFound(string $argument, string $id, string $accepted, string $example): self
     {
-        return new self(ErrorCode::NOT_FOUND, __('firewatch::messages.not_found', ['argument' => $argument, 'id' => $id, 'accepted' => $accepted, 'example' => $example]));
+        return new self(ErrorCode::NOT_FOUND, __('firewatch::messages.not_found', [
+            'argument' => $argument,
+            'id' => $id,
+            'accepted' => $accepted,
+            'example' => $example,
+        ]));
     }
 
     /**
@@ -116,7 +146,12 @@ class Refusal extends RuntimeException
     {
         $shown = '`'.(is_string($value) ? $value : json_encode($value, JSON_THROW_ON_ERROR)).'`';
 
-        return new self(ErrorCode::UNREADABLE_TIME, __('firewatch::messages.unreadable_time', ['argument' => $argument, 'value' => $shown, 'tool' => $tool, 'maximum' => TimeGrammar::MAXIMUM_EPOCH]));
+        return new self(ErrorCode::UNREADABLE_TIME, __('firewatch::messages.unreadable_time', [
+            'argument' => $argument,
+            'value' => $shown,
+            'tool' => $tool,
+            'maximum' => TimeGrammar::MAXIMUM_EPOCH,
+        ]));
     }
 
     /**
@@ -124,6 +159,10 @@ class Refusal extends RuntimeException
      */
     public static function window(float $since, float $until, string $timezone, string $tool): self
     {
-        return new self(ErrorCode::EMPTY_WINDOW, __('firewatch::messages.empty_window', ['since' => Instant::format($since, $timezone), 'until' => Instant::format($until, $timezone), 'tool' => $tool]));
+        return new self(ErrorCode::EMPTY_WINDOW, __('firewatch::messages.empty_window', [
+            'since' => Instant::format($since, $timezone),
+            'until' => Instant::format($until, $timezone),
+            'tool' => $tool,
+        ]));
     }
 }

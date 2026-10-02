@@ -131,7 +131,10 @@ class Overview extends Tool
             return new Answer(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
         }
 
-        $summary = __('firewatch::messages.overview_summary', ['records' => $records, 'requests' => $requests]);
+        $summary = __('firewatch::messages.overview_summary', [
+            'records' => $records,
+            'requests' => $requests,
+        ]);
 
         return new Answer(
             tool: 'overview',
@@ -140,7 +143,10 @@ class Overview extends Tool
             window: $window,
             summary: $summary,
             empty: null,
-            result: ['records' => $records, 'requests' => $requests],
+            result: [
+                'records' => $records,
+                'requests' => $requests,
+            ],
             coverage: $coverage,
             blindSpots: $blindSpots,
         );

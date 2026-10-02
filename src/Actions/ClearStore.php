@@ -93,7 +93,13 @@ class ClearStore
 
         $truncated = $this->reclaim();
 
-        return ['records' => $records, 'users' => $users, 'before' => $before, 'after' => $this->size(), 'truncated' => $truncated];
+        return [
+            'records' => $records,
+            'users' => $users,
+            'before' => $before,
+            'after' => $this->size(),
+            'truncated' => $truncated,
+        ];
     }
 
     /**
@@ -119,7 +125,12 @@ class ClearStore
 
         $truncated = $this->reclaim();
 
-        return ['damaged' => $state === StoreState::CORRUPT, 'before' => $before, 'after' => $this->size(), 'truncated' => $truncated];
+        return [
+            'damaged' => $state === StoreState::CORRUPT,
+            'before' => $before,
+            'after' => $this->size(),
+            'truncated' => $truncated,
+        ];
     }
 
     /**

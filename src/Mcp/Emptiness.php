@@ -45,9 +45,21 @@ class Emptiness
         $reason = Coverage::reason($unusable);
 
         $message = match ($unusable->state) {
-            StoreState::CORRUPT => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')]),
-            StoreState::BUSY => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')]),
-            default => __('firewatch::messages.store_unusable.'.$reason->value, ['path' => $path, 'found' => $unusable->found, 'expected' => Schema::VERSION, 'version' => $unusable->found, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]),
+            StoreState::CORRUPT => __('firewatch::messages.store_unusable.unreadable', [
+                'path' => $path,
+                'cause' => __('firewatch::messages.store_causes.corrupt'),
+            ]),
+            StoreState::BUSY => __('firewatch::messages.store_unusable.unreadable', [
+                'path' => $path,
+                'cause' => __('firewatch::messages.store_causes.busy'),
+            ]),
+            default => __('firewatch::messages.store_unusable.'.$reason->value, [
+                'path' => $path,
+                'found' => $unusable->found,
+                'expected' => Schema::VERSION,
+                'version' => $unusable->found,
+                'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+            ]),
         };
 
         return new self(EmptyKind::STORE_UNUSABLE, null, $message);
@@ -76,7 +88,10 @@ class Emptiness
      */
     public static function noMatch(int $records, array $filters): self
     {
-        return new self(EmptyKind::NO_MATCH, $records, __('firewatch::messages.no_match', ['population' => $records, 'filters' => implode(', ', $filters)]));
+        return new self(EmptyKind::NO_MATCH, $records, __('firewatch::messages.no_match', [
+            'population' => $records,
+            'filters' => implode(', ', $filters),
+        ]));
     }
 
     /**

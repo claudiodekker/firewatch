@@ -67,7 +67,13 @@ class Conditions
 
         $id = str_starts_with($history->reason, 'pruned-') ? 'history-pruned' : 'history-cleared';
 
-        return [$this->condition($id, ['from' => Instant::format($history->from, $timezone), 'reason' => $history->reason], ['from_at' => $history->from, 'reason' => $history->reason])];
+        return [$this->condition($id, [
+            'from' => Instant::format($history->from, $timezone),
+            'reason' => $history->reason,
+        ], [
+            'from_at' => $history->from,
+            'reason' => $history->reason,
+        ])];
     }
 
     /**
@@ -84,7 +90,13 @@ class Conditions
             return [];
         }
 
-        return [$this->condition('store-rebuilt', ['at' => Instant::format($at, $timezone), 'why' => $why], ['rebuilt_at' => $at, 'why' => $why])];
+        return [$this->condition('store-rebuilt', [
+            'at' => Instant::format($at, $timezone),
+            'why' => $why,
+        ], [
+            'rebuilt_at' => $at,
+            'why' => $why,
+        ])];
     }
 
     /**
@@ -110,8 +122,18 @@ class Conditions
 
         return [$this->condition(
             'records-dropped',
-            ['n' => number_format($records), 'from' => Instant::format($from, $timezone), 'to' => Instant::format($to, $timezone), 'reason' => $reason],
-            ['records' => $records, 'from_at' => $from, 'to_at' => $to, 'reason' => $reason],
+            [
+                'n' => number_format($records),
+                'from' => Instant::format($from, $timezone),
+                'to' => Instant::format($to, $timezone),
+                'reason' => $reason,
+            ],
+            [
+                'records' => $records,
+                'from_at' => $from,
+                'to_at' => $to,
+                'reason' => $reason,
+            ],
         )];
     }
 
@@ -133,8 +155,18 @@ class Conditions
 
             $conditions[] = $this->condition(
                 'drift',
-                ['count' => number_format($row['count']), 'kind' => $row['kind'], 'type' => $row['type'], 'last' => Instant::format($row['last_seen'], $timezone)],
-                ['count' => $row['count'], 'drift_kind' => $row['kind'], 'type' => $row['type'], 'last_at' => $row['last_seen']],
+                [
+                    'count' => number_format($row['count']),
+                    'kind' => $row['kind'],
+                    'type' => $row['type'],
+                    'last' => Instant::format($row['last_seen'], $timezone),
+                ],
+                [
+                    'count' => $row['count'],
+                    'drift_kind' => $row['kind'],
+                    'type' => $row['type'],
+                    'last_at' => $row['last_seen'],
+                ],
             );
         }
 
@@ -154,7 +186,13 @@ class Conditions
 
         $version = $facts->meta->nightwatchVersion ?? '';
 
-        return [$this->condition('nightwatch-unverified', ['version' => $version, 'line' => NightwatchInstall::VERIFIED_LINE], ['version' => $version, 'line' => NightwatchInstall::VERIFIED_LINE])];
+        return [$this->condition('nightwatch-unverified', [
+            'version' => $version,
+            'line' => NightwatchInstall::VERIFIED_LINE,
+        ], [
+            'version' => $version,
+            'line' => NightwatchInstall::VERIFIED_LINE,
+        ])];
     }
 
     /**
@@ -172,7 +210,10 @@ class Conditions
             return [];
         }
 
-        return [$this->condition('redaction-active', [], ['headers' => $headers, 'payload_fields' => $fields])];
+        return [$this->condition('redaction-active', [], [
+            'headers' => $headers,
+            'payload_fields' => $fields,
+        ])];
     }
 
     /**
@@ -192,6 +233,11 @@ class Conditions
      */
     protected function condition(string $id, array $replace, array $facts): array
     {
-        return ['id' => $id, 'kind' => BlindSpotKind::CONDITION->value, 'message' => __("firewatch::messages.conditions.{$id}", $replace), ...$facts];
+        return [
+            'id' => $id,
+            'kind' => BlindSpotKind::CONDITION->value,
+            'message' => __("firewatch::messages.conditions.{$id}", $replace),
+            ...$facts,
+        ];
     }
 }

@@ -35,7 +35,12 @@ class StoreFacts
         $drift = [];
 
         while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $drift[] = ['kind' => (string) $row[0], 'type' => (string) $row[1], 'count' => (int) $row[2], 'last_seen' => (float) $row[3]];
+            $drift[] = [
+                'kind' => (string) $row[0],
+                'type' => (string) $row[1],
+                'count' => (int) $row[2],
+                'last_seen' => (float) $row[3],
+            ];
         }
 
         return new self($meta, $drift);

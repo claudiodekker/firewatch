@@ -142,6 +142,148 @@ class PackageSource
     }
 
     /**
+     * Array literals with several elements and a key that are written on one line.
+     * A rules() method body is exempt: validation rule lists stay on one line.
+     *
+     * @return list<string>
+     */
+    public static function inlineKeyedArrays(): array
+    {
+        $offences = [];
+
+        foreach (static::files() as $relativePath => $contents) {
+            $tokens = array_values(array_filter(
+                PhpToken::tokenize($contents),
+                fn (PhpToken $token) => ! $token->isIgnorable(),
+            ));
+            $exempt = static::rulesMethodRanges($tokens);
+
+            foreach ($tokens as $index => $token) {
+                if ($token->text !== '[' || ! static::isArrayLiteralStart($tokens, $index)) {
+                    continue;
+                }
+
+                foreach ($exempt as [$from, $to]) {
+                    if ($index > $from && $index < $to) {
+                        continue 2;
+                    }
+                }
+
+                $close = static::closingIndex($tokens, $index);
+
+                if (($tokens[$close + 1] ?? null)?->text === '=') {
+                    continue;
+                }
+
+                if ($token->line === $tokens[$close]->line && static::isKeyedWithSeveralElements($tokens, $index, $close)) {
+                    $offences[] = "src/{$relativePath}:{$token->line}";
+                }
+            }
+        }
+
+        return $offences;
+    }
+
+    /**
+     * @param  list<PhpToken>  $tokens
+     * @return list<array{int, int}>
+     */
+    protected static function rulesMethodRanges(array $tokens): array
+    {
+        $ranges = [];
+
+        foreach ($tokens as $index => $token) {
+            if (! $token->is(T_FUNCTION) || ($tokens[$index + 1] ?? null)?->text !== 'rules') {
+                continue;
+            }
+
+            $open = $index;
+
+            while (($tokens[$open] ?? null) !== null && $tokens[$open]->text !== '{' && $tokens[$open]->text !== ';') {
+                $open++;
+            }
+
+            if (($tokens[$open] ?? null)?->text === '{') {
+                $ranges[] = [$open, static::closingIndex($tokens, $open)];
+            }
+        }
+
+        return $ranges;
+    }
+
+    /**
+     * A `[` after an expression is index access; anywhere else it opens an array.
+     *
+     * @param  list<PhpToken>  $tokens
+     */
+    protected static function isArrayLiteralStart(array $tokens, int $index): bool
+    {
+        $previous = $tokens[$index - 1] ?? null;
+
+        if ($previous === null) {
+            return true;
+        }
+
+        return ! ($previous->is([T_VARIABLE, T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_CONSTANT_ENCAPSED_STRING])
+            || in_array($previous->text, [')', ']', '}'], true));
+    }
+
+    /**
+     * @param  list<PhpToken>  $tokens
+     */
+    protected static function closingIndex(array $tokens, int $open): int
+    {
+        $depth = 0;
+
+        for ($i = $open; $i < count($tokens); $i++) {
+            if ($tokens[$i]->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES]) || in_array($tokens[$i]->text, ['(', '[', '{'], true)) {
+                $depth++;
+            } elseif (in_array($tokens[$i]->text, [')', ']', '}'], true) && --$depth === 0) {
+                return $i;
+            }
+        }
+
+        return count($tokens) - 1;
+    }
+
+    /**
+     * @param  list<PhpToken>  $tokens
+     */
+    protected static function isKeyedWithSeveralElements(array $tokens, int $open, int $close): bool
+    {
+        $depth = 0;
+        $elements = 1;
+        $keyed = false;
+        $elementStart = $open + 1;
+        $arrowFunctionArrowSeen = false;
+
+        for ($i = $open + 1; $i < $close; $i++) {
+            $token = $tokens[$i];
+
+            if ($token->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES]) || in_array($token->text, ['(', '[', '{'], true)) {
+                $depth++;
+            } elseif (in_array($token->text, [')', ']', '}'], true)) {
+                $depth--;
+            } elseif ($depth === 0 && $token->text === ',' && $i + 1 < $close) {
+                $elements++;
+                $elementStart = $i + 1;
+                $arrowFunctionArrowSeen = false;
+            } elseif ($depth === 0 && $token->is(T_DOUBLE_ARROW)) {
+                $start = $tokens[$elementStart];
+                $startsArrowFunction = $start->is(T_FN) || ($start->is(T_STATIC) && $tokens[$elementStart + 1]->is(T_FN));
+
+                if ($startsArrowFunction && ! $arrowFunctionArrowSeen) {
+                    $arrowFunctionArrowSeen = true;
+                } else {
+                    $keyed = true;
+                }
+            }
+        }
+
+        return $elements > 1 && $keyed;
+    }
+
+    /**
      * @param  list<PhpToken>  $tokens
      */
     protected static function callsConsoleOutput(PhpToken $token, array $tokens, int $index): bool

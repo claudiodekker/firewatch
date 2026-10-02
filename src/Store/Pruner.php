@@ -246,7 +246,11 @@ class Pruner
             $free = $connection->querySingle('PRAGMA freelist_count');
             $size = $connection->querySingle('PRAGMA page_size');
 
-            return ['live' => (int) $total - (int) $free, 'free' => (int) $free, 'size' => (int) $size];
+            return [
+                'live' => (int) $total - (int) $free,
+                'free' => (int) $free,
+                'size' => (int) $size,
+            ];
         });
     }
 

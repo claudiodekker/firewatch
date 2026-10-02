@@ -203,7 +203,10 @@ class Markers
         /** @var SQLite3Stmt $statement */
         $statement = $connection->prepare('INSERT INTO meta (key, value) VALUES (:key, :value) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE value IS NOT excluded.value');
 
-        foreach ([self::NIGHTWATCH_VERSION => $version, self::NIGHTWATCH_VERIFIED => $verified ? '1' : '0'] as $key => $value) {
+        foreach ([
+            self::NIGHTWATCH_VERSION => $version,
+            self::NIGHTWATCH_VERIFIED => $verified ? '1' : '0',
+        ] as $key => $value) {
             $statement->bindValue(':key', $key);
             $statement->bindValue(':value', $value);
             $statement->execute();

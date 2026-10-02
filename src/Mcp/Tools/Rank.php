@@ -166,7 +166,11 @@ class Rank extends Tool
 
         $rows = Rows::bound($ranked['rows'], $limit);
         $groupsRanked = count($ranked['rows']);
-        $summary = trans_choice('firewatch::messages.rank_summary', $groupsRanked, ['count' => $groupsRanked, 'type' => $type->value, 'by' => $by->value]);
+        $summary = trans_choice('firewatch::messages.rank_summary', $groupsRanked, [
+            'count' => $groupsRanked,
+            'type' => $type->value,
+            'by' => $by->value,
+        ]);
         $truncation = $rows->truncation('groups', __('firewatch::messages.rank_truncated_how'));
         $notes = $this->notes($by, $ranked);
 
@@ -204,7 +208,10 @@ class Rank extends Tool
         $notes = [];
 
         if ($ranked['orderedBy'] !== $by && ($floor = $by->floor()) !== null) {
-            $notes[] = __('firewatch::messages.rank_fallback', ['statistic' => $floor[0], 'needed' => $floor[1]]);
+            $notes[] = __('firewatch::messages.rank_fallback', [
+                'statistic' => $floor[0],
+                'needed' => $floor[1],
+            ]);
         }
 
         if ($ranked['untimed'] > 0) {

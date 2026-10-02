@@ -33,7 +33,10 @@ class Bounds
             $result[$section] = self::cap($value, $cut);
 
             if ($cut > 0) {
-                $how = __('firewatch::messages.cap_how', ['characters' => number_format(self::CELL_CHARACTERS), 'next' => self::CELL_CHARACTERS + 1]);
+                $how = __('firewatch::messages.cap_how', [
+                    'characters' => number_format(self::CELL_CHARACTERS),
+                    'next' => self::CELL_CHARACTERS + 1,
+                ]);
 
                 $truncated[] = [
                     'section' => (string) $section,

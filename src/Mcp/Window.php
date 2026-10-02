@@ -104,7 +104,10 @@ class Window
     public function toArray(): array
     {
         if (! $this->windowed) {
-            return ['windowed' => false, 'reason' => $this->reason];
+            return [
+                'windowed' => false,
+                'reason' => $this->reason,
+            ];
         }
 
         return [

@@ -149,7 +149,10 @@ class Answer
             "## {$this->tool}",
             $this->summary,
             $this->window->line(),
-            __('firewatch::messages.store_clock', ['time' => Instant::format($this->now, $this->timezone), 'epoch' => Instant::epoch($this->now)]),
+            __('firewatch::messages.store_clock', [
+                'time' => Instant::format($this->now, $this->timezone),
+                'epoch' => Instant::epoch($this->now),
+            ]),
         ];
 
         if ($this->empty !== null) {
@@ -167,7 +170,10 @@ class Answer
                 default => 'firewatch::messages.truncated',
             };
 
-            $lines[] = __($key, [...$entry, 'characters' => number_format(Bounds::CELL_CHARACTERS)]);
+            $lines[] = __($key, [
+                ...$entry,
+                'characters' => number_format(Bounds::CELL_CHARACTERS),
+            ]);
         }
 
         foreach ($this->notes as $note) {
@@ -175,7 +181,10 @@ class Answer
         }
 
         foreach ($this->blindSpots as $blindSpot) {
-            $lines[] = __('firewatch::messages.blind_spot', ['id' => $blindSpot['id'], 'message' => $blindSpot['message']]);
+            $lines[] = __('firewatch::messages.blind_spot', [
+                'id' => $blindSpot['id'],
+                'message' => $blindSpot['message'],
+            ]);
         }
 
         if ($this->next !== []) {

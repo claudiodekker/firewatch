@@ -104,3 +104,7 @@ test('the SQL child script references no framework or application code', functio
 
     expect($offences)->toBe([]);
 });
+
+test('no keyed array with several elements is written on one line', function () {
+    expect(PackageSource::inlineKeyedArrays())->toBe([]);
+});

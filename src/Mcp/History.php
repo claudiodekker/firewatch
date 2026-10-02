@@ -80,7 +80,10 @@ class History
         return [
             'from' => $this->from,
             'reason' => $this->reason,
-            'retention' => ['age_seconds' => $this->retentionAge, 'records' => $this->retentionRecords],
+            'retention' => [
+                'age_seconds' => $this->retentionAge,
+                'records' => $this->retentionRecords,
+            ],
         ];
     }
 }

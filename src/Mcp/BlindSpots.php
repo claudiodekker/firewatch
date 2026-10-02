@@ -83,7 +83,11 @@ class BlindSpots
      */
     public static function for(array $types, bool $actor = false, bool $anchored = false, bool $storeLevel = false): array
     {
-        $flags = ['actor' => $actor, 'anchored' => $anchored, 'storeLevel' => $storeLevel];
+        $flags = [
+            'actor' => $actor,
+            'anchored' => $anchored,
+            'storeLevel' => $storeLevel,
+        ];
         $blindSpots = [];
 
         foreach (self::ATTACHES_TO as $id => $attaches) {
@@ -92,7 +96,11 @@ class BlindSpots
                 : array_filter($attaches, fn (RecordType $type) => in_array($type, $types, true)) !== [];
 
             if ($applies) {
-                $blindSpots[] = ['id' => $id, 'kind' => BlindSpotKind::STRUCTURAL->value, 'message' => self::sentence($id)];
+                $blindSpots[] = [
+                    'id' => $id,
+                    'kind' => BlindSpotKind::STRUCTURAL->value,
+                    'message' => self::sentence($id),
+                ];
             }
         }
 

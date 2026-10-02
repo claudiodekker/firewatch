@@ -75,11 +75,22 @@ class ClearCommand extends Command
             return self::FAILURE;
         }
 
-        $sizes = ['before' => Number::fileSize($result['before'], precision: 1), 'after' => Number::fileSize($result['after'], precision: 1)];
+        $sizes = [
+            'before' => Number::fileSize($result['before'], precision: 1),
+            'after' => Number::fileSize($result['after'], precision: 1),
+        ];
 
         $this->line($type === null
-            ? __('firewatch::messages.clear.cleared', ['records' => number_format($result['records']), 'users' => number_format($result['users']), ...$sizes])
-            : __('firewatch::messages.clear.cleared_type', ['records' => number_format($result['records']), 'type' => $type->value, ...$sizes]));
+            ? __('firewatch::messages.clear.cleared', [
+                'records' => number_format($result['records']),
+                'users' => number_format($result['users']),
+                ...$sizes,
+            ])
+            : __('firewatch::messages.clear.cleared_type', [
+                'records' => number_format($result['records']),
+                'type' => $type->value,
+                ...$sizes,
+            ]));
 
         if ($result['truncated']) {
             $this->line(__('firewatch::messages.clear.log_in_use'));
@@ -101,7 +112,11 @@ class ClearCommand extends Command
 
         $this->line($result['damaged']
             ? __('firewatch::messages.clear.replaced_damaged', ['file' => basename($path).'.corrupt'])
-            : __('firewatch::messages.clear.rebuilt', ['path' => $path, 'before' => Number::fileSize($result['before'], precision: 1), 'after' => Number::fileSize($result['after'], precision: 1)]));
+            : __('firewatch::messages.clear.rebuilt', [
+                'path' => $path,
+                'before' => Number::fileSize($result['before'], precision: 1),
+                'after' => Number::fileSize($result['after'], precision: 1),
+            ]));
 
         if ($result['truncated']) {
             $this->line(__('firewatch::messages.clear.log_in_use'));
@@ -176,7 +191,10 @@ class ClearCommand extends Command
         $question = match (true) {
             (bool) $this->option('drop') => __('firewatch::messages.clear.confirm_drop', ['path' => $path]),
             $type === null => __('firewatch::messages.clear.confirm', ['path' => $path]),
-            default => __('firewatch::messages.clear.confirm_type', ['path' => $path, 'type' => $type->value]),
+            default => __('firewatch::messages.clear.confirm_type', [
+                'path' => $path,
+                'type' => $type->value,
+            ]),
         };
 
         if ($this->confirm($question, false)) {
@@ -200,10 +218,16 @@ class ClearCommand extends Command
         }
 
         $this->error(match ($unusable->state) {
-            StoreState::SCHEMA_MISMATCH => __('firewatch::messages.clear.schema', ['found' => (string) $unusable->found, 'expected' => Schema::VERSION]),
+            StoreState::SCHEMA_MISMATCH => __('firewatch::messages.clear.schema', [
+                'found' => (string) $unusable->found,
+                'expected' => Schema::VERSION,
+            ]),
             StoreState::CORRUPT => __('firewatch::messages.clear.damaged'),
             StoreState::FOREIGN => __('firewatch::messages.clear.foreign', ['path' => $path]),
-            StoreState::UNAVAILABLE => __('firewatch::messages.clear.sqlite', ['version' => (string) $unusable->found, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]),
+            StoreState::UNAVAILABLE => __('firewatch::messages.clear.sqlite', [
+                'version' => (string) $unusable->found,
+                'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+            ]),
             StoreState::BUSY => __('firewatch::messages.clear.busy'),
         });
 
