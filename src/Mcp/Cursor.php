@@ -2,9 +2,12 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use Closure;
 use JsonException;
 
 /**
+ * @template-covariant TLast of array<string, mixed>
+ *
  * @internal
  */
 class Cursor
@@ -19,7 +22,7 @@ class Cursor
     /**
      * Create a new cursor instance.
      *
-     * @param  array{value: int|float|null, occurrences: int, hash: string}  $last  the sort key and identity of the last row shown
+     * @param  TLast  $last  the sort key and identity of the last row shown
      */
     protected function __construct(
         public readonly array $last,
@@ -34,7 +37,7 @@ class Cursor
      * Get the opaque cursor that continues a listing after its last row: the tool, a hash of the other arguments, the store's creation, the key of the last row and the window as first resolved.
      *
      * @param  array<string, mixed>  $arguments
-     * @param  array{value: int|float|null, occurrences: int, hash: string}  $last
+     * @param  array<string, mixed>  $last
      */
     public static function make(string $tool, array $arguments, ?float $createdAt, array $last, ?float $since, ?float $until): string
     {
@@ -53,9 +56,13 @@ class Cursor
     /**
      * Read a cursor passed to a call, which must be one the tool made for these arguments.
      *
+     * @template TKey of array<string, mixed>
+     *
      * @param  array<string, mixed>  $arguments
+     * @param  Closure(array<string, mixed>): (TKey|null)  $key  checks the key of the last row and returns it, or null when it is none
+     * @return self<TKey>
      */
-    public static function read(mixed $value, string $tool, array $arguments): self
+    public static function read(mixed $value, string $tool, array $arguments, Closure $key): self
     {
         $payload = is_string($value) ? base64_decode(strtr($value, '-_', '+/'), strict: true) : false;
 
@@ -69,18 +76,14 @@ class Cursor
             throw Refusal::badCursor($tool);
         }
 
-        $last = $fields['last'] ?? null;
+        $last = is_array($fields['last'] ?? null) ? $key($fields['last']) : null;
 
-        if (! is_array($last) || ! array_key_exists('value', $last) || ! (is_int($last['value']) || is_float($last['value']) || $last['value'] === null) || ! is_int($last['occurrences'] ?? null) || ! is_string($last['hash'] ?? null) || ! array_key_exists('created_at', $fields)) {
+        if ($last === null || ! array_key_exists('created_at', $fields)) {
             throw Refusal::badCursor($tool);
         }
 
         return new self(
-            last: [
-                'value' => $last['value'],
-                'occurrences' => $last['occurrences'],
-                'hash' => $last['hash'],
-            ],
+            last: $last,
             since: self::instant($fields['since'] ?? null),
             until: self::instant($fields['until'] ?? null),
             createdAt: self::instant($fields['created_at']),

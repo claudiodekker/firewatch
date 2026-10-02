@@ -16,3 +16,4 @@
 - The `rank` tool lists the groups of one record type worst first by a measure (`p95_duration`, `occurrences`, `max_memory`, `queries` and others), over a window and an optional deploy. Percentiles are nearest rank and withheld below a sample floor.
 - `rank` can match a group by a substring of its label, break one group down by deploy with `group`, and continue a cut list with a `cursor`.
 - The `execution` tool shows one request, command, job attempt or scheduled task in full, by id or the latest to finish: outcome, stages, a request's headers and payload, counted-versus-captured accounting, up to five exceptions with their frames, and a timeline with repeated queries collapsed.
+- The `occurrences` tool lists individual records for a group, type, execution, trace, job or user, newest first or by duration, memory or queries, with filters that fit each type, a baseline against the median or 95th percentile, and a cursor for the rest.

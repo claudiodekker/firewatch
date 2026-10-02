@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
+use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -355,6 +356,32 @@ it('offers to rank the group of the execution, and the call runs', function () {
     expect($envelope['next'])->toHaveCount(1)
         ->and($call)->toBe(['tool' => 'rank', 'arguments' => ['group' => str_repeat('b', 32)], 'why' => __('firewatch::messages.execution_next_rank')])
         ->and($ranked['empty'])->toBeNull();
+});
+
+it('offers to list the queries of an execution that captured some, and the call runs', function () {
+    ingest([
+        execRecord(RecordType::REQUEST, 'request', ['_group' => str_repeat('b', 32)]),
+        execQuery('select 1', id: 'request'),
+    ]);
+
+    $envelope = execAnswer();
+    $call = $envelope['next'][1];
+    $listed = Envelope::assert(Occurrences::class, $call['arguments']);
+
+    expect($envelope['next'])->toHaveCount(2)
+        ->and($call)->toBe(['tool' => 'occurrences', 'arguments' => ['execution_id' => 'request', 'type' => 'query'], 'why' => __('firewatch::messages.execution_next_occurrences')])
+        ->and($listed['result']['rows'])->toHaveCount(1);
+});
+
+it('offers no list of queries for an execution that captured none', function () {
+    ingest([
+        execRecord(RecordType::REQUEST, 'request', ['_group' => str_repeat('b', 32)]),
+        execChild(RecordType::LOG, 'request'),
+    ]);
+
+    $envelope = execAnswer();
+
+    expect(array_column($envelope['next'], 'tool'))->toBe(['rank']);
 });
 
 it('offers nothing to follow for an execution without a group', function () {

@@ -202,7 +202,7 @@ class Execution extends Tool
             'outcome' => $outcome,
         ]);
 
-        $next = $this->next($row);
+        $next = $this->next($row, $children);
 
         return new Answer(
             tool: $this->name(),
@@ -274,24 +274,36 @@ class Execution extends Tool
     }
 
     /**
-     * Get the calls that follow from the execution: rank its group.
+     * Get the calls that follow from the execution: rank its group, and list its queries when it captured some.
      *
      * @param  array<string, mixed>  $row
+     * @param  list<array<string, mixed>>  $children
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(array $row): array
+    protected function next(array $row, array $children): array
     {
-        if (! is_string($row['group_hash'] ?? null)) {
-            return [];
-        }
+        $next = [];
 
-        return [
-            [
+        if (is_string($row['group_hash'] ?? null)) {
+            $next[] = [
                 'tool' => 'rank',
                 'arguments' => ['group' => $row['group_hash']],
                 'why' => __('firewatch::messages.execution_next_rank'),
-            ],
-        ];
+            ];
+        }
+
+        if (in_array(RecordType::QUERY->value, array_column($children, 'type'), true)) {
+            $next[] = [
+                'tool' => 'occurrences',
+                'arguments' => [
+                    'execution_id' => $row['execution_id'],
+                    'type' => RecordType::QUERY->value,
+                ],
+                'why' => __('firewatch::messages.execution_next_occurrences'),
+            ];
+        }
+
+        return $next;
     }
 
     /**

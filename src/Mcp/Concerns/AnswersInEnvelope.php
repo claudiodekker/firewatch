@@ -5,11 +5,15 @@ namespace ClaudioDekker\Firewatch\Mcp\Concerns;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
+use ClaudioDekker\Firewatch\Mcp\Window;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
+use SQLite3;
+use SQLite3Result;
+use SQLite3Stmt;
 use Throwable;
 
 /**
@@ -84,5 +88,38 @@ trait AnswersInEnvelope
                 ? Refusal::inapplicable(argument: $argument, tool: $this->name(), accepted: $accepted)
                 : Refusal::unknown(argument: $argument, tool: $this->name(), accepted: $accepted);
         }
+    }
+
+    /**
+     * Get a call of the tool as it is written, from its arguments.
+     *
+     * @param  array<string, mixed>  $arguments
+     */
+    protected function call(array $arguments): string
+    {
+        $written = array_map(fn (string $name, mixed $value) => $name.': '.json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), array_keys($arguments), $arguments);
+
+        return $this->name().'('.implode(', ', $written).')';
+    }
+
+    /**
+     * Count all records and those of the window, and find the span the records cover.
+     *
+     * @return array{int, int, float|null, float|null}
+     */
+    protected function count(SQLite3 $connection, Window $window): array
+    {
+        $condition = $window->condition();
+
+        /** @var SQLite3Stmt $statement */
+        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), min(started_at), max(started_at) FROM records");
+
+        $window->bind($statement);
+
+        /** @var SQLite3Result $result */
+        $result = $statement->execute();
+
+        /** @var array{int, int, float|null, float|null} */
+        return $result->fetchArray(SQLITE3_NUM);
     }
 }
