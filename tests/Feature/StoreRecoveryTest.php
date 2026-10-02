@@ -16,7 +16,7 @@ function recoveryPath(): string
 }
 
 /**
- * Register Firewatch with a writer on the given SQLite release: one with the WAL-reset bug closes its connection after every batch, one without keeps it.
+ * Register Firewatch with a writer on the given SQLite release.
  */
 function recoveryWriter(string $sqliteVersion): Writer
 {
@@ -49,7 +49,7 @@ function recoveryStore(string $key = 'old'): void
 }
 
 /**
- * Overwrite the store from the given offset on, which leaves the header and its stamps readable but not what they point at.
+ * Overwrite the store from the given offset on.
  */
 function recoveryCorrupt(int $offset = 4096): void
 {
@@ -72,16 +72,7 @@ function recoveryForeignStore(): void
  */
 function recoveryKeys(): array
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
-        $result = $connection->query('SELECT key FROM cache_events ORDER BY id');
-        $keys = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $keys[] = $row['key'];
-        }
-
-        return $keys;
-    });
+    return array_column(storeRows('SELECT key FROM cache_events ORDER BY id'), 'key');
 }
 
 /**

@@ -3,6 +3,7 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use ClaudioDekker\Firewatch\Tests\TestCase;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
@@ -39,6 +40,8 @@ function registerFirewatch(): Configuration
 }
 
 /**
+ * Forget that a service provider was registered, so that registering it again boots it afresh.
+ *
  * @param  class-string<ServiceProvider>  $provider
  */
 function forgetProvider(string $provider): void
@@ -60,6 +63,8 @@ function setEnvironmentVariable(string $name, string $value): void
 }
 
 /**
+ * Replace the process arguments for the test and restore them afterwards.
+ *
  * @param  list<string>  $argv
  */
 function setArgv(array $argv): void
@@ -80,12 +85,14 @@ function setArgv(array $argv): void
 
 function forceRequests(): void
 {
-    setEnvironmentVariable('NIGHTWATCH_FORCE_REQUEST', '1');
+    setEnvironmentVariable(name: 'NIGHTWATCH_FORCE_REQUEST', value: '1');
 
     test()->refreshApplication();
 }
 
 /**
+ * Run an Artisan command through the console kernel, as the real process would.
+ *
  * @param  array<string, mixed>  $input
  */
 function runArtisan(array $input): void
@@ -107,6 +114,8 @@ function syntheticRecord(RecordType $type): RecordBuilder
 }
 
 /**
+ * Send records through Firewatch's real ingest and digest them.
+ *
  * @param  list<RecordBuilder|array<mixed>>  $records
  */
 function ingest(array $records): void
@@ -116,4 +125,23 @@ function ingest(array $records): void
     }
 
     Nightwatch::digest();
+}
+
+/**
+ * Read the rows a query returns from the store, through its reader.
+ *
+ * @return list<array<string, mixed>>
+ */
+function storeRows(string $sql): array
+{
+    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
+        $result = $connection->query($sql);
+        $rows = [];
+
+        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
+            $rows[] = $row;
+        }
+
+        return $rows;
+    });
 }

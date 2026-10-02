@@ -3,6 +3,7 @@
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Markers;
+use ClaudioDekker\Firewatch\Store\PruneReason;
 
 function markerStore(): SQLite3
 {
@@ -37,25 +38,25 @@ it('reads the creation and the rebuild with their microseconds', function () {
 it('advances the pruned-through instant with the reason of the pass that advanced it', function () {
     $connection = markerStore();
 
-    Markers::advancePrunedThrough($connection, 100.5, 'age');
-    Markers::advancePrunedThrough($connection, 200.0, 'cap');
+    Markers::advancePrunedThrough($connection, 100.5, PruneReason::AGE);
+    Markers::advancePrunedThrough($connection, 200.0, PruneReason::CAP);
     $markers = Markers::read($connection);
 
     expect($markers->prunedThrough)->toBe(200.0)
-        ->and($markers->prunedReason)->toBe('cap');
+        ->and($markers->prunedReason)->toBe(PruneReason::CAP);
 });
 
 it('never moves an instant back, and an equal one keeps the reason that set it', function (float $second) {
     $connection = markerStore();
-    Markers::advancePrunedThrough($connection, 200.0, 'age');
+    Markers::advancePrunedThrough($connection, 200.0, PruneReason::AGE);
     Markers::markCleared($connection, 200.0);
 
-    Markers::advancePrunedThrough($connection, $second, 'size');
+    Markers::advancePrunedThrough($connection, $second, PruneReason::SIZE);
     Markers::markCleared($connection, $second);
     $markers = Markers::read($connection);
 
     expect($markers->prunedThrough)->toBe(200.0)
-        ->and($markers->prunedReason)->toBe('age')
+        ->and($markers->prunedReason)->toBe(PruneReason::AGE)
         ->and($markers->clearedAt)->toBe(200.0);
 })->with([
     'an earlier instant' => [199.999999],
@@ -117,7 +118,7 @@ it('reads a prune that names no reason as pruned by age, and a marker that is no
     $markers = Markers::read($connection);
 
     expect($markers->prunedThrough)->toBe(400.0)
-        ->and($markers->prunedReason)->toBe('age')
+        ->and($markers->prunedReason)->toBe(PruneReason::AGE)
         ->and($markers->createdAt)->toBeNull()
         ->and($markers->clearedTypes)->toBe([]);
 });

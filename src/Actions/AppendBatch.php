@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Actions;
 use ClaudioDekker\Firewatch\Capture\Drift;
 use ClaudioDekker\Firewatch\Capture\DriftKind;
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Writer;
@@ -100,7 +101,7 @@ class AppendBatch
             }
         }
 
-        $receivedAt = (float) now()->format('U.u');
+        $receivedAt = Instant::now();
 
         $this->writer->transaction(function (SQLite3 $connection) use ($rows, $users, $drift, $receivedAt) {
             $this->execute($connection, static::INSERT, $rows);

@@ -3,6 +3,7 @@
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Markers;
+use ClaudioDekker\Firewatch\Store\PruneReason;
 
 it('starts a type\'s history at the latest of the store\'s markers', function (Markers $markers, ?float $from, ?string $reason) {
     $history = History::of($markers, [RecordType::REQUEST]);
@@ -15,14 +16,14 @@ it('starts a type\'s history at the latest of the store\'s markers', function (M
     'a clear after creation' => [new Markers(createdAt: 100.0, clearedAt: 200.0), 200.0, 'cleared'],
     'a clear of the type' => [new Markers(createdAt: 100.0, clearedTypes: ['request' => 300.0]), 300.0, 'cleared-type'],
     'a clear of another type' => [new Markers(createdAt: 100.0, clearedTypes: ['query' => 300.0]), 100.0, 'created'],
-    'a prune by age' => [new Markers(createdAt: 100.0, prunedThrough: 400.0, prunedReason: 'age'), 400.0, 'pruned-age'],
-    'a prune by record count' => [new Markers(createdAt: 100.0, prunedThrough: 400.0, prunedReason: 'cap'), 400.0, 'pruned-cap'],
-    'a prune by size' => [new Markers(createdAt: 100.0, prunedThrough: 400.0, prunedReason: 'size'), 400.0, 'pruned-size'],
-    'a clear before a prune' => [new Markers(createdAt: 100.0, clearedAt: 200.0, prunedThrough: 400.0, prunedReason: 'cap'), 400.0, 'pruned-cap'],
-    'a tie of a clear and a prune' => [new Markers(clearedAt: 200.0, prunedThrough: 200.0, prunedReason: 'age'), 200.0, 'cleared'],
-    'a tie of a clear of the type and a prune' => [new Markers(clearedTypes: ['request' => 200.0], prunedThrough: 200.0, prunedReason: 'age'), 200.0, 'cleared-type'],
+    'a prune by age' => [new Markers(createdAt: 100.0, prunedThrough: 400.0, prunedReason: PruneReason::AGE), 400.0, 'pruned-age'],
+    'a prune by record count' => [new Markers(createdAt: 100.0, prunedThrough: 400.0, prunedReason: PruneReason::CAP), 400.0, 'pruned-cap'],
+    'a prune by size' => [new Markers(createdAt: 100.0, prunedThrough: 400.0, prunedReason: PruneReason::SIZE), 400.0, 'pruned-size'],
+    'a clear before a prune' => [new Markers(createdAt: 100.0, clearedAt: 200.0, prunedThrough: 400.0, prunedReason: PruneReason::CAP), 400.0, 'pruned-cap'],
+    'a tie of a clear and a prune' => [new Markers(clearedAt: 200.0, prunedThrough: 200.0, prunedReason: PruneReason::AGE), 200.0, 'cleared'],
+    'a tie of a clear of the type and a prune' => [new Markers(clearedTypes: ['request' => 200.0], prunedThrough: 200.0, prunedReason: PruneReason::AGE), 200.0, 'cleared-type'],
     'a tie of a clear and a creation' => [new Markers(createdAt: 200.0, clearedAt: 200.0), 200.0, 'cleared'],
-    'a tie of a prune and a creation' => [new Markers(createdAt: 200.0, prunedThrough: 200.0, prunedReason: 'cap'), 200.0, 'pruned-cap'],
+    'a tie of a prune and a creation' => [new Markers(createdAt: 200.0, prunedThrough: 200.0, prunedReason: PruneReason::CAP), 200.0, 'pruned-cap'],
 ]);
 
 it('starts the history of several types at the latest start among them, with that type\'s reason', function () {

@@ -13,6 +13,8 @@ use Laravel\Mcp\Server\Transport\StdioTransport;
  */
 class ServerCommand extends Command
 {
+    use ReadsFlags;
+
     /**
      * The name of the command that starts the MCP server.
      */
@@ -44,13 +46,13 @@ class ServerCommand extends Command
      */
     public function handle(): int
     {
-        if ($this->option('json') && ! $this->option('list')) {
+        if ($this->flag('json') && ! $this->flag('list')) {
             $this->error(__('firewatch::messages.json_requires_list'));
 
             return self::FAILURE;
         }
 
-        if ($this->option('list')) {
+        if ($this->flag('list')) {
             return $this->list();
         }
 
@@ -71,9 +73,7 @@ class ServerCommand extends Command
         $this->laravel->make('config')->set('app.debug', false);
 
         $transport = new StdioTransport;
-        $server = $this->laravel->make(FirewatchServer::class, ['transport' => $transport]);
-
-        $server->start();
+        $this->laravel->make(FirewatchServer::class, ['transport' => $transport])->start();
         $transport->run();
 
         return self::SUCCESS;
@@ -84,11 +84,9 @@ class ServerCommand extends Command
      */
     protected function list(): int
     {
-        $server = $this->laravel->make(FirewatchServer::class, ['transport' => new FakeTransporter]);
+        $listing = $this->laravel->make(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
 
-        $listing = $server->listing();
-
-        if ($this->option('json')) {
+        if ($this->flag('json')) {
             $json = json_encode($listing, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
             $this->line($json);

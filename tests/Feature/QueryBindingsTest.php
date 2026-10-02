@@ -2,7 +2,6 @@
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Laravel\Nightwatch\Core;
@@ -14,17 +13,11 @@ use Laravel\Nightwatch\Records\Query as QueryRecord;
  */
 function storedBindings(): array
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
-        $result = $connection->query("SELECT sql, bindings FROM queries WHERE sql LIKE 'select %probe%' ORDER BY id");
-        $rows = [];
+    return array_map(function (array $row) {
+        $row['bindings'] = $row['bindings'] === null ? null : json_decode($row['bindings'], associative: true, flags: JSON_THROW_ON_ERROR);
 
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $row['bindings'] = $row['bindings'] === null ? null : json_decode($row['bindings'], associative: true, flags: JSON_THROW_ON_ERROR);
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
+        return $row;
+    }, storeRows("SELECT sql, bindings FROM queries WHERE sql LIKE 'select %probe%' ORDER BY id"));
 }
 
 /**

@@ -63,7 +63,7 @@ class History
         $candidates = [
             [$meta->clearedAt, 'cleared'],
             [$meta->clearedAtOf($type), 'cleared-type'],
-            [$meta->prunedThrough, 'pruned-'.$meta->prunedReason],
+            [$meta->prunedThrough, 'pruned-'.$meta->prunedReason?->value],
             [$meta->createdAt, 'created'],
         ];
 

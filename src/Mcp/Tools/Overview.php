@@ -13,6 +13,7 @@ use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -93,9 +94,9 @@ class Overview extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $epoch = (float) $now->format('U.u');
+        $epoch = Instant::of($now);
         $timezone = config()->string('app.timezone');
-        $window = Window::read($request, $now, $timezone, $this->name());
+        $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
 
         $types = RecordType::events();
         $structural = BlindSpots::for($types, storeLevel: true);
@@ -107,10 +108,9 @@ class Overview extends Tool
             $blindSpots = [...$structural, ...$this->conditions->for(null, $types, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
 
-            $unknownHistory = History::unknown(...$retention);
-            $coverage = Coverage::of($unusable, $types, $unknownHistory);
+            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
 
-            return new Answer(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $blindSpots = [...$structural, ...$this->conditions->for($facts, $types, $window)];
@@ -120,7 +120,7 @@ class Overview extends Tool
             $empty = Emptiness::storeEmpty($this->configuration->database);
             $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
 
-            return new Answer(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
@@ -128,7 +128,7 @@ class Overview extends Tool
         if ($records === 0) {
             $empty = Emptiness::windowEmpty($total);
 
-            return new Answer(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $summary = __('firewatch::messages.overview_summary', [

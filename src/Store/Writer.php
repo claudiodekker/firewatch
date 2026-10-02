@@ -10,7 +10,6 @@ use SQLite3;
 use SQLite3Exception;
 use SQLite3Result;
 use SQLite3Stmt;
-use Throwable;
 
 /**
  * @internal
@@ -60,11 +59,6 @@ class Writer
      * The share of the backstop's pages a burst between two passes may reach, as a multiple.
      */
     protected const BURST_HEADROOM = 1.25;
-
-    /**
-     * The microseconds in a millisecond.
-     */
-    protected const MICROSECONDS_PER_MILLISECOND = 1_000;
 
     /**
      * The interval the lock file is polled at, in milliseconds.
@@ -308,7 +302,7 @@ class Writer
 
                 $poll = min($remaining, static::LOCK_POLL_MILLISECONDS);
 
-                Sleep::usleep($poll * static::MICROSECONDS_PER_MILLISECOND);
+                Sleep::usleep($poll * Microseconds::PER_MILLISECOND);
 
                 $remaining -= $poll;
             }
@@ -359,6 +353,8 @@ class Writer
 
         $connection = new SQLite3($path, SQLITE3_OPEN_READWRITE);
 
+        $ready = false;
+
         // A connection left to the exception's trace could close, and checkpoint, after the lock is released.
         try {
             $connection->enableExceptions(true);
@@ -366,10 +362,12 @@ class Writer
 
             $this->configure($connection);
             $this->createSchema($connection);
-        } catch (Throwable $exception) {
-            $connection->close();
 
-            throw $exception;
+            $ready = true;
+        } finally {
+            if (! $ready) {
+                $connection->close();
+            }
         }
 
         return $connection;
@@ -565,19 +563,23 @@ class Writer
     {
         $connection->exec('BEGIN IMMEDIATE');
 
+        $committed = false;
+
         try {
             $result = $callback();
 
             $connection->exec('COMMIT');
-        } catch (Throwable $exception) {
-            // SQLite rolls a transaction back itself when the store is full, and there is then nothing left to roll back.
-            try {
-                $connection->exec('ROLLBACK');
-            } catch (SQLite3Exception) {
-                //
-            }
 
-            throw $exception;
+            $committed = true;
+        } finally {
+            // SQLite rolls a transaction back itself when the store is full, and there is then nothing left to roll back.
+            if (! $committed) {
+                try {
+                    $connection->exec('ROLLBACK');
+                } catch (SQLite3Exception) {
+                    //
+                }
+            }
         }
 
         return $result;

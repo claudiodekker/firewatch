@@ -3,7 +3,7 @@
 namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use Illuminate\Support\Facades\Date;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use SQLite3;
 use SQLite3Exception;
 use SQLite3Result;
@@ -57,7 +57,7 @@ class Pruner
      */
     public function run(): void
     {
-        $now = (float) Date::now()->format('U.u');
+        $now = Instant::now();
 
         try {
             if ($this->claim($now)) {
@@ -153,7 +153,7 @@ class Pruner
         $transactions = $this->passTransactions();
 
         while ($transactions > 0) {
-            $removed = $this->chunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows(), 'age');
+            $removed = $this->chunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows(), PruneReason::AGE);
             $deleted = $deleted || $removed > 0;
 
             // A transaction that found nothing to delete does not count against the pass.
@@ -172,7 +172,7 @@ class Pruner
             while ($transactions > 0 && $excess > 0) {
                 $transactions--;
                 $limit = min($this->chunkRows(), $excess);
-                $removed = $this->chunk('1 = 1', [], $limit, 'cap');
+                $removed = $this->chunk('1 = 1', [], $limit, PruneReason::CAP);
                 $excess -= $removed;
                 $deleted = $deleted || $removed > 0;
 
@@ -192,7 +192,7 @@ class Pruner
             $transactions--;
 
             // Freed pages land on the freelist at once, so the counts are read again after each committed chunk.
-            if ($this->chunk('1 = 1', [], $this->chunkRows(), 'size') === 0) {
+            if ($this->chunk('1 = 1', [], $this->chunkRows(), PruneReason::SIZE) === 0) {
                 break;
             }
 
@@ -242,14 +242,14 @@ class Pruner
     protected function pages(): array
     {
         return $this->reader->snapshot(function (SQLite3 $connection) {
-            $total = $connection->querySingle('PRAGMA page_count');
-            $free = $connection->querySingle('PRAGMA freelist_count');
-            $size = $connection->querySingle('PRAGMA page_size');
+            $totalPages = Cell::integer($connection->querySingle('PRAGMA page_count'));
+            $freePages = Cell::integer($connection->querySingle('PRAGMA freelist_count'));
+            $pageSizeBytes = Cell::integer($connection->querySingle('PRAGMA page_size'));
 
             return [
-                'live' => (int) $total - (int) $free,
-                'free' => (int) $free,
-                'size' => (int) $size,
+                'live' => $totalPages - $freePages,
+                'free' => $freePages,
+                'size' => $pageSizeBytes,
             ];
         });
     }
@@ -269,7 +269,7 @@ class Pruner
      *
      * @param  array<string, float>  $bindings
      */
-    protected function chunk(string $condition, array $bindings, int $limit, string $reason): int
+    protected function chunk(string $condition, array $bindings, int $limit, PruneReason $reason): int
     {
         return $this->writer->transaction(function (SQLite3 $connection) use ($condition, $bindings, $limit, $reason) {
             /** @var SQLite3Stmt $statement */
@@ -286,8 +286,8 @@ class Pruner
 
             /** @var SQLite3Result $result */
             while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-                $ids[] = (int) $row[0];
-                $newest = (float) $row[1];
+                $ids[] = Cell::integer($row[0]);
+                $newest = Cell::float($row[1]);
             }
 
             if ($ids === []) {

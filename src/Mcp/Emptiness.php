@@ -42,8 +42,6 @@ class Emptiness
             return self::noStore($path);
         }
 
-        $reason = Coverage::reason($unusable);
-
         $message = match ($unusable->state) {
             StoreState::CORRUPT => __('firewatch::messages.store_unusable.unreadable', [
                 'path' => $path,
@@ -53,7 +51,7 @@ class Emptiness
                 'path' => $path,
                 'cause' => __('firewatch::messages.store_causes.busy'),
             ]),
-            default => __('firewatch::messages.store_unusable.'.$reason->value, [
+            default => __('firewatch::messages.store_unusable.'.Coverage::reason($unusable)->value, [
                 'path' => $path,
                 'found' => $unusable->found,
                 'expected' => Schema::VERSION,

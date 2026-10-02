@@ -66,12 +66,11 @@ class Markers
     /**
      * The reason a prune is assumed to have when the store names none.
      */
-    protected const DEFAULT_PRUNED_REASON = 'age';
+    protected const DEFAULT_PRUNED_REASON = PruneReason::AGE;
 
     /**
      * Create a new markers instance.
      *
-     * @param  string|null  $prunedReason  age, cap or size
      * @param  array<string, float>  $clearedTypes  the instant of the last clear of each record type, by its value
      */
     public function __construct(
@@ -79,7 +78,7 @@ class Markers
         public readonly ?float $rebuiltAt = null,
         public readonly ?string $rebuiltWhy = null,
         public readonly ?float $prunedThrough = null,
-        public readonly ?string $prunedReason = null,
+        public readonly ?PruneReason $prunedReason = null,
         public readonly ?float $clearedAt = null,
         public readonly array $clearedTypes = [],
         public readonly ?float $pruneClaimedAt = null,
@@ -109,7 +108,7 @@ class Markers
             rebuiltAt: self::instant($meta[self::REBUILT_AT] ?? null),
             rebuiltWhy: $meta[self::REBUILT_WHY] ?? null,
             prunedThrough: $prunedThrough,
-            prunedReason: $prunedThrough === null ? null : $meta[self::PRUNED_BY] ?? self::DEFAULT_PRUNED_REASON,
+            prunedReason: $prunedThrough === null ? null : PruneReason::tryFrom($meta[self::PRUNED_BY] ?? '') ?? self::DEFAULT_PRUNED_REASON,
             clearedAt: self::instant($meta[self::CLEARED_AT] ?? null),
             clearedTypes: self::types($meta[self::CLEARED_TYPES] ?? null),
             pruneClaimedAt: self::instant($meta[self::PRUNE_CLAIMED_AT] ?? null),
@@ -135,7 +134,7 @@ class Markers
      */
     public static function markCreated(SQLite3 $connection, CarbonInterface $at): void
     {
-        self::put($connection, self::CREATED_AT, self::text($at));
+        self::put($connection, key: self::CREATED_AT, value: self::text($at));
     }
 
     /**
@@ -143,20 +142,20 @@ class Markers
      */
     public static function markRebuilt(SQLite3 $connection, CarbonInterface $at, string $why): void
     {
-        self::put($connection, self::REBUILT_AT, self::text($at));
-        self::put($connection, self::REBUILT_WHY, $why);
+        self::put($connection, key: self::REBUILT_AT, value: self::text($at));
+        self::put($connection, key: self::REBUILT_WHY, value: $why);
     }
 
     /**
      * Record that history was removed through an instant, with the reason of the pass that advanced it, unless it was already removed through a later one.
      */
-    public static function advancePrunedThrough(SQLite3 $connection, float $through, string $reason): void
+    public static function advancePrunedThrough(SQLite3 $connection, float $through, PruneReason $reason): void
     {
         if (! self::moveForward($connection, self::PRUNED_THROUGH, $through)) {
             return;
         }
 
-        self::put($connection, self::PRUNED_BY, $reason);
+        self::put($connection, key: self::PRUNED_BY, value: $reason->value);
     }
 
     /**
@@ -175,7 +174,9 @@ class Markers
         $cleared = self::types(self::get($connection, self::CLEARED_TYPES));
         $cleared[$type->value] = max($at, $cleared[$type->value] ?? 0.0);
 
-        self::put($connection, self::CLEARED_TYPES, json_encode($cleared, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR));
+        $json = json_encode($cleared, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
+
+        self::put($connection, key: self::CLEARED_TYPES, value: $json);
     }
 
     /**
@@ -183,7 +184,7 @@ class Markers
      */
     public static function claimPrune(SQLite3 $connection, float $now, int $intervalSeconds): bool
     {
-        self::put($connection, self::PRUNE_CLAIMED_AT, '0', replace: false);
+        self::put($connection, key: self::PRUNE_CLAIMED_AT, value: '0', replace: false);
 
         /** @var SQLite3Stmt $statement */
         $statement = $connection->prepare('UPDATE meta SET value = :now WHERE key = :key AND CAST(value AS REAL) < :before');

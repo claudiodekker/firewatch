@@ -21,7 +21,7 @@ function lockPath(): string
 }
 
 /**
- * Hold the store's lock file from another open file, as another process would, keeping its handle on the test.
+ * Hold the store's lock file open, as another process would.
  */
 function holdLockFile(): void
 {
@@ -38,16 +38,7 @@ function holdLockFile(): void
  */
 function lockedCacheKeys(): array
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
-        $result = $connection->query('SELECT key FROM cache_events ORDER BY id');
-        $keys = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $keys[] = $row['key'];
-        }
-
-        return $keys;
-    });
+    return array_column(storeRows('SELECT key FROM cache_events ORDER BY id'), 'key');
 }
 
 /**

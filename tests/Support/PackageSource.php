@@ -142,7 +142,7 @@ class PackageSource
     }
 
     /**
-     * Array literals with several elements and a key that are written on one line.
+     * Array literals with several elements and a key that are written on one line, or that share a line between two keyed elements.
      * A rules() method body is exempt: validation rule lists stay on one line.
      *
      * @return list<string>
@@ -175,7 +175,15 @@ class PackageSource
                     continue;
                 }
 
-                if ($token->line === $tokens[$close]->line && static::isKeyedWithSeveralElements($tokens, $index, $close)) {
+                $keyedLines = static::keyedElementLines($tokens, $index, $close);
+
+                if ($keyedLines === []) {
+                    continue;
+                }
+
+                $sharesLine = count($keyedLines) !== count(array_unique($keyedLines));
+
+                if (($token->line === $tokens[$close]->line && static::hasSeveralElements($tokens, $index, $close)) || $sharesLine) {
                     $offences[] = "src/{$relativePath}:{$token->line}";
                 }
             }
@@ -247,13 +255,15 @@ class PackageSource
     }
 
     /**
+     * The line of each keyed element of the array, one entry per element.
+     *
      * @param  list<PhpToken>  $tokens
+     * @return list<int>
      */
-    protected static function isKeyedWithSeveralElements(array $tokens, int $open, int $close): bool
+    protected static function keyedElementLines(array $tokens, int $open, int $close): array
     {
         $depth = 0;
-        $elements = 1;
-        $keyed = false;
+        $lines = [];
         $elementStart = $open + 1;
         $arrowFunctionArrowSeen = false;
 
@@ -265,7 +275,6 @@ class PackageSource
             } elseif (in_array($token->text, [')', ']', '}'], true)) {
                 $depth--;
             } elseif ($depth === 0 && $token->text === ',' && $i + 1 < $close) {
-                $elements++;
                 $elementStart = $i + 1;
                 $arrowFunctionArrowSeen = false;
             } elseif ($depth === 0 && $token->is(T_DOUBLE_ARROW)) {
@@ -275,12 +284,34 @@ class PackageSource
                 if ($startsArrowFunction && ! $arrowFunctionArrowSeen) {
                     $arrowFunctionArrowSeen = true;
                 } else {
-                    $keyed = true;
+                    $lines[] = $token->line;
                 }
             }
         }
 
-        return $elements > 1 && $keyed;
+        return $lines;
+    }
+
+    /**
+     * @param  list<PhpToken>  $tokens
+     */
+    protected static function hasSeveralElements(array $tokens, int $open, int $close): bool
+    {
+        $depth = 0;
+
+        for ($i = $open + 1; $i < $close; $i++) {
+            $token = $tokens[$i];
+
+            if ($token->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES]) || in_array($token->text, ['(', '[', '{'], true)) {
+                $depth++;
+            } elseif (in_array($token->text, [')', ']', '}'], true)) {
+                $depth--;
+            } elseif ($depth === 0 && $token->text === ',' && $i + 1 < $close) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

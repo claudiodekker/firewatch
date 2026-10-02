@@ -28,8 +28,6 @@ class StoreFacts
      */
     public static function read(SQLite3 $connection): self
     {
-        $meta = Markers::read($connection);
-
         /** @var SQLite3Result $result */
         $result = $connection->query('SELECT kind, type, sum(count), max(last_seen) FROM drift WHERE type != \'\' GROUP BY type, kind ORDER BY type, kind');
         $drift = [];
@@ -43,6 +41,6 @@ class StoreFacts
             ];
         }
 
-        return new self($meta, $drift);
+        return new self(Markers::read($connection), $drift);
     }
 }

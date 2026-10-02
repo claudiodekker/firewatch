@@ -67,6 +67,16 @@ class Answer
     }
 
     /**
+     * Create a new answer that holds no result and states why.
+     *
+     * @param  list<array<string, mixed>>  $blindSpots
+     */
+    public static function empty(string $tool, float $now, string $timezone, Window $window, Emptiness $empty, Coverage $coverage, array $blindSpots): self
+    {
+        return new self(tool: $tool, now: $now, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+    }
+
+    /**
      * Get the answer in the requested format: one text block of markdown, or the envelope as structured content beside the same JSON as one text block.
      */
     public function response(AnswerFormat $format): Response|ResponseFactory

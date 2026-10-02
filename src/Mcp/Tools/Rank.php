@@ -13,6 +13,7 @@ use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
@@ -61,6 +62,11 @@ class Rank extends Tool
      * The most rows an answer lists.
      */
     protected const MAXIMUM_LIMIT = 100;
+
+    /**
+     * What a group id is, as the refusal of a malformed one says it.
+     */
+    protected const GROUP_ID_DESCRIPTION = 'a 32-character lowercase hex group id';
 
     /**
      * The most characters a label match has.
@@ -134,11 +140,12 @@ class Rank extends Tool
             $this->measure($request, $explicit, $group);
         }
 
-        $cursor = $request->get('cursor') === null ? null : Cursor::read(value: $request->get('cursor'), tool: $this->name(), arguments: $request->all());
+        $cursorValue = $request->get('cursor');
+        $cursor = $cursorValue === null ? null : Cursor::read(value: $cursorValue, tool: $this->name(), arguments: $request->all());
 
-        $epoch = (float) $now->format('U.u');
+        $epoch = Instant::of($now);
         $timezone = config()->string('app.timezone');
-        $window = $cursor === null ? Window::read($request, $now, $timezone, $this->name()) : Window::between($cursor->since, $cursor->until, $timezone);
+        $window = $this->window($request, $now, $timezone, $cursor);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
@@ -173,10 +180,9 @@ class Rank extends Tool
             $blindSpots = [...BlindSpots::for($types), ...$this->conditions->for(null, $types, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
 
-            $unknownHistory = History::unknown(...$retention);
-            $coverage = Coverage::of($unusable, $types, $unknownHistory);
+            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
 
-            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $cursor?->belongsTo($facts->meta->createdAt, $this->name());
@@ -189,7 +195,7 @@ class Rank extends Tool
             $empty = Emptiness::storeEmpty($this->configuration->database);
             $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
 
-            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
@@ -197,7 +203,7 @@ class Rank extends Tool
         if ($ranking === null && $breakdown === null && ($group === null || $held !== [])) {
             $empty = Emptiness::windowEmpty($total);
 
-            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $filters = $group === null
@@ -205,16 +211,28 @@ class Rank extends Tool
             : ["group: {$group}", ...($explicit === null ? [] : ["type: {$explicit->value}"])];
 
         if ($type !== null && $by !== null && $ranking !== null) {
-            return $this->ranking($request, $epoch, $timezone, $window, $coverage, $blindSpots, $filters, $inWindow, $type, $by, $cursor, $facts->meta->createdAt, $limit, $ranking);
+            return $this->ranking($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, filters: $filters, inWindow: $inWindow, type: $type, by: $by, cursor: $cursor, createdAt: $facts->meta->createdAt, limit: $limit, ranked: $ranking);
         }
 
         if ($type !== null && $group !== null && $breakdown !== null) {
-            return $this->breakdown($request, $epoch, $timezone, $window, $coverage, $blindSpots, $filters, $inWindow, $type, $group, $held, $limit, $breakdown);
+            return $this->breakdown($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, filters: $filters, inWindow: $inWindow, type: $type, group: $group, held: $held, limit: $limit, breakdown: $breakdown);
         }
 
         $empty = Emptiness::noMatch($inWindow, $filters);
 
-        return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+        return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+    }
+
+    /**
+     * Get the window of the call: the one a cursor was issued for, or the one its `since` and `until` give.
+     */
+    protected function window(Request $request, CarbonImmutable $now, string $timezone, ?Cursor $cursor): Window
+    {
+        if ($cursor !== null) {
+            return Window::between(since: $cursor->since, until: $cursor->until, timezone: $timezone);
+        }
+
+        return Window::read($request, $now, timezone: $timezone, tool: $this->name());
     }
 
     /**
@@ -229,7 +247,7 @@ class Rank extends Tool
         if ($ranked['rows'] === []) {
             $empty = Emptiness::noMatch($inWindow, $filters);
 
-            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $page = array_keys(array_filter($ranked['keys'], fn (array $key) => $cursor === null || Ranking::compare($key, $cursor->last) > 0));
@@ -238,14 +256,11 @@ class Rank extends Tool
 
         if ($rows->more) {
             $last = $ranked['keys'][$page[count($rows->rows) - 1]];
-            $cursorArgument = Cursor::make(tool: $this->name(), arguments: $request->all(), createdAt: $createdAt, last: $last, since: $window->since(), until: $window->until() ?? $epoch);
-            $arguments = [
-                ...array_diff_key($request->all(), array_flip(['cursor', 'format'])),
-                'cursor' => $cursorArgument,
-            ];
+            $arguments = array_diff_key($request->all(), array_flip(['cursor', 'format']));
+            $arguments['cursor'] = Cursor::make(tool: $this->name(), arguments: $request->all(), createdAt: $createdAt, last: $last, since: $window->since(), until: $window->until() ?? $epoch);
             $call = $this->call($arguments);
             $how = __('firewatch::messages.rank_cursor_how', ['call' => $call]);
-            $entry = $rows->truncation('groups', $how);
+            $entry = $rows->truncation(section: 'groups', how: $how);
             $truncated = $entry === null ? [] : [$entry];
         }
 
@@ -295,7 +310,7 @@ class Rank extends Tool
         if ($breakdown['rows'] === []) {
             $empty = Emptiness::noMatch($inWindow, $filters);
 
-            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $shared = $request->get('type') === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
@@ -347,8 +362,10 @@ class Rank extends Tool
         }
 
         foreach (['since', 'until'] as $name) {
-            if ($request->get($name) !== null) {
-                $arguments[$name] = $request->get($name);
+            $value = $request->get($name);
+
+            if ($value !== null) {
+                $arguments[$name] = $value;
             }
         }
 
@@ -530,7 +547,7 @@ class Rank extends Tool
 
         $shown = json_encode($value, JSON_THROW_ON_ERROR);
 
-        throw Refusal::invalid(argument: 'group', expected: 'a 32-character lowercase hex group id', value: $shown, accepted: 'a 32-character lowercase hex group id', example: 'rank(group: "<group id>")');
+        throw Refusal::invalid(argument: 'group', expected: self::GROUP_ID_DESCRIPTION, value: $shown, accepted: self::GROUP_ID_DESCRIPTION, example: 'rank(group: "<group id>")');
     }
 
     /**

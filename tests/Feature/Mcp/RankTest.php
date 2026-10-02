@@ -34,7 +34,7 @@ function rankRecord(RecordType $type, string $letter, ?int $milliseconds, array 
 }
 
 /**
- * Records of one group whose durations are the given milliseconds.
+ * Make the records of one group, one per given duration in milliseconds.
  *
  * @param  list<int>  $milliseconds
  * @param  array<string, mixed>  $fields
@@ -120,7 +120,7 @@ it('orders by the maximum and says so when no group reaches the floor of the per
     $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'by' => $by]);
 
     expect(array_column($envelope['result']['groups'], 'group'))->toBe([rankHash('b'), rankHash('a')])
-        ->and($envelope['notes'])->toBe(["No group has enough records for {$statistic} (needed {$needed}); ordered by max."]);
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.rank_fallback', ['statistic' => $statistic, 'needed' => $needed])]);
 })->with([
     'p95' => ['p95_duration', 'p95', 20],
     'p50' => ['p50_duration', 'p50', 3],
@@ -205,7 +205,7 @@ it('counts a record without a duration as an occurrence, and leaves it out of th
 
     expect($rows[rankHash('a')])->toMatchArray(['occurrences' => 2, 'min_ms' => 30.0, 'max_ms' => 30.0, 'total_ms' => 30.0])
         ->and($rows[rankHash('b')])->toMatchArray(['occurrences' => 1, 'min_ms' => null, 'avg_ms' => null, 'max_ms' => null, 'total_ms' => null, 'p50_ms' => null, 'p95_ms' => null])
-        ->and($envelope['notes'])->toContain('2 records without duration are counted in occurrences and left out of the duration statistics.');
+        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_untimed', 2, ['count' => 2]));
 });
 
 it('computes failure_pct by the rule of each type', function (RecordType $type, array $failed, array $kept, ?float $percent, ?string $definition) {
@@ -330,7 +330,7 @@ it('cuts the list at the limit, and says how to see more', function () {
         ->and($envelope['result']['groups_ranked'])->toBe(3)
         ->and($envelope['truncated'])->toHaveCount(1)
         ->and($envelope['truncated'][0])->toMatchArray(['section' => 'groups', 'shown' => 2, 'matched' => null, 'reason' => 'limit'])
-        ->and($envelope['truncated'][0]['how'])->toStartWith('Call rank again with this cursor to see the rest: rank(type: "request", by: "max_duration", limit: 2, cursor: "');
+        ->and($envelope['truncated'][0]['how'])->toStartWith(__('firewatch::messages.rank_cursor_how', ['call' => 'rank(type: "request", by: "max_duration", limit: 2, cursor: "']));
 });
 
 it('answers that the store holds nothing of the type in the window, naming the filters', function () {
@@ -463,7 +463,7 @@ function rankCursor(array $envelope): string
 }
 
 /**
- * Twenty-five groups of one record each, the one named `0` the slowest.
+ * Ingest twenty-five groups of one record each, the one named `0` the slowest.
  */
 function rankTwentyFiveGroups(): void
 {
@@ -471,7 +471,7 @@ function rankTwentyFiveGroups(): void
 }
 
 /**
- * The labels of the groups an answer lists.
+ * Get the labels of the groups an answer lists.
  *
  * @param  array<string, mixed>  $envelope
  * @return list<string>
@@ -482,7 +482,7 @@ function rankLabels(array $envelope): array
 }
 
 /**
- * The labels of the routes of twenty-five groups, from the first to the last given.
+ * Get the labels of the routes of twenty-five groups, from the first to the last given.
  *
  * @return list<string>
  */
@@ -638,11 +638,12 @@ it('keeps a cursor valid across a clear', function () {
     rankTwentyFiveGroups();
     $arguments = ['type' => 'request', 'by' => 'max_duration', 'limit' => 10];
     $cursor = rankCursor(Envelope::assert(Rank::class, $arguments));
-    $this->artisan('firewatch:clear', ['--force' => true])->assertExitCode(0);
+    $exitCode = $this->artisan('firewatch:clear', ['--force' => true])->run();
 
     $envelope = Envelope::assert(Rank::class, [...$arguments, 'cursor' => $cursor]);
 
-    expect($envelope['empty']['kind'])->toBe('store_empty');
+    expect($exitCode)->toBe(0)
+        ->and($envelope['empty']['kind'])->toBe('store_empty');
 });
 
 it('breaks one group down by deploy, in the order the deploys were first seen', function () {

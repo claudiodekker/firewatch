@@ -14,26 +14,9 @@ use Illuminate\Testing\PendingCommand;
 
 const CLEAR_NOW = '2026-09-30 14:00:00';
 
-/**
- * @return list<array<string, mixed>>
- */
-function clearRows(string $sql): array
-{
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
-        $result = $connection->query($sql);
-        $rows = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_ASSOC))) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
-}
-
 function clearIds(string $where = '1 = 1'): array
 {
-    return array_column(clearRows("SELECT id FROM records WHERE {$where} ORDER BY id"), 'id');
+    return array_column(storeRows("SELECT id FROM records WHERE {$where} ORDER BY id"), 'id');
 }
 
 function clearMarkers(): Markers
@@ -52,7 +35,7 @@ function clearFailuresPath(): string
 }
 
 /**
- * A store with 3 requests, 2 logs, a signed-in user, a drift row and a dropped batch, one of the records of unknown start.
+ * Fill the store with 3 requests, 2 logs, a user, a drift row and a dropped batch.
  */
 function clearPopulatedStore(): void
 {
@@ -226,8 +209,8 @@ describe('clearing everything', function () {
         expect($result['exit'])->toBe(0)
             ->and($result['output'])->toMatch(clearedPattern('cleared', ['records' => 6, 'users' => 1]))
             ->and(clearIds())->toBe([])
-            ->and(clearRows('SELECT id FROM users'))->toBe([])
-            ->and(clearRows('SELECT kind, type FROM drift'))->toBe([['kind' => 'unknown_field', 'type' => 'cache-event']])
+            ->and(storeRows('SELECT id FROM users'))->toBe([])
+            ->and(storeRows('SELECT kind, type FROM drift'))->toBe([['kind' => 'unknown_field', 'type' => 'cache-event']])
             ->and(filesize(clearFailuresPath()))->toBe(0);
     });
 
@@ -306,7 +289,7 @@ describe('clearing everything', function () {
 
         runClear()->run();
 
-        $pages = clearRows('PRAGMA freelist_count');
+        $pages = storeRows('PRAGMA freelist_count');
 
         expect($pages)->toBe([['freelist_count' => 0]])
             ->and(filesize(clearStorePath()))->toBeLessThan($before);
@@ -331,17 +314,17 @@ describe('clearing one type', function () {
     it('removes the records of that type and nothing else, and says how many', function () {
         clearPopulatedStore();
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 'soon'])]);
-        $drift = clearRows('SELECT kind, type FROM drift');
+        $drift = storeRows('SELECT kind, type FROM drift');
         $this->travelTo('2026-09-30 14:30:00');
 
         $result = clearResult(['--type' => 'log', '--force' => true]);
 
         expect($result['exit'])->toBe(0)
             ->and($result['output'])->toMatch(clearedPattern('cleared_type', ['records' => 2, 'type' => 'log']))
-            ->and(array_column(clearRows('SELECT DISTINCT type FROM records ORDER BY type'), 'type'))->toBe(['cache-event', 'request'])
+            ->and(array_column(storeRows('SELECT DISTINCT type FROM records ORDER BY type'), 'type'))->toBe(['cache-event', 'request'])
             ->and(clearIds("type = 'request'"))->toHaveCount(4)
-            ->and(clearRows('SELECT id FROM users'))->toHaveCount(1)
-            ->and(clearRows('SELECT kind, type FROM drift'))->toBe($drift)
+            ->and(storeRows('SELECT id FROM users'))->toHaveCount(1)
+            ->and(storeRows('SELECT kind, type FROM drift'))->toBe($drift)
             ->and(filesize(clearFailuresPath()))->toBeGreaterThan(0);
     });
 

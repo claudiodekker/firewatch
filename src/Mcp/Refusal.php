@@ -128,7 +128,9 @@ class Refusal extends RuntimeException
      */
     public static function format(mixed $value, string $tool): self
     {
-        return self::invalid('format', 'markdown or json', json_encode($value, JSON_THROW_ON_ERROR), 'markdown or json', self::formatExample($tool));
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        return self::invalid(argument: 'format', expected: 'markdown or json', value: $shown, accepted: 'markdown or json', example: self::formatExample($tool));
     }
 
     /**

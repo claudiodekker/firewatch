@@ -37,11 +37,11 @@ class Window
      */
     public static function read(Request $request, CarbonImmutable $now, string $timezone, string $tool): self
     {
-        $since = self::boundary($request, 'since', $now, $timezone, $tool);
-        $until = self::boundary($request, 'until', $now, $timezone, $tool);
+        $since = self::boundary($request, argument: 'since', now: $now, timezone: $timezone, tool: $tool);
+        $until = self::boundary($request, argument: 'until', now: $now, timezone: $timezone, tool: $tool);
 
         if ($since !== null && $until !== null && $since >= $until) {
-            throw Refusal::window($since, $until, $timezone, $tool);
+            throw Refusal::window(since: $since, until: $until, timezone: $timezone, tool: $tool);
         }
 
         return self::between($since, $until, $timezone);
@@ -159,6 +159,6 @@ class Window
             return null;
         }
 
-        return TimeGrammar::parse($value, $now, $timezone) ?? throw Refusal::time($argument, $value, $tool);
+        return TimeGrammar::parse($value, $now, $timezone) ?? throw Refusal::time(argument: $argument, value: $value, tool: $tool);
     }
 }

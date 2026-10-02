@@ -23,7 +23,7 @@ function sensorRecord(Producer $producer, ?Closure $prepare = null): array
 }
 
 /**
- * Get when Nightwatch stamps a record, from a clock whose readings are powers of two milliseconds apart, so no reading is another one plus or minus a duration.
+ * Get when Nightwatch stamps a record, from a clock whose readings are powers of two milliseconds apart.
  */
 function stampedAt(Producer $producer): string
 {
@@ -45,7 +45,7 @@ function stampedAt(Producer $producer): string
     };
 }
 
-it('writes the fields of the contract table, of the kinds it accepts', function (Producer $producer) {
+test('Nightwatch writes the fields of the contract table, of the kinds it accepts', function (Producer $producer) {
     $record = sensorRecord($producer);
 
     $kinds = array_map(fn (mixed $value) => [WireFixture::kindOf($value)], $record);
@@ -53,19 +53,19 @@ it('writes the fields of the contract table, of the kinds it accepts', function 
     expect($kinds)->toEqual($producer->type()->acceptedTypes(), "Nightwatch's {$producer->value} records no longer match the contract table.");
 })->with(Producer::cases());
 
-it('writes the version of each type the contract table was built from', function (Producer $producer) {
+test('Nightwatch writes the version of each type the contract table was built from', function (Producer $producer) {
     $record = sensorRecord($producer);
 
     expect($producer->type()->hasVersion($record['v']))->toBeTrue("Nightwatch writes {$producer->value} records at version {$record['v']}.");
 })->with(Producer::cases());
 
-it('stamps each type with a duration at its start or its end, as the contract table says', function (Producer $producer) {
+test('each type with a duration is stamped at its start or its end, as the contract table says', function (Producer $producer) {
     $stampedAt = stampedAt($producer);
 
     expect($stampedAt)->toBe($producer->type()->isStampedAtEnd() ? 'end' : 'start');
 })->with(array_filter(Producer::cases(), fn (Producer $producer) => array_key_exists('duration', $producer->type()->acceptedTypes())));
 
-it('groups each type by the recipe recomputed from its record', function (Producer $producer, Closure $recipe) {
+test('each type is grouped by the recipe recomputed from its record', function (Producer $producer, Closure $recipe) {
     $record = sensorRecord($producer);
 
     expect(hash('xxh128', $recipe($record)))->toBe($record['_group']);
@@ -83,7 +83,7 @@ it('groups each type by the recipe recomputed from its record', function (Produc
     'queued job' => [Producer::QUEUED_JOB, fn (array $record) => $record['name']],
 ]);
 
-it('writes no group for the types that have none', function (Producer $producer) {
+test('Nightwatch writes no group for the types that have none', function (Producer $producer) {
     $record = sensorRecord($producer);
 
     expect($record)->not->toHaveKey('_group');

@@ -1,27 +1,9 @@
 <?php
 
-use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\Records\Request as RequestRecord;
-
-/**
- * @return list<array<string, mixed>>
- */
-function redactedRows(string $sql): array
-{
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
-        $result = $connection->query($sql);
-        $rows = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
-}
 
 /**
  * @param  array<string, string>  $variables
@@ -29,7 +11,7 @@ function redactedRows(string $sql): array
 function serveFailingCheckout(array $variables = []): void
 {
     foreach ($variables as $name => $value) {
-        setEnvironmentVariable($name, $value);
+        setEnvironmentVariable(name: $name, value: $value);
     }
 
     forceRequests();
@@ -44,7 +26,7 @@ function serveFailingCheckout(array $variables = []): void
  */
 function storedRequest(): array
 {
-    [$request] = redactedRows('SELECT headers, payload FROM requests');
+    [$request] = storeRows('SELECT headers, payload FROM requests');
 
     return [
         'headers' => json_decode($request['headers'], associative: true, flags: JSON_THROW_ON_ERROR),
@@ -141,5 +123,5 @@ it('strips the userinfo from an outgoing request\'s URL', function () {
     Http::get('https://taylor:secret@example.com/ping');
     Nightwatch::digest();
 
-    expect(redactedRows('SELECT url FROM outgoing_requests'))->toBe([['url' => 'https://example.com/ping']]);
+    expect(storeRows('SELECT url FROM outgoing_requests'))->toBe([['url' => 'https://example.com/ping']]);
 });

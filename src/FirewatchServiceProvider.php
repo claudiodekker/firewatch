@@ -190,9 +190,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function resolveMode(): void
     {
-        $resolver = new ModeResolver;
-
-        $this->mode = $resolver->resolve(
+        $this->mode = (new ModeResolver)->resolve(
             $this->app->make(Configuration::class),
             environment: $this->app->environment(),
             argv: $this->argv(),

@@ -2,7 +2,6 @@
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Support\Facades\Cache;
@@ -26,20 +25,11 @@ function failureLines(): array
  */
 function storedCacheKeys(): array
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
-        $result = $connection->query('SELECT key FROM cache_events ORDER BY id');
-        $keys = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $keys[] = $row['key'];
-        }
-
-        return $keys;
-    });
+    return array_column(storeRows('SELECT key FROM cache_events ORDER BY id'), 'key');
 }
 
 /**
- * Start a second process that holds the store's write lock until the returned closure releases it.
+ * Start a second process that holds the write lock until the returned closure releases it.
  */
 function holdWriteLock(string $database): Closure
 {

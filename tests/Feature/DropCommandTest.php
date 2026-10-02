@@ -12,23 +12,6 @@ use Illuminate\Testing\PendingCommand;
 
 const DROP_NOW = '2026-09-30 14:00:00';
 
-/**
- * @return list<array<string, mixed>>
- */
-function dropRows(string $sql): array
-{
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
-        $result = $connection->query($sql);
-        $rows = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_ASSOC))) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
-}
-
 function dropMarkers(): Markers
 {
     return app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection));
@@ -52,7 +35,7 @@ function dropFailuresPath(): string
 }
 
 /**
- * A store with records, a user, drift, a clear marker and a dropped batch.
+ * Fill the store with records, a user, drift, a clear marker and a dropped batch.
  */
 function dropPopulatedStore(): void
 {
@@ -105,7 +88,7 @@ it('can\'t be combined with a type, and changes nothing', function () {
 
     expect($result['exit'])->toBe(1)
         ->and($result['output'])->toBe(__('firewatch::messages.clear.drop_with_type'))
-        ->and(dropRows('SELECT id FROM records'))->toHaveCount(2);
+        ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
 });
 
 describe('a healthy store', function () {
@@ -119,11 +102,11 @@ describe('a healthy store', function () {
         expect($result['exit'])->toBe(0)
             ->and($result['output'])->toMatch(rebuiltPattern())
             ->and($markers)->toEqual(new Markers(createdAt: 1790780400.0))
-            ->and(dropRows('SELECT id FROM records'))->toBe([])
-            ->and(dropRows('SELECT id FROM users'))->toBe([])
-            ->and(dropRows('SELECT kind FROM drift'))->toBe([])
+            ->and(storeRows('SELECT id FROM records'))->toBe([])
+            ->and(storeRows('SELECT id FROM users'))->toBe([])
+            ->and(storeRows('SELECT kind FROM drift'))->toBe([])
             ->and(filesize(dropFailuresPath()))->toBe(0)
-            ->and(dropRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]]);
+            ->and(storeRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]]);
     });
 
     it('restarts the ids at 1, and never unlinks the file', function () {
@@ -134,7 +117,7 @@ describe('a healthy store', function () {
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776100.0])]);
 
         expect($result['exit'])->toBe(0)
-            ->and(array_column(dropRows('SELECT id FROM records'), 'id'))->toBe([1])
+            ->and(array_column(storeRows('SELECT id FROM records'), 'id'))->toBe([1])
             ->and(fileinode(dropPath()))->toBe($inode)
             ->and(file_exists(dropPath().'.corrupt'))->toBeFalse();
     });
@@ -145,7 +128,7 @@ describe('a healthy store', function () {
 
         runDrop()->run();
 
-        expect(dropRows('PRAGMA freelist_count'))->toBe([['freelist_count' => 0]])
+        expect(storeRows('PRAGMA freelist_count'))->toBe([['freelist_count' => 0]])
             ->and(filesize(dropPath()))->toBeLessThan($before);
     });
 
@@ -187,8 +170,8 @@ describe('a store in another state', function () {
 
         expect($result['exit'])->toBe(0)
             ->and($result['output'])->toMatch(rebuiltPattern())
-            ->and(dropRows('SELECT id FROM records'))->toBe([])
-            ->and(dropRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]])
+            ->and(storeRows('SELECT id FROM records'))->toBe([])
+            ->and(storeRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]])
             ->and(dropMarkers()->rebuiltWhy)->toBe('schema')
             ->and(fileinode(dropPath()))->toBe($inode);
     })->with([
@@ -208,7 +191,7 @@ describe('a store in another state', function () {
         expect($result['exit'])->toBe(0)
             ->and($result['output'])->toBe(__('firewatch::messages.clear.replaced_damaged', ['file' => basename(dropPath()).'.corrupt']))
             ->and(md5_file(dropPath().'.corrupt'))->toBe($damaged)
-            ->and(dropRows('SELECT id FROM records'))->toBe([])
+            ->and(storeRows('SELECT id FROM records'))->toBe([])
             ->and(dropMarkers()->rebuiltWhy)->toBe('corrupt')
             ->and(filesize(dropFailuresPath()))->toBe(0);
     });
@@ -242,7 +225,7 @@ describe('a store in another state', function () {
 
         expect($result['exit'])->toBe(1)
             ->and($result['output'])->toBe(__('firewatch::messages.clear.sqlite', ['version' => '3.30.0', 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]))
-            ->and(dropRows('SELECT id FROM records'))->toHaveCount(2);
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 
     it('says the store is busy after its fixed wait, and rebuilds nothing', function () {
@@ -261,7 +244,7 @@ describe('a store in another state', function () {
 
         expect($result['exit'])->toBe(1)
             ->and($result['output'])->toBe(__('firewatch::messages.clear.busy'))
-            ->and(dropRows('SELECT id FROM records'))->toHaveCount(2);
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 });
 
@@ -276,7 +259,7 @@ describe('the confirmation', function () {
         $exit = $command->run();
 
         expect($exit)->toBe(1)
-            ->and(dropRows('SELECT id FROM records'))->toHaveCount(2);
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 
     it('rebuilds once it is confirmed', function () {
@@ -288,7 +271,7 @@ describe('the confirmation', function () {
         $exit = $command->run();
 
         expect($exit)->toBe(0)
-            ->and(dropRows('SELECT id FROM records'))->toBe([]);
+            ->and(storeRows('SELECT id FROM records'))->toBe([]);
     });
 
     it('aborts without asking when it can\'t, unless it is forced', function () {
@@ -298,6 +281,6 @@ describe('the confirmation', function () {
 
         expect($result['exit'])->toBe(1)
             ->and($result['output'])->toBe(__('firewatch::messages.clear.not_forced'))
-            ->and(dropRows('SELECT id FROM records'))->toHaveCount(2);
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 });

@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Capture;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Microseconds;
 use ClaudioDekker\Firewatch\Store\Schema;
 use JsonException;
 use stdClass;
@@ -107,7 +108,7 @@ class RecordMapper
         }
 
         // The round trip can turn a float into an integer, so the instant comes from the original array.
-        $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, duration: $columns['duration']);
+        $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, durationMicroseconds: $columns['duration']);
 
         if ($type !== null) {
             $columns['execution_id'] = $this->executionId($type, $columns);
@@ -338,12 +339,12 @@ class RecordMapper
     /**
      * Get the instant a record started at, moving the types Nightwatch stamps at their end back by their duration, or null for a timestamp that is not a number.
      */
-    protected function startedAt(?RecordType $type, mixed $timestamp, mixed $duration): int|float|null
+    protected function startedAt(?RecordType $type, mixed $timestamp, mixed $durationMicroseconds): int|float|null
     {
         $instant = $this->instant($timestamp);
 
-        if ($instant !== null && $type?->isStampedAtEnd() && is_numeric($duration)) {
-            return $instant - $duration / 1e6;
+        if ($instant !== null && $type?->isStampedAtEnd() && is_numeric($durationMicroseconds)) {
+            return $instant - $durationMicroseconds / Microseconds::PER_SECOND;
         }
 
         return $instant;

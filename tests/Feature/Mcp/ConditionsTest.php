@@ -10,6 +10,7 @@ use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
+use ClaudioDekker\Firewatch\Store\PruneReason;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
@@ -59,7 +60,7 @@ describe('history', function () {
     });
 
     it('attaches only while the window starts before the history does', function (?float $since, bool $attached) {
-        $markers = new Markers(createdAt: 100.0, prunedThrough: 500.0, prunedReason: 'cap');
+        $markers = new Markers(createdAt: 100.0, prunedThrough: 500.0, prunedReason: PruneReason::CAP);
 
         expect(array_column(conditionsFor($markers, since: $since), 'id'))->toBe($attached ? ['history-pruned'] : []);
     })->with([
@@ -70,7 +71,7 @@ describe('history', function () {
     ]);
 
     it('names the reason of the prune that left the history', function (string $by) {
-        $conditions = conditionsFor(new Markers(createdAt: 100.0, prunedThrough: 500.0, prunedReason: $by));
+        $conditions = conditionsFor(new Markers(createdAt: 100.0, prunedThrough: 500.0, prunedReason: PruneReason::from($by)));
 
         expect($conditions[0])->toMatchArray(['id' => 'history-pruned', 'reason' => "pruned-{$by}"])
             ->and($conditions[0]['message'])->toContain("(pruned-{$by})");
@@ -323,7 +324,7 @@ it('attaches the conditions after the structural blind spots, in the order of th
     config()->set('firewatch.capture.redact_headers', ['Authorization']);
     registerFirewatch();
 
-    $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema', prunedThrough: 700.0, prunedReason: 'age', nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
+    $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema', prunedThrough: 700.0, prunedReason: PruneReason::AGE, nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
 
     $conditions = conditionsFor($markers, drift: [['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen' => 5.0]]);
 

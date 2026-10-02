@@ -21,6 +21,8 @@ use SQLite3Exception;
  */
 class ClearCommand extends Command
 {
+    use ReadsFlags;
+
     /**
      * The name and signature of the console command.
      *
@@ -46,7 +48,7 @@ class ClearCommand extends Command
             return self::FAILURE;
         }
 
-        if ($this->option('drop') && $type !== null) {
+        if ($this->flag('drop') && $type !== null) {
             $this->error(__('firewatch::messages.clear.drop_with_type'));
 
             return self::FAILURE;
@@ -55,7 +57,7 @@ class ClearCommand extends Command
         $unusable = $clear->unusable();
 
         // A dropped store may be damaged or of another schema version, which is what a drop is for.
-        $rebuildable = $this->option('drop') && $unusable?->state->isRebuildable() === true;
+        $rebuildable = $this->flag('drop') && $unusable?->state->isRebuildable() === true;
 
         if ($unusable !== null && ! $rebuildable) {
             return $this->refuse($unusable, $configuration->database);
@@ -65,7 +67,7 @@ class ClearCommand extends Command
             return self::FAILURE;
         }
 
-        if ($this->option('drop')) {
+        if ($this->flag('drop')) {
             return $this->drop($clear, $unusable?->state, $configuration->database);
         }
 
@@ -178,7 +180,7 @@ class ClearCommand extends Command
      */
     protected function confirmed(?RecordType $type, string $path): bool
     {
-        if ($this->option('force')) {
+        if ($this->flag('force')) {
             return true;
         }
 
@@ -189,7 +191,7 @@ class ClearCommand extends Command
         }
 
         $question = match (true) {
-            (bool) $this->option('drop') => __('firewatch::messages.clear.confirm_drop', ['path' => $path]),
+            $this->flag('drop') => __('firewatch::messages.clear.confirm_drop', ['path' => $path]),
             $type === null => __('firewatch::messages.clear.confirm', ['path' => $path]),
             default => __('firewatch::messages.clear.confirm_type', [
                 'path' => $path,

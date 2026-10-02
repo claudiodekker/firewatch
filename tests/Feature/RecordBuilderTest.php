@@ -1,26 +1,8 @@
 <?php
 
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Reader;
 use Workbench\App\Fixtures\Producer;
 use Workbench\App\Fixtures\WireFixture;
-
-/**
- * @return list<array<string, mixed>>
- */
-function storedSyntheticRecords(string $sql): array
-{
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
-        $result = $connection->query($sql);
-        $rows = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
-}
 
 it('builds a record with the fields of its wire fixture and deterministic values for the placeholders', function (RecordType $type) {
     $fixture = app(WireFixture::class)->load(Producer::from($type->value));
@@ -82,6 +64,6 @@ it('stamps a record with a deploy', function () {
 it('sends a synthetic record through Firewatch\'s real ingest, which maps it and counts its drift', function () {
     ingest([syntheticRecord(RecordType::CACHE_EVENT)->inExecution('execution-1')->with(['colour' => 'red'])]);
 
-    expect(storedSyntheticRecords('SELECT execution_id, key FROM cache_events'))->toBe([['execution_id' => 'execution-1', 'key' => 'orders']])
-        ->and(storedSyntheticRecords('SELECT kind, detail FROM drift'))->toBe([['kind' => 'unknown_field', 'detail' => 'colour']]);
+    expect(storeRows('SELECT execution_id, key FROM cache_events'))->toBe([['execution_id' => 'execution-1', 'key' => 'orders']])
+        ->and(storeRows('SELECT kind, detail FROM drift'))->toBe([['kind' => 'unknown_field', 'detail' => 'colour']]);
 });

@@ -3,14 +3,15 @@
 namespace ClaudioDekker\Firewatch\Actions;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Store\Writer;
-use Illuminate\Support\Facades\Date;
 use SQLite3;
 use SQLite3Stmt;
 
@@ -72,7 +73,7 @@ class ClearStore
     public function clear(?RecordType $type): array
     {
         $before = $this->size();
-        $instant = (float) Date::now()->format('U.u');
+        $instant = Instant::now();
 
         // Stamped before anything is deleted, so a reader that sees a half-cleared store already clips its history; records that arrive meanwhile have newer ids and stay.
         $through = $this->stamp($type, $instant);
@@ -139,7 +140,7 @@ class ClearStore
     protected function stamp(?RecordType $type, float $instant): int
     {
         return $this->writer()->transaction(function (SQLite3 $connection) use ($type, $instant) {
-            $through = (int) $connection->querySingle('SELECT coalesce(max(id), 0) FROM records');
+            $through = Cell::integer($connection->querySingle('SELECT coalesce(max(id), 0) FROM records'));
 
             if ($type === null) {
                 Markers::markCleared($connection, $instant);
@@ -192,16 +193,16 @@ class ClearStore
     {
         $writer = $this->writer();
 
-        $free = (int) $writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count'));
+        $freePages = Cell::integer($writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count')));
 
         // One step frees a fixed number of pages, so the steps needed are known and the loop always ends.
-        for ($steps = (int) ceil($free / static::RECLAIM_PAGES); $steps > 0; $steps--) {
+        for ($steps = intdiv($freePages + static::RECLAIM_PAGES - 1, static::RECLAIM_PAGES); $steps > 0; $steps--) {
             $writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.static::RECLAIM_PAGES.')'));
         }
 
         $checkpoint = $writer->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA wal_checkpoint(TRUNCATE)', entireRow: true));
 
-        return is_array($checkpoint) && (int) $checkpoint['busy'] === 1;
+        return is_array($checkpoint) && Cell::integer($checkpoint['busy']) === 1;
     }
 
     /**
@@ -211,7 +212,7 @@ class ClearStore
     {
         clearstatcache();
 
-        return (int) @filesize($this->configuration->database) + (int) @filesize($this->configuration->database.'-wal');
+        return Cell::integer(@filesize($this->configuration->database)) + Cell::integer(@filesize($this->configuration->database.'-wal'));
     }
 
     /**
