@@ -54,7 +54,7 @@ class ExecutionHeader
      *
      * @param  array<string, mixed>  $row
      */
-    protected static function label(RecordType $type, array $row): mixed
+    public static function label(RecordType $type, array $row): mixed
     {
         if ($type !== RecordType::REQUEST) {
             return $row['name'] ?? null;
@@ -68,7 +68,7 @@ class ExecutionHeader
      *
      * @param  array<string, mixed>  $row
      */
-    protected static function outcome(RecordType $type, array $row): mixed
+    public static function outcome(RecordType $type, array $row): mixed
     {
         return match ($type) {
             RecordType::REQUEST => $row['status_code'] ?? null,

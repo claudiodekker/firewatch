@@ -32,6 +32,7 @@ Four tools exist so far:
 - `rank` lists the worst groups of one record type by a measure such as `p95_duration`, over a time window, optionally matched by label, split by deploy and paged with a cursor.
 - `occurrences` lists individual records for a group, type, execution, trace, job or user, newest first or by duration, memory or queries, with filters that fit each type and a cursor for the rest.
 - `execution` shows one request, command, job attempt or scheduled task in full: its outcome, stages, exceptions with their frames and a timeline of its children.
+- `trace` follows one trace or queued job: the request, commands and job attempts it touched in start order, and each job's path from dispatch to its attempts, with the wait before each.
 
 Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see.
 

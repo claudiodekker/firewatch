@@ -2,10 +2,12 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
+use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
+use Workbench\App\Jobs\ShipOrder;
 
 function oneExecutionApplication(): void
 {
@@ -112,4 +114,95 @@ it('says what it cannot see: running work, the process peak of memory and a payl
     $envelope = Envelope::assert(Execution::class);
 
     expect(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion', 'memory-is-process-peak', 'payload-on-server-error-only', 'dead-counters');
+});
+
+function oneExecutionShipment(string $connection): void
+{
+    oneExecutionApplication();
+
+    // The application the request forced is a fresh one, with an empty database.
+    test()->loadLaravelMigrations();
+
+    config()->set('queue.default', $connection);
+    Route::get('/ship', function () {
+        dispatch(new ShipOrder);
+
+        return 'ok';
+    });
+
+    test()->get('/ship');
+}
+
+function oneExecutionWorkedJob(): void
+{
+    config()->set('queue.default', 'database');
+    dispatch(new ShipOrder);
+    Nightwatch::digest();
+
+    runArtisan(['command' => 'queue:work', '--once' => true]);
+}
+
+it('follows a job from its dispatch to the worker attempt that ran it', function () {
+    oneExecutionWorkedJob();
+    [$dispatch] = storeRows('SELECT trace_id, job_id FROM queued_jobs');
+
+    $envelope = Envelope::assert(Trace::class, ['trace_id' => $dispatch['trace_id']]);
+    $job = $envelope['result']['jobs'][0];
+
+    expect(array_column($envelope['result']['executions'], 'source'))->toBe(['job'])
+        ->and($envelope['result']['jobs'])->toHaveCount(1)
+        ->and($job)->toMatchArray(['job_id' => $dispatch['job_id'], 'name' => ShipOrder::class, 'lineage' => 'complete', 'outcome' => 'processed'])
+        ->and($job['dispatch'])->toMatchArray(['connection' => 'database', 'queue' => 'default'])
+        ->and($job['attempts'])->toHaveCount(1)
+        ->and($job['attempts'][0])->toMatchArray(['attempt' => 1, 'status' => 'processed', 'trace_id' => null])
+        ->and($job['attempts'][0]['wait_ms'])->toBeGreaterThanOrEqual(0)
+        ->and($envelope['notes'])->toBe([]);
+});
+
+it('starts from the job id and reaches the same trace', function () {
+    oneExecutionWorkedJob();
+    [$dispatch] = storeRows('SELECT trace_id, job_id FROM queued_jobs');
+
+    $envelope = Envelope::assert(Trace::class, ['job_id' => $dispatch['job_id']]);
+
+    expect($envelope['result']['trace_id'])->toBe($dispatch['trace_id'])
+        ->and(array_column($envelope['result']['executions'], 'source'))->toBe(['job'])
+        ->and(array_column($envelope['result']['jobs'], 'job_id'))->toBe([$dispatch['job_id']]);
+});
+
+it('shows a job queued by a request and not yet taken by a worker as pending', function () {
+    oneExecutionShipment('database');
+    Nightwatch::digest();
+    [$request] = storeRows('SELECT trace_id FROM requests');
+
+    $envelope = Envelope::assert(Trace::class, ['trace_id' => $request['trace_id']]);
+
+    expect(array_column($envelope['result']['executions'], 'source'))->toBe(['request'])
+        ->and($envelope['result']['executions'][0])->toMatchArray(['execution_id' => $request['trace_id'], 'label' => '/ship', 'outcome' => 200])
+        ->and($envelope['result']['jobs'][0])->toMatchArray(['lineage' => 'no_attempts', 'outcome' => 'pending', 'attempts' => []])
+        ->and($envelope['result']['jobs'][0]['dispatch'])->toMatchArray(['execution_id' => $request['trace_id'], 'connection' => 'database', 'queue' => 'default'])
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.trace_partial_no_attempts')]);
+});
+
+it('finds no job for a request that ran its job on the sync connection, and says so', function () {
+    oneExecutionShipment('sync');
+    Nightwatch::digest();
+    [$request] = storeRows('SELECT trace_id FROM requests');
+
+    $envelope = Envelope::assert(Trace::class, ['trace_id' => $request['trace_id']]);
+
+    expect($envelope['result']['jobs'])->toBe([])
+        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
+});
+
+it('offers next calls that run', function () {
+    oneExecutionShipment('database');
+    Nightwatch::digest();
+    [$request] = storeRows('SELECT trace_id FROM requests');
+
+    $envelope = Envelope::assert(Trace::class, ['trace_id' => $request['trace_id']]);
+    $opened = array_map(fn (array $call) => Envelope::assert(Execution::class, $call['arguments']), $envelope['next']);
+
+    expect($envelope['next'])->not->toBe([])
+        ->and($opened)->toHaveCount(count($envelope['next']));
 });

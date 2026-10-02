@@ -17,3 +17,4 @@
 - `rank` can match a group by a substring of its label, break one group down by deploy with `group`, and continue a cut list with a `cursor`.
 - The `execution` tool shows one request, command, job attempt or scheduled task in full, by id or the latest to finish: outcome, stages, a request's headers and payload, counted-versus-captured accounting, up to five exceptions with their frames, and a timeline with repeated queries collapsed.
 - The `occurrences` tool lists individual records for a group, type, execution, trace, job or user, newest first or by duration, memory or queries, with filters that fit each type, a baseline against the median or 95th percentile, and a cursor for the rest.
+- The `trace` tool follows one trace or queued job: the executions it touched in start order, and for every queued job its dispatch, its attempts and the wait before each, noting where a dispatch or attempt was not recorded. The `execution` tool now offers it as a next call.

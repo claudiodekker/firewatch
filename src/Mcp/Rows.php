@@ -42,9 +42,9 @@ class Rows
     /**
      * Get the `truncated` entry of a list the limit cut, or null for a complete one.
      *
-     * @return array{section: string, shown: int, matched: null, reason: string, how: string}|null
+     * @return array{section: string, shown: int, matched: int|null, reason: string, how: string}|null
      */
-    public function truncation(string $section, string $how): ?array
+    public function truncation(string $section, string $how, ?int $matched = null): ?array
     {
         if (! $this->more) {
             return null;
@@ -53,7 +53,7 @@ class Rows
         return [
             'section' => $section,
             'shown' => count($this->rows),
-            'matched' => null,
+            'matched' => $matched,
             'reason' => TruncationReason::LIMIT->value,
             'how' => $how,
         ];

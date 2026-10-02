@@ -51,17 +51,17 @@ class Ranking
     /**
      * The first HTTP status code that counts as a failure.
      */
-    protected const FIRST_FAILED_STATUS_CODE = 400;
+    public const FIRST_FAILED_STATUS_CODE = 400;
 
     /**
      * The status of a job attempt or scheduled task that failed.
      */
-    protected const STATUS_FAILED = 'failed';
+    public const STATUS_FAILED = 'failed';
 
     /**
      * The status of a job attempt that was released back to the queue.
      */
-    protected const STATUS_RELEASED = 'released';
+    public const STATUS_RELEASED = 'released';
 
     /**
      * The status of a scheduled task that was skipped.
