@@ -18,4 +18,4 @@
 - Real sensors first: drive the workbench. A synthetic record only where the sensors can't give exact durations, volume, many groups, deploy identities, drift shapes or other-process writers, built by the record builder from a committed wire fixture and sent through Firewatch's real ingest.
 - Raw SQL inserts into the store exist only in corruption and foreign-file tests.
 - Layers and tags are in `CODING_STANDARDS.md` section 11; select a layer with `--group=scenario|feature|contract|unit|arch`.
-- Suite setup, only when creating or explicitly asked to tune `tests/Pest.php`: `LazilyRefreshDatabase` is for the workbench's own database, never the store.
+- When creating or explicitly asked to tune `tests/Pest.php`, apply `LazilyRefreshDatabase` to the workbench's own database only, never the store.

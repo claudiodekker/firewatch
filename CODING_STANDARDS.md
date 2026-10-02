@@ -8,7 +8,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 
 ## 1. Sibling changes
 
-- Firewatch's sibling sets are MCP tools, detectors, doctor checks, commands, listeners of the same kind, and record types with their view and contract-table entry.
+- The sibling-set rule (rulebook §1) covers Firewatch's MCP tools, detectors, doctor checks, commands, listeners of the same kind, and record types with their view and contract-table entry.
 - A closed set of the design (detector shapes, blind-spot ids, error codes, doctor check ids, drift kinds, empty kinds, store states, config keys) changes only by changing its contract, and the test that pins it changes in the same diff.
 
 ## 2. Actions
@@ -20,7 +20,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 ## 3. Entry points
 
 - Artisan commands and MCP tools validate their input, call one Action or query, and return. They hold no business logic.
-- Tool and command input is validated at the boundary. Numbers such as `limit` and `window` are refused with an actionable error when out of range, never silently clamped, so the answer always reflects what was asked. A malformed time is refused, never read as unbounded.
+- Tool and command arguments are read through typed accessors, with no `(int)` casts, and validated at the boundary. Numbers such as `limit` and `window` are refused with an actionable error when out of range, never silently clamped, so the answer always reflects what was asked. A malformed time is refused, never read as unbounded.
 - An unknown, misspelt or inapplicable argument is refused with the accepted values, never ignored. Enumerated values are matched exactly.
 - Output is an array or value object, never a raw driver result. An empty object result serializes as `{}`, not `[]`.
 - Every tool answers with the one fixed envelope. A failed call is a plain-text tool error with a closed code and no envelope, never a protocol error, stack trace or path. A valid selector that matches nothing is an empty answer, not an error.
@@ -39,12 +39,13 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 
 ## 5. Null-safety
 
+- The null guard (rulebook §8) covers optional wire payload keys, nullable store columns and Nightwatch event properties. Check that a key exists before indexing a wire record or tool argument.
 - A new column doesn't duplicate one the store already keeps.
 - A stored value keeps the wire's word: a wire `0` or `''` is stored as sent, and NULL only where the wire omits the field. NULL means unknown, never zero and never clean.
 
 ## 6. Types and values
 
-- Enum values are spelled exactly as the design spells them (`job-attempt`, `not_evaluated`).
+- Enum values are spelled exactly as the design spells them (`job-attempt`, `not_evaluated`). Only an enum that renders text has a `label()` method.
 - Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool returns raw values. An instant held as Unix seconds is named for the moment it marks (`$now`, `$since`, `$cutoff`) and needs no suffix.
 - Each step that does real work (reads rows, plans, writes, hashes, calls another class) gets its own statement and a named variable. Don't nest it inside another call's argument, where a reader skims past it. Resolving a dependency isn't real work in this sense: don't split a call's arguments into single-use locals, e.g. `new SignInAttempt(Keystone::guard(), app(AccountLookup::class))` stays inline.
 - Record data is JSON-encoded with the seam's flag set, so wire floats keep their fraction.
@@ -59,13 +60,14 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 
 ## 8. Long-running processes
 
-- The MCP server reuses its process like Octane and queue workers do, so call-specific statics and singletons are reset between tool calls too.
+- Queue workers and Octane run Firewatch's ingest, and the MCP server reuses its process too, so call-specific statics and singletons are reset between executions and tool calls.
 - The mode and the configuration are read once per process. A store connection is keyed by `getmypid()`: after a fork the inherited handle is abandoned unused and a new one is opened. Every write batch and reader call checks the file's identity, so a file deleted or replaced under a live connection is reopened; where no identity exists (Windows) the check does nothing and never throws.
 - The MCP server and the SQL child write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
 - Windows is supported: no code assumes POSIX (file modes, `stream_select()` on `proc_open` pipes) without a Windows path that the platform job runs (ADR 0012).
 
 ## 9. Configuration
 
+- Config values are cacheable: scalars, class-strings and arrays of them, never objects or closures.
 - Config is read only through the configuration normaliser, never with `config('firewatch.…')` elsewhere. An invalid value falls back to its default, alone, with an issue; it never throws, never stops capture and never changes the mode.
 - The closed key set is the only configuration. Limits, ceilings, thresholds, sample floors, chunk sizes and the size backstop are named constants, never settings. `FIREWATCH_ENABLED` is the only on/off switch, and the values forced onto Nightwatch are not configurable.
 - New options default to off or the least surprising behaviour and are documented in the config file with a Laravel `|` header block.
@@ -92,7 +94,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 - A test that spawns a real process carries the `process` tag, and one that asserts a file mode or another POSIX-only fact carries `posix`. Real processes run with shortened deadlines passed through constructor arguments, never a real wait.
 - Each test uses its own temporary store path, and the fake `Stopwatch` when it needs a clock.
 - No test asserts timing, sleeps or belongs to a performance group. Correctness is asserted through bounds that are behaviour (bounded batches, ceilings, a deadline that returns control).
-- Nightwatch's per-process state counts as global state a test restores in teardown.
+- A test that changes Nightwatch's per-process state restores it in teardown.
 
 ## 12. Methods and classes
 
@@ -101,8 +103,9 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 
 ## 13. Code hygiene
 
-- Commented-out sample entries in the published config file, as in Laravel's own, may stay.
-- An `@param` or `@return` tag gets a description only for a constraint the name can't express.
+- Sample entries in the published config file may stay commented out, as in Laravel's own.
+- Where an `@param` or `@return` tag is kept, it gets a description only for a constraint the name can't express.
+- A guard clause that doesn't fit on one line gets a shorter message, not a wrap.
 - No PHPStan baseline: fix, don't baseline.
 
 ## 14. Domain language and user-facing text

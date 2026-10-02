@@ -4,7 +4,7 @@
 - No documentation beyond `README.md`, `CHANGELOG.md`, `CONTEXT.md`, ADRs and `docs/agents/`. The design set lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`. A PR that changes what a user installs, configures or runs updates the README, which stays a short guide, and adds one line to the changelog. Internals belong in `CONTEXT.md` and the ADRs, not the README. No docblocks that restate types.
 - Work in the `skills:claudio-mode` skill.
 - One PR delivers one complete, reviewable feature or fix. Never split a feature into "part 1, 2, 3" PRs; if it is too big to review, split the ticket.
-- Package guardrails and store-specific test rules: @docs/agents/laravel.md
+- Package guardrails, store and test rules: @docs/agents/laravel.md
 
 ## Opening PRs
 
