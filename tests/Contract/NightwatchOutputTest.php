@@ -87,4 +87,4 @@ it('writes no group for the types that have none', function (Producer $producer)
     $record = sensorRecord($producer);
 
     expect($record)->not->toHaveKey('_group');
-})->with([Producer::LOG, Producer::USER]);
+})->with(['a log' => Producer::LOG, 'a user' => Producer::USER]);

@@ -25,7 +25,7 @@ use RuntimeException;
 use SQLite3;
 
 /**
- * @internal
+ * @api
  */
 class FirewatchServiceProvider extends ServiceProvider
 {

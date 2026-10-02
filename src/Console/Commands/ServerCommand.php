@@ -9,7 +9,7 @@ use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Mcp\Server\Transport\StdioTransport;
 
 /**
- * @internal
+ * @api
  */
 class ServerCommand extends Command
 {

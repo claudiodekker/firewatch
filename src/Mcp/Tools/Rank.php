@@ -37,7 +37,7 @@ use SQLite3Result;
 use SQLite3Stmt;
 
 /**
- * @internal
+ * @api
  */
 #[Name('rank')]
 #[Title('Rank')]
@@ -133,7 +133,10 @@ class Rank extends Tool
             $blindSpots = [...$structural, ...$this->conditions->for(null, $types, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable, $types, History::unknown(...$retention)), $blindSpots);
+            $unknownHistory = History::unknown(...$retention);
+            $coverage = Coverage::of($unusable, $types, $unknownHistory);
+
+            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $blindSpots = [...$structural, ...$this->conditions->for($facts, $types, $window)];
@@ -141,8 +144,9 @@ class Rank extends Tool
 
         if ($total === 0) {
             $empty = Emptiness::storeEmpty($this->configuration->database);
+            $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::EMPTY, $types, $history, records: 0), $blindSpots);
+            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
@@ -150,38 +154,42 @@ class Rank extends Tool
         if ($ranked === null) {
             $empty = Emptiness::windowEmpty($total);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
+            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
         }
 
         if ($ranked['rows'] === []) {
             $filters = ["type: {$type->value}", ...($deploy === null ? [] : ["deploy: {$deploy}"])];
             $empty = Emptiness::noMatch($inWindow, $filters);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
+            return new Answer(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $rows = Rows::bound($ranked['rows'], $limit);
+        $groupsRanked = count($ranked['rows']);
+        $summary = trans_choice('firewatch::messages.rank_summary', $groupsRanked, ['count' => $groupsRanked, 'type' => $type->value, 'by' => $by->value]);
+        $truncation = $rows->truncation('groups', __('firewatch::messages.rank_truncated_how'));
+        $notes = $this->notes($by, $ranked);
 
         return new Answer(
-            $this->name(),
-            $epoch,
-            $timezone,
-            $window,
-            trans_choice('firewatch::messages.rank_summary', count($ranked['rows']), ['count' => count($ranked['rows']), 'type' => $type->value, 'by' => $by->value]),
-            null,
-            [
+            tool: $this->name(),
+            now: $epoch,
+            timezone: $timezone,
+            window: $window,
+            summary: $summary,
+            empty: null,
+            result: [
                 'type' => $type->value,
                 'by' => $by->value,
                 'failure_definition' => Ranking::failureDefinition($type),
                 'records' => $ranked['records'],
-                'groups_ranked' => count($ranked['rows']),
+                'groups_ranked' => $groupsRanked,
                 'records_without_group' => $ranked['withoutGroup'],
                 'groups' => $rows->rows,
             ],
-            $coverage,
-            $blindSpots,
-            $this->notes($by, $ranked),
-            ($truncated = $rows->truncation('groups', __('firewatch::messages.rank_truncated_how'))) === null ? [] : [$truncated],
+            coverage: $coverage,
+            blindSpots: $blindSpots,
+            notes: $notes,
+            truncated: $truncation === null ? [] : [$truncation],
         );
     }
 
@@ -216,13 +224,15 @@ class Rank extends Tool
         $value = $request->get('type');
 
         if ($value === null) {
-            throw Refusal::missing('type', $types, $example);
+            throw Refusal::missing(argument: 'type', accepted: $types, example: $example);
         }
 
         $type = is_string($value) ? RecordType::tryFrom($value) : null;
 
         if ($type === null || ! in_array($type, Measure::types(), true)) {
-            throw Refusal::invalid('type', 'one of the types with groups', json_encode($value, JSON_THROW_ON_ERROR), $types, $example);
+            $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+            throw Refusal::invalid(argument: 'type', expected: 'one of the types with groups', value: $shown, accepted: $types, example: $example);
         }
 
         return $type;
@@ -246,7 +256,10 @@ class Rank extends Tool
             return $measure;
         }
 
-        throw Refusal::invalid('by', "a measure of {$type->value}", json_encode($value, JSON_THROW_ON_ERROR), implode(', ', array_map(fn (Measure $measure) => $measure->value, Measure::for($type))), "rank(type: \"{$type->value}\", by: \"{$default->value}\")");
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+        $accepted = implode(', ', array_map(fn (Measure $measure) => $measure->value, Measure::for($type)));
+
+        throw Refusal::invalid(argument: 'by', expected: "a measure of {$type->value}", value: $shown, accepted: $accepted, example: "rank(type: \"{$type->value}\", by: \"{$default->value}\")");
     }
 
     /**
@@ -264,7 +277,9 @@ class Rank extends Tool
             return $value;
         }
 
-        throw Refusal::invalid('limit', '1 to '.self::MAXIMUM_LIMIT, json_encode($value, JSON_THROW_ON_ERROR), 'a whole number from 1 to '.self::MAXIMUM_LIMIT, "rank(type: \"{$type->value}\", limit: ".self::DEFAULT_LIMIT.')');
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: "rank(type: \"{$type->value}\", limit: ".self::DEFAULT_LIMIT.')');
     }
 
     /**
@@ -278,7 +293,9 @@ class Rank extends Tool
             return $value;
         }
 
-        throw Refusal::invalid('deploy', 'an exact deploy string', json_encode($value, JSON_THROW_ON_ERROR), 'an exact deploy string', "rank(type: \"{$type->value}\", deploy: \"v1\")");
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'deploy', expected: 'an exact deploy string', value: $shown, accepted: 'an exact deploy string', example: "rank(type: \"{$type->value}\", deploy: \"v1\")");
     }
 
     /**

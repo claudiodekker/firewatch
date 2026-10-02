@@ -8,14 +8,16 @@ use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
+use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Number;
-use Throwable;
+use SQLite3Exception;
 
 /**
- * @internal
+ * @api
  */
 class ClearCommand extends Command
 {
@@ -53,7 +55,7 @@ class ClearCommand extends Command
         $unusable = $clear->unusable();
 
         // A dropped store may be damaged or of another schema version, which is what a drop is for.
-        $rebuildable = $this->option('drop') && in_array($unusable?->state, [StoreState::SCHEMA_MISMATCH, StoreState::CORRUPT], true);
+        $rebuildable = $this->option('drop') && $unusable?->state->isRebuildable() === true;
 
         if ($unusable !== null && ! $rebuildable) {
             return $this->refuse($unusable, $configuration->database);
@@ -67,15 +69,9 @@ class ClearCommand extends Command
             return $this->drop($clear, $unusable?->state, $configuration->database);
         }
 
-        try {
-            $result = $clear->clear($type);
-        } catch (Throwable $exception) {
-            if (FailureKind::of($exception) !== FailureKind::BUSY) {
-                throw $exception;
-            }
+        $result = $this->unlessBusy(fn () => $clear->clear($type));
 
-            $this->error(__('firewatch::messages.clear.busy'));
-
+        if ($result === null) {
             return self::FAILURE;
         }
 
@@ -97,15 +93,9 @@ class ClearCommand extends Command
      */
     protected function drop(ClearStore $clear, ?StoreState $state, string $path): int
     {
-        try {
-            $result = $clear->drop($state);
-        } catch (Throwable $exception) {
-            if (FailureKind::of($exception) !== FailureKind::BUSY) {
-                throw $exception;
-            }
+        $result = $this->unlessBusy(fn () => $clear->drop($state));
 
-            $this->error(__('firewatch::messages.clear.busy'));
-
+        if ($result === null) {
             return self::FAILURE;
         }
 
@@ -118,6 +108,29 @@ class ClearCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Run a clear or a drop, and say so and get null when the store stays busy for the whole wait.
+     *
+     * @template TResult of array
+     *
+     * @param  Closure(): TResult  $action
+     * @return TResult|null
+     */
+    protected function unlessBusy(Closure $action): ?array
+    {
+        try {
+            return $action();
+        } catch (SQLite3Exception|StoreFailure $exception) {
+            if (FailureKind::of($exception) !== FailureKind::BUSY) {
+                throw $exception;
+            }
+
+            $this->error(__('firewatch::messages.clear.busy'));
+
+            return null;
+        }
     }
 
     /**

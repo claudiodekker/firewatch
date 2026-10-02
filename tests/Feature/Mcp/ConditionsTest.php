@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
@@ -25,12 +26,11 @@ function conditionsOf(array $arguments = []): array
 
 /**
  * @param  list<RecordType>  $types
- * @param  array<string, string>  $meta
  * @return list<array<string, mixed>>
  */
-function conditionsFor(array $meta, array $types = [RecordType::REQUEST], ?float $since = null, ?float $until = null, array $drift = []): array
+function conditionsFor(Markers $markers, array $types = [RecordType::REQUEST], ?float $since = null, ?float $until = null, array $drift = []): array
 {
-    return app(Conditions::class)->for(new StoreFacts($meta, $drift), $types, Window::between($since, $until, 'UTC'));
+    return app(Conditions::class)->for(new StoreFacts($markers, $drift), $types, Window::between($since, $until, 'UTC'));
 }
 
 beforeEach(function () {
@@ -47,19 +47,21 @@ describe('history', function () {
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
 
-        expect(conditionsOf())->toEqual([[
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([[
             'id' => 'history-pruned',
             'kind' => 'condition',
-            'message' => 'History before 2026-09-02 12:00:00.000000 was pruned (pruned-age); this window starts before it.',
+            'message' => __('firewatch::messages.conditions.history-pruned', ['from' => '2026-09-02 12:00:00.000000', 'reason' => 'pruned-age']),
             'from_at' => 1788350400.0,
             'reason' => 'pruned-age',
         ]]);
     });
 
     it('attaches only while the window starts before the history does', function (?float $since, bool $attached) {
-        $meta = ['created_at' => '100', 'pruned_through' => '500', 'pruned_by' => 'cap'];
+        $markers = new Markers(createdAt: 100.0, prunedThrough: 500.0, prunedReason: 'cap');
 
-        expect(array_column(conditionsFor($meta, since: $since), 'id'))->toBe($attached ? ['history-pruned'] : []);
+        expect(array_column(conditionsFor($markers, since: $since), 'id'))->toBe($attached ? ['history-pruned'] : []);
     })->with([
         'no start' => [null, true],
         'a start before it' => [499.999999, true],
@@ -68,53 +70,55 @@ describe('history', function () {
     ]);
 
     it('names the reason of the prune that left the history', function (string $by) {
-        $conditions = conditionsFor(['created_at' => '100', 'pruned_through' => '500', 'pruned_by' => $by]);
+        $conditions = conditionsFor(new Markers(createdAt: 100.0, prunedThrough: 500.0, prunedReason: $by));
 
         expect($conditions[0])->toMatchArray(['id' => 'history-pruned', 'reason' => "pruned-{$by}"])
             ->and($conditions[0]['message'])->toContain("(pruned-{$by})");
-    })->with(['age', 'cap', 'size']);
+    })->with(['by age' => 'age', 'by cap' => 'cap', 'by size' => 'size']);
 
-    it('says the window starts before cleared history, for a clear of everything or of a type read', function (array $meta, string $reason) {
-        $conditions = conditionsFor(['created_at' => '100', ...$meta]);
+    it('says the window starts before cleared history, for a clear of everything or of a type read', function (Markers $markers, string $reason) {
+        $conditions = conditionsFor($markers);
 
         expect($conditions)->toBe([[
             'id' => 'history-cleared',
             'kind' => 'condition',
-            'message' => 'History before 1970-01-01 00:08:20.000000 was cleared; this window starts before it.',
+            'message' => __('firewatch::messages.conditions.history-cleared', ['from' => '1970-01-01 00:08:20.000000']),
             'from_at' => 500.0,
             'reason' => $reason,
         ]]);
     })->with([
-        'a clear' => [['cleared_at' => '500'], 'cleared'],
-        'a clear of the type' => [['cleared_types' => '{"request":500}'], 'cleared-type'],
+        'a clear' => [new Markers(createdAt: 100.0, clearedAt: 500.0), 'cleared'],
+        'a clear of the type' => [new Markers(createdAt: 100.0, clearedTypes: ['request' => 500.0]), 'cleared-type'],
     ]);
 
-    it('says nothing of a history that starts at the creation of the store, or of a clear of another type', function (array $meta) {
-        expect(conditionsFor($meta))->toBe([]);
+    it('says nothing of a history that starts at the creation of the store, or of a clear of another type', function (Markers $markers) {
+        $conditions = conditionsFor($markers);
+
+        expect($conditions)->toBe([]);
     })->with([
-        'created' => [['created_at' => '100']],
-        'a clear of another type' => [['created_at' => '100', 'cleared_types' => '{"log":500}']],
-        'no markers' => [[]],
+        'created' => [new Markers(createdAt: 100.0)],
+        'a clear of another type' => [new Markers(createdAt: 100.0, clearedTypes: ['log' => 500.0])],
+        'no markers' => [new Markers],
     ]);
 });
 
 describe('a rebuilt store', function () {
     it('says earlier data is gone from the rebuild, with when and why', function (string $why) {
-        $conditions = conditionsFor(['created_at' => '600', 'rebuilt_at' => '600', 'rebuilt_why' => $why]);
+        $conditions = conditionsFor(new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: $why));
 
         expect($conditions)->toBe([[
             'id' => 'store-rebuilt',
             'kind' => 'condition',
-            'message' => "The store was rebuilt at 1970-01-01 00:10:00.000000 ({$why}); earlier data is gone.",
+            'message' => __('firewatch::messages.conditions.store-rebuilt', ['at' => '1970-01-01 00:10:00.000000', 'why' => $why]),
             'rebuilt_at' => 600.0,
             'why' => $why,
         ]]);
-    })->with(['schema', 'corrupt']);
+    })->with(['a schema change' => 'schema', 'corruption' => 'corrupt']);
 
     it('attaches only while the window starts before the rebuild', function (?float $since, bool $attached) {
-        $meta = ['created_at' => '600', 'rebuilt_at' => '600', 'rebuilt_why' => 'schema'];
+        $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema');
 
-        expect(array_column(conditionsFor($meta, since: $since), 'id'))->toBe($attached ? ['store-rebuilt'] : []);
+        expect(array_column(conditionsFor($markers, since: $since), 'id'))->toBe($attached ? ['store-rebuilt'] : []);
     })->with([
         'no start' => [null, true],
         'a start before it' => [599.0, true],
@@ -131,10 +135,12 @@ describe('a rebuilt store', function () {
 
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
 
-        expect(conditionsOf())->toEqual([[
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([[
             'id' => 'store-rebuilt',
             'kind' => 'condition',
-            'message' => 'The store was rebuilt at 2026-09-30 14:00:00.000000 (schema); earlier data is gone.',
+            'message' => __('firewatch::messages.conditions.store-rebuilt', ['at' => '2026-09-30 14:00:00.000000', 'why' => 'schema']),
             'rebuilt_at' => 1790776800.0,
             'why' => 'schema',
         ]]);
@@ -145,7 +151,9 @@ describe('a rebuilt store', function () {
 
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
 
-        expect(conditionsOf())->toEqual([]);
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([]);
     });
 });
 
@@ -162,10 +170,12 @@ describe('dropped records', function () {
         dropBatch('2026-09-30 14:00:10', FailureKind::FULL, 4);
         $this->travelTo('2026-09-30 14:01:00');
 
-        expect(conditionsOf())->toEqual([[
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([[
             'id' => 'records-dropped',
             'kind' => 'condition',
-            'message' => '7 records were not stored between 2026-09-30 14:00:00.000000 and 2026-09-30 14:00:10.000000 (last reason: full); results may be incomplete.',
+            'message' => __('firewatch::messages.conditions.records-dropped', ['n' => 7, 'from' => '2026-09-30 14:00:00.000000', 'to' => '2026-09-30 14:00:10.000000', 'reason' => 'full']),
             'records' => 7,
             'from_at' => 1790776800.0,
             'to_at' => 1790776810.0,
@@ -191,11 +201,15 @@ describe('dropped records', function () {
     it('says nothing of a recovery that dropped nothing, or of a store that dropped nothing', function () {
         dropBatch('2026-09-30 14:00:00', FailureKind::BUSY, 0);
 
-        expect(conditionsOf())->toEqual([]);
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([]);
 
         app(FailureLog::class)->recovered(new StoreFailure(FailureKind::CORRUPT, 'damaged'));
 
-        expect(conditionsOf())->toEqual([]);
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([]);
     });
 
     it('is attached to an answer about a store that cannot be read', function () {
@@ -213,10 +227,12 @@ describe('drift', function () {
             syntheticRecord(RecordType::CACHE_EVENT)->with(['colour' => 'blue']),
         ]);
 
-        expect(conditionsOf())->toEqual([[
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([[
             'id' => 'drift',
             'kind' => 'condition',
-            'message' => '2 unknown_field drift on cache-event, last 2026-09-30 14:00:00.000000; fields may be null or missing.',
+            'message' => __('firewatch::messages.conditions.drift', ['count' => 2, 'kind' => 'unknown_field', 'type' => 'cache-event', 'last' => '2026-09-30 14:00:00.000000']),
             'count' => 2,
             'drift_kind' => 'unknown_field',
             'type' => 'cache-event',
@@ -232,9 +248,9 @@ describe('drift', function () {
             ['kind' => 'version', 'type' => '', 'count' => 9, 'last_seen' => 40.0],
         ];
 
-        expect(array_column(conditionsFor(['created_at' => '1'], [RecordType::LOG], drift: $drift), 'count'))->toBe([5, 1])
-            ->and(array_column(conditionsFor(['created_at' => '1'], [RecordType::REQUEST], drift: $drift), 'count'))->toBe([2])
-            ->and(conditionsFor(['created_at' => '1'], [RecordType::QUERY], drift: $drift))->toBe([]);
+        expect(array_column(conditionsFor(new Markers(createdAt: 1.0), [RecordType::LOG], drift: $drift), 'count'))->toBe([5, 1])
+            ->and(array_column(conditionsFor(new Markers(createdAt: 1.0), [RecordType::REQUEST], drift: $drift), 'count'))->toBe([2])
+            ->and(conditionsFor(new Markers(createdAt: 1.0), [RecordType::QUERY], drift: $drift))->toBe([]);
     });
 });
 
@@ -245,14 +261,16 @@ describe('an unverified Nightwatch', function () {
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
 
-        expect(conditionsOf())->toEqual([[
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([[
             'id' => 'nightwatch-unverified',
             'kind' => 'condition',
-            'message' => "Nightwatch {$version} is newer than the verified line 1.30; records may be partly interpreted.",
+            'message' => __('firewatch::messages.conditions.nightwatch-unverified', ['version' => $version, 'line' => '1.30']),
             'version' => $version,
             'line' => '1.30',
         ]]);
-    })->with(['v1.31.0', 'v2.0.0', 'dev-main']);
+    })->with(['a newer minor' => 'v1.31.0', 'a newer major' => 'v2.0.0', 'a development branch' => 'dev-main']);
 
     it('says nothing of the verified line, its patch releases or lower releases', function (string $version) {
         app()->bind(NightwatchInstall::class, fn () => new NightwatchInstall($version, registeredFirst: false));
@@ -260,8 +278,10 @@ describe('an unverified Nightwatch', function () {
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
 
-        expect(conditionsOf())->toEqual([]);
-    })->with(['v1.30.0', 'v1.30.9', 'v1.29.4']);
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([]);
+    })->with(['the verified release' => 'v1.30.0', 'a patch release' => 'v1.30.9', 'a lower release' => 'v1.29.4']);
 });
 
 describe('redaction', function () {
@@ -270,10 +290,12 @@ describe('redaction', function () {
         config()->set('firewatch.capture.redact_payload_fields', $fields);
         registerFirewatch();
 
-        expect(conditionsFor(['created_at' => '1']))->toBe([[
+        $conditions = conditionsFor(new Markers(createdAt: 1.0));
+
+        expect($conditions)->toBe([[
             'id' => 'redaction-active',
             'kind' => 'condition',
-            'message' => 'Some request headers or payload fields are redacted and read [N bytes redacted].',
+            'message' => __('firewatch::messages.conditions.redaction-active'),
             'headers' => $headers,
             'payload_fields' => $fields,
         ]]);
@@ -284,12 +306,16 @@ describe('redaction', function () {
     ]);
 
     it('says nothing for empty lists, or when requests are not read', function () {
-        expect(conditionsFor(['created_at' => '1']))->toBe([]);
+        $conditions = conditionsFor(new Markers(createdAt: 1.0));
+
+        expect($conditions)->toBe([]);
 
         config()->set('firewatch.capture.redact_headers', ['Authorization']);
         registerFirewatch();
 
-        expect(conditionsFor(['created_at' => '1'], [RecordType::LOG, RecordType::QUERY]))->toBe([]);
+        $conditions = conditionsFor(new Markers(createdAt: 1.0), [RecordType::LOG, RecordType::QUERY]);
+
+        expect($conditions)->toBe([]);
     });
 });
 
@@ -297,10 +323,9 @@ it('attaches the conditions after the structural blind spots, in the order of th
     config()->set('firewatch.capture.redact_headers', ['Authorization']);
     registerFirewatch();
 
-    $conditions = conditionsFor([
-        'created_at' => '600', 'rebuilt_at' => '600', 'rebuilt_why' => 'schema',
-        'pruned_through' => '700', 'pruned_by' => 'age', 'nightwatch_version' => 'v2.0.0', 'nightwatch_verified' => '0',
-    ], drift: [['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen' => 5.0]]);
+    $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema', prunedThrough: 700.0, prunedReason: 'age', nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
+
+    $conditions = conditionsFor($markers, drift: [['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen' => 5.0]]);
 
     expect(array_column($conditions, 'id'))->toBe(['history-pruned', 'store-rebuilt', 'drift', 'nightwatch-unverified', 'redaction-active']);
 

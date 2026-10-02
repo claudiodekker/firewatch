@@ -65,7 +65,7 @@ it('orders the groups of a type worst first by their 95th percentile, nearest ra
         ->and($rows[1])->toMatchArray(['occurrences' => 20, 'min_ms' => 1.0, 'p50_ms' => 10.0, 'avg_ms' => 10.5, 'p95_ms' => 19.0, 'max_ms' => 20.0, 'total_ms' => 210.0, 'withheld' => null])
         ->and($rows[2])->toMatchArray(['p95_ms' => 5.0, 'max_ms' => 900.0])
         ->and($envelope['result'])->toMatchArray(['type' => 'request', 'by' => 'p95_duration', 'records' => 60, 'groups_ranked' => 3, 'records_without_group' => 0])
-        ->and($envelope['summary'])->toBe('Ranked 3 request groups by p95_duration, worst first.')
+        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_summary', 3, ['count' => 3, 'type' => 'request', 'by' => 'p95_duration']))
         ->and($envelope['notes'])->toBe([])
         ->and($envelope['coverage']['types_read'])->toBe(['request']);
 });
@@ -91,7 +91,9 @@ it('withholds a percentile below its sample floor, and shows it at the floor', f
 it('shows the raw values, ascending, of a group with fewer than 3 records', function (array $milliseconds, ?array $values) {
     ingest(rankGroup(RecordType::REQUEST, 'a', $milliseconds));
 
-    expect(rankRows()[0]['values_ms'])->toEqual($values);
+    $rows = rankRows();
+
+    expect($rows[0]['values_ms'])->toEqual($values);
 })->with([
     'one record' => [[7], [7.0]],
     'two records' => [[9, 3], [3.0, 9.0]],
@@ -101,7 +103,9 @@ it('shows the raw values, ascending, of a group with fewer than 3 records', func
 it('shows one record as occurrences 1 with min, average, max and total equal', function () {
     ingest([rankRecord(RecordType::REQUEST, 'a', 12)]);
 
-    expect(rankRows()[0])->toMatchArray(['occurrences' => 1, 'min_ms' => 12.0, 'avg_ms' => 12.0, 'max_ms' => 12.0, 'total_ms' => 12.0, 'p50_ms' => null, 'p95_ms' => null]);
+    $rows = rankRows();
+
+    expect($rows[0])->toMatchArray(['occurrences' => 1, 'min_ms' => 12.0, 'avg_ms' => 12.0, 'max_ms' => 12.0, 'total_ms' => 12.0, 'p50_ms' => null, 'p95_ms' => null]);
 });
 
 it('orders by the maximum and says so when no group reaches the floor of the percentile', function (string $by, string $statistic, int $needed) {
@@ -164,7 +168,9 @@ it('shows peak memory in megabytes and the summed query counter of executions', 
         rankRecord(RecordType::REQUEST, 'a', 10, ['peak_memory_usage' => 5242880, 'queries' => 6]),
     ]);
 
-    expect(rankRows()[0])->toMatchArray(['max_memory_mb' => 5.0, 'p95_memory_mb' => null, 'queries' => 18])
+    $rows = rankRows();
+
+    expect($rows[0])->toMatchArray(['max_memory_mb' => 5.0, 'p95_memory_mb' => null, 'queries' => 18])
         ->and(rankRows()[0]['withheld']['p95_memory_mb'])->toBe(['reason' => 'sample_too_small', 'have' => 4, 'needed' => 20]);
 });
 
@@ -221,7 +227,9 @@ it('computes failure_pct by the rule of each type', function (RecordType $type, 
 it('leaves failure_pct null when no record of the group has the field it reads', function () {
     ingest([rankRecord(RecordType::REQUEST, 'a', 10, ['status_code' => null])]);
 
-    expect(rankRows()[0]['failure_pct'])->toBeNull();
+    $rows = rankRows();
+
+    expect($rows[0]['failure_pct'])->toBeNull();
 });
 
 it('labels a group from the display field of its latest record in the window', function (RecordType $type, string $field, string $label, array $extra) {
@@ -248,7 +256,9 @@ it('labels a group from the display field of its latest record in the window', f
 it('labels requests that matched no route as one group, and shows the method', function () {
     ingest([rankRecord(RecordType::REQUEST, 'a', 10, ['route_path' => '', 'method' => 'DELETE'])]);
 
-    expect(rankRows()[0])->toMatchArray(['label' => '(no route matched)', 'method' => 'DELETE']);
+    $rows = rankRows();
+
+    expect($rows[0])->toMatchArray(['label' => '(no route matched)', 'method' => 'DELETE']);
 });
 
 it('keeps groups of the same label and different hashes as separate rows', function () {
@@ -267,7 +277,9 @@ it('reads the window by when the records started, and the deploy by its exact st
         rankRecord(RecordType::REQUEST, 'a', 50, ['timestamp' => RANK_AT + 200, 'deploy' => 'v2']),
     ]);
 
-    expect(rankRows(['type' => 'request', 'since' => RANK_AT + 100])[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 50.0, 'deploys' => 1])
+    $rows = rankRows(['type' => 'request', 'since' => RANK_AT + 100]);
+
+    expect($rows[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 50.0, 'deploys' => 1])
         ->and(rankRows(['type' => 'request', 'until' => RANK_AT + 200])[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 30.0, 'deploys' => 2])
         ->and(rankRows(['type' => 'request', 'deploy' => 'v2'])[0])->toMatchArray(['occurrences' => 2, 'min_ms' => 30.0]);
 });
@@ -279,7 +291,9 @@ it('shows when the group was first seen in the store, when it was last seen in t
         rankRecord(RecordType::REQUEST, 'a', 30, ['timestamp' => RANK_AT + 200, 'trace_id' => 'last']),
     ]);
 
-    expect(rankRows(['type' => 'request', 'since' => RANK_AT + 50, 'until' => RANK_AT + 150])[0])->toMatchArray([
+    $rows = rankRows(['type' => 'request', 'since' => RANK_AT + 50, 'until' => RANK_AT + 150]);
+
+    expect($rows[0])->toMatchArray([
         'first_seen_at' => RANK_AT,
         'last_seen_at' => RANK_AT + 100,
         'slowest_execution_id' => 'slowest',
@@ -295,7 +309,9 @@ it('counts the records of the window, the groups ranked and the records without 
         rankRecord(RecordType::QUERY, 'a', 10),
     ]);
 
-    expect(Envelope::assert(Rank::class, ['type' => 'request', 'until' => RANK_AT + 100])['result'])->toMatchArray(['records' => 3, 'groups_ranked' => 2, 'records_without_group' => 1]);
+    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'until' => RANK_AT + 100]);
+
+    expect($envelope['result'])->toMatchArray(['records' => 3, 'groups_ranked' => 2, 'records_without_group' => 1]);
 });
 
 it('cuts the list at the limit, and says how to see more', function () {
@@ -325,50 +341,62 @@ it('answers that the store holds nothing of the type in the window, naming the f
 });
 
 it('answers that the store is empty or missing', function () {
-    expect(Envelope::assert(Rank::class, ['type' => 'request'])['empty']['kind'])->toBe('no_store');
+    $envelope = Envelope::assert(Rank::class, ['type' => 'request']);
+
+    expect($envelope['empty']['kind'])->toBe('no_store');
 
     app(Writer::class)->transaction(fn () => null);
 
-    expect(Envelope::assert(Rank::class, ['type' => 'request'])['empty']['kind'])->toBe('store_empty');
+    $envelope = Envelope::assert(Rank::class, ['type' => 'request']);
+
+    expect($envelope['empty']['kind'])->toBe('store_empty');
 });
 
-it('refuses what it can not rank, naming what it accepts', function (array $arguments, string $code, string $sentence, string $argument, string $accepted, string $example) {
-    FirewatchServer::tool(Rank::class, $arguments)->assertHasErrors(["error: {$code}\n{$sentence}\nargument: {$argument}\naccepted: {$accepted}\nexample: {$example}"]);
+it('refuses what it can not rank, naming what it accepts', function (array $arguments, string $key, string $argument, string $accepted, string $example, ?string $expected = null, ?string $value = null) {
+    $response = FirewatchServer::tool(Rank::class, $arguments);
+
+    $response->assertHasErrors([__("firewatch::messages.{$key}", ['argument' => $argument, 'expected' => $expected, 'value' => $value, 'accepted' => $accepted, 'example' => $example])]);
 })->with(function () {
     $types = 'request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request, queued-job';
     $example = 'rank(type: "request", by: "p95_duration")';
 
     return [
-        'no type' => [[], 'missing_argument', '`type` is required.', 'type', $types, $example],
-        'a type with no groups' => [['type' => 'log'], 'invalid_argument', '`type` must be one of the types with groups; got "log".', 'type', $types, $example],
-        'a type spelled with an underscore' => [['type' => 'job_attempt'], 'invalid_argument', '`type` must be one of the types with groups; got "job_attempt".', 'type', $types, $example],
-        'a type in capitals' => [['type' => 'Request'], 'invalid_argument', '`type` must be one of the types with groups; got "Request".', 'type', $types, $example],
-        'a measure that is none' => [['type' => 'request', 'by' => 'p99_duration'], 'invalid_argument', '`by` must be a measure of request; got "p99_duration".', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen, queries', 'rank(type: "request", by: "p95_duration")'],
-        'a duration of exceptions' => [['type' => 'exception', 'by' => 'p95_duration'], 'invalid_argument', '`by` must be a measure of exception; got "p95_duration".', 'by', 'occurrences, last_seen', 'rank(type: "exception", by: "occurrences")'],
-        'memory of a query' => [['type' => 'query', 'by' => 'p95_memory'], 'invalid_argument', '`by` must be a measure of query; got "p95_memory".', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, last_seen', 'rank(type: "query", by: "p95_duration")'],
-        'queries of a mail' => [['type' => 'mail', 'by' => 'queries'], 'invalid_argument', '`by` must be a measure of mail; got "queries".', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, last_seen', 'rank(type: "mail", by: "p95_duration")'],
-        'a limit of 0' => [['type' => 'request', 'limit' => 0], 'invalid_argument', '`limit` must be 1 to 100; got 0.', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)'],
-        'a limit of 101' => [['type' => 'request', 'limit' => 101], 'invalid_argument', '`limit` must be 1 to 100; got 101.', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)'],
-        'a limit that is no whole number' => [['type' => 'request', 'limit' => 'ten'], 'invalid_argument', '`limit` must be 1 to 100; got "ten".', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)'],
-        'a type that is no string' => [['type' => 5], 'invalid_argument', '`type` must be one of the types with groups; got 5.', 'type', $types, $example],
+        'no type' => [[], 'missing_argument', 'type', $types, $example],
+        'a type with no groups' => [['type' => 'log'], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"log"'],
+        'a type spelled with an underscore' => [['type' => 'job_attempt'], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"job_attempt"'],
+        'a type in capitals' => [['type' => 'Request'], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"Request"'],
+        'a measure that is none' => [['type' => 'request', 'by' => 'p99_duration'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen, queries', 'rank(type: "request", by: "p95_duration")', 'a measure of request', '"p99_duration"'],
+        'a duration of exceptions' => [['type' => 'exception', 'by' => 'p95_duration'], 'invalid_argument', 'by', 'occurrences, last_seen', 'rank(type: "exception", by: "occurrences")', 'a measure of exception', '"p95_duration"'],
+        'memory of a query' => [['type' => 'query', 'by' => 'p95_memory'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, last_seen', 'rank(type: "query", by: "p95_duration")', 'a measure of query', '"p95_memory"'],
+        'queries of a mail' => [['type' => 'mail', 'by' => 'queries'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, last_seen', 'rank(type: "mail", by: "p95_duration")', 'a measure of mail', '"queries"'],
+        'a limit of 0' => [['type' => 'request', 'limit' => 0], 'invalid_argument', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)', '1 to 100', '0'],
+        'a limit of 101' => [['type' => 'request', 'limit' => 101], 'invalid_argument', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)', '1 to 100', '101'],
+        'a limit that is no whole number' => [['type' => 'request', 'limit' => 'ten'], 'invalid_argument', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)', '1 to 100', '"ten"'],
+        'a type that is no string' => [['type' => 5], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '5'],
     ];
 });
 
 it('accepts a limit of 1 and of 100', function (int $limit) {
     ingest([rankRecord(RecordType::REQUEST, 'a', 10)]);
 
-    expect(rankRows(['type' => 'request', 'limit' => $limit]))->toHaveCount(1);
-})->with([1, 100]);
+    $rows = rankRows(['type' => 'request', 'limit' => $limit]);
+
+    expect($rows)->toHaveCount(1);
+})->with(['the lowest' => 1, 'the highest' => 100]);
 
 it('refuses an argument it does not take yet, and one that is none', function (string $argument, string $code) {
-    FirewatchServer::tool(Rank::class, ['type' => 'request', $argument => 'x'])->assertHasErrors(["error: {$code}"]);
+    $response = FirewatchServer::tool(Rank::class, ['type' => 'request', $argument => 'x']);
+
+    $response->assertHasErrors(["error: {$code}"]);
 })->with([
     'a group' => ['group', 'conflicting_arguments'],
     'a misspelling' => ['sinse', 'invalid_argument'],
 ]);
 
 it('refuses a window that does not start before it ends', function () {
-    FirewatchServer::tool(Rank::class, ['type' => 'request', 'since' => 'now', 'until' => '-1d'])->assertHasErrors(['error: empty_window']);
+    $response = FirewatchServer::tool(Rank::class, ['type' => 'request', 'since' => 'now', 'until' => '-1d']);
+
+    $response->assertHasErrors(['error: empty_window']);
 });
 
 it('is read only, idempotent and closed', function () {
@@ -396,7 +424,9 @@ it('leaves the duration of a skipped scheduled task out of the durations', funct
         rankRecord(RecordType::SCHEDULED_TASK, 'a', 900, ['status' => 'skipped']),
     ]);
 
-    expect(rankRows(['type' => 'scheduled-task'])[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 30.0, 'total_ms' => 30.0]);
+    $rows = rankRows(['type' => 'scheduled-task']);
+
+    expect($rows[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 30.0, 'total_ms' => 30.0]);
 });
 
 it('shows the 95th percentile of memory at 20 records and falls back to the maximum below it', function () {

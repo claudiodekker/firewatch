@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Exceptions;
 
 it('answers that no store exists yet, with the store clock', function () {
@@ -16,13 +17,27 @@ it('answers that no store exists yet, with the store clock', function () {
 
     $envelope = Envelope::assert(Overview::class);
 
-    expect($envelope)->toMatchArray([
+    expect(Arr::except($envelope, 'blind_spots'))->toBe([
         'tool' => 'overview',
         'now' => 1790776800.25,
-        'summary' => 'Nothing to report: no store has been written yet.',
+        'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => null, 'until' => null, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
+        'summary' => __('firewatch::messages.empty_summary.no_store'),
         'empty' => ['kind' => 'no_store', 'population' => null, 'message' => __('firewatch::messages.no_store', ['path' => $path])],
         'result' => [],
-    ])->and($envelope['coverage'])->toMatchArray(['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null]);
+        'coverage' => [
+            'state' => 'absent',
+            'reason' => null,
+            'oldest_at' => null,
+            'newest_at' => null,
+            'records' => null,
+            'types_read' => ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'],
+            'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => 3153600000, 'records' => 100000]],
+            'straddling' => null,
+        ],
+        'notes' => [],
+        'truncated' => [],
+        'next' => [],
+    ]);
 });
 
 it('answers that the store is empty when it holds no records', function () {
@@ -32,7 +47,7 @@ it('answers that the store is empty when it holds no records', function () {
     $envelope = Envelope::assert(Overview::class);
 
     expect($envelope)->toMatchArray([
-        'summary' => 'Nothing to report: the store holds no records.',
+        'summary' => __('firewatch::messages.empty_summary.store_empty'),
         'empty' => ['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => $path])],
     ])->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0]);
 });
@@ -47,7 +62,7 @@ it('counts the records the store holds, and the requests among them', function (
     expect($envelope['empty'])->toBeNull()
         ->and($envelope['result']['requests'])->toBe(1)
         ->and($envelope['result']['records'])->toBeGreaterThanOrEqual(1)
-        ->and($envelope['summary'])->toBe("The store holds {$envelope['result']['records']} records, 1 of them requests.")
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'requests' => 1]))
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $envelope['result']['records']])
         ->and($envelope['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($envelope['coverage']['newest_at']);
 });
@@ -61,18 +76,18 @@ it('answers in JSON for a format of json', function () {
 it('refuses a format that is none, matching it exactly', function (string $format) {
     $response = FirewatchServer::tool(Overview::class, ['format' => $format]);
 
-    $response->assertHasErrors(["error: invalid_argument\n`format` must be markdown or json; got \"{$format}\".\nargument: format\naccepted: markdown or json\nexample: overview(format: \"json\")"]);
-})->with(['xml', ' json ', 'JSON']);
+    $response->assertHasErrors([__('firewatch::messages.invalid_argument', ['argument' => 'format', 'expected' => 'markdown or json', 'value' => "\"{$format}\"", 'accepted' => 'markdown or json', 'example' => 'overview(format: "json")'])]);
+})->with(['an unknown format' => 'xml', 'padded' => ' json ', 'upper case' => 'JSON']);
 
-it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $code, string $sentence) {
+it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $key) {
     $response = FirewatchServer::tool(Overview::class, [$argument => 'request']);
 
-    $response->assertHasErrors(["error: {$code}\n`{$argument}` {$sentence}\nargument: {$argument}\naccepted: since, until, format\nexample: overview(format: \"json\")"]);
+    $response->assertHasErrors([__("firewatch::messages.{$key}", ['argument' => $argument, 'tool' => 'overview', 'accepted' => 'since, until, format', 'example' => 'overview(format: "json")'])]);
 })->with([
-    'a misspelling' => ['sinse', 'invalid_argument', 'is not an argument of overview.'],
-    'an argument of another tool' => ['type', 'conflicting_arguments', 'does not apply to overview.'],
-    'an argument of fingerprint' => ['repeat_seconds', 'conflicting_arguments', 'does not apply to overview.'],
-    'a source fact of fingerprint' => ['path', 'conflicting_arguments', 'does not apply to overview.'],
+    'a misspelling' => ['sinse', 'unknown_argument'],
+    'an argument of another tool' => ['type', 'inapplicable_argument'],
+    'an argument of fingerprint' => ['repeat_seconds', 'inapplicable_argument'],
+    'a source fact of fingerprint' => ['path', 'inapplicable_argument'],
 ]);
 
 it('refuses the arguments before it reads the store', function () {
@@ -86,7 +101,7 @@ it('refuses the arguments before it reads the store', function () {
 
     $response = FirewatchServer::tool(Overview::class, ['sinse' => 'now']);
 
-    $response->assertHasErrors(["error: invalid_argument\n`sinse` is not an argument of overview.\nargument: sinse\naccepted: since, until, format\nexample: overview(format: \"json\")"]);
+    $response->assertHasErrors([__('firewatch::messages.unknown_argument', ['argument' => 'sinse', 'tool' => 'overview', 'accepted' => 'since, until, format', 'example' => 'overview(format: "json")'])]);
     Exceptions::assertNothingReported();
 });
 
@@ -102,7 +117,7 @@ it('answers that it failed unexpectedly, even with debug on, and reports it once
 
     $response = FirewatchServer::tool(Overview::class);
 
-    $response->assertHasErrors(["error: internal\nThe tool failed unexpectedly. Run the doctor command."]);
+    $response->assertHasErrors([__('firewatch::messages.internal')]);
     $response->assertDontSee('secret');
     Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'secret detail at /var/www/app');
     Exceptions::assertReportedCount(1);
@@ -124,7 +139,7 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
     $envelope = Envelope::assert(Overview::class);
 
     expect($envelope['empty'])->toBe(['kind' => 'store_unusable', 'population' => null, 'message' => __("firewatch::messages.store_unusable.{$key}", $replace($path))])
-        ->and($envelope['summary'])->toBe('Nothing to report: the store can not be used.')
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.store_unusable'))
         ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => $key, 'records' => null])
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('console-requests', 'values-truncated');
 })->with([
@@ -251,7 +266,7 @@ describe('windows', function () {
         $envelope = Envelope::assert(Overview::class, ['since' => '-30m']);
 
         expect($envelope['empty'])->toBe(['kind' => 'window_empty', 'population' => 2, 'message' => __('firewatch::messages.window_empty', ['population' => 2])])
-            ->and($envelope['summary'])->toBe('Nothing to report: no records fall in the window.')
+            ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.window_empty'))
             ->and($envelope['result'])->toBe([])
             ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 2]);
     });

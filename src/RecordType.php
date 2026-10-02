@@ -40,6 +40,26 @@ enum RecordType: string
     }
 
     /**
+     * The source of a request's executions.
+     */
+    protected const REQUEST_SOURCE = 'request';
+
+    /**
+     * The source of a command's executions.
+     */
+    protected const COMMAND_SOURCE = 'command';
+
+    /**
+     * The source of a job attempt's executions.
+     */
+    protected const JOB_SOURCE = 'job';
+
+    /**
+     * The source of a scheduled task's executions.
+     */
+    protected const SCHEDULE_SOURCE = 'schedule';
+
+    /**
      * The wire fields every record carries, with the name they are stored under and their accepted JSON types.
      */
     protected const ENVELOPE = [
@@ -328,10 +348,10 @@ enum RecordType: string
     public function source(): ?string
     {
         return match ($this) {
-            self::REQUEST => 'request',
-            self::COMMAND => 'command',
-            self::JOB_ATTEMPT => 'job',
-            self::SCHEDULED_TASK => 'schedule',
+            self::REQUEST => self::REQUEST_SOURCE,
+            self::COMMAND => self::COMMAND_SOURCE,
+            self::JOB_ATTEMPT => self::JOB_SOURCE,
+            self::SCHEDULED_TASK => self::SCHEDULE_SOURCE,
             default => null,
         };
     }

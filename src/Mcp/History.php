@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 
 /**
  * @internal
@@ -24,14 +25,11 @@ class History
     }
 
     /**
-     * Get the history the store's markers state for the record types a call read: it is complete from the latest start among them.
+     * Get the history the store's markers state for the record types a call read, complete from the latest start among them.
      *
-     * A type starts at the latest of the store's creation, its last clear, a clear of the type and the instant records were pruned through, and the reason is the one that is latest. A tie goes to a clear, then a clear of the type, then a prune, then the creation.
-     *
-     * @param  array<string, string>  $meta
      * @param  list<RecordType>  $types
      */
-    public static function of(array $meta, array $types, ?int $retentionAge = null, ?int $retentionRecords = null): self
+    public static function of(Markers $meta, array $types, ?int $retentionAge = null, ?int $retentionRecords = null): self
     {
         $latest = null;
 
@@ -57,29 +55,19 @@ class History
     /**
      * Get the starts a type's markers give, in the order a tie is settled.
      *
-     * @param  array<string, string>  $meta
      * @return list<array{float, string}>
      */
-    protected static function starts(array $meta, RecordType $type): array
+    protected static function starts(Markers $meta, RecordType $type): array
     {
-        $cleared = json_decode($meta['cleared_types'] ?? '', associative: true);
-
+        // A type starts at the latest of these, and a tie goes to the first listed.
         $candidates = [
-            [self::instant($meta['cleared_at'] ?? null), 'cleared'],
-            [self::instant(is_array($cleared) ? $cleared[$type->value] ?? null : null), 'cleared-type'],
-            [self::instant($meta['pruned_through'] ?? null), 'pruned-'.($meta['pruned_by'] ?? 'age')],
-            [self::instant($meta['created_at'] ?? null), 'created'],
+            [$meta->clearedAt, 'cleared'],
+            [$meta->clearedAtOf($type), 'cleared-type'],
+            [$meta->prunedThrough, 'pruned-'.$meta->prunedReason],
+            [$meta->createdAt, 'created'],
         ];
 
         return array_values(array_filter($candidates, fn (array $candidate) => $candidate[0] !== null));
-    }
-
-    /**
-     * Read a marker as an instant, or null for one that is absent or not a number.
-     */
-    protected static function instant(mixed $value): ?float
-    {
-        return is_numeric($value) ? (float) $value : null;
     }
 
     /**

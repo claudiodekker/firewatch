@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 use SQLite3Result;
 
@@ -13,11 +14,10 @@ class StoreFacts
     /**
      * Create a new store facts instance.
      *
-     * @param  array<string, string>  $meta  the store's markers by key
      * @param  list<array{kind: string, type: string, count: int, last_seen: float}>  $drift
      */
     public function __construct(
-        public readonly array $meta,
+        public readonly Markers $meta,
         public readonly array $drift = [],
     ) {
         //
@@ -28,13 +28,7 @@ class StoreFacts
      */
     public static function read(SQLite3 $connection): self
     {
-        /** @var SQLite3Result $result */
-        $result = $connection->query('SELECT key, value FROM meta');
-        $meta = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $meta[(string) $row[0]] = (string) $row[1];
-        }
+        $meta = Markers::read($connection);
 
         /** @var SQLite3Result $result */
         $result = $connection->query('SELECT kind, type, sum(count), max(last_seen) FROM drift WHERE type != \'\' GROUP BY type, kind ORDER BY type, kind');

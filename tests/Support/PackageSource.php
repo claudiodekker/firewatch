@@ -52,6 +52,29 @@ class PackageSource
     }
 
     /**
+     * The classes under the namespaces whose class docblock lacks the tag.
+     *
+     * @param  list<string>  $namespaces  relative to the package namespace
+     * @return list<string>
+     */
+    public static function classesWithoutTag(array $namespaces, string $tag): array
+    {
+        $prefixes = array_map(fn (string $namespace) => static::NAMESPACE.$namespace.'\\', $namespaces);
+
+        $classes = array_filter(
+            static::classes(),
+            fn (string $class) => array_filter($prefixes, fn (string $prefix) => str_starts_with($class, $prefix)) !== [],
+        );
+
+        $untagged = array_filter(
+            $classes,
+            fn (string $class) => ! str_contains((new ReflectionClass($class))->getDocComment() ?: '', "@{$tag}"),
+        );
+
+        return array_values($untagged);
+    }
+
+    /**
      * @param  Closure(PhpToken, list<PhpToken>, int): bool  $offends
      * @return list<string>
      */

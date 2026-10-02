@@ -99,9 +99,12 @@ class Answer
         if ($this->bounded === null) {
             [$result, $truncated] = Bounds::capCells($this->result, $this->truncated);
 
-            [$fitted, $truncated] = Bounds::fitAnswer($result, $truncated, fn (array $result, array $truncated) => mb_strlen(json_encode($this->envelope($result, $truncated), RecordMapper::JSON_FLAGS)));
+            $size = fn (array $result, array $truncated) => mb_strlen(json_encode($this->envelope($result, $truncated), RecordMapper::JSON_FLAGS));
 
-            $this->bounded = [$fitted, Bounds::recountCaps($this->result, $fitted, $truncated)];
+            [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $size);
+            $recounted = Bounds::recountCaps(original: $this->result, fitted: $fitted, truncated: $truncated);
+
+            $this->bounded = [$fitted, $recounted];
         }
 
         return $this->bounded;
@@ -158,11 +161,13 @@ class Answer
         $lines[] = $this->coverage->line($this->timezone);
 
         foreach ($truncated as $entry) {
-            $lines[] = __(match (true) {
-                $entry['reason'] === 'cap' => 'firewatch::messages.truncated_cap',
+            $key = match (true) {
+                $entry['reason'] === TruncationReason::CAP->value => 'firewatch::messages.truncated_cap',
                 $entry['matched'] === null => 'firewatch::messages.truncated_unknown',
                 default => 'firewatch::messages.truncated',
-            }, $entry);
+            };
+
+            $lines[] = __($key, [...$entry, 'characters' => number_format(Bounds::CELL_CHARACTERS)]);
         }
 
         foreach ($this->notes as $note) {

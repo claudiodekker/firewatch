@@ -49,7 +49,9 @@ class IngestReplacer
             throw new RuntimeException('its core has no assignable ingest property');
         }
 
-        (new ReflectionProperty($core, 'ingest'))->setValue($core, $ingest());
+        $replacement = $ingest();
+
+        (new ReflectionProperty($core, 'ingest'))->setValue($core, $replacement);
     }
 
     /**

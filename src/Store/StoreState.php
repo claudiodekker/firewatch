@@ -13,4 +13,15 @@ enum StoreState: string
     case FOREIGN = 'foreign';
     case BUSY = 'busy';
     case UNAVAILABLE = 'unavailable';
+
+    /**
+     * Determine if a drop can rebuild a store in this state: one of another schema version or a damaged one.
+     */
+    public function isRebuildable(): bool
+    {
+        return match ($this) {
+            self::SCHEMA_MISMATCH, self::CORRUPT => true,
+            default => false,
+        };
+    }
 }

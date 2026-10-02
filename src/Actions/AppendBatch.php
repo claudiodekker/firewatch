@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Capture\Drift;
 use ClaudioDekker\Firewatch\Capture\DriftKind;
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\NightwatchInstall;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Writer;
 use SQLite3;
 use SQLite3Result;
@@ -45,14 +46,6 @@ class AppendBatch
         ON CONFLICT (kind, type, v, detail) DO UPDATE SET
             count = count + excluded.count,
             last_seen = excluded.last_seen
-        SQL;
-
-    /**
-     * The statement that keeps a fact about the capture, touching it only when it changed.
-     */
-    protected const UPSERT_META = <<<'SQL'
-        INSERT INTO meta (key, value) VALUES (:key, :value)
-        ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE value IS NOT excluded.value
         SQL;
 
     /**
@@ -115,7 +108,7 @@ class AppendBatch
             $driftRows = $this->driftRows($connection, $drift, $receivedAt);
 
             $this->execute($connection, static::UPSERT_DRIFT, $driftRows);
-            $this->execute($connection, static::UPSERT_META, $this->metaRows());
+            Markers::recordNightwatch($connection, $this->install->version, $this->install->isVerified());
         });
 
         $this->storedFirstBatch = true;
@@ -214,19 +207,6 @@ class AppendBatch
     protected function driftKey(array $drift): string
     {
         return implode("\0", [$drift['kind'], $drift['type'], $drift['v'], $drift['detail']]);
-    }
-
-    /**
-     * Get the facts about the capture that each batch keeps.
-     *
-     * @return list<array{key: string, value: string}>
-     */
-    protected function metaRows(): array
-    {
-        return [
-            ['key' => 'nightwatch_version', 'value' => $this->install->version],
-            ['key' => 'nightwatch_verified', 'value' => $this->install->isVerified() ? '1' : '0'],
-        ];
     }
 
     /**

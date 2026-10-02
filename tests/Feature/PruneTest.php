@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Pruner;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
@@ -30,21 +31,9 @@ function startedAts(): array
     });
 }
 
-/**
- * @return array<string, string>
- */
-function pruneMeta(): array
+function pruneMarkers(): Markers
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
-        $result = $connection->query('SELECT key, value FROM meta');
-        $meta = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $meta[$row[0]] = $row[1];
-        }
-
-        return $meta;
-    });
+    return app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection));
 }
 
 function tableCount(string $table): int
@@ -106,7 +95,10 @@ describe('by age', function () {
     it('records through which instant history was removed, and why', function () {
         requestsStartedAt([PRUNE_CUTOFF - 100, PRUNE_CUTOFF - 1, PRUNE_CUTOFF + 1]);
 
-        expect(pruneMeta())->toMatchArray(['pruned_through' => '1790171999.000000', 'pruned_by' => 'age']);
+        $markers = pruneMarkers();
+
+        expect($markers->prunedThrough)->toBe(1790171999.0)
+            ->and($markers->prunedReason)->toBe('age');
     });
 
     it('states in answers the history that was removed', function () {
@@ -123,7 +115,10 @@ describe('by age', function () {
     it('writes no marker when it removes nothing', function () {
         requestsStartedAt([PRUNE_CUTOFF + 1]);
 
-        expect(pruneMeta())->not->toHaveKeys(['pruned_through', 'pruned_by']);
+        $markers = pruneMarkers();
+
+        expect($markers->prunedThrough)->toBeNull()
+            ->and($markers->prunedReason)->toBeNull();
     });
 
     it('never moves the instant history was removed through back', function () {
@@ -132,7 +127,7 @@ describe('by age', function () {
         requestsStartedAt([PRUNE_CUTOFF - 5000]);
 
         expect(startedAts())->toBe([])
-            ->and(pruneMeta()['pruned_through'])->toBe('1790171999.000000');
+            ->and(pruneMarkers()->prunedThrough)->toBe(1790171999.0);
     });
 
     it('removes the records of unknown start below the last record it removes, and leaves them when it removes none', function () {
@@ -183,7 +178,8 @@ describe('by record count', function () {
         requestsStartedAt([1790776800.0]);
 
         expect(startedAts())->toBe([...range(1790776703.0, 1790776710.0), 1790776800.0])
-            ->and(pruneMeta())->toMatchArray(['pruned_through' => '1790776702.000000', 'pruned_by' => 'cap']);
+            ->and(pruneMarkers()->prunedThrough)->toBe(1790776702.0)
+            ->and(pruneMarkers()->prunedReason)->toBe('cap');
     });
 
     it('counts records of unknown start, and leaves them when it trims the oldest known ones above them', function () {
@@ -387,7 +383,7 @@ describe('the size backstop', function () {
             ->and(storePages()['live'])->toBeGreaterThan($target - 12)
             ->and($startedAts)->not->toContain(1790776001.0)
             ->and(end($startedAts))->toBe(1790776200.0)
-            ->and(pruneMeta())->toMatchArray(['pruned_by' => 'size']);
+            ->and(pruneMarkers()->prunedReason)->toBe('size');
     });
 
     it('stops as soon as a chunk brings it under, reading the page counts again after each chunk', function () {

@@ -112,9 +112,6 @@ return [
     |
     */
 
-    'budgets' => [
-        // ['type' => 'request', 'methods' => ['POST'], 'path' => 'checkout/*', 'duration' => 800, 'memory' => 64],
-        // ['type' => 'command', 'name' => 'reports:*', 'duration' => 60000],
-    ],
+    'budgets' => [],
 
 ];

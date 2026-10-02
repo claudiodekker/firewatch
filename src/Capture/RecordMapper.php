@@ -79,13 +79,16 @@ class RecordMapper
 
         $this->check($wire, $type, $drift);
 
-        $user = $this->user($type, $wire, seenAt: $this->instant($record['timestamp'] ?? null));
+        $seenAt = $this->instant($record['timestamp'] ?? null);
+        $user = $this->user($type, $wire, seenAt: $seenAt);
 
         if ($user !== null) {
             return new MappedRecord(user: $user);
         }
 
-        return new MappedRecord(record: $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings));
+        $columns = $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings);
+
+        return new MappedRecord(record: $columns);
     }
 
     /**
@@ -111,7 +114,9 @@ class RecordMapper
             $columns['source'] = $type->source() ?? $columns['source'];
         }
 
-        $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $type === RecordType::EXCEPTION ? 'trace' : null);
+        $trace = $type === RecordType::EXCEPTION ? 'trace' : null;
+
+        $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $trace);
 
         return $columns;
     }

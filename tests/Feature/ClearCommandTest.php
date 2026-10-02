@@ -3,10 +3,13 @@
 use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
 
 const CLEAR_NOW = '2026-09-30 14:00:00';
@@ -33,9 +36,9 @@ function clearIds(string $where = '1 = 1'): array
     return array_column(clearRows("SELECT id FROM records WHERE {$where} ORDER BY id"), 'id');
 }
 
-function clearMeta(): array
+function clearMarkers(): Markers
 {
-    return array_column(clearRows('SELECT key, value FROM meta'), 'value', 'key');
+    return app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection));
 }
 
 function clearStorePath(): string
@@ -73,6 +76,27 @@ function runClear(array $options = ['--force' => true]): PendingCommand
     return test()->artisan('firewatch:clear', $options);
 }
 
+/**
+ * @param  array<string, mixed>  $options
+ * @return array{exit: int, output: string}
+ */
+function clearResult(array $options = ['--force' => true]): array
+{
+    $exit = Artisan::call('firewatch:clear', $options);
+
+    return ['exit' => $exit, 'output' => trim(Artisan::output())];
+}
+
+/**
+ * @param  array<string, string|int>  $replace
+ */
+function clearedPattern(string $key, array $replace): string
+{
+    $text = __("firewatch::messages.clear.{$key}", [...$replace, 'before' => '@@SIZE@@', 'after' => '@@SIZE@@']);
+
+    return '/'.str_replace('@@SIZE@@', '[\d.,]+ \w+', preg_quote($text, '/')).'/';
+}
+
 beforeEach(function () {
     $this->travelTo(CLEAR_NOW);
     config()->set('app.timezone', 'UTC');
@@ -80,18 +104,22 @@ beforeEach(function () {
 
 describe('a store in every state', function () {
     it('has nothing to clear when there is no store, and creates nothing', function () {
-        runClear()->expectsOutput('Nothing to clear.')->assertExitCode(0);
+        $result = clearResult();
 
-        expect(file_exists(dirname(clearStorePath())))->toBeFalse();
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.nothing'))
+            ->and(file_exists(dirname(clearStorePath())))->toBeFalse();
     });
 
     it('has nothing to clear in an empty file, and leaves it', function () {
         mkdir(dirname(clearStorePath()), recursive: true);
         touch(clearStorePath());
 
-        runClear()->expectsOutput('Nothing to clear.')->assertExitCode(0);
+        $result = clearResult();
 
-        expect(filesize(clearStorePath()))->toBe(0)
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.nothing'))
+            ->and(filesize(clearStorePath()))->toBe(0)
             ->and(scandir(dirname(clearStorePath())))->toBe(['.', '..', basename(clearStorePath())]);
     });
 
@@ -102,12 +130,15 @@ describe('a store in every state', function () {
         $store->close();
         $before = md5_file(clearStorePath());
 
-        runClear()
-            ->expectsOutput("The store was written by another Firewatch schema (found {$version}, expected ".Schema::VERSION.'). Run with --drop to rebuild it now, or let the next captured batch do it.')
-            ->assertExitCode(1);
+        $result = clearResult();
 
-        expect(md5_file(clearStorePath()))->toBe($before);
-    })->with([0, Schema::VERSION + 1]);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.schema', ['found' => $version, 'expected' => Schema::VERSION]))
+            ->and(md5_file(clearStorePath()))->toBe($before);
+    })->with([
+        'an older schema' => 0,
+        'a newer schema' => Schema::VERSION + 1,
+    ]);
 
     it('refuses a damaged store', function () {
         clearPopulatedStore();
@@ -117,9 +148,11 @@ describe('a store in every state', function () {
         fclose($handle);
         $before = md5_file(clearStorePath());
 
-        runClear()->expectsOutput('The store file is damaged; run with --drop or let the next capture replace it.')->assertExitCode(1);
+        $result = clearResult();
 
-        expect(md5_file(clearStorePath()))->toBe($before)
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.damaged'))
+            ->and(md5_file(clearStorePath()))->toBe($before)
             ->and(file_exists(clearStorePath().'.corrupt'))->toBeFalse();
     });
 
@@ -128,9 +161,11 @@ describe('a store in every state', function () {
         $arrange(clearStorePath());
         $before = md5_file(clearStorePath());
 
-        runClear()->expectsOutput(clearStorePath().' is not a Firewatch store; nothing was changed.')->assertExitCode(1);
+        $result = clearResult();
 
-        expect(md5_file(clearStorePath()))->toBe($before);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.foreign', ['path' => clearStorePath()]))
+            ->and(md5_file(clearStorePath()))->toBe($before);
     })->with([
         'a text file' => [fn (string $path) => file_put_contents($path, 'not a database')],
         'another application\'s SQLite file' => [function (string $path) {
@@ -144,10 +179,12 @@ describe('a store in every state', function () {
         clearPopulatedStore();
         app()->instance(Reader::class, new Reader(app(Configuration::class), '3.30.0'));
 
-        runClear()->expectsOutputToContain('SQLite 3.30.0 is older than')->assertExitCode(1);
+        $result = clearResult();
         app()->forgetInstance(Reader::class);
 
-        expect(clearIds())->toHaveCount(6);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.sqlite', ['version' => '3.30.0', 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]))
+            ->and(clearIds())->toHaveCount(6);
     });
 
     it('says the store is busy after its fixed wait, and deletes nothing', function () {
@@ -161,17 +198,22 @@ describe('a store in every state', function () {
         $connection->exec('PRAGMA journal_mode = DELETE');
         $connection->exec('BEGIN EXCLUSIVE');
 
-        runClear()->expectsOutput('The store is busy; try again.')->assertExitCode(1);
+        $result = clearResult();
         $connection->exec('ROLLBACK');
 
-        expect(clearIds())->toHaveCount(6);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.busy'))
+            ->and(clearIds())->toHaveCount(6);
     });
 
     it('runs while Firewatch is off', function () {
         config()->set('firewatch.enabled', false);
         registerFirewatch();
 
-        runClear()->expectsOutput('Nothing to clear.')->assertExitCode(0);
+        $result = clearResult();
+
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.nothing'));
     });
 });
 
@@ -179,9 +221,11 @@ describe('clearing everything', function () {
     it('removes the records and the users and the failure lines, keeps the drift, and says how many', function () {
         clearPopulatedStore();
 
-        runClear()->expectsOutputToContain('Cleared 6 records and 1 users. Store size ')->assertExitCode(0);
+        $result = clearResult();
 
-        expect(clearIds())->toBe([])
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toMatch(clearedPattern('cleared', ['records' => 6, 'users' => 1]))
+            ->and(clearIds())->toBe([])
             ->and(clearRows('SELECT id FROM users'))->toBe([])
             ->and(clearRows('SELECT kind, type FROM drift'))->toBe([['kind' => 'unknown_field', 'type' => 'cache-event']])
             ->and(filesize(clearFailuresPath()))->toBe(0);
@@ -190,9 +234,11 @@ describe('clearing everything', function () {
     it('also removes the records of unknown start and the error placeholders', function () {
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 'soon'])]);
 
-        runClear()->expectsOutputToContain('Cleared 1 records')->assertExitCode(0);
+        $result = clearResult();
 
-        expect(clearIds())->toBe([]);
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toMatch(clearedPattern('cleared', ['records' => 1, 'users' => 0]))
+            ->and(clearIds())->toBe([]);
     });
 
     it('stamps the clear before it deletes, and the history of every type starts there', function () {
@@ -201,7 +247,7 @@ describe('clearing everything', function () {
 
         runClear()->run();
 
-        expect(clearMeta())->toMatchArray(['cleared_at' => '1790778600.000000'])
+        expect(clearMarkers()->clearedAt)->toBe(1790778600.0)
             ->and(Envelope::assert(Overview::class)['coverage']['history'])->toMatchArray(['from' => 1790778600.0, 'reason' => 'cleared']);
     });
 
@@ -233,9 +279,11 @@ describe('clearing everything', function () {
             }
         });
 
-        runClear()->expectsOutputToContain('Cleared 6 records')->assertExitCode(0);
+        $result = clearResult();
 
-        expect(clearIds())->toBe([$last + 1]);
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toMatch(clearedPattern('cleared', ['records' => 6, 'users' => 1]))
+            ->and(clearIds())->toBe([$last + 1]);
     });
 
     it('deletes in chunks until none are left up to the newest id it saw', function () {
@@ -245,9 +293,11 @@ describe('clearing everything', function () {
             protected const CHUNK_ROWS = 2;
         });
 
-        runClear()->expectsOutputToContain('Cleared 6 records')->assertExitCode(0);
+        $result = clearResult();
 
-        expect(clearIds())->toBe([]);
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toMatch(clearedPattern('cleared', ['records' => 6, 'users' => 1]))
+            ->and(clearIds())->toBe([]);
     });
 
     it('returns the freed pages to the file', function () {
@@ -269,10 +319,12 @@ it('says so when a reader keeps the log from being truncated, and still succeeds
     $reader->exec('BEGIN');
     $reader->querySingle('SELECT count(*) FROM records');
 
-    runClear()->expectsOutput('The write-ahead log was not truncated because the store is in use.')->assertExitCode(0);
+    $result = clearResult();
     $reader->exec('COMMIT');
 
-    expect(clearIds())->toBe([]);
+    expect($result['exit'])->toBe(0)
+        ->and($result['output'])->toContain(__('firewatch::messages.clear.log_in_use'))
+        ->and(clearIds())->toBe([]);
 });
 
 describe('clearing one type', function () {
@@ -282,9 +334,11 @@ describe('clearing one type', function () {
         $drift = clearRows('SELECT kind, type FROM drift');
         $this->travelTo('2026-09-30 14:30:00');
 
-        runClear(['--type' => 'log', '--force' => true])->expectsOutputToContain('Cleared 2 log records. Store size ')->assertExitCode(0);
+        $result = clearResult(['--type' => 'log', '--force' => true]);
 
-        expect(array_column(clearRows('SELECT DISTINCT type FROM records ORDER BY type'), 'type'))->toBe(['cache-event', 'request'])
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toMatch(clearedPattern('cleared_type', ['records' => 2, 'type' => 'log']))
+            ->and(array_column(clearRows('SELECT DISTINCT type FROM records ORDER BY type'), 'type'))->toBe(['cache-event', 'request'])
             ->and(clearIds("type = 'request'"))->toHaveCount(4)
             ->and(clearRows('SELECT id FROM users'))->toHaveCount(1)
             ->and(clearRows('SELECT kind, type FROM drift'))->toBe($drift)
@@ -298,8 +352,10 @@ describe('clearing one type', function () {
         runClear(['--type' => 'log', '--force' => true])->run();
         runClear(['--type' => 'request', '--force' => true])->run();
 
-        expect(clearMeta())->not->toHaveKey('cleared_at')
-            ->and(json_decode(clearMeta()['cleared_types'], associative: true))->toBe(['log' => 1790778600.0, 'request' => 1790778600.0]);
+        $markers = clearMarkers();
+
+        expect($markers->clearedAt)->toBeNull()
+            ->and($markers->clearedTypes)->toBe(['log' => 1790778600.0, 'request' => 1790778600.0]);
     });
 
     it('never moves the stamp of a type back', function () {
@@ -310,57 +366,71 @@ describe('clearing one type', function () {
 
         runClear(['--type' => 'log', '--force' => true])->run();
 
-        expect(json_decode(clearMeta()['cleared_types'], associative: true))->toBe(['log' => 1790778600.0]);
+        expect(clearMarkers()->clearedTypes)->toBe(['log' => 1790778600.0]);
     });
 
     it('refuses a type that is not one of the twelve, user included, listing them', function (string $type) {
         clearPopulatedStore();
 
-        runClear(['--type' => $type, '--force' => true])
-            ->expectsOutput("Unknown type \"{$type}\". Valid types: request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request, queued-job.")
-            ->assertExitCode(1);
+        $result = clearResult(['--type' => $type, '--force' => true]);
 
-        expect(clearIds())->toHaveCount(6);
-    })->with(['user', 'Log', 'logs', 'job_attempt', '']);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.unknown_type', ['type' => $type, 'types' => 'request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request, queued-job']))
+            ->and(clearIds())->toHaveCount(6);
+    })->with([
+        'the user type' => 'user',
+        'another case' => 'Log',
+        'a plural' => 'logs',
+        'an underscore' => 'job_attempt',
+        'an empty value' => '',
+    ]);
 });
 
 describe('the confirmation', function () {
     it('asks first, with no as the default, and deletes nothing when it is declined', function () {
         clearPopulatedStore();
 
-        runClear([])
-            ->expectsConfirmation('This deletes all captured records, users and failure lines from '.clearStorePath().'. Continue?', 'no')
-            ->expectsOutput('Aborted.')
-            ->assertExitCode(1);
+        $command = runClear([])
+            ->expectsConfirmation(__('firewatch::messages.clear.confirm', ['path' => clearStorePath()]), 'no')
+            ->expectsOutput(__('firewatch::messages.clear.declined'));
 
-        expect(clearIds())->toHaveCount(6);
+        $exit = $command->run();
+
+        expect($exit)->toBe(1)
+            ->and(clearIds())->toHaveCount(6);
     });
 
     it('clears once it is confirmed, and asks about the type when there is one', function () {
         clearPopulatedStore();
 
-        runClear(['--type' => 'log'])
-            ->expectsConfirmation('This deletes all log records from '.clearStorePath().'. Continue?', 'yes')
-            ->assertExitCode(0);
+        $command = runClear(['--type' => 'log'])
+            ->expectsConfirmation(__('firewatch::messages.clear.confirm_type', ['path' => clearStorePath(), 'type' => 'log']), 'yes');
 
-        expect(clearIds())->toHaveCount(4);
+        $exit = $command->run();
+
+        expect($exit)->toBe(0)
+            ->and(clearIds())->toHaveCount(4);
     });
 
     it('aborts without asking when it can\'t, unless it is forced', function () {
         clearPopulatedStore();
 
-        $this->artisan('firewatch:clear', ['--no-interaction' => true])
-            ->expectsOutput('Aborted: pass --force to clear without confirmation.')
-            ->assertExitCode(1);
+        $unforced = clearResult(['--no-interaction' => true]);
+        $idsAfterUnforced = clearIds();
+        $forced = clearResult(['--no-interaction' => true, '--force' => true]);
 
-        expect(clearIds())->toHaveCount(6);
-
-        $this->artisan('firewatch:clear', ['--no-interaction' => true, '--force' => true])->assertExitCode(0);
-
-        expect(clearIds())->toBe([]);
+        expect($unforced['exit'])->toBe(1)
+            ->and($unforced['output'])->toBe(__('firewatch::messages.clear.not_forced'))
+            ->and($idsAfterUnforced)->toHaveCount(6)
+            ->and($forced['exit'])->toBe(0)
+            ->and(clearIds())->toBe([]);
     });
 
     it('does not ask when there is nothing to clear', function () {
-        runClear([])->expectsOutput('Nothing to clear.')->assertExitCode(0);
+        $command = runClear([])->expectsOutput(__('firewatch::messages.clear.nothing'));
+
+        $exit = $command->run();
+
+        expect($exit)->toBe(0);
     });
 });

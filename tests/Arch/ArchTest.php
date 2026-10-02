@@ -51,6 +51,12 @@ test('every command signature starts with firewatch:', function () {
     expect($offences)->toBe([]);
 });
 
+test('every command and tool is a supported entry point', function () {
+    $offences = PackageSource::classesWithoutTag(['Console\\Commands', 'Mcp\\Tools'], 'api');
+
+    expect($offences)->toBe([]);
+});
+
 arch('nothing in the package source can leave the machine')
     ->expect('ClaudioDekker\\Firewatch')
     ->not->toUse([...OFF_MACHINE, ...NIGHTWATCH_INGEST])

@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
+use ClaudioDekker\Firewatch\Mcp\UnusableReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 
@@ -95,8 +96,8 @@ it('prints only the lines that apply', function () {
 it('prints the times of an answer in the application timezone', function () {
     $markdown = answerWith(timezone: 'Europe/Amsterdam', window: Window::between(1790776800.0, null, 'Europe/Amsterdam'))->toMarkdown();
 
-    expect($markdown)->toContain('Window: since 2026-09-30 16:00:00.000000 until none (unbounded) (Europe/Amsterdam, half-open)')
-        ->toContain('Store clock: 2026-09-30 16:00:00.250000 (epoch 1790776800.25)');
+    expect($markdown)->toContain(__('firewatch::messages.window_bounded', ['since' => '2026-09-30 16:00:00.000000', 'until' => __('firewatch::messages.window_none'), 'timezone' => 'Europe/Amsterdam']))
+        ->toContain(__('firewatch::messages.store_clock', ['time' => '2026-09-30 16:00:00.250000', 'epoch' => '1790776800.25']));
 });
 
 test('a window states its bounds, or that it has none', function (Window $window, array $json, string $line) {
@@ -157,7 +158,9 @@ test('rows print as a table only when they are one shape', function (array $valu
 ]);
 
 test('each empty kind carries its population and its fixed words', function (Emptiness $empty, string $kind, ?int $population, string $message, string $summary) {
-    expect(answerWith(empty: $empty)->toArray()['empty'])->toBe(['kind' => $kind, 'population' => $population, 'message' => $message])
+    $answer = answerWith(empty: $empty)->toArray()['empty'];
+
+    expect($answer)->toBe(['kind' => $kind, 'population' => $population, 'message' => $message])
         ->and($empty->summary())->toBe($summary);
 })->with([
     'no store' => [
@@ -216,7 +219,9 @@ test('an answer carries at most five notes and five next calls', function (int $
     $next = array_fill(0, $count, ['tool' => 'describe', 'arguments' => [], 'why' => 'the store']);
 
     if ($allowed) {
-        expect(answerWith(notes: $notes, next: $next)->toArray())->toMatchArray(['notes' => $notes, 'next' => $next]);
+        $answer = answerWith(notes: $notes, next: $next)->toArray();
+
+        expect($answer)->toMatchArray(['notes' => $notes, 'next' => $next]);
     } else {
         expect(fn () => answerWith(notes: $notes))->toThrow(InvalidArgumentException::class)
             ->and(fn () => answerWith(next: $next))->toThrow(InvalidArgumentException::class);
@@ -236,7 +241,7 @@ test('the store line states the coverage', function (Coverage $coverage, string 
         ['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => ['request'], 'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => 604800, 'records' => 100000]], 'straddling' => null],
     ],
     'an unusable store' => [
-        new Coverage(CoverageState::UNUSABLE, [], History::unknown(null, null), 'foreign_file'),
+        new Coverage(CoverageState::UNUSABLE, [], History::unknown(null, null), UnusableReason::FOREIGN_FILE),
         'Store: unusable (foreign_file)',
         ['state' => 'unusable', 'reason' => 'foreign_file', 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => [], 'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => null, 'records' => null]], 'straddling' => null],
     ],

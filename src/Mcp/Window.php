@@ -29,7 +29,7 @@ class Window
      */
     public static function between(?float $since, ?float $until, string $timezone): self
     {
-        return new self(true, $since, $until, $timezone, '');
+        return new self(windowed: true, since: $since, until: $until, timezone: $timezone, reason: '');
     }
 
     /**
@@ -52,7 +52,7 @@ class Window
      */
     public static function none(string $reason, string $timezone): self
     {
-        return new self(false, null, null, $timezone, $reason);
+        return new self(windowed: false, since: null, until: null, timezone: $timezone, reason: $reason);
     }
 
     /**
