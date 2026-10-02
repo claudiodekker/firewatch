@@ -130,7 +130,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 13. Code hygiene
 
-- Delete code rather than commenting it out. Temporary disables ("re-enable after X") are not merged.
+- Delete code rather than commenting it out. Temporary disables ("re-enable after X") are not merged. Commented-out sample entries in the published config file, as in Laravel's own, may stay.
 - Method docblocks are one imperative line ending in a period (`Determine if…`, `Get the…`, `Create a new … instance.`), then tags. Property and constant docblocks are a noun phrase (`The event dispatcher instance.`). Class docblocks hold only tags (`@template`, `@mixin`, `@method`, `@internal`, `@api`).
 - `@param`/`@return` carry the type. Add a description only for a constraint the name can't express.
 - Inline `//` comments are kept only for a vendor quirk, a gotcha or a cross-reference. A comment that restates the next line is deleted.
