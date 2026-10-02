@@ -36,7 +36,7 @@ class Ranking
     /**
      * The whole of a percentile scale.
      */
-    protected const PERCENT = 100;
+    public const PERCENT = 100;
 
     /**
      * The decimals a failure percentage is rounded to.
@@ -46,7 +46,7 @@ class Ranking
     /**
      * The decimals a duration in milliseconds is rounded to.
      */
-    protected const MILLISECOND_DECIMALS = 2;
+    public const MILLISECOND_DECIMALS = 2;
 
     /**
      * The first HTTP status code that counts as a failure.
@@ -76,7 +76,7 @@ class Ranking
     /**
      * The bytes in a megabyte of peak memory.
      */
-    protected const MEGABYTE = 1048576;
+    public const MEGABYTE = 1048576;
 
     /**
      * The four execution types, the only ones that carry memory and a query counter.
@@ -493,7 +493,7 @@ class Ranking
 
         if ($have > 0) {
             $withheld[$name] = [
-                'reason' => 'sample_too_small',
+                'reason' => WithheldReason::SAMPLE_TOO_SMALL->value,
                 'have' => $have,
                 'needed' => $needed,
             ];

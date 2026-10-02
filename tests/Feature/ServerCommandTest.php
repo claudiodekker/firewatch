@@ -16,9 +16,10 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 2]),
-            '  overview  Entry point.',
-            '  rank      Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 3]),
+            '  overview     Entry point.',
+            '  rank         Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
+            '  occurrences  Lists individual records, newest first by default, for the selectors you give (at least o…',
             '',
         ]));
 });
@@ -39,7 +40,7 @@ it('lists a tool\'s first sentence, cut at 90 characters', function (string $des
 
     Artisan::call('firewatch:server', ['--list' => true]);
 
-    expect(explode("\n", Artisan::output())[1])->toBe("  overview  {$expected}");
+    expect(explode("\n", Artisan::output())[1])->toBe("  overview     {$expected}");
 })->with([
     '90 characters' => ['description' => str_repeat('a', 89).'. Never listed.', 'expected' => str_repeat('a', 89).'.'],
     '91 characters' => ['description' => str_repeat('a', 90).'. Never listed.', 'expected' => str_repeat('a', 89).'…'],
@@ -75,6 +76,33 @@ it('lists the tools as JSON with the server name and version', function () {
                         'deploy' => ['description' => __('firewatch::messages.rank_deploy_argument'), 'type' => 'string'],
                         'limit' => ['description' => __('firewatch::messages.rank_limit_argument'), 'type' => 'integer'],
                         'cursor' => ['description' => __('firewatch::messages.rank_cursor_argument'), 'type' => 'string'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object'],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
+                    'name' => 'occurrences',
+                    'description' => __('firewatch::messages.tools.occurrences'),
+                    'inputSchema' => ['properties' => [
+                        'group' => ['description' => __('firewatch::messages.occurrences_group_argument'), 'type' => 'string'],
+                        'type' => ['description' => __('firewatch::messages.occurrences_type_argument'), 'type' => 'string'],
+                        'execution_id' => ['description' => __('firewatch::messages.occurrences_execution_id_argument'), 'type' => 'string'],
+                        'trace_id' => ['description' => __('firewatch::messages.occurrences_trace_id_argument'), 'type' => 'string'],
+                        'job_id' => ['description' => __('firewatch::messages.occurrences_job_id_argument'), 'type' => 'string'],
+                        'user_id' => ['description' => __('firewatch::messages.occurrences_user_id_argument'), 'type' => 'string'],
+                        'order' => ['description' => __('firewatch::messages.occurrences_order_argument'), 'type' => 'string'],
+                        'method' => ['description' => __('firewatch::messages.occurrences_method_argument'), 'type' => 'string'],
+                        'status' => ['description' => __('firewatch::messages.occurrences_status_argument'), 'type' => 'string'],
+                        'outcome' => ['description' => __('firewatch::messages.occurrences_outcome_argument'), 'type' => 'string'],
+                        'level' => ['description' => __('firewatch::messages.occurrences_level_argument'), 'type' => 'string'],
+                        'slower_than_ms' => ['description' => __('firewatch::messages.occurrences_slower_than_ms_argument'), 'type' => 'number'],
+                        'at_or_above' => ['description' => __('firewatch::messages.occurrences_at_or_above_argument'), 'type' => 'string'],
+                        'matching' => ['description' => __('firewatch::messages.occurrences_matching_argument'), 'type' => 'string'],
+                        'since' => ['description' => __('firewatch::messages.since_argument'), 'type' => 'string'],
+                        'until' => ['description' => __('firewatch::messages.until_argument'), 'type' => 'string'],
+                        'deploy' => ['description' => __('firewatch::messages.rank_deploy_argument'), 'type' => 'string'],
+                        'limit' => ['description' => __('firewatch::messages.occurrences_limit_argument'), 'type' => 'integer'],
+                        'cursor' => ['description' => __('firewatch::messages.occurrences_cursor_argument'), 'type' => 'string'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
