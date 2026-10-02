@@ -17,8 +17,8 @@ class Failure
         return match ($type) {
             ExecutionType::REQUEST => is_int($outcome) && $outcome >= Ranking::FIRST_FAILED_STATUS_CODE,
             ExecutionType::COMMAND => is_int($outcome) && $outcome !== 0,
-            ExecutionType::JOB_ATTEMPT => in_array($outcome, [Ranking::STATUS_FAILED, Ranking::STATUS_RELEASED], true),
-            ExecutionType::SCHEDULED_TASK => $outcome === Ranking::STATUS_FAILED,
+            ExecutionType::JOB_ATTEMPT => in_array($outcome, [Outcome::FAILED->value, Outcome::RELEASED->value], true),
+            ExecutionType::SCHEDULED_TASK => $outcome === Outcome::FAILED->value,
         };
     }
 }

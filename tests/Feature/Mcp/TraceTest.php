@@ -734,6 +734,29 @@ describe('the next calls', function () {
         expect($envelope['next'])->toBe([['tool' => 'execution', 'arguments' => ['execution_id' => 'elsewhere'], 'why' => __('firewatch::messages.trace_next_slowest')]]);
     });
 
+    it('does not offer an execution twice when its id is all digits', function () {
+        ingest([
+            trcDispatch('job'),
+            trcAttempt('job', '42', 1, ['status' => 'failed', 'duration' => 9_000_000]),
+        ]);
+
+        $envelope = trcAnswer();
+
+        expect($envelope['next'])->toBe([['tool' => 'execution', 'arguments' => ['execution_id' => '42'], 'why' => __('firewatch::messages.trace_next_failed')]]);
+    });
+
+    it('offers no execution for an attempt that has no execution id', function () {
+        ingest([
+            trcDispatch('job'),
+            trcAttempt('job', 'attempt', 1, ['attempt_id' => null, 'status' => 'failed']),
+        ]);
+
+        $envelope = trcAnswer();
+
+        expect($envelope['next'])->toBe([])
+            ->and(trcJob($envelope, 'job')['attempts'][0]['execution_id'])->toBeNull();
+    });
+
     it('offers at most five calls', function () {
         ingest(array_map(fn (int $number) => trcAttempt("job-{$number}", "attempt-{$number}", 1, ['status' => 'failed', 'timestamp' => TRACE_AT + $number]), range(1, 8)));
 

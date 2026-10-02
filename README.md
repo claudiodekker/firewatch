@@ -26,7 +26,7 @@ claude mcp add firewatch -- php artisan firewatch:server
 
 The server speaks MCP over stdio. Use only this command to start it, never `mcp:start` or `mcp:inspector`. To see the tools an assistant would get, run `php artisan firewatch:server --list`.
 
-Four tools exist so far:
+Five tools exist so far:
 
 - `overview` counts what the store holds.
 - `rank` lists the worst groups of one record type by a measure such as `p95_duration`, over a time window, optionally matched by label, split by deploy and paged with a cursor.

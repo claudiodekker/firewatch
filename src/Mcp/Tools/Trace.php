@@ -16,7 +16,9 @@ use ClaudioDekker\Firewatch\Mcp\ExecutionHeader;
 use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
+use ClaudioDekker\Firewatch\Mcp\JobOutcome;
 use ClaudioDekker\Firewatch\Mcp\Lineage;
+use ClaudioDekker\Firewatch\Mcp\LineageState;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -201,23 +203,21 @@ class Trace extends Tool
     /**
      * Get what is partial about the answer: a job seen as one side only, and the records of an execution that is not held.
      *
-     * @param  array{trace: string|null, executions: list<array<string, mixed>>, dispatches: list<array<string, mixed>>, orphans: array<string, int>}  $found
+     * @param  array{trace: string|null, orphans: array<string, int>}  $found
      * @param  list<array<string, mixed>>  $jobs
      * @return list<string>
      */
     protected function notes(array $found, array $jobs): array
     {
-        $dispatched = array_column($found['dispatches'], null, 'job_id');
-        $partial = array_column($jobs, 'lineage');
+        $outcomes = array_column($jobs, 'outcome');
+        $lineages = array_column($jobs, 'lineage');
         $notes = [];
 
-        $withoutAttempts = array_filter($jobs, fn (array $job) => $job['lineage'] === 'no_attempts' && ! Lineage::inline($dispatched[$job['job_id']]));
-
-        if ($withoutAttempts !== []) {
+        if (in_array(JobOutcome::PENDING->value, $outcomes, true)) {
             $notes[] = __('firewatch::messages.trace_partial_no_attempts');
         }
 
-        if (in_array('no_dispatch', $partial, true)) {
+        if (in_array(LineageState::NO_DISPATCH->value, $lineages, true)) {
             $notes[] = __('firewatch::messages.trace_partial_no_dispatch');
         }
 
@@ -244,6 +244,10 @@ class Trace extends Tool
         $links = [];
 
         foreach ($found['executions'] as $execution) {
+            if (! is_string($execution['execution_id'])) {
+                continue;
+            }
+
             $type = ExecutionType::from($execution['type']);
             $links[$execution['execution_id']] = [
                 'failed' => Failure::of($type, ExecutionHeader::outcome(RecordType::from($type->value), $execution)),
@@ -252,13 +256,17 @@ class Trace extends Tool
         }
 
         foreach ($found['attempts'] as $attempt) {
+            if (! is_string($attempt['execution_id'])) {
+                continue;
+            }
+
             $links[$attempt['execution_id']] ??= [
                 'failed' => Failure::of(ExecutionType::JOB_ATTEMPT, $attempt['status']),
                 'duration' => $attempt['duration'],
             ];
         }
 
-        $failed = array_keys(array_filter($links, fn (array $link) => $link['failed']));
+        $failed = array_map(strval(...), array_keys(array_filter($links, fn (array $link) => $link['failed'])));
         $slowest = $this->slowest($links);
         $next = array_map(fn (string $id) => $this->execution($id, 'trace_next_failed'), $failed);
 

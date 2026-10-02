@@ -284,11 +284,13 @@ class Execution extends Tool
             ];
         }
 
-        $next[] = [
-            'tool' => 'trace',
-            'arguments' => ['trace_id' => $row['trace_id']],
-            'why' => __('firewatch::messages.execution_next_trace'),
-        ];
+        if (is_string($row['trace_id'] ?? null)) {
+            $next[] = [
+                'tool' => 'trace',
+                'arguments' => ['trace_id' => $row['trace_id']],
+                'why' => __('firewatch::messages.execution_next_trace'),
+            ];
+        }
 
         return $next;
     }

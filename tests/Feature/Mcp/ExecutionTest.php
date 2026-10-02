@@ -399,6 +399,14 @@ it('offers to follow the trace of the execution, and the call runs', function ()
         ->and(array_column($traced['result']['executions'], 'execution_id'))->toBe(['request', 'attempt']);
 });
 
+it('offers no trace to follow for an execution that has none', function () {
+    ingest([execRecord(RecordType::JOB_ATTEMPT, 'attempt', ['trace_id' => null])]);
+
+    $envelope = execAnswer(['execution_id' => 'attempt']);
+
+    expect(array_column($envelope['next'], 'tool'))->not->toContain('trace');
+});
+
 it('offers only the trace for an execution without a group', function () {
     ingest([execRecord(RecordType::COMMAND, 'command')->without('_group')]);
 

@@ -56,12 +56,12 @@ class Ranking
     /**
      * The status of a job attempt or scheduled task that failed.
      */
-    public const STATUS_FAILED = 'failed';
+    protected const STATUS_FAILED = 'failed';
 
     /**
      * The status of a job attempt that was released back to the queue.
      */
-    public const STATUS_RELEASED = 'released';
+    protected const STATUS_RELEASED = 'released';
 
     /**
      * The status of a scheduled task that was skipped.

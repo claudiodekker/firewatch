@@ -95,7 +95,7 @@ class Lineage
      *
      * @param  array<string, mixed>|null  $dispatch
      */
-    public static function inline(?array $dispatch): bool
+    protected static function inline(?array $dispatch): bool
     {
         return in_array($dispatch['connection'] ?? null, self::INLINE_CONNECTIONS, true);
     }
