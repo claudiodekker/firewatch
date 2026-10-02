@@ -13,12 +13,19 @@ use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Listing;
+use ClaudioDekker\Firewatch\Mcp\LogLevel;
+use ClaudioDekker\Firewatch\Mcp\Order;
+use ClaudioDekker\Firewatch\Mcp\Outcome;
+use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\Mcp\WithheldReason;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Microseconds;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -33,8 +40,6 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @api
@@ -59,30 +64,6 @@ class Occurrences extends Tool
      * The most rows an answer lists.
      */
     protected const MAXIMUM_LIMIT = 100;
-
-    /**
-     * The orders a list can have.
-     *
-     * @var list<string>
-     */
-    protected const ORDERS = ['recent', 'slowest', 'memory', 'queries'];
-
-    /**
-     * The levels of a log, least severe first.
-     *
-     * @var list<string>
-     */
-    protected const LEVELS = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
-
-    /**
-     * The outcomes of the types that have them.
-     *
-     * @var array<string, list<string>>
-     */
-    protected const OUTCOMES = [
-        'job-attempt' => ['processed', 'failed', 'released'],
-        'scheduled-task' => ['processed', 'failed', 'skipped'],
-    ];
 
     /**
      * The longest `matching` there is.
@@ -159,80 +140,42 @@ class Occurrences extends Tool
     {
         $group = $this->group($request);
         $type = $this->type($request);
-        $ids = [
-            'execution_id' => $this->id($request, 'execution_id'),
-            'trace_id' => $this->id($request, 'trace_id'),
-            'job_id' => $this->id($request, 'job_id'),
-            'user_id' => $this->id($request, 'user_id'),
-        ];
+        $ids = $this->ids($request);
 
-        if ($group === null && $type === null && array_filter($ids, fn (?string $id) => $id !== null) === []) {
-            throw Refusal::missing('selector', 'group, type, execution_id, trace_id, job_id or user_id', self::EXAMPLE);
+        if ($group === null && $type === null && array_filter($ids) === []) {
+            throw Refusal::missing(argument: 'selector', accepted: 'group, type, execution_id, trace_id, job_id or user_id', example: self::EXAMPLE);
         }
 
         $order = $this->order($request);
         $limit = $this->limit($request);
         $deploy = $this->deploy($request);
-        $with = $group !== null ? 'group' : (array_key_first(array_filter($ids)) ?? 'type');
-        $filters = $this->filters($request, $type, $group !== null, $with, $order);
+        $selector = $group !== null ? 'group' : (array_key_first(array_filter($ids)) ?? 'type');
+        $filters = $this->filters($request);
 
-        $cursor = $request->get('cursor') === null ? null : Cursor::read($request->get('cursor'), $this->name(), $request->all(), $this->key(...));
+        $this->refuseMisfits(filters: $filters, order: $order, type: $type, selector: $selector, resolvable: $group !== null);
 
-        $epoch = (float) $now->format('U.u');
+        if ($type !== null) {
+            $this->refuseOutcome($filters['outcome'], $type);
+        }
+
+        $cursorValue = $request->get('cursor');
+        $cursor = $cursorValue === null ? null : Cursor::read(value: $cursorValue, tool: $this->name(), arguments: $request->all(), key: $this->key(...));
+
+        $epoch = Instant::of($now);
         $timezone = config()->string('app.timezone');
-        $window = $cursor === null ? Window::read($request, $now, $timezone, $this->name()) : Window::between($cursor->since, $cursor->until, $timezone);
+        $window = $this->window($request, $now, $timezone, $cursor);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
         $typesRead = $type === null ? RecordType::events() : [$type];
         $structural = BlindSpots::for($typesRead, actor: $ids['user_id'] !== null);
 
         try {
-            $read = $this->reader->snapshot(function (SQLite3 $connection) use ($window, $order, $group, $type, $ids, $deploy, $filters, $limit, $with, $cursor) {
-                [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
-                $facts = StoreFacts::read($connection);
-
-                if ($inWindow === 0) {
-                    return compact('total', 'inWindow', 'oldest', 'newest', 'facts');
-                }
-
-                $held = $group === null ? [] : Listing::typesOf($connection, $group);
-                $resolved = $type ?? (count($held) === 1 ? $held[0] : null);
-
-                if ($held !== [] && $type !== null && ! in_array($type, $held, true)) {
-                    throw Refusal::conflicting('group', 'type', 'a `type` that holds the group: '.implode(', ', array_map(fn (RecordType $held) => $held->value, $held)), self::EXAMPLE);
-                }
-
-                if ($group !== null && $held === []) {
-                    return compact('total', 'inWindow', 'oldest', 'newest', 'facts');
-                }
-
-                $this->refuseMisfits($filters, $order, $resolved, $with, false);
-
-                if ($filters['outcome'] !== null) {
-                    $this->outcome($filters['outcome'], $resolved);
-                }
-
-                $listing = new Listing($window, $order, $group, $resolved, $ids['execution_id'], $ids['trace_id'], $ids['job_id'], $ids['user_id'], $deploy, $filters['method'], $filters['status'], $filters['outcome'], $filters['levels'], $filters['slower_than_ms'], $filters['matching']);
-                $baseline = null;
-
-                if ($filters['at_or_above'] !== null) {
-                    $measured = $listing->baseline($connection, $filters['at_or_above']);
-                    $baseline = [
-                        ...$measured,
-                        'percentile' => $filters['at_or_above'],
-                    ];
-                }
-
-                $threshold = $baseline['threshold'] ?? null;
-                $listed = $listing->rows($connection, $limit, $threshold, $cursor?->last);
-                $sites = $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null;
-
-                return compact('total', 'inWindow', 'oldest', 'newest', 'facts', 'baseline', 'listed', 'sites');
-            });
+            $read = $this->reader->snapshot(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $deploy, $filters, $limit, $selector, $cursor));
         } catch (StoreUnusable $unusable) {
             $blindSpots = [...$structural, ...$this->conditions->for(null, $typesRead, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
+            $coverage = Coverage::of($unusable, $typesRead, History::unknown(...$retention));
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable, $typesRead, History::unknown(...$retention)), $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $createdAt = $read['facts']->meta->createdAt;
@@ -244,8 +187,9 @@ class Occurrences extends Tool
 
         if ($read['total'] === 0) {
             $empty = Emptiness::storeEmpty($this->configuration->database);
+            $coverage = new Coverage(CoverageState::EMPTY, $typesRead, $history, records: 0);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::EMPTY, $typesRead, $history, records: 0), $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $coverage = new Coverage(CoverageState::OK, $typesRead, $history, oldest: $read['oldest'], newest: $read['newest'], records: $read['total']);
@@ -253,32 +197,110 @@ class Occurrences extends Tool
         if ($read['inWindow'] === 0) {
             $empty = Emptiness::windowEmpty($read['total']);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
-        if (! isset($read['listed']) || $read['listed']['rows'] === []) {
-            $given = [
-                'group' => $group,
-                'type' => $type?->value,
-                ...$ids,
-                'method' => $filters['method'],
-                'status' => $filters['status_text'],
-                'outcome' => $filters['outcome'],
-                'level' => $filters['level'],
-                'slower_than_ms' => $filters['slower_than_ms'],
-                'at_or_above' => $filters['at_or_above'],
-                'matching' => $filters['matching'],
-                'deploy' => $deploy,
-            ];
-            $named = array_filter($given, fn (mixed $value) => $value !== null);
-            $empty = Emptiness::noMatch($read['inWindow'], array_map(fn (string $name, mixed $value) => "{$name}: {$value}", array_keys($named), $named));
+        if ($read['listed'] === null || $read['listed']['rows'] === []) {
+            $given = $this->given($group, $type, $ids, $deploy, $filters);
+            $empty = Emptiness::noMatch($read['inWindow'], $given);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
-        $rows = Rows::bound($read['listed']['rows'], $limit);
+        return $this->listing($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, order: $order, group: $group, userId: $ids['user_id'], limit: $limit, createdAt: $createdAt, read: $read);
+    }
+
+    /**
+     * Read the store inside its snapshot: the counts, the facts, and the rows when the window and the group hold something to list.
+     *
+     * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
+     * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
+     * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
+     * @return array{total: int, inWindow: int, oldest: float|null, newest: float|null, facts: StoreFacts, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string, count: int}>|null}
+     */
+    protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, array $filters, int $limit, string $selector, ?Cursor $cursor): array
+    {
+        [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
+        $facts = StoreFacts::read($connection);
+        $nothing = [
+            'total' => $total,
+            'inWindow' => $inWindow,
+            'oldest' => $oldest,
+            'newest' => $newest,
+            'facts' => $facts,
+            'baseline' => null,
+            'listed' => null,
+            'sites' => null,
+        ];
+
+        if ($inWindow === 0) {
+            return $nothing;
+        }
+
+        $held = $group === null ? [] : Listing::typesOf($connection, $group);
+
+        if ($held !== [] && $type !== null && ! in_array($type, $held, true)) {
+            $holding = implode(', ', array_map(fn (RecordType $held) => $held->value, $held));
+
+            throw Refusal::conflicting(argument: 'group', with: 'type', accepted: "a `type` that holds the group: {$holding}", example: self::EXAMPLE);
+        }
+
+        if ($group !== null && $held === []) {
+            return $nothing;
+        }
+
+        $resolved = $type ?? (count($held) === 1 ? $held[0] : null);
+
+        $this->refuseMisfits(filters: $filters, order: $order, type: $resolved, selector: $selector, resolvable: false);
+
+        $this->refuseOutcome($filters['outcome'], $resolved);
+
+        $listing = new Listing(
+            window: $window,
+            order: $order,
+            group: $group,
+            type: $resolved,
+            executionId: $ids['execution_id'],
+            traceId: $ids['trace_id'],
+            jobId: $ids['job_id'],
+            userId: $ids['user_id'],
+            deploy: $deploy,
+            method: $filters['method'],
+            status: $filters['status'],
+            outcome: $filters['outcome'],
+            level: $filters['level'],
+            slowerThanMilliseconds: $filters['slower_than_ms'],
+            matching: $filters['matching'],
+        );
+        $baseline = $filters['at_or_above'] === null ? null : [
+            ...$listing->baseline($connection, $filters['at_or_above']),
+            'percentile' => $filters['at_or_above'],
+        ];
+        $threshold = $baseline['threshold'] ?? null;
+        $listed = $listing->rows($connection, $limit, $threshold, $cursor?->last);
+        $sites = $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null;
+
+        return [
+            ...$nothing,
+            'baseline' => $baseline,
+            'listed' => $listed,
+            'sites' => $sites,
+        ];
+    }
+
+    /**
+     * Put the rows, newest or worst first, in the envelope: cut at the limit, with the cursor for the rest.
+     *
+     * @param  list<array<string, mixed>>  $blindSpots
+     * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string, count: int}>|null}  $read
+     */
+    protected function listing(Request $request, float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, Order $order, ?string $group, ?string $userId, int $limit, ?float $createdAt, array $read): Answer
+    {
+        /** @var array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>} $listed */
+        $listed = $read['listed'];
+        $rows = Rows::bound($listed['rows'], $limit);
         $result = [
-            'order' => $order,
+            'order' => $order->value,
             'rows' => $rows->rows,
         ];
 
@@ -290,67 +312,132 @@ class Occurrences extends Tool
             $result['call_sites'] = $read['sites'];
         }
 
-        $notes = [];
-
-        if ($read['baseline'] !== null && $read['baseline']['threshold'] === null) {
-            $notes[] = __('firewatch::messages.occurrences_baseline_withheld', [
-                'percentile' => $read['baseline']['percentile'],
-                'have' => $read['baseline']['samples'],
-                'needed' => $read['baseline']['needed'],
-            ]);
-        }
-
-        if ($ids['user_id'] !== null) {
-            $notes[] = __('firewatch::messages.occurrences_user_only');
-        }
-
         $count = count($rows->rows);
         $summary = trans_choice('firewatch::messages.occurrences_summary', $count, [
             'count' => $count,
-            'order' => $order,
+            'order' => $order->value,
         ]);
-        $truncation = null;
-
-        if ($rows->more) {
-            $last = $read['listed']['keys'][$count - 1];
-            $continued = Cursor::make(
-                tool: $this->name(),
-                arguments: $request->all(),
-                createdAt: $createdAt,
-                last: $last,
-                since: $window->since(),
-                until: $window->until() ?? $epoch,
-            );
-            $arguments = array_diff_key($request->all(), array_flip(['cursor', 'format']));
-            $arguments['cursor'] = $continued;
-            $truncation = $rows->truncation(section: 'rows', how: __('firewatch::messages.occurrences_cursor_how', ['call' => $this->call($arguments)]));
-        }
-
-        $first = $rows->rows[0]['group'];
-        $next = [];
-
-        if ($group === null && $first !== null) {
-            $next[] = [
-                'tool' => 'rank',
-                'arguments' => ['group' => $first],
-                'why' => __('firewatch::messages.occurrences_next_group'),
-            ];
-        }
+        $truncated = $this->truncated($request, $rows, $listed['keys'], $epoch, $window, $createdAt);
 
         return new Answer(
-            $this->name(),
-            $epoch,
-            $timezone,
-            $window,
-            $summary,
-            null,
-            $result,
-            $coverage,
-            $blindSpots,
-            $notes,
-            $truncation === null ? [] : [$truncation],
-            $next,
+            tool: $this->name(),
+            now: $epoch,
+            timezone: $timezone,
+            window: $window,
+            summary: $summary,
+            empty: null,
+            result: $result,
+            coverage: $coverage,
+            blindSpots: $blindSpots,
+            notes: $this->notes($read['baseline'], $userId),
+            truncated: $truncated,
+            next: $this->next($group, $listed['rows'][0]['group']),
         );
+    }
+
+    /**
+     * Get the notes of the answer: that the baseline is withheld, and that a user is matched as recorded.
+     *
+     * @param  array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null  $baseline
+     * @return list<string>
+     */
+    protected function notes(?array $baseline, ?string $userId): array
+    {
+        $notes = [];
+
+        if ($baseline !== null && $baseline['threshold'] === null) {
+            $notes[] = __('firewatch::messages.occurrences_baseline_withheld', [
+                'percentile' => $baseline['percentile']->value,
+                'have' => $baseline['samples'],
+                'needed' => $baseline['needed'],
+            ]);
+        }
+
+        if ($userId !== null) {
+            $notes[] = __('firewatch::messages.occurrences_user_only');
+        }
+
+        return $notes;
+    }
+
+    /**
+     * Get the `truncated` entries of the answer: the cut list and the call that continues it, or none for a complete list.
+     *
+     * @param  list<array{value: int|float, id: int}>  $keys
+     * @return list<array{section: string, shown: int, matched: null, reason: string, how: string}>
+     */
+    protected function truncated(Request $request, Rows $rows, array $keys, float $epoch, Window $window, ?float $createdAt): array
+    {
+        if (! $rows->more) {
+            return [];
+        }
+
+        $last = $keys[count($rows->rows) - 1];
+        $arguments = array_diff_key($request->all(), array_flip(['cursor', 'format']));
+        $arguments['cursor'] = Cursor::make(tool: $this->name(), arguments: $request->all(), createdAt: $createdAt, last: $last, since: $window->since(), until: $window->until() ?? $epoch);
+        $call = $this->call($arguments);
+        $how = __('firewatch::messages.occurrences_cursor_how', ['call' => $call]);
+        $entry = $rows->truncation(section: 'rows', how: $how);
+
+        return $entry === null ? [] : [$entry];
+    }
+
+    /**
+     * Get the call that shows how the group of the first row compares with its peers, or none for a list of one group or of a record without one.
+     *
+     * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
+     */
+    protected function next(?string $group, ?string $first): array
+    {
+        if ($group !== null || $first === null) {
+            return [];
+        }
+
+        return [[
+            'tool' => 'rank',
+            'arguments' => ['group' => $first],
+            'why' => __('firewatch::messages.occurrences_next_group'),
+        ]];
+    }
+
+    /**
+     * Get the window of the call: the one a cursor was issued for, or the one its `since` and `until` give.
+     *
+     * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
+     */
+    protected function window(Request $request, CarbonImmutable $now, string $timezone, ?Cursor $cursor): Window
+    {
+        if ($cursor !== null) {
+            return Window::between(since: $cursor->since, until: $cursor->until, timezone: $timezone);
+        }
+
+        return Window::read($request, $now, timezone: $timezone, tool: $this->name());
+    }
+
+    /**
+     * Get the filters and selectors the call was given, as the words of an empty answer name them.
+     *
+     * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
+     * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
+     * @return list<string>
+     */
+    protected function given(?string $group, ?RecordType $type, array $ids, ?string $deploy, array $filters): array
+    {
+        $given = array_filter([
+            'group' => $group,
+            'type' => $type?->value,
+            ...$ids,
+            'method' => $filters['method'],
+            'status' => $filters['status_text'],
+            'outcome' => $filters['outcome']?->value,
+            'level' => $filters['level']?->value,
+            'slower_than_ms' => $filters['slower_than_ms'],
+            'at_or_above' => $filters['at_or_above']?->value,
+            'matching' => $filters['matching'],
+            'deploy' => $deploy,
+        ], fn (mixed $value) => $value !== null);
+
+        return array_map(fn (string $name, mixed $value) => "{$name}: {$value}", array_keys($given), $given);
     }
 
     /**
@@ -377,7 +464,7 @@ class Occurrences extends Tool
     /**
      * Get the baseline of the answer.
      *
-     * @param  array{samples: int, needed: int, threshold: int|float|null, percentile: string}  $baseline
+     * @param  array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}  $baseline
      * @return array<string, mixed>
      */
     protected function baseline(array $baseline): array
@@ -387,16 +474,16 @@ class Occurrences extends Tool
 
         if ($baseline['threshold'] === null) {
             $withheld = [
-                'reason' => 'sample_too_small',
+                'reason' => WithheldReason::SAMPLE_TOO_SMALL->value,
                 'have' => $baseline['samples'],
                 'needed' => $baseline['needed'],
             ];
         } else {
-            $thresholdMilliseconds = $baseline['threshold'] / 1000;
+            $thresholdMilliseconds = $baseline['threshold'] / Microseconds::PER_MILLISECOND;
         }
 
         return [
-            'percentile' => $baseline['percentile'],
+            'percentile' => $baseline['percentile']->value,
             'threshold_ms' => $thresholdMilliseconds,
             'samples' => $baseline['samples'],
             'withheld' => $withheld,
@@ -410,11 +497,17 @@ class Occurrences extends Tool
     {
         $value = $request->get('group');
 
-        if ($value === null || (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1)) {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1) {
             return $value;
         }
 
-        throw Refusal::invalid('group', 'a group id of 32 lowercase hex characters', json_encode($value, JSON_THROW_ON_ERROR), 'the `group` of a row of `rank` or `occurrences`', 'occurrences(group: "'.str_repeat('0', 32).'")');
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'group', expected: 'a group id of 32 lowercase hex characters', value: $shown, accepted: 'the `group` of a row of `rank` or `occurrences`', example: 'occurrences(group: "'.str_repeat('0', 32).'")');
     }
 
     /**
@@ -431,10 +524,28 @@ class Occurrences extends Tool
         $type = is_string($value) ? RecordType::tryFrom($value) : null;
 
         if ($type === null || $type === RecordType::USER) {
-            throw Refusal::invalid('type', 'one of the record types', json_encode($value, JSON_THROW_ON_ERROR), implode(', ', array_map(fn (RecordType $type) => $type->value, RecordType::events())), self::EXAMPLE);
+            $shown = json_encode($value, JSON_THROW_ON_ERROR);
+            $accepted = implode(', ', array_map(fn (RecordType $type) => $type->value, RecordType::events()));
+
+            throw Refusal::invalid(argument: 'type', expected: 'one of the record types', value: $shown, accepted: $accepted, example: self::EXAMPLE);
         }
 
         return $type;
+    }
+
+    /**
+     * Read the identifiers that select records, each text of at least one character.
+     *
+     * @return array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}
+     */
+    protected function ids(Request $request): array
+    {
+        return [
+            'execution_id' => $this->id($request, 'execution_id'),
+            'trace_id' => $this->id($request, 'trace_id'),
+            'job_id' => $this->id($request, 'job_id'),
+            'user_id' => $this->id($request, 'user_id'),
+        ];
     }
 
     /**
@@ -448,25 +559,32 @@ class Occurrences extends Tool
             return $value;
         }
 
-        throw Refusal::invalid($argument, 'an id of at least one character', json_encode($value, JSON_THROW_ON_ERROR), "the `{$argument}` of a record", "occurrences({$argument}: \"abc\")");
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: $argument, expected: 'an id of at least one character', value: $shown, accepted: "the `{$argument}` of a record", example: "occurrences({$argument}: \"abc\")");
     }
 
     /**
      * Read the order of the list.
      */
-    protected function order(Request $request): string
+    protected function order(Request $request): Order
     {
         $value = $request->get('order');
 
         if ($value === null) {
-            return 'recent';
+            return Order::RECENT;
         }
 
-        if (is_string($value) && in_array($value, self::ORDERS, true)) {
-            return $value;
+        $order = is_string($value) ? Order::tryFrom($value) : null;
+
+        if ($order !== null) {
+            return $order;
         }
 
-        throw Refusal::invalid('order', 'one of the orders', json_encode($value, JSON_THROW_ON_ERROR), implode(', ', self::ORDERS), 'occurrences(type: "request", order: "slowest")');
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+        $accepted = implode(', ', array_map(fn (Order $order) => $order->value, Order::cases()));
+
+        throw Refusal::invalid(argument: 'order', expected: 'one of the orders', value: $shown, accepted: $accepted, example: 'occurrences(type: "request", order: "slowest")');
     }
 
     /**
@@ -484,7 +602,9 @@ class Occurrences extends Tool
             return $value;
         }
 
-        throw Refusal::invalid('limit', '1 to '.self::MAXIMUM_LIMIT, json_encode($value, JSON_THROW_ON_ERROR), 'a whole number from 1 to '.self::MAXIMUM_LIMIT, 'occurrences(type: "request", limit: '.self::DEFAULT_LIMIT.')');
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'occurrences(type: "request", limit: '.self::DEFAULT_LIMIT.')');
     }
 
     /**
@@ -498,70 +618,29 @@ class Occurrences extends Tool
             return $value;
         }
 
-        throw Refusal::invalid('deploy', 'an exact deploy string', json_encode($value, JSON_THROW_ON_ERROR), 'an exact deploy string', 'occurrences(type: "request", deploy: "v1")');
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'deploy', expected: 'an exact deploy string', value: $shown, accepted: 'an exact deploy string', example: 'occurrences(type: "request", deploy: "v1")');
     }
 
     /**
-     * Read the filters, each checked against the type when it is known and for its own value.
+     * Read the filters, each checked for its own value.
      *
-     * @return array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: string|null, level: string|null, levels: list<string>|null, slower_than_ms: int|float|null, at_or_above: string|null, matching: string|null}
+     * @return array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}
      */
-    protected function filters(Request $request, ?RecordType $type, bool $hasGroup, string $with, string $order): array
+    protected function filters(Request $request): array
     {
-        $filters = [
-            'method' => $this->text($request, 'method'),
-            'status_text' => $this->text($request, 'status'),
-            'outcome' => $this->text($request, 'outcome'),
-            'level' => $this->text($request, 'level'),
-            'slower_than_ms' => $request->get('slower_than_ms'),
-            'at_or_above' => $this->text($request, 'at_or_above'),
-            'matching' => $this->text($request, 'matching'),
-        ];
-
-        $this->refuseMisfits($filters, $order, $type, $with, $hasGroup);
-
-        $slower = $filters['slower_than_ms'];
-
-        if ($slower !== null && (is_bool($slower) || ! (is_int($slower) || is_float($slower)) || $slower < 0)) {
-            throw Refusal::invalid('slower_than_ms', 'a number of milliseconds from 0', json_encode($slower, JSON_THROW_ON_ERROR), 'a number of milliseconds from 0', 'occurrences(type: "request", slower_than_ms: 500)');
-        }
-
-        $levels = null;
-
-        if ($filters['level'] !== null) {
-            $at = array_search($filters['level'], self::LEVELS, true);
-
-            if ($at === false) {
-                throw Refusal::invalid('level', 'a log level', json_encode($filters['level'], JSON_THROW_ON_ERROR), implode(', ', self::LEVELS), 'occurrences(type: "log", level: "error")');
-            }
-
-            $levels = array_slice(self::LEVELS, $at);
-        }
-
-        if ($filters['at_or_above'] !== null && ! in_array($filters['at_or_above'], ['median', 'p95'], true)) {
-            throw Refusal::invalid('at_or_above', 'median or p95', json_encode($filters['at_or_above'], JSON_THROW_ON_ERROR), 'median, p95', 'occurrences(type: "request", at_or_above: "p95")');
-        }
-
-        $matching = $filters['matching'];
-
-        if ($matching !== null && (mb_strlen($matching) < 1 || mb_strlen($matching) > self::MAXIMUM_MATCHING)) {
-            throw Refusal::invalid('matching', '1 to '.self::MAXIMUM_MATCHING.' characters', json_encode($matching, JSON_THROW_ON_ERROR), 'a substring of 1 to '.self::MAXIMUM_MATCHING.' characters', 'occurrences(type: "log", matching: "timeout")');
-        }
-
-        if ($type !== null && $filters['outcome'] !== null) {
-            $this->outcome($filters['outcome'], $type);
-        }
+        $status = $this->text($request, 'status');
 
         return [
-            'method' => $filters['method'],
-            'status' => $filters['status_text'] === null ? null : $this->status($filters['status_text']),
-            'status_text' => $filters['status_text'],
-            'outcome' => $filters['outcome'],
-            'level' => $filters['level'],
-            'levels' => $levels,
-            'slower_than_ms' => $slower,
-            'at_or_above' => $filters['at_or_above'],
-            'matching' => $matching,
+            'method' => $this->text($request, 'method'),
+            'status' => $status === null ? null : $this->status($status),
+            'status_text' => $status,
+            'outcome' => $this->outcome($request),
+            'level' => $this->level($request),
+            'slower_than_ms' => $this->slowerThan($request),
+            'at_or_above' => $this->percentile($request),
+            'matching' => $this->matching($request),
         ];
     }
 
@@ -576,7 +655,9 @@ class Occurrences extends Tool
             return $value;
         }
 
-        throw Refusal::invalid($argument, 'text', json_encode($value, JSON_THROW_ON_ERROR), 'text', self::EXAMPLE);
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: $argument, expected: 'text', value: $shown, accepted: 'text', example: self::EXAMPLE);
     }
 
     /**
@@ -607,27 +688,144 @@ class Occurrences extends Tool
             }
         }
 
-        throw Refusal::invalid('status', 'a status such as 500, 5xx or 400-499', json_encode($status, JSON_THROW_ON_ERROR), '500, 5xx or 400-499', 'occurrences(type: "request", status: "5xx")');
+        $shown = json_encode($status, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'status', expected: 'a status such as 500, 5xx or 400-499', value: $shown, accepted: '500, 5xx or 400-499', example: 'occurrences(type: "request", status: "5xx")');
+    }
+
+    /**
+     * Read the outcome of a job attempt or a scheduled task.
+     */
+    protected function outcome(Request $request): ?Outcome
+    {
+        $value = $this->text($request, 'outcome');
+
+        if ($value === null) {
+            return null;
+        }
+
+        $outcome = Outcome::tryFrom($value);
+
+        if ($outcome !== null) {
+            return $outcome;
+        }
+
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+        $accepted = implode(', ', array_map(fn (Outcome $outcome) => $outcome->value, Outcome::cases()));
+
+        throw Refusal::invalid(argument: 'outcome', expected: 'an outcome', value: $shown, accepted: $accepted, example: 'occurrences(type: "job-attempt", outcome: "failed")');
+    }
+
+    /**
+     * Read the log level the list starts at.
+     */
+    protected function level(Request $request): ?LogLevel
+    {
+        $value = $this->text($request, 'level');
+
+        if ($value === null) {
+            return null;
+        }
+
+        $level = LogLevel::tryFrom($value);
+
+        if ($level !== null) {
+            return $level;
+        }
+
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+        $accepted = implode(', ', array_map(fn (LogLevel $level) => $level->value, LogLevel::cases()));
+
+        throw Refusal::invalid(argument: 'level', expected: 'a log level', value: $shown, accepted: $accepted, example: 'occurrences(type: "log", level: "error")');
+    }
+
+    /**
+     * Read the percentile of the duration the list starts at.
+     */
+    protected function percentile(Request $request): ?Percentile
+    {
+        $value = $this->text($request, 'at_or_above');
+
+        if ($value === null) {
+            return null;
+        }
+
+        $percentile = Percentile::tryFrom($value);
+
+        if ($percentile !== null) {
+            return $percentile;
+        }
+
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'at_or_above', expected: 'median or p95', value: $shown, accepted: 'median, p95', example: 'occurrences(type: "request", at_or_above: "p95")');
+    }
+
+    /**
+     * Read the milliseconds a record must be slower than, from 0.
+     */
+    protected function slowerThan(Request $request): int|float|null
+    {
+        $value = $request->get('slower_than_ms');
+
+        if ($value === null) {
+            return null;
+        }
+
+        if ((is_int($value) || is_float($value)) && $value >= 0) {
+            return $value;
+        }
+
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'slower_than_ms', expected: 'a number of milliseconds from 0', value: $shown, accepted: 'a number of milliseconds from 0', example: 'occurrences(type: "request", slower_than_ms: 500)');
+    }
+
+    /**
+     * Read the text a record must contain, from 1 to 200 characters.
+     */
+    protected function matching(Request $request): ?string
+    {
+        $value = $this->text($request, 'matching');
+
+        if ($value === null) {
+            return null;
+        }
+
+        if (mb_strlen($value) >= 1 && mb_strlen($value) <= self::MAXIMUM_MATCHING) {
+            return $value;
+        }
+
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'matching', expected: '1 to '.self::MAXIMUM_MATCHING.' characters', value: $shown, accepted: 'a substring of 1 to '.self::MAXIMUM_MATCHING.' characters', example: 'occurrences(type: "log", matching: "timeout")');
     }
 
     /**
      * Refuse an outcome the type does not have.
      */
-    protected function outcome(string $outcome, ?RecordType $type): void
+    protected function refuseOutcome(?Outcome $outcome, ?RecordType $type): void
     {
-        $outcomes = $type === null ? [] : (self::OUTCOMES[$type->value] ?? []);
+        if ($outcome === null) {
+            return;
+        }
+
+        $outcomes = $type === null ? [] : Outcome::for($type);
 
         if (! in_array($outcome, $outcomes, true)) {
-            throw Refusal::invalid('outcome', 'an outcome of the type', json_encode($outcome, JSON_THROW_ON_ERROR), implode(', ', $outcomes), 'occurrences(type: "job-attempt", outcome: "failed")');
+            $shown = json_encode($outcome->value, JSON_THROW_ON_ERROR);
+            $accepted = implode(', ', array_map(fn (Outcome $outcome) => $outcome->value, $outcomes));
+
+            throw Refusal::invalid(argument: 'outcome', expected: 'an outcome of the type', value: $shown, accepted: $accepted, example: 'occurrences(type: "job-attempt", outcome: "failed")');
         }
     }
 
     /**
      * Refuse a filter, or an order, that does not fit the type, naming what it fits.
      *
-     * @param  array<string, mixed>  $filters
+     * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
      */
-    protected function refuseMisfits(array $filters, string $order, ?RecordType $type, string $with, bool $resolvable): void
+    protected function refuseMisfits(array $filters, Order $order, ?RecordType $type, string $selector, bool $resolvable): void
     {
         $timed = array_values(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, [RecordType::EXCEPTION, RecordType::LOG], true)));
         $executions = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
@@ -635,12 +833,12 @@ class Occurrences extends Tool
 
         $rules = [
             ['method', $filters['method'] !== null, $requests, true, 'a call with `type` request or outgoing-request'],
-            ['status', $filters['status_text'] !== null, $requests, true, 'a call with `type` request or outgoing-request'],
+            ['status', $filters['status'] !== null, $requests, true, 'a call with `type` request or outgoing-request'],
             ['outcome', $filters['outcome'] !== null, [RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK], true, 'a call with `type` job-attempt or scheduled-task'],
             ['level', $filters['level'] !== null, [RecordType::LOG], true, 'a call with `type` log'],
             ['slower_than_ms', $filters['slower_than_ms'] !== null, $timed, false, 'a call with a timed `type`'],
-            ['order', $order === 'slowest', $timed, false, 'a call with a timed `type`'],
-            ['order', in_array($order, ['memory', 'queries'], true), $executions, true, 'a call with `type` request, command, job-attempt or scheduled-task'],
+            ['order', $order === Order::SLOWEST, $timed, false, 'a call with a timed `type`'],
+            ['order', in_array($order, [Order::MEMORY, Order::QUERIES], true), $executions, true, 'a call with `type` request, command, job-attempt or scheduled-task'],
             ['at_or_above', $filters['at_or_above'] !== null, $timed, true, 'a call with a timed `type`'],
             ['matching', $filters['matching'] !== null, RecordType::events(), true, 'a call with a `type`'],
         ];
@@ -649,29 +847,8 @@ class Occurrences extends Tool
             $misfit = $type === null ? ($needsType && ! $resolvable) : ! in_array($type, $fits, true);
 
             if ($given && $misfit) {
-                throw Refusal::conflicting($argument, $type->value ?? $with, $accepted, self::EXAMPLE);
+                throw Refusal::conflicting(argument: $argument, with: $type?->value ?? $selector, accepted: $accepted, example: self::EXAMPLE);
             }
         }
-    }
-
-    /**
-     * Count all records and those of the window, and find the span the records cover.
-     *
-     * @return array{int, int, float|null, float|null}
-     */
-    protected function count(SQLite3 $connection, Window $window): array
-    {
-        $condition = $window->condition();
-
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), min(started_at), max(started_at) FROM records");
-
-        $window->bind($statement);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-
-        /** @var array{int, int, float|null, float|null} */
-        return $result->fetchArray(SQLITE3_NUM);
     }
 }

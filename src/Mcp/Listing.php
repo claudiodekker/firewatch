@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
 use SQLite3Result;
 use SQLite3Stmt;
@@ -13,51 +14,23 @@ use SQLite3Stmt;
 class Listing
 {
     /**
-     * The fields a `matching` is looked for in, by type, in the order the first one that matches is named.
-     *
-     * @var array<string, list<string>>
-     */
-    protected const MATCHED_FIELDS = [
-        'request' => ['route_path', 'route_name', 'route_action', 'url'],
-        'command' => ['name', 'command'],
-        'job-attempt' => ['name'],
-        'scheduled-task' => ['name'],
-        'queued-job' => ['name'],
-        'query' => ['sql'],
-        'exception' => ['class', 'message', 'file'],
-        'log' => ['message'],
-        'cache-event' => ['key'],
-        'outgoing-request' => ['host', 'url'],
-        'mail' => ['class', 'subject'],
-        'notification' => ['class'],
-    ];
-
-    /**
-     * The sort key of each order, which the store id breaks ties of, newest first. A record without the measure sorts last.
-     *
-     * @var array<string, string>
-     */
-    protected const ORDERS = [
-        'recent' => 'COALESCE(started_at, -1)',
-        'slowest' => 'COALESCE(duration, -1)',
-        'memory' => "COALESCE(json_extract(data, '$.peak_memory_usage'), -1)",
-        'queries' => "COALESCE(json_extract(data, '$.queries'), -1)",
-    ];
-
-    /**
      * The most call sites a query group lists.
      */
     protected const CALL_SITES = 20;
 
     /**
+     * The decimals the memory of a record is rounded to, in megabytes.
+     */
+    protected const MEMORY_DECIMALS = 1;
+
+    /**
      * Create a new listing instance.
      *
      * @param  array{int, int}|null  $status  the lowest and the highest status code that is kept
-     * @param  list<string>|null  $levels  the log levels that are kept
      */
     public function __construct(
         public readonly Window $window,
-        public readonly string $order,
+        public readonly Order $order,
         public readonly ?string $group = null,
         public readonly ?RecordType $type = null,
         public readonly ?string $executionId = null,
@@ -67,8 +40,8 @@ class Listing
         public readonly ?string $deploy = null,
         public readonly ?string $method = null,
         public readonly ?array $status = null,
-        public readonly ?string $outcome = null,
-        public readonly ?array $levels = null,
+        public readonly ?Outcome $outcome = null,
+        public readonly ?LogLevel $level = null,
         public readonly int|float|null $slowerThanMilliseconds = null,
         public readonly ?string $matching = null,
     ) {
@@ -83,27 +56,30 @@ class Listing
     public static function typesOf(SQLite3 $connection, string $group): array
     {
         $rows = self::run($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group ORDER BY type', [':group' => $group]);
-        $types = [];
 
-        foreach ($rows as $row) {
-            $type = RecordType::tryFrom($row['type']);
-
-            if ($type !== null) {
-                $types[] = $type;
-            }
-        }
-
-        return $types;
+        return array_values(array_filter(array_map(fn (array $row) => RecordType::tryFrom($row['type']), $rows)));
     }
 
     /**
-     * Get the record types that carry a field name a `matching` can look in.
+     * Get the fields of a type a `matching` is looked for in, in the order the first one that matches is named.
      *
      * @return list<string>
      */
     protected static function matchedFields(RecordType $type): array
     {
-        return self::MATCHED_FIELDS[$type->value] ?? [];
+        return match ($type) {
+            RecordType::REQUEST => ['route_path', 'route_name', 'route_action', 'url'],
+            RecordType::COMMAND => ['name', 'command'],
+            RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK, RecordType::QUEUED_JOB => ['name'],
+            RecordType::QUERY => ['sql'],
+            RecordType::EXCEPTION => ['class', 'message', 'file'],
+            RecordType::LOG => ['message'],
+            RecordType::CACHE_EVENT => ['key'],
+            RecordType::OUTGOING_REQUEST => ['host', 'url'],
+            RecordType::MAIL => ['class', 'subject'],
+            RecordType::NOTIFICATION => ['class'],
+            RecordType::USER => [],
+        };
     }
 
     /**
@@ -111,10 +87,10 @@ class Listing
      *
      * @return array{samples: int, needed: int, threshold: int|float|null}
      */
-    public function baseline(SQLite3 $connection, string $percentile): array
+    public function baseline(SQLite3 $connection, Percentile $percentile): array
     {
         [$selection, $bindings] = $this->selection();
-        [$share, $needed] = $percentile === 'median' ? [50, 3] : [95, 20];
+        $needed = $percentile->floor();
 
         $samples = self::run($connection, "SELECT count(duration) AS samples FROM records WHERE {$selection}", $bindings, $this->window)[0]['samples'];
 
@@ -126,8 +102,8 @@ class Listing
             ];
         }
 
-        $offset = intdiv($samples * $share + 99, 100) - 1;
-        $row = self::run($connection, "SELECT duration FROM records WHERE {$selection} AND duration IS NOT NULL ORDER BY duration LIMIT 1 OFFSET {$offset}", $bindings, $this->window)[0];
+        $bindings[':offset'] = intdiv($samples * $percentile->share() + Ranking::PERCENT - 1, Ranking::PERCENT) - 1;
+        $row = self::run($connection, "SELECT duration FROM records WHERE {$selection} AND duration IS NOT NULL ORDER BY duration LIMIT 1 OFFSET :offset", $bindings, $this->window)[0];
 
         return [
             'samples' => $samples,
@@ -145,8 +121,8 @@ class Listing
     public function rows(SQLite3 $connection, int $limit, int|float|null $threshold, ?array $after = null): array
     {
         [$where, $bindings] = $this->where($threshold);
-        $key = self::ORDERS[$this->order];
-        $fetch = Rows::fetch($limit);
+        $key = $this->order->sortKey();
+        $bindings[':fetch'] = Rows::fetch($limit);
 
         if ($after !== null) {
             $where .= " AND ({$key} < :after_value OR ({$key} = :after_value AND id < :after_id))";
@@ -154,7 +130,7 @@ class Listing
             $bindings[':after_id'] = $after['id'];
         }
 
-        $records = self::run($connection, "SELECT id, type, started_at, duration, source, execution_id, trace_id, group_hash, job_id, user_id, deploy, data, {$key} AS sort_key FROM records WHERE {$where} ORDER BY {$key} DESC, id DESC LIMIT {$fetch}", $bindings, $this->window);
+        $records = self::run($connection, "SELECT id, type, started_at, duration, source, execution_id, trace_id, group_hash, job_id, user_id, deploy, data, {$key} AS sort_key FROM records WHERE {$where} ORDER BY {$key} DESC, id DESC LIMIT :fetch", $bindings, $this->window);
 
         return [
             'rows' => array_map($this->row(...), $records),
@@ -173,9 +149,9 @@ class Listing
     public function callSites(SQLite3 $connection, int|float|null $threshold): array
     {
         [$where, $bindings] = $this->where($threshold);
-        $limit = self::CALL_SITES;
+        $bindings[':limit'] = self::CALL_SITES;
 
-        $sites = self::run($connection, "SELECT json_extract(data, '\$.file') AS file, json_extract(data, '\$.line') AS line, count(*) AS count FROM records WHERE {$where} AND json_extract(data, '\$.file') IS NOT NULL GROUP BY file, line ORDER BY count DESC, file, line LIMIT {$limit}", $bindings, $this->window);
+        $sites = self::run($connection, "SELECT json_extract(data, '\$.file') AS file, json_extract(data, '\$.line') AS line, count(*) AS count FROM records WHERE {$where} AND json_extract(data, '\$.file') IS NOT NULL GROUP BY file, line ORDER BY count DESC, file, line LIMIT :limit", $bindings, $this->window);
 
         return array_map(fn (array $site) => [
             'location' => self::location($site['file'], $site['line']),
@@ -235,13 +211,13 @@ class Listing
 
         if ($this->outcome !== null) {
             $conditions[] = "json_extract(data, '\$.status') = :outcome";
-            $bindings[':outcome'] = $this->outcome;
+            $bindings[':outcome'] = $this->outcome->value;
         }
 
-        if ($this->levels !== null) {
+        if ($this->level !== null) {
             $names = [];
 
-            foreach ($this->levels as $at => $level) {
+            foreach ($this->level->andWorse() as $at => $level) {
                 $names[] = ":level{$at}";
                 $bindings[":level{$at}"] = $level;
             }
@@ -251,7 +227,7 @@ class Listing
 
         if ($this->slowerThanMilliseconds !== null) {
             $conditions[] = 'duration > :slower';
-            $bindings[':slower'] = $this->slowerThanMilliseconds * 1000;
+            $bindings[':slower'] = $this->slowerThanMilliseconds * Microseconds::PER_MILLISECOND;
         }
 
         if ($threshold !== null) {
@@ -286,7 +262,7 @@ class Listing
             'type' => $type->value,
             'source' => $record['source'],
             'stage' => $data['execution_stage'] ?? null,
-            'duration_ms' => $record['duration'] === null ? null : round($record['duration'] / 1000, 2),
+            'duration_ms' => $record['duration'] === null ? null : round($record['duration'] / Microseconds::PER_MILLISECOND, Ranking::MILLISECOND_DECIMALS),
             'execution_id' => $record['execution_id'],
             'trace_id' => $record['trace_id'],
             'group' => $record['group_hash'],
@@ -297,7 +273,7 @@ class Listing
         ];
 
         if ($this->matching !== null) {
-            $row['matched_on'] = $this->matchedOn($type, $data);
+            $row['matched_on'] = $this->matchedOn($type, $data, $this->matching);
         }
 
         $row['detail'] = $this->detail($type, $record, $data);
@@ -330,10 +306,10 @@ class Listing
      *
      * @param  array<string, mixed>  $data
      */
-    protected function matchedOn(RecordType $type, array $data): ?string
+    protected function matchedOn(RecordType $type, array $data, string $matching): ?string
     {
         foreach (self::matchedFields($type) as $field) {
-            if (is_string($data[$field] ?? null) && str_contains(strtolower($data[$field]), strtolower((string) $this->matching))) {
+            if (is_string($data[$field] ?? null) && str_contains(strtolower($data[$field]), strtolower($matching))) {
                 return $field;
             }
         }
@@ -350,7 +326,7 @@ class Listing
      */
     protected function detail(RecordType $type, array $record, array $data): array
     {
-        $memory = isset($data['peak_memory_usage']) ? round($data['peak_memory_usage'] / 1048576, 1) : null;
+        $memory = isset($data['peak_memory_usage']) ? round($data['peak_memory_usage'] / Ranking::MEGABYTE, self::MEMORY_DECIMALS) : null;
 
         return match ($type) {
             RecordType::REQUEST => [

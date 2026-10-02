@@ -605,25 +605,4 @@ class Rank extends Tool
             }
         }
     }
-
-    /**
-     * Count all records and those of the window, and find the span the records cover.
-     *
-     * @return array{int, int, float|null, float|null}
-     */
-    protected function count(SQLite3 $connection, Window $window): array
-    {
-        $condition = $window->condition();
-
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), min(started_at), max(started_at) FROM records");
-
-        $window->bind($statement);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-
-        /** @var array{int, int, float|null, float|null} */
-        return $result->fetchArray(SQLITE3_NUM);
-    }
 }
