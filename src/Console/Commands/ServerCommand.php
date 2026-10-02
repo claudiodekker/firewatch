@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Console\Commands;
 
+use ClaudioDekker\Firewatch\Console\Concerns\ReadsFlags;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
@@ -9,10 +10,12 @@ use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Mcp\Server\Transport\StdioTransport;
 
 /**
- * @internal
+ * @api
  */
 class ServerCommand extends Command
 {
+    use ReadsFlags;
+
     /**
      * The name of the command that starts the MCP server.
      */
@@ -44,13 +47,13 @@ class ServerCommand extends Command
      */
     public function handle(): int
     {
-        if ($this->option('json') && ! $this->option('list')) {
+        if ($this->flag('json') && ! $this->flag('list')) {
             $this->error(__('firewatch::messages.json_requires_list'));
 
             return self::FAILURE;
         }
 
-        if ($this->option('list')) {
+        if ($this->flag('list')) {
             return $this->list();
         }
 
@@ -71,9 +74,7 @@ class ServerCommand extends Command
         $this->laravel->make('config')->set('app.debug', false);
 
         $transport = new StdioTransport;
-        $server = $this->laravel->make(FirewatchServer::class, ['transport' => $transport]);
-
-        $server->start();
+        $this->laravel->make(FirewatchServer::class, ['transport' => $transport])->start();
         $transport->run();
 
         return self::SUCCESS;
@@ -84,11 +85,9 @@ class ServerCommand extends Command
      */
     protected function list(): int
     {
-        $server = $this->laravel->make(FirewatchServer::class, ['transport' => new FakeTransporter]);
+        $listing = $this->laravel->make(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
 
-        $listing = $server->listing();
-
-        if ($this->option('json')) {
+        if ($this->flag('json')) {
             $json = json_encode($listing, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
             $this->line($json);
@@ -96,7 +95,10 @@ class ServerCommand extends Command
             return self::SUCCESS;
         }
 
-        $header = __('firewatch::messages.listing', ['version' => $listing['server']['version'], 'count' => count($listing['tools'])]);
+        $header = __('firewatch::messages.listing', [
+            'version' => $listing['server']['version'],
+            'count' => count($listing['tools']),
+        ]);
         $width = max([0, ...array_map(fn (array $tool) => Str::length($tool['name']), $listing['tools'])]);
 
         $this->line($header);

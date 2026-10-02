@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Exceptions;
 
 it('reads each key from its environment variable', function (string $variable, string $value, string $property, mixed $expected) {
-    setEnvironmentVariable($variable, $value);
+    setEnvironmentVariable(name: $variable, value: $value);
     config()->set('firewatch', []);
 
     $configuration = registerFirewatch();
@@ -66,7 +66,7 @@ it('fills the keys a partially published file leaves out', function () {
 });
 
 it('reads a nested key from its environment variable when the published file leaves it out', function () {
-    setEnvironmentVariable('FIREWATCH_RETENTION_RECORDS', '5000');
+    setEnvironmentVariable(name: 'FIREWATCH_RETENTION_RECORDS', value: '5000');
     config()->set('firewatch', ['retention' => ['age' => '3d']]);
 
     $configuration = registerFirewatch();
@@ -78,7 +78,7 @@ it('lets the environment variable win over the published file', function () {
     app()->useConfigPath($this->storeDirectory.'/config');
     registerFirewatch();
     $this->artisan('vendor:publish', ['--tag' => 'firewatch-config'])->run();
-    setEnvironmentVariable('FIREWATCH_BUSY_TIMEOUT', '0');
+    setEnvironmentVariable(name: 'FIREWATCH_BUSY_TIMEOUT', value: '0');
     config()->set('firewatch', require $this->storeDirectory.'/config/firewatch.php');
 
     $configuration = registerFirewatch();

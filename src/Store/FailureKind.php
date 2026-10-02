@@ -19,6 +19,41 @@ enum FailureKind: string
     case OTHER = 'other';
 
     /**
+     * The mask that keeps the primary result code of an extended one, which holds it in its low byte.
+     */
+    public const PRIMARY_CODE_MASK = 0xFF;
+
+    /**
+     * The SQLite result code of a database that is locked by another connection.
+     */
+    public const SQLITE_BUSY = 5;
+
+    /**
+     * The SQLite result code of a disk I/O error.
+     */
+    public const SQLITE_IOERR = 10;
+
+    /**
+     * The SQLite result code of a database file that is malformed.
+     */
+    public const SQLITE_CORRUPT = 11;
+
+    /**
+     * The SQLite result code of a database that is full.
+     */
+    public const SQLITE_FULL = 13;
+
+    /**
+     * The SQLite result code of a database file that can't be opened.
+     */
+    public const SQLITE_CANTOPEN = 14;
+
+    /**
+     * The SQLite result code of a file that is not a database.
+     */
+    public const SQLITE_NOTADB = 26;
+
+    /**
      * Classify why a batch could not be stored, by its SQLite primary result code or the kind the store gave it.
      */
     public static function of(Throwable $exception): self
@@ -31,13 +66,12 @@ enum FailureKind: string
             return self::OTHER;
         }
 
-        // An extended result code keeps its primary code in its low byte.
-        return match ($exception->getCode() & 0xFF) {
-            5 => self::BUSY,
-            13 => self::FULL,
-            11 => self::CORRUPT,
-            26 => self::FOREIGN,
-            10, 14 => self::IO,
+        return match ($exception->getCode() & self::PRIMARY_CODE_MASK) {
+            self::SQLITE_BUSY => self::BUSY,
+            self::SQLITE_FULL => self::FULL,
+            self::SQLITE_CORRUPT => self::CORRUPT,
+            self::SQLITE_NOTADB => self::FOREIGN,
+            self::SQLITE_IOERR, self::SQLITE_CANTOPEN => self::IO,
             default => self::OTHER,
         };
     }

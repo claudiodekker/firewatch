@@ -106,11 +106,11 @@ return [
 
     'truncated' => 'Truncated: :section shows :shown of :matched (:reason). :how',
 
-    'truncated_cap' => 'Truncated: :section had cells cut at 2,000 characters, :shown in all (:reason). :how',
+    'truncated_cap' => 'Truncated: :section had cells cut at :characters characters, :shown in all (:reason). :how',
 
-    'cap_how' => 'Cells are cut at 2,000 characters; read the rest of a value with the query tool: substr(column, 2001, 2000).',
+    'cap_how' => 'Cells are cut at :characters characters; read the rest of a value with the query tool: substr(column, :next, :characters).',
 
-    'size_how' => 'The answer is over its budget of 24,000 characters: narrow the call (a shorter window, a lower limit or a filter) to see the rest.',
+    'size_how' => 'The answer is over its budget of :characters characters: narrow the call (a shorter window, a lower limit or a filter) to see the rest.',
 
     'cell_truncated' => '... [truncated, :count characters]',
 
@@ -133,7 +133,7 @@ return [
         'actor-partial' => 'Commands and scheduled tasks carry no actor; requests with no recorded user may be guests or users of a non-default guard; ids are keys, not people; names come from the application\'s user callback, and impersonation shows the impersonated user.',
         'visible-at-completion' => 'An execution is recorded when it finishes: work still running is absent, and work spanning a boundary sits on the side where it started.',
         'application-opt-outs' => 'Anything the application\'s opt-outs excluded (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.',
-        'values-truncated' => 'Long values are cut at ingest (65,535 bytes per string, bindings 16,384 bytes in all) and again to 2,000 characters when printed; the SQL tool prints at most 2,000 characters per cell, read the rest with substr().',
+        'values-truncated' => 'Long values are cut at ingest (:field_bytes bytes per string, bindings :bindings_bytes bytes in all) and again to :characters characters when printed; the SQL tool prints at most :characters characters per cell, read the rest with substr().',
         'octane-bootstrap' => 'Under Octane the request bootstrap stage is always 0, because the worker is already booted; compare stage shares only between requests served the same way.',
     ],
 

@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
+use ClaudioDekker\Firewatch\Mcp\UnusableReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 
@@ -57,9 +58,9 @@ it('prints the whole envelope in its fixed layout', function () {
     expect($answer->toMarkdown())->toBe(implode("\n", [
         '## overview',
         'One slow route.',
-        'Window: none (unbounded)',
-        'Store clock: 2026-09-30 14:00:00.250000 (epoch 1790776800.25) - pass that number as since, until or split_at to measure what happens next against what came before',
-        'No records fall in this window, and the store holds 40 records: widen the window or move it.',
+        __('firewatch::messages.window_unbounded'),
+        __('firewatch::messages.store_clock', ['time' => '2026-09-30 14:00:00.250000', 'epoch' => '1790776800.25']),
+        __('firewatch::messages.window_empty', ['population' => 40]),
         '- **requests**: 2',
         '',
         '### slowest',
@@ -86,8 +87,8 @@ it('prints only the lines that apply', function () {
     expect($markdown)->toBe(implode("\n", [
         '## overview',
         'Two requests.',
-        'Window: none (unbounded)',
-        'Store clock: 2026-09-30 14:00:00.250000 (epoch 1790776800.25) - pass that number as since, until or split_at to measure what happens next against what came before',
+        __('firewatch::messages.window_unbounded'),
+        __('firewatch::messages.store_clock', ['time' => '2026-09-30 14:00:00.250000', 'epoch' => '1790776800.25']),
         'Store: absent',
     ]));
 });
@@ -95,27 +96,27 @@ it('prints only the lines that apply', function () {
 it('prints the times of an answer in the application timezone', function () {
     $markdown = answerWith(timezone: 'Europe/Amsterdam', window: Window::between(1790776800.0, null, 'Europe/Amsterdam'))->toMarkdown();
 
-    expect($markdown)->toContain('Window: since 2026-09-30 16:00:00.000000 until none (unbounded) (Europe/Amsterdam, half-open)')
-        ->toContain('Store clock: 2026-09-30 16:00:00.250000 (epoch 1790776800.25)');
+    expect($markdown)->toContain(__('firewatch::messages.window_bounded', ['since' => '2026-09-30 16:00:00.000000', 'until' => __('firewatch::messages.window_none'), 'timezone' => 'Europe/Amsterdam']))
+        ->toContain(__('firewatch::messages.store_clock', ['time' => '2026-09-30 16:00:00.250000', 'epoch' => '1790776800.25']));
 });
 
-test('a window states its bounds, or that it has none', function (Window $window, array $json, string $line) {
+it('states the bounds of a window, or that it has none', function (Window $window, array $json, string $line) {
     expect($window->toArray())->toBe($json)
         ->and($window->line())->toBe($line);
 })->with([
     'unbounded' => [
         fn () => Window::between(null, null, 'UTC'),
-        ['windowed' => true, 'basis' => 'started_at', 'since' => null, 'until' => null, 'timezone' => 'UTC', 'description' => 'Half-open on started_at: a record at since is in, a record at until is out; an absent bound is unbounded.'],
-        'Window: none (unbounded)',
+        fn () => ['windowed' => true, 'basis' => 'started_at', 'since' => null, 'until' => null, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
+        fn () => __('firewatch::messages.window_unbounded'),
     ],
     'both bounds' => [
         fn () => Window::between(1790776800.0, 1790780400.5, 'UTC'),
-        ['windowed' => true, 'basis' => 'started_at', 'since' => 1790776800.0, 'until' => 1790780400.5, 'timezone' => 'UTC', 'description' => 'Half-open on started_at: a record at since is in, a record at until is out; an absent bound is unbounded.'],
+        fn () => ['windowed' => true, 'basis' => 'started_at', 'since' => 1790776800.0, 'until' => 1790780400.5, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
         'Window: since 2026-09-30 14:00:00.000000 until 2026-09-30 15:00:00.500000 (UTC, half-open)',
     ],
     'only until' => [
         fn () => Window::between(null, 1790780400.0, 'UTC'),
-        ['windowed' => true, 'basis' => 'started_at', 'since' => null, 'until' => 1790780400.0, 'timezone' => 'UTC', 'description' => 'Half-open on started_at: a record at since is in, a record at until is out; an absent bound is unbounded.'],
+        fn () => ['windowed' => true, 'basis' => 'started_at', 'since' => null, 'until' => 1790780400.0, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
         'Window: since none (unbounded) until 2026-09-30 15:00:00.000000 (UTC, half-open)',
     ],
     'not windowed' => [
@@ -125,7 +126,7 @@ test('a window states its bounds, or that it has none', function (Window $window
     ],
 ]);
 
-test('each cell prints by one set of rules', function (mixed $value, string $cell) {
+it('prints each cell by one set of rules', function (mixed $value, string $cell) {
     expect(Markdown::cell($value))->toBe($cell);
 })->with([
     'null' => [null, 'n/a'],
@@ -141,7 +142,7 @@ test('each cell prints by one set of rules', function (mixed $value, string $cel
     'an object' => [['a' => true, 'b' => '/'], '{"a":true,"b":"/"}'],
 ]);
 
-test('rows print as a table only when they are one shape', function (array $value, string $line) {
+it('prints rows as a table only when they are one shape', function (array $value, string $line) {
     $markdown = answerWith(result: ['rows' => $value])->toMarkdown();
 
     expect($markdown)->toContain($line);
@@ -157,47 +158,49 @@ test('rows print as a table only when they are one shape', function (array $valu
 ]);
 
 test('each empty kind carries its population and its fixed words', function (Emptiness $empty, string $kind, ?int $population, string $message, string $summary) {
-    expect(answerWith(empty: $empty)->toArray()['empty'])->toBe(['kind' => $kind, 'population' => $population, 'message' => $message])
+    $answer = answerWith(empty: $empty)->toArray()['empty'];
+
+    expect($answer)->toBe(['kind' => $kind, 'population' => $population, 'message' => $message])
         ->and($empty->summary())->toBe($summary);
 })->with([
     'no store' => [
         fn () => Emptiness::noStore('/s/firewatch.sqlite'),
         'no_store',
         null,
-        'No application process has written a store at /s/firewatch.sqlite yet: exercise the application, then ask again.',
-        'Nothing to report: no store has been written yet.',
+        fn () => __('firewatch::messages.no_store', ['path' => '/s/firewatch.sqlite']),
+        fn () => __('firewatch::messages.empty_summary.no_store'),
     ],
     'an unusable store' => [
         fn () => new Emptiness(EmptyKind::STORE_UNUSABLE, null, 'The store can not be read.'),
         'store_unusable',
         null,
         'The store can not be read.',
-        'Nothing to report: the store can not be used.',
+        fn () => __('firewatch::messages.empty_summary.store_unusable'),
     ],
     'an empty store' => [
         fn () => Emptiness::storeEmpty('/s/firewatch.sqlite'),
         'store_empty',
         0,
-        'The store at /s/firewatch.sqlite holds no records: nothing was captured yet, or it was cleared. Exercise the application, then ask again.',
-        'Nothing to report: the store holds no records.',
+        fn () => __('firewatch::messages.store_empty', ['path' => '/s/firewatch.sqlite']),
+        fn () => __('firewatch::messages.empty_summary.store_empty'),
     ],
     'an empty window' => [
         fn () => Emptiness::windowEmpty(40),
         'window_empty',
         40,
-        'No records fall in this window, and the store holds 40 records: widen the window or move it.',
-        'Nothing to report: no records fall in the window.',
+        fn () => __('firewatch::messages.window_empty', ['population' => 40]),
+        fn () => __('firewatch::messages.empty_summary.window_empty'),
     ],
     'no match' => [
         fn () => Emptiness::noMatch(12, ['type=request', 'status=500']),
         'no_match',
         12,
-        'No record matched the filters (type=request, status=500), among 12 records before filtering.',
-        'Nothing to report: no records matched the filters.',
+        fn () => __('firewatch::messages.no_match', ['filters' => 'type=request, status=500', 'population' => 12]),
+        fn () => __('firewatch::messages.empty_summary.no_match'),
     ],
 ]);
 
-test('a summary is cut at a word boundary within 300 characters', function (string $summary, string $expected) {
+it('cuts a summary at a word boundary within 300 characters', function (string $summary, string $expected) {
     $fitted = answerWith(summary: $summary)->summary;
 
     expect($fitted)->toBe($expected)
@@ -211,12 +214,14 @@ test('a summary is cut at a word boundary within 300 characters', function (stri
     'one of multibyte characters' => [str_repeat('é', 301), str_repeat('é', 300)],
 ]);
 
-test('an answer carries at most five notes and five next calls', function (int $count, bool $allowed) {
+it('allows an answer at most five notes and five next calls', function (int $count, bool $allowed) {
     $notes = array_fill(0, $count, 'A note.');
     $next = array_fill(0, $count, ['tool' => 'describe', 'arguments' => [], 'why' => 'the store']);
 
     if ($allowed) {
-        expect(answerWith(notes: $notes, next: $next)->toArray())->toMatchArray(['notes' => $notes, 'next' => $next]);
+        $answer = answerWith(notes: $notes, next: $next)->toArray();
+
+        expect($answer)->toMatchArray(['notes' => $notes, 'next' => $next]);
     } else {
         expect(fn () => answerWith(notes: $notes))->toThrow(InvalidArgumentException::class)
             ->and(fn () => answerWith(next: $next))->toThrow(InvalidArgumentException::class);
@@ -226,7 +231,7 @@ test('an answer carries at most five notes and five next calls', function (int $
     'six' => [6, false],
 ]);
 
-test('the store line states the coverage', function (Coverage $coverage, string $line, array $json) {
+it('states the coverage in the store line', function (Coverage $coverage, string $line, array $json) {
     expect($coverage->line('UTC'))->toBe($line)
         ->and($coverage->toArray())->toBe($json);
 })->with([
@@ -236,7 +241,7 @@ test('the store line states the coverage', function (Coverage $coverage, string 
         ['state' => 'absent', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => ['request'], 'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => 604800, 'records' => 100000]], 'straddling' => null],
     ],
     'an unusable store' => [
-        new Coverage(CoverageState::UNUSABLE, [], History::unknown(null, null), 'foreign_file'),
+        new Coverage(CoverageState::UNUSABLE, [], History::unknown(null, null), UnusableReason::FOREIGN_FILE),
         'Store: unusable (foreign_file)',
         ['state' => 'unusable', 'reason' => 'foreign_file', 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => [], 'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => null, 'records' => null]], 'straddling' => null],
     ],

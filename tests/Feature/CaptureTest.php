@@ -14,16 +14,7 @@ use Laravel\Nightwatch\Facades\Nightwatch;
  */
 function storedRecords(string $columns = '*'): array
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($columns) {
-        $result = $connection->query("SELECT {$columns} FROM records ORDER BY id");
-        $rows = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
+    return storeRows("SELECT {$columns} FROM records ORDER BY id");
 }
 
 it('stores a request the application served, with its common columns', function () {

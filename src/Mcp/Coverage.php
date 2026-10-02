@@ -16,13 +16,12 @@ class Coverage
      * Create a new coverage instance.
      *
      * @param  list<RecordType>  $typesRead  the record types the call examined
-     * @param  string|null  $reason  why an unusable store is: foreign_file, newer_schema, older_schema, sqlite_too_old or unreadable
      */
     public function __construct(
         public readonly CoverageState $state,
         public readonly array $typesRead,
         public readonly History $history,
-        public readonly ?string $reason = null,
+        public readonly ?UnusableReason $reason = null,
         public readonly ?float $oldest = null,
         public readonly ?float $newest = null,
         public readonly ?int $records = null,
@@ -39,19 +38,19 @@ class Coverage
     {
         return $unusable->state === StoreState::ABSENT
             ? new self(CoverageState::ABSENT, $typesRead, $history)
-            : new self(CoverageState::UNUSABLE, $typesRead, $history, self::reason($unusable));
+            : new self(CoverageState::UNUSABLE, $typesRead, $history, reason: self::reason($unusable));
     }
 
     /**
-     * Get why a store is unusable: foreign_file, newer_schema, older_schema, sqlite_too_old, or unreadable for anything else.
+     * Get why a store is unusable, which is unreadable for anything that has no reason of its own.
      */
-    public static function reason(StoreUnusable $unusable): string
+    public static function reason(StoreUnusable $unusable): UnusableReason
     {
         return match ($unusable->state) {
-            StoreState::FOREIGN => 'foreign_file',
-            StoreState::SCHEMA_MISMATCH => $unusable->found < Schema::VERSION ? 'older_schema' : 'newer_schema',
-            StoreState::UNAVAILABLE => 'sqlite_too_old',
-            default => 'unreadable',
+            StoreState::FOREIGN => UnusableReason::FOREIGN_FILE,
+            StoreState::SCHEMA_MISMATCH => $unusable->found < Schema::VERSION ? UnusableReason::OLDER_SCHEMA : UnusableReason::NEWER_SCHEMA,
+            StoreState::UNAVAILABLE => UnusableReason::SQLITE_TOO_OLD,
+            default => UnusableReason::UNREADABLE,
         };
     }
 
@@ -64,7 +63,7 @@ class Coverage
     {
         return [
             'state' => $this->state->value,
-            'reason' => $this->reason,
+            'reason' => $this->reason?->value,
             'oldest_at' => $this->oldest,
             'newest_at' => $this->newest,
             'records' => $this->records,
@@ -79,7 +78,7 @@ class Coverage
      */
     public function line(string $timezone): string
     {
-        $parts = [$this->reason === null ? $this->state->value : "{$this->state->value} ({$this->reason})"];
+        $parts = [$this->reason === null ? $this->state->value : "{$this->state->value} ({$this->reason->value})"];
 
         if ($this->oldest !== null && $this->newest !== null) {
             $parts[] = Instant::format($this->oldest, $timezone).' '.__('firewatch::messages.store_to').' '.Instant::format($this->newest, $timezone);

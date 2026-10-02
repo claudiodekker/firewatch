@@ -26,17 +26,6 @@ class ConfigurationNormaliser
     ];
 
     /**
-     * The seconds in each duration unit.
-     */
-    protected const DURATION_UNIT_SECONDS = [
-        's' => 1,
-        'm' => 60,
-        'h' => 3600,
-        'd' => 86400,
-        'w' => 604800,
-    ];
-
-    /**
      * The busy timeout used when none is valid.
      */
     protected const DEFAULT_BUSY_TIMEOUT_MILLISECONDS = 300;
@@ -158,6 +147,8 @@ class ConfigurationNormaliser
         $redactPayloadFields = $this->redactList($capture, 'redact_payload_fields', key: 'capture.redact_payload_fields');
         $redactHeaders = $this->redactList($capture, 'redact_headers', key: 'capture.redact_headers');
         $budgets = $this->budgets($raw);
+        $retentionAgeSeconds = $this->durationSeconds($retentionAge);
+        $ignoredBudgetEntries = $this->ignoredBudgetEntries($raw, $budgets);
 
         return new Configuration(
             enabled: $enabled,
@@ -165,7 +156,7 @@ class ConfigurationNormaliser
             database: $database,
             busyTimeoutMilliseconds: $busyTimeoutMilliseconds,
             retentionAge: $retentionAge,
-            retentionAgeSeconds: $this->durationSeconds($retentionAge),
+            retentionAgeSeconds: $retentionAgeSeconds,
             retentionRecords: $retentionRecords,
             deploy: $deploy,
             captureLogs: $captureLogs,
@@ -173,7 +164,7 @@ class ConfigurationNormaliser
             redactPayloadFields: $redactPayloadFields,
             redactHeaders: $redactHeaders,
             budgets: $budgets,
-            ignoredBudgetEntries: $this->ignoredBudgetEntries($raw, $budgets),
+            ignoredBudgetEntries: $ignoredBudgetEntries,
             issues: $this->issues,
         );
     }
@@ -288,7 +279,7 @@ class ConfigurationNormaliser
         $unit = substr($duration, -1);
         $count = intval(substr($duration, 0, -1));
 
-        return $count * static::DURATION_UNIT_SECONDS[$unit];
+        return $count * DurationUnit::from($unit)->seconds();
     }
 
     /**

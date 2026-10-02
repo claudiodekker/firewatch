@@ -1,7 +1,7 @@
 ### Working agreements
 
 - TDD for all code (`/mattpocock-skills:tdd`): red, green, refactor. No untested logic.
-- No documentation beyond `README.md`, `CHANGELOG.md`, `CONTEXT.md`, ADRs and `docs/agents/`. The design set lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`. A PR that changes behaviour updates the README and changelog. No docblocks that restate types.
+- No documentation beyond `README.md`, `CHANGELOG.md`, `CONTEXT.md`, ADRs and `docs/agents/`. The design set lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`. A PR that changes what a user installs, configures or runs updates the README, which stays a short guide, and adds one line to the changelog. Internals belong in `CONTEXT.md` and the ADRs, not the README. No docblocks that restate types.
 - Small PRs: one issue, one vertical slice per PR.
 - Laravel package and Pest guidance: @docs/agents/laravel.md
 

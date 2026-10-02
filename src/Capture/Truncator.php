@@ -48,7 +48,8 @@ class Truncator
     public function serialize(array $data, array $exempt, ?string $trace = null): string
     {
         $cuttable = $this->cuttable($data, $exempt);
-        $fitted = array_replace($data, array_map(fn (string $value) => $this->cut($value), $cuttable));
+        $cutValues = array_map(fn (string $value) => $this->cut($value), $cuttable);
+        $fitted = array_replace($data, $cutValues);
 
         $json = $this->encode($fitted);
 

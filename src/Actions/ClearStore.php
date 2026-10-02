@@ -3,13 +3,15 @@
 namespace ClaudioDekker\Firewatch\Actions;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Store\Writer;
-use Illuminate\Support\Facades\Date;
 use SQLite3;
 use SQLite3Stmt;
 
@@ -66,15 +68,14 @@ class ClearStore
     /**
      * Clear the store of every record, user and failure line, or of the records of one type.
      *
-     * The clear is stamped before anything is deleted, so a reader that sees a half-cleared store already clips its history. Records that arrive meanwhile have newer ids and stay, and ids go on from where they were.
-     *
      * @return array{records: int, users: int, before: int, after: int, truncated: bool}
      */
     public function clear(?RecordType $type): array
     {
         $before = $this->size();
-        $instant = (float) Date::now()->format('U.u');
+        $instant = Instant::now();
 
+        // Stamped before anything is deleted, so a reader that sees a half-cleared store already clips its history; records that arrive meanwhile have newer ids and stay.
         $through = $this->stamp($type, $instant);
         $records = 0;
 
@@ -93,7 +94,13 @@ class ClearStore
 
         $truncated = $this->reclaim();
 
-        return ['records' => $records, 'users' => $users, 'before' => $before, 'after' => $this->size(), 'truncated' => $truncated];
+        return [
+            'records' => $records,
+            'users' => $users,
+            'before' => $before,
+            'after' => $this->size(),
+            'truncated' => $truncated,
+        ];
     }
 
     /**
@@ -119,45 +126,30 @@ class ClearStore
 
         $truncated = $this->reclaim();
 
-        return ['damaged' => $state === StoreState::CORRUPT, 'before' => $before, 'after' => $this->size(), 'truncated' => $truncated];
+        return [
+            'damaged' => $state === StoreState::CORRUPT,
+            'before' => $before,
+            'after' => $this->size(),
+            'truncated' => $truncated,
+        ];
     }
 
     /**
-     * Write the marker of the clear and read the newest id, in one transaction before any row is deleted; a marker never moves back.
+     * Write the marker of the clear and read the newest id, in one transaction before any row is deleted.
      */
     protected function stamp(?RecordType $type, float $instant): int
     {
         return $this->writer()->transaction(function (SQLite3 $connection) use ($type, $instant) {
-            $through = (int) $connection->querySingle('SELECT coalesce(max(id), 0) FROM records');
+            $through = Cell::integer($connection->querySingle('SELECT coalesce(max(id), 0) FROM records'));
 
             if ($type === null) {
-                $this->setMarker($connection, 'cleared_at', $instant);
-
-                return $through;
+                Markers::markCleared($connection, $instant);
+            } else {
+                Markers::markTypeCleared($connection, $type, $instant);
             }
-
-            $stored = $connection->querySingle("SELECT value FROM meta WHERE key = 'cleared_types'");
-            $cleared = is_string($stored) ? json_decode($stored, associative: true) : [];
-            $cleared = is_array($cleared) ? $cleared : [];
-            $cleared[$type->value] = max($instant, (float) ($cleared[$type->value] ?? 0));
-
-            $this->setMarker($connection, 'cleared_types', json_encode($cleared, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR));
 
             return $through;
         });
-    }
-
-    /**
-     * Set a marker of the store, which for an instant is only ever moved forward.
-     */
-    protected function setMarker(SQLite3 $connection, string $key, float|string $value): void
-    {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("INSERT INTO meta (key, value) VALUES (:key, :value) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE CAST(excluded.value AS REAL) > CAST(meta.value AS REAL) OR NOT (meta.value GLOB '[0-9]*')");
-
-        $statement->bindValue(':key', $key);
-        $statement->bindValue(':value', is_float($value) ? sprintf('%.6F', $value) : $value);
-        $statement->execute();
     }
 
     /**
@@ -201,16 +193,16 @@ class ClearStore
     {
         $writer = $this->writer();
 
-        $free = (int) $writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count'));
+        $freePages = Cell::integer($writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count')));
 
         // One step frees a fixed number of pages, so the steps needed are known and the loop always ends.
-        for ($steps = (int) ceil($free / static::RECLAIM_PAGES); $steps > 0; $steps--) {
+        for ($steps = intdiv($freePages + static::RECLAIM_PAGES - 1, static::RECLAIM_PAGES); $steps > 0; $steps--) {
             $writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.static::RECLAIM_PAGES.')'));
         }
 
         $checkpoint = $writer->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA wal_checkpoint(TRUNCATE)', entireRow: true));
 
-        return is_array($checkpoint) && (int) $checkpoint['busy'] === 1;
+        return is_array($checkpoint) && Cell::integer($checkpoint['busy']) === 1;
     }
 
     /**
@@ -220,7 +212,7 @@ class ClearStore
     {
         clearstatcache();
 
-        return (int) @filesize($this->configuration->database) + (int) @filesize($this->configuration->database.'-wal');
+        return Cell::integer(@filesize($this->configuration->database)) + Cell::integer(@filesize($this->configuration->database.'-wal'));
     }
 
     /**

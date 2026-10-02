@@ -1,6 +1,5 @@
 <?php
 
-use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -12,16 +11,7 @@ use Monolog\Handler\NullHandler;
  */
 function capturedLogs(): array
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
-        $result = $connection->query('SELECT level, message FROM logs ORDER BY id');
-        $rows = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
+    return storeRows('SELECT level, message FROM logs ORDER BY id');
 }
 
 /**

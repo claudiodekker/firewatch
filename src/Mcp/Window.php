@@ -29,7 +29,7 @@ class Window
      */
     public static function between(?float $since, ?float $until, string $timezone): self
     {
-        return new self(true, $since, $until, $timezone, '');
+        return new self(windowed: true, since: $since, until: $until, timezone: $timezone, reason: '');
     }
 
     /**
@@ -37,11 +37,11 @@ class Window
      */
     public static function read(Request $request, CarbonImmutable $now, string $timezone, string $tool): self
     {
-        $since = self::boundary($request, 'since', $now, $timezone, $tool);
-        $until = self::boundary($request, 'until', $now, $timezone, $tool);
+        $since = self::boundary($request, argument: 'since', now: $now, timezone: $timezone, tool: $tool);
+        $until = self::boundary($request, argument: 'until', now: $now, timezone: $timezone, tool: $tool);
 
         if ($since !== null && $until !== null && $since >= $until) {
-            throw Refusal::window($since, $until, $timezone, $tool);
+            throw Refusal::window(since: $since, until: $until, timezone: $timezone, tool: $tool);
         }
 
         return self::between($since, $until, $timezone);
@@ -52,7 +52,7 @@ class Window
      */
     public static function none(string $reason, string $timezone): self
     {
-        return new self(false, null, null, $timezone, $reason);
+        return new self(windowed: false, since: null, until: null, timezone: $timezone, reason: $reason);
     }
 
     /**
@@ -104,7 +104,10 @@ class Window
     public function toArray(): array
     {
         if (! $this->windowed) {
-            return ['windowed' => false, 'reason' => $this->reason];
+            return [
+                'windowed' => false,
+                'reason' => $this->reason,
+            ];
         }
 
         return [
@@ -156,6 +159,6 @@ class Window
             return null;
         }
 
-        return TimeGrammar::parse($value, $now, $timezone) ?? throw Refusal::time($argument, $value, $tool);
+        return TimeGrammar::parse($value, $now, $timezone) ?? throw Refusal::time(argument: $argument, value: $value, tool: $tool);
     }
 }

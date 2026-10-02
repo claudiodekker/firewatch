@@ -2,6 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
@@ -15,7 +16,7 @@ function recoveryPath(): string
 }
 
 /**
- * Register Firewatch with a writer on the given SQLite release: one with the WAL-reset bug closes its connection after every batch, one without keeps it.
+ * Register Firewatch with a writer on the given SQLite release.
  */
 function recoveryWriter(string $sqliteVersion): Writer
 {
@@ -48,7 +49,7 @@ function recoveryStore(string $key = 'old'): void
 }
 
 /**
- * Overwrite the store from the given offset on, which leaves the header and its stamps readable but not what they point at.
+ * Overwrite the store from the given offset on.
  */
 function recoveryCorrupt(int $offset = 4096): void
 {
@@ -71,16 +72,7 @@ function recoveryForeignStore(): void
  */
 function recoveryKeys(): array
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) {
-        $result = $connection->query('SELECT key FROM cache_events ORDER BY id');
-        $keys = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $keys[] = $row['key'];
-        }
-
-        return $keys;
-    });
+    return array_column(storeRows('SELECT key FROM cache_events ORDER BY id'), 'key');
 }
 
 /**
@@ -152,7 +144,7 @@ describe('a store of another schema version', function () {
 
         recoveryBatch('new');
 
-        expect(app(Reader::class)->snapshot(fn (SQLite3 $connection) => $connection->querySingle("SELECT value FROM meta WHERE key = 'created_at'")))->toBe('1790776800.000000');
+        expect(app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->createdAt))->toBe(1790776800.0);
     });
 
     it('is not rebuilt twice when another writer rebuilt it first', function () {
@@ -209,7 +201,7 @@ describe('a damaged Firewatch store', function () {
             ->and(recoveryFailures())->toHaveCount(1)
             ->and(recoveryFailures()[0])->toMatchArray(['at' => (float) $now->format('U.u'), 'kind' => 'corrupt', 'code' => 11, 'dropped' => 0])
             ->and(recoveryFailures()[0]['message'])->toEndWith('database disk image is malformed')
-            ->and(app(Reader::class)->snapshot(fn (SQLite3 $connection) => $connection->querySingle("SELECT value FROM meta WHERE key = 'rebuilt_why'")))->toBe('corrupt');
+            ->and(app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->rebuiltWhy))->toBe('corrupt');
         Exceptions::assertNothingReported();
     })->with([
         'a writer that closes its connection per batch, damaged in its tables' => ['3.45.1', 4096],

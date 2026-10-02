@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Capture;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Microseconds;
 use ClaudioDekker\Firewatch\Store\Schema;
 use JsonException;
 use stdClass;
@@ -79,13 +80,16 @@ class RecordMapper
 
         $this->check($wire, $type, $drift);
 
-        $user = $this->user($type, $wire, seenAt: $this->instant($record['timestamp'] ?? null));
+        $seenAt = $this->instant($record['timestamp'] ?? null);
+        $user = $this->user($type, $wire, seenAt: $seenAt);
 
         if ($user !== null) {
             return new MappedRecord(user: $user);
         }
 
-        return new MappedRecord(record: $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings));
+        $columns = $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings);
+
+        return new MappedRecord(record: $columns);
     }
 
     /**
@@ -104,14 +108,16 @@ class RecordMapper
         }
 
         // The round trip can turn a float into an integer, so the instant comes from the original array.
-        $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, duration: $columns['duration']);
+        $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, durationMicroseconds: $columns['duration']);
 
         if ($type !== null) {
             $columns['execution_id'] = $this->executionId($type, $columns);
             $columns['source'] = $type->source() ?? $columns['source'];
         }
 
-        $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $type === RecordType::EXCEPTION ? 'trace' : null);
+        $trace = $type === RecordType::EXCEPTION ? 'trace' : null;
+
+        $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $trace);
 
         return $columns;
     }
@@ -333,12 +339,12 @@ class RecordMapper
     /**
      * Get the instant a record started at, moving the types Nightwatch stamps at their end back by their duration, or null for a timestamp that is not a number.
      */
-    protected function startedAt(?RecordType $type, mixed $timestamp, mixed $duration): int|float|null
+    protected function startedAt(?RecordType $type, mixed $timestamp, mixed $durationMicroseconds): int|float|null
     {
         $instant = $this->instant($timestamp);
 
-        if ($instant !== null && $type?->isStampedAtEnd() && is_numeric($duration)) {
-            return $instant - $duration / 1e6;
+        if ($instant !== null && $type?->isStampedAtEnd() && is_numeric($durationMicroseconds)) {
+            return $instant - $durationMicroseconds / Microseconds::PER_SECOND;
         }
 
         return $instant;

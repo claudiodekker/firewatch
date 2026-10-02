@@ -3,7 +3,7 @@
 use Workbench\App\Fixtures\Producer;
 use Workbench\App\Fixtures\WireFixture;
 
-it('matches each committed wire fixture\'s fields and their kinds with what the sensors write', function (Producer $producer) {
+test('each committed wire fixture matches the fields and kinds the sensors write', function (Producer $producer) {
     $fixtures = app(WireFixture::class);
 
     $differences = $fixtures->differences($producer, $fixtures->produce($producer));
