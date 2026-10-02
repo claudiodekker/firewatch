@@ -37,6 +37,7 @@ return [
     'tools' => [
         'overview' => 'Entry point. Answers "what is wrong in this application?": the store\'s coverage, the server-error and client-error rate, the slowest groups by total time, record counts for all twelve types and the user directory, how many executions had a signed-in actor, budget verdicts, and all eleven problem shapes checked at once. Use it first and after every change; drill into a shape with `detect`, into a group with `rank`. Windowed by since/until; without them everything stored counts. Empty is not clean: each shape is clean, has findings or is not_evaluated, with the number of records examined. Nothing is wrong only when all eleven ran and are clean.',
         'rank' => 'Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, worst first, to answer "what is slow, heavy or frequent?". Pass `type`, or `group` to break one group down by deploy (rows in first-seen order) to see whether it changed. `matching` finds a group by a substring of its label. `by` picks the measure, p95_duration by default and occurrences for exceptions. Percentiles are null with a `withheld` object when too few records support them; when no group has enough for the percentile, the order falls back to the maximum and a note says so. Rows carry when the group was first and last seen, its deploys and its slowest execution, and failure_pct where the type has a notion of failure. Windowed by since/until; `deploy` restricts the records; a cursor continues a cut list. Empty is not clean.',
+        'execution' => 'One execution in full: a request, command, job attempt or scheduled task. Without arguments it returns the latest one that finished (greatest end time); `type` picks the latest of one kind; `execution_id` picks a specific one (a request\'s trace id is also its execution id). Shows outcome, stages, budget verdict, request headers and payload as captured, counted-versus-captured accounting for eight counters, up to five exceptions with application frames and source lines, and the child timeline. Not windowed. For the job lineage across attempts use `trace`. Recorded when finished: running work is absent.',
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
     ],
 
@@ -230,6 +231,47 @@ return [
 
     'rank_no_route' => '(no route matched)',
 
+    'execution_id_argument' => 'The execution id to open (a request\'s trace id is its execution id). Omit for the latest finished execution. Excludes type.',
+
+    'execution_type_argument' => 'request, command, job-attempt or scheduled-task: the latest finished execution of that kind. Not with execution_id.',
+
+    'execution_limit_argument' => 'The most timeline entries, 1 to 100. Default 50. Counted after repeated identical queries collapse.',
+
+    'execution_window_reason' => 'one execution, found by its id or as the latest one that finished',
+
+    'execution_any_type' => 'type: any execution type',
+
+    'execution_summary' => 'Showed the :type :id: outcome :outcome.',
+
+    'execution_not_found_trace' => "error: not_found\nNo execution `:id` exists in the store, but that value is a trace id; use trace.\nargument: :argument\naccepted: :accepted\nexample: :example",
+
+    'execution_next_rank' => 'Rank the group of this execution to see how it compares with the others of its kind.',
+    'execution_next_occurrences' => 'List the queries this execution ran, to see which was slowest.',
+
+    'execution_timeline_how' => 'Pass a larger `limit`, up to 100, to see more of the timeline.',
+
+    'execution_exceptions_how' => 'The five earliest exceptions are shown; the accounting row counts them all.',
+
+    'execution_frames_limit_reached' => 'Nightwatch stores source lines for the first 10 application frames of an exception only; this one had more.',
+
+    'execution_frames_limit_not_reached' => 'Nightwatch\'s limit of 10 frames with source lines was not reached: the lines were not available when the exception was captured, or were dropped to fit the record.',
+
+    'accounting_incomplete' => 'Incomplete: :captured of :counted counted :noun were captured.',
+
+    'accounting_more' => 'More records captured than counted: :captured :noun captured, :counted counted.',
+
+    'accounting_outside_coverage' => 'Children outside coverage: history for :noun before :from was removed.',
+
+    'accounting_nouns' => [
+        'queries' => 'queries',
+        'exceptions' => 'exceptions',
+        'logs' => 'logs',
+        'cache_events' => 'cache events',
+        'mail' => 'mail',
+        'notifications' => 'notifications',
+        'outgoing_requests' => 'outgoing requests',
+        'jobs_queued' => 'jobs queued',
+    ],
     'occurrences_group_argument' => 'A group id from `rank` or from a row: only its records. A job group lists its dispatches and attempts together.',
 
     'occurrences_type_argument' => 'A record type: request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request or queued-job.',

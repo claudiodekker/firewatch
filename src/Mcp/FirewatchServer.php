@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
@@ -35,6 +36,7 @@ class FirewatchServer extends Server
         Overview::class,
         Rank::class,
         Occurrences::class,
+        Execution::class,
     ];
 
     /**

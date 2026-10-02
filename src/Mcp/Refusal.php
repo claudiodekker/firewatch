@@ -108,6 +108,19 @@ class Refusal extends RuntimeException
     }
 
     /**
+     * Get the refusal of an execution id that the store holds only as a trace id, which says where to read it.
+     */
+    public static function traceIdNotExecution(string $argument, string $id, string $accepted, string $example): self
+    {
+        return new self(ErrorCode::NOT_FOUND, __('firewatch::messages.execution_not_found_trace', [
+            'argument' => $argument,
+            'id' => $id,
+            'accepted' => $accepted,
+            'example' => $example,
+        ]));
+    }
+
+    /**
      * Get the refusal of a cursor that does not belong to the call it was passed to.
      */
     public static function badCursor(string $tool): self

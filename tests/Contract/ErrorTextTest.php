@@ -54,6 +54,11 @@ test('every general error code has pinned text', function (Closure $refusal, Err
         ErrorCode::NOT_FOUND,
         "error: not_found\nNo record `abc` exists in the store; the identifier may have been pruned or cleared.\nargument: trace_id\naccepted: a trace id the store holds\nexample: trace(trace_id: \"abc\")",
     ],
+    'an execution id that is a trace id' => [
+        fn () => Refusal::traceIdNotExecution('execution_id', 'abc', 'an execution id; a trace id belongs to `trace`', 'execution(execution_id: "<execution id>")'),
+        ErrorCode::NOT_FOUND,
+        "error: not_found\nNo execution `abc` exists in the store, but that value is a trace id; use trace.\nargument: execution_id\naccepted: an execution id; a trace id belongs to `trace`\nexample: execution(execution_id: \"<execution id>\")",
+    ],
     'bad_cursor' => [
         fn () => Refusal::badCursor('rank'),
         ErrorCode::BAD_CURSOR,
