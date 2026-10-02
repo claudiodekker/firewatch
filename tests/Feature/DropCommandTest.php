@@ -2,28 +2,26 @@
 
 use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
 
 const DROP_NOW = '2026-09-30 14:00:00';
 
-/**
- * @return list<array<string, mixed>>
- */
-function dropRows(string $sql): array
+function dropMarkers(): Markers
 {
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
-        $result = $connection->query($sql);
-        $rows = [];
+    return app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection));
+}
 
-        while (is_array($row = $result->fetchArray(SQLITE3_ASSOC))) {
-            $rows[] = $row;
-        }
+function rebuiltPattern(): string
+{
+    $text = __('firewatch::messages.clear.rebuilt', ['path' => dropPath(), 'before' => '@@SIZE@@', 'after' => '@@SIZE@@']);
 
-        return $rows;
-    });
+    return '/'.str_replace('@@SIZE@@', '[\d.,]+ \w+', preg_quote($text, '/')).'/';
 }
 
 function dropPath(): string
@@ -37,7 +35,7 @@ function dropFailuresPath(): string
 }
 
 /**
- * A store with records, a user, drift, a clear marker and a dropped batch.
+ * Fill the store with records, a user, drift, a clear marker and a dropped batch.
  */
 function dropPopulatedStore(): void
 {
@@ -59,6 +57,17 @@ function runDrop(array $options = ['--force' => true]): PendingCommand
     return test()->artisan('firewatch:clear', ['--drop' => true, ...$options]);
 }
 
+/**
+ * @param  array<string, mixed>  $options
+ * @return array{exit: int, output: string}
+ */
+function dropResult(array $options = ['--force' => true]): array
+{
+    $exit = Artisan::call('firewatch:clear', ['--drop' => true, ...$options]);
+
+    return ['exit' => $exit, 'output' => trim(Artisan::output())];
+}
+
 function dropCorrupt(): void
 {
     $handle = fopen(dropPath(), 'r+b');
@@ -75,9 +84,11 @@ beforeEach(function () {
 it('can\'t be combined with a type, and changes nothing', function () {
     dropPopulatedStore();
 
-    runDrop(['--type' => 'log', '--force' => true])->expectsOutput(__('firewatch::messages.clear.drop_with_type'))->assertExitCode(1);
+    $result = dropResult(['--type' => 'log', '--force' => true]);
 
-    expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
+    expect($result['exit'])->toBe(1)
+        ->and($result['output'])->toBe(__('firewatch::messages.clear.drop_with_type'))
+        ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
 });
 
 describe('a healthy store', function () {
@@ -85,24 +96,28 @@ describe('a healthy store', function () {
         dropPopulatedStore();
         $this->travelTo('2026-09-30 15:00:00');
 
-        runDrop()->expectsOutputToContain('Rebuilt the store at '.dropPath())->assertExitCode(0);
+        $result = dropResult();
+        $markers = dropMarkers();
 
-        expect(dropRows('SELECT id FROM records'))->toBe([])
-            ->and(dropRows('SELECT id FROM users'))->toBe([])
-            ->and(dropRows('SELECT kind FROM drift'))->toBe([])
-            ->and(array_column(dropRows('SELECT key, value FROM meta'), 'value', 'key'))->toBe(['created_at' => '1790780400.000000'])
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toMatch(rebuiltPattern())
+            ->and($markers)->toEqual(new Markers(createdAt: 1790780400.0))
+            ->and(storeRows('SELECT id FROM records'))->toBe([])
+            ->and(storeRows('SELECT id FROM users'))->toBe([])
+            ->and(storeRows('SELECT kind FROM drift'))->toBe([])
             ->and(filesize(dropFailuresPath()))->toBe(0)
-            ->and(dropRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]]);
+            ->and(storeRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]]);
     });
 
     it('restarts the ids at 1, and never unlinks the file', function () {
         dropPopulatedStore();
         $inode = fileinode(dropPath());
 
-        runDrop()->assertExitCode(0);
+        $result = dropResult();
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776100.0])]);
 
-        expect(array_column(dropRows('SELECT id FROM records'), 'id'))->toBe([1])
+        expect($result['exit'])->toBe(0)
+            ->and(array_column(storeRows('SELECT id FROM records'), 'id'))->toBe([1])
             ->and(fileinode(dropPath()))->toBe($inode)
             ->and(file_exists(dropPath().'.corrupt'))->toBeFalse();
     });
@@ -113,7 +128,7 @@ describe('a healthy store', function () {
 
         runDrop()->run();
 
-        expect(dropRows('PRAGMA freelist_count'))->toBe([['freelist_count' => 0]])
+        expect(storeRows('PRAGMA freelist_count'))->toBe([['freelist_count' => 0]])
             ->and(filesize(dropPath()))->toBeLessThan($before);
     });
 
@@ -123,22 +138,25 @@ describe('a healthy store', function () {
 
         runDrop()->run();
 
-        expect(dropRows("SELECT value FROM meta WHERE key = 'created_at'"))->toBe([['value' => '1790780400.000000']]);
+        expect(dropMarkers()->createdAt)->toBe(1790780400.0);
     });
 });
 
 describe('a store in another state', function () {
     it('has nothing to drop when there is no store, or an empty file, and creates nothing', function () {
-        runDrop()->expectsOutput(__('firewatch::messages.clear.nothing'))->assertExitCode(0);
-
-        expect(file_exists(dirname(dropPath())))->toBeFalse();
-
+        $withoutStore = dropResult();
+        $directoryCreated = file_exists(dirname(dropPath()));
         mkdir(dirname(dropPath()), recursive: true);
         touch(dropPath());
 
-        runDrop()->expectsOutput(__('firewatch::messages.clear.nothing'))->assertExitCode(0);
+        $withEmptyFile = dropResult();
 
-        expect(filesize(dropPath()))->toBe(0);
+        expect($withoutStore['exit'])->toBe(0)
+            ->and($withoutStore['output'])->toBe(__('firewatch::messages.clear.nothing'))
+            ->and($directoryCreated)->toBeFalse()
+            ->and($withEmptyFile['exit'])->toBe(0)
+            ->and($withEmptyFile['output'])->toBe(__('firewatch::messages.clear.nothing'))
+            ->and(filesize(dropPath()))->toBe(0);
     });
 
     it('rebuilds a store of another schema in place, and says why it starts there', function (int $version) {
@@ -148,13 +166,18 @@ describe('a store in another state', function () {
         $store->close();
         $inode = fileinode(dropPath());
 
-        runDrop()->expectsOutputToContain('Rebuilt the store at')->assertExitCode(0);
+        $result = dropResult();
 
-        expect(dropRows('SELECT id FROM records'))->toBe([])
-            ->and(dropRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]])
-            ->and(array_column(dropRows('SELECT key, value FROM meta'), 'value', 'key'))->toHaveKey('rebuilt_why', 'schema')
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toMatch(rebuiltPattern())
+            ->and(storeRows('SELECT id FROM records'))->toBe([])
+            ->and(storeRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]])
+            ->and(dropMarkers()->rebuiltWhy)->toBe('schema')
             ->and(fileinode(dropPath()))->toBe($inode);
-    })->with([0, Schema::VERSION + 1]);
+    })->with([
+        'an older schema' => 0,
+        'a newer schema' => Schema::VERSION + 1,
+    ]);
 
     it('moves a damaged store aside, keeping at most one earlier copy, and creates a new one', function () {
         dropPopulatedStore();
@@ -163,11 +186,13 @@ describe('a store in another state', function () {
         file_put_contents(dropPath().'.corrupt', 'an earlier copy');
         file_put_contents(dropPath().'-wal.corrupt', 'an earlier log');
 
-        runDrop()->expectsOutput(__('firewatch::messages.clear.replaced_damaged', ['file' => basename(dropPath()).'.corrupt']))->assertExitCode(0);
+        $result = dropResult();
 
-        expect(md5_file(dropPath().'.corrupt'))->toBe($damaged)
-            ->and(dropRows('SELECT id FROM records'))->toBe([])
-            ->and(array_column(dropRows('SELECT key, value FROM meta'), 'value', 'key'))->toHaveKey('rebuilt_why', 'corrupt')
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.replaced_damaged', ['file' => basename(dropPath()).'.corrupt']))
+            ->and(md5_file(dropPath().'.corrupt'))->toBe($damaged)
+            ->and(storeRows('SELECT id FROM records'))->toBe([])
+            ->and(dropMarkers()->rebuiltWhy)->toBe('corrupt')
             ->and(filesize(dropFailuresPath()))->toBe(0);
     });
 
@@ -176,9 +201,11 @@ describe('a store in another state', function () {
         $arrange(dropPath());
         $before = md5_file(dropPath());
 
-        runDrop()->expectsOutput(__('firewatch::messages.clear.foreign', ['path' => dropPath()]))->assertExitCode(1);
+        $result = dropResult();
 
-        expect(md5_file(dropPath()))->toBe($before)
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.foreign', ['path' => dropPath()]))
+            ->and(md5_file(dropPath()))->toBe($before)
             ->and(file_exists(dropPath().'.corrupt'))->toBeFalse();
     })->with([
         'a text file' => [fn (string $path) => file_put_contents($path, 'not a database')],
@@ -193,10 +220,12 @@ describe('a store in another state', function () {
         dropPopulatedStore();
         app()->instance(Reader::class, new Reader(app(Configuration::class), '3.30.0'));
 
-        runDrop()->expectsOutputToContain('SQLite 3.30.0 is older than')->assertExitCode(1);
+        $result = dropResult();
         app()->forgetInstance(Reader::class);
 
-        expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.sqlite', ['version' => '3.30.0', 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]))
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 
     it('says the store is busy after its fixed wait, and rebuilds nothing', function () {
@@ -210,10 +239,12 @@ describe('a store in another state', function () {
         $connection->exec('PRAGMA journal_mode = DELETE');
         $connection->exec('BEGIN EXCLUSIVE');
 
-        runDrop()->expectsOutput(__('firewatch::messages.clear.busy'))->assertExitCode(1);
+        $result = dropResult();
         $connection->exec('ROLLBACK');
 
-        expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.busy'))
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 });
 
@@ -221,31 +252,35 @@ describe('the confirmation', function () {
     it('asks first, with no as the default, and rebuilds nothing when it is declined', function () {
         dropPopulatedStore();
 
-        runDrop([])
+        $command = runDrop([])
             ->expectsConfirmation(__('firewatch::messages.clear.confirm_drop', ['path' => dropPath()]), 'no')
-            ->expectsOutput(__('firewatch::messages.clear.declined'))
-            ->assertExitCode(1);
+            ->expectsOutput(__('firewatch::messages.clear.declined'));
 
-        expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
+        $exit = $command->run();
+
+        expect($exit)->toBe(1)
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 
     it('rebuilds once it is confirmed', function () {
         dropPopulatedStore();
 
-        runDrop([])
-            ->expectsConfirmation(__('firewatch::messages.clear.confirm_drop', ['path' => dropPath()]), 'yes')
-            ->assertExitCode(0);
+        $command = runDrop([])
+            ->expectsConfirmation(__('firewatch::messages.clear.confirm_drop', ['path' => dropPath()]), 'yes');
 
-        expect(dropRows('SELECT id FROM records'))->toBe([]);
+        $exit = $command->run();
+
+        expect($exit)->toBe(0)
+            ->and(storeRows('SELECT id FROM records'))->toBe([]);
     });
 
     it('aborts without asking when it can\'t, unless it is forced', function () {
         dropPopulatedStore();
 
-        $this->artisan('firewatch:clear', ['--drop' => true, '--no-interaction' => true])
-            ->expectsOutput(__('firewatch::messages.clear.not_forced'))
-            ->assertExitCode(1);
+        $result = dropResult(['--no-interaction' => true]);
 
-        expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.not_forced'))
+            ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 });

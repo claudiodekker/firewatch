@@ -33,7 +33,18 @@ class Bounds
             $result[$section] = self::cap($value, $cut);
 
             if ($cut > 0) {
-                $truncated[] = ['section' => (string) $section, 'shown' => $cut, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how')];
+                $how = __('firewatch::messages.cap_how', [
+                    'characters' => number_format(self::CELL_CHARACTERS),
+                    'next' => self::CELL_CHARACTERS + 1,
+                ]);
+
+                $truncated[] = [
+                    'section' => (string) $section,
+                    'shown' => $cut,
+                    'matched' => null,
+                    'reason' => TruncationReason::CAP->value,
+                    'how' => $how,
+                ];
             }
         }
 
@@ -41,7 +52,7 @@ class Bounds
     }
 
     /**
-     * State the cells cut again for the rows the budget kept, so a row it dropped doesn't count.
+     * Count the cells cut again for the rows the budget kept, so a row it dropped doesn't count.
      *
      * @param  array<string, mixed>  $original  the result before any cut
      * @param  array<string, mixed>  $fitted  the result after the budget
@@ -50,7 +61,7 @@ class Bounds
      */
     public static function recountCaps(array $original, array $fitted, array $truncated): array
     {
-        $kept = array_values(array_filter($truncated, fn (array $entry) => $entry['reason'] !== 'cap'));
+        $kept = array_values(array_filter($truncated, fn (array $entry) => $entry['reason'] !== TruncationReason::CAP->value));
 
         foreach ($fitted as $section => $value) {
             if (is_array($value) && array_is_list($value)) {
@@ -58,7 +69,9 @@ class Bounds
             }
         }
 
-        return self::capCells($original, $kept)[1];
+        [, $recounted] = self::capCells($original, $kept);
+
+        return $recounted;
     }
 
     /**
@@ -80,13 +93,13 @@ class Bounds
 
         $cut++;
 
-        return mb_substr($value, 0, self::CELL_CHARACTERS).__('firewatch::messages.cell_truncated', ['count' => mb_strlen($value) - self::CELL_CHARACTERS]);
+        $notice = __('firewatch::messages.cell_truncated', ['count' => mb_strlen($value) - self::CELL_CHARACTERS]);
+
+        return mb_substr($value, 0, self::CELL_CHARACTERS).$notice;
     }
 
     /**
      * Drop whole rows from the tail of the lowest-priority list until the answer fits its budget, and state each list it cut.
-     *
-     * Lists are in priority order, the first highest. The first row of the first list is never dropped, so an answer whose one row is over the budget is returned whole.
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
@@ -95,13 +108,21 @@ class Bounds
      */
     public static function fitAnswer(array $result, array $truncated, Closure $size): array
     {
-        $lists = array_keys(array_filter($result, fn (mixed $value) => is_array($value) && array_is_list($value) && $value !== [] && is_array($value[0])));
+        $isList = fn (mixed $value) => is_array($value) && array_is_list($value) && $value !== [] && is_array($value[0]);
+        $lists = array_keys(array_filter($result, $isList));
         $matched = [];
 
         foreach (array_reverse($lists, preserve_keys: true) as $position => $section) {
+            // The first row of the first list is never dropped: one row over the budget is returned whole.
             $floor = $position === 0 ? 1 : 0;
 
-            while (count($result[$section]) > $floor && $size($result, self::withCuts($truncated, $result, $matched)) > self::ANSWER_CHARACTERS) {
+            while (count($result[$section]) > $floor) {
+                $cuts = self::withCuts($truncated, $result, $matched);
+
+                if ($size($result, $cuts) <= self::ANSWER_CHARACTERS) {
+                    break;
+                }
+
                 $matched[$section] ??= count($result[$section]);
                 array_pop($result[$section]);
             }
@@ -123,12 +144,18 @@ class Bounds
         $entries = [];
 
         foreach ($originals as $section => $original) {
-            $earlier = array_values(array_filter($truncated, fn (array $entry) => $entry['section'] === (string) $section && $entry['reason'] === 'limit'))[0] ?? null;
+            $earlier = array_values(array_filter($truncated, fn (array $entry) => $entry['section'] === (string) $section && $entry['reason'] === TruncationReason::LIMIT->value))[0] ?? null;
 
-            $entries[(string) $section] = ['section' => (string) $section, 'shown' => count($result[$section]), 'matched' => $earlier === null ? $original : $earlier['matched'], 'reason' => 'size', 'how' => __('firewatch::messages.size_how')];
+            $entries[(string) $section] = [
+                'section' => (string) $section,
+                'shown' => count($result[$section]),
+                'matched' => $earlier === null ? $original : $earlier['matched'],
+                'reason' => TruncationReason::SIZE->value,
+                'how' => __('firewatch::messages.size_how', ['characters' => number_format(self::ANSWER_CHARACTERS)]),
+            ];
         }
 
-        $kept = array_values(array_filter($truncated, fn (array $entry) => ! ($entry['reason'] === 'limit' && isset($entries[$entry['section']]))));
+        $kept = array_values(array_filter($truncated, fn (array $entry) => ! ($entry['reason'] === TruncationReason::LIMIT->value && isset($entries[$entry['section']]))));
 
         return [...$kept, ...array_values($entries)];
     }

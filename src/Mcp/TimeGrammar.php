@@ -3,7 +3,8 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use Carbon\CarbonImmutable;
-use Throwable;
+use Carbon\Exceptions\InvalidFormatException;
+use ClaudioDekker\Firewatch\Configuration\DurationUnit;
 
 /**
  * @internal
@@ -16,16 +17,28 @@ class TimeGrammar
     public const MAXIMUM_EPOCH = 4102444800;
 
     /**
-     * The seconds in a unit of a relative time, by the spellings of the unit.
+     * The unit of a relative time, by the spellings of the unit.
      *
-     * @var array<string, int>
+     * @var array<string, DurationUnit>
      */
     protected const UNITS = [
-        's' => 1, 'sec' => 1, 'second' => 1, 'seconds' => 1,
-        'm' => 60, 'min' => 60, 'minute' => 60, 'minutes' => 60,
-        'h' => 3600, 'hour' => 3600, 'hours' => 3600,
-        'd' => 86400, 'day' => 86400, 'days' => 86400,
-        'w' => 604800, 'week' => 604800, 'weeks' => 604800,
+        's' => DurationUnit::SECOND,
+        'sec' => DurationUnit::SECOND,
+        'second' => DurationUnit::SECOND,
+        'seconds' => DurationUnit::SECOND,
+        'm' => DurationUnit::MINUTE,
+        'min' => DurationUnit::MINUTE,
+        'minute' => DurationUnit::MINUTE,
+        'minutes' => DurationUnit::MINUTE,
+        'h' => DurationUnit::HOUR,
+        'hour' => DurationUnit::HOUR,
+        'hours' => DurationUnit::HOUR,
+        'd' => DurationUnit::DAY,
+        'day' => DurationUnit::DAY,
+        'days' => DurationUnit::DAY,
+        'w' => DurationUnit::WEEK,
+        'week' => DurationUnit::WEEK,
+        'weeks' => DurationUnit::WEEK,
     ];
 
     /**
@@ -44,21 +57,13 @@ class TimeGrammar
         $value = trim($value);
 
         return match (true) {
-            strtolower($value) === 'now' => self::seconds($now),
+            strtolower($value) === 'now' => Instant::of($now),
             preg_match('/^\d+(\.\d+)?$/', $value) === 1 => self::epoch($value),
             preg_match('/^-(\d+) ?([a-z]+)$/i', $value, $relative) === 1 => self::relative($relative, $now),
-            preg_match('/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?$/', $value) === 1 => self::local($value, $timezone),
-            preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i', $value) === 1 => self::local($value, $timezone),
+            preg_match('/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?$/', $value) === 1 => self::local(value: $value, timezone: $timezone),
+            preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i', $value) === 1 => self::local(value: $value, timezone: $timezone),
             default => null,
         };
-    }
-
-    /**
-     * Get Unix seconds from an instant.
-     */
-    protected static function seconds(CarbonImmutable $instant): float
-    {
-        return (float) $instant->format('U.u');
     }
 
     /**
@@ -78,13 +83,13 @@ class TimeGrammar
      */
     protected static function relative(array $match, CarbonImmutable $now): ?float
     {
-        $seconds = self::UNITS[strtolower($match[2])] ?? null;
+        $unit = self::UNITS[strtolower($match[2])] ?? null;
 
-        if ($seconds === null || ltrim($match[1], '0') === '') {
+        if ($unit === null || ltrim($match[1], '0') === '') {
             return null;
         }
 
-        $instant = self::seconds($now) - (float) $match[1] * $seconds;
+        $instant = Instant::of($now) - (float) $match[1] * $unit->seconds();
 
         return $instant < 0 ? null : $instant;
     }
@@ -94,18 +99,20 @@ class TimeGrammar
      */
     protected static function local(string $value, string $timezone): ?float
     {
+        $day = substr($value, 0, 10);
+
         try {
-            $date = CarbonImmutable::createFromFormat('!Y-m-d', substr($value, 0, 10), $timezone);
+            $rolledOver = CarbonImmutable::createFromFormat('!Y-m-d', $day, $timezone)?->format('Y-m-d') !== $day;
             $parsed = CarbonImmutable::parse($value, $timezone);
-        } catch (Throwable) {
+        } catch (InvalidFormatException) {
             return null;
         }
 
         // A date PHP rolls over (February 30th) is no date.
-        if ($date?->format('Y-m-d') !== substr($value, 0, 10)) {
+        if ($rolledOver) {
             return null;
         }
 
-        return self::seconds($parsed);
+        return Instant::of($parsed);
     }
 }

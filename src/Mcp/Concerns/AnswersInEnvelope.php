@@ -1,7 +1,10 @@
 <?php
 
-namespace ClaudioDekker\Firewatch\Mcp;
+namespace ClaudioDekker\Firewatch\Mcp\Concerns;
 
+use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
+use ClaudioDekker\Firewatch\Mcp\Refusal;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Mcp\Request;
@@ -78,8 +81,8 @@ trait AnswersInEnvelope
             }
 
             throw in_array($argument, self::KNOWN_ARGUMENTS, true)
-                ? Refusal::inapplicable($argument, $this->name(), $accepted)
-                : Refusal::unknown($argument, $this->name(), $accepted);
+                ? Refusal::inapplicable(argument: $argument, tool: $this->name(), accepted: $accepted)
+                : Refusal::unknown(argument: $argument, tool: $this->name(), accepted: $accepted);
         }
     }
 }

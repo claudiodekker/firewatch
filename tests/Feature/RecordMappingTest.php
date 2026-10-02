@@ -1,7 +1,6 @@
 <?php
 
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Cache;
@@ -11,23 +10,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Workbench\App\Notifications\OrderShipped;
-
-/**
- * @return list<array<string, mixed>>
- */
-function selectFromStore(string $sql): array
-{
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
-        $result = $connection->query($sql);
-        $rows = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
-}
 
 function forceRequestTo(string $uri): void
 {
@@ -77,8 +59,8 @@ it('stores each record type the sensors write with its common columns and its fi
     $traffic();
     Nightwatch::digest();
 
-    $rows = selectFromStore("SELECT * FROM {$view}");
-    $types = selectFromStore("SELECT DISTINCT r.type FROM {$view} v JOIN records r USING (id)");
+    $rows = storeRows("SELECT * FROM {$view}");
+    $types = storeRows("SELECT DISTINCT r.type FROM {$view} v JOIN records r USING (id)");
     $contractFields = array_values(array_diff(array_keys($rows[0]), ['id', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'execution_source', 'job_id', 'user_id', 'deploy', 'server', 'data']));
     $data = json_decode($rows[0]['data'], associative: true);
 
@@ -95,7 +77,7 @@ it('counts no drift for any record type the sensors write', function (Closure $t
 
     Nightwatch::digest();
 
-    expect(selectFromStore("SELECT kind, type, detail FROM drift WHERE kind <> 'version'"))->toBe([]);
+    expect(storeRows("SELECT kind, type, detail FROM drift WHERE kind <> 'version'"))->toBe([]);
 })->with('sensors');
 
 it('links a job attempt\'s children to the attempt, which keeps the trace of its dispatch', function () {
@@ -105,9 +87,9 @@ it('links a job attempt\'s children to the attempt, which keeps the trace of its
 
     runArtisan(['command' => 'queue:work', '--once' => true]);
 
-    [$dispatch] = selectFromStore('SELECT trace_id, job_id FROM queued_jobs');
-    [$attempt] = selectFromStore('SELECT trace_id, job_id, execution_id FROM job_attempts');
-    $children = selectFromStore("SELECT execution_id FROM cache_events WHERE key = 'in-the-job'");
+    [$dispatch] = storeRows('SELECT trace_id, job_id FROM queued_jobs');
+    [$attempt] = storeRows('SELECT trace_id, job_id, execution_id FROM job_attempts');
+    $children = storeRows("SELECT execution_id FROM cache_events WHERE key = 'in-the-job'");
 
     expect($attempt)->toMatchArray(['trace_id' => $dispatch['trace_id'], 'job_id' => $dispatch['job_id']])
         ->and($attempt['execution_id'])->not->toBe($attempt['trace_id'])
@@ -118,7 +100,7 @@ it('decodes the JSON-string fields of a record', function (Closure $traffic, str
     $traffic();
     Nightwatch::digest();
 
-    [$record] = selectFromStore("SELECT json_type(data, '$.{$field}') AS decoded FROM {$view}");
+    [$record] = storeRows("SELECT json_type(data, '$.{$field}') AS decoded FROM {$view}");
 
     expect($record['decoded'])->toBe($decoded);
 })->with([
@@ -144,7 +126,7 @@ it('decodes the JSON-string fields of a record', function (Closure $traffic, str
 it('keeps a wire zero and an empty string as sent', function () {
     forceRequestTo('/');
 
-    [$request] = selectFromStore('SELECT lazy_loads, payload FROM requests');
+    [$request] = storeRows('SELECT lazy_loads, payload FROM requests');
 
     expect($request)->toBe(['lazy_loads' => 0, 'payload' => '']);
 });
@@ -152,7 +134,7 @@ it('keeps a wire zero and an empty string as sent', function () {
 it('starts the types Nightwatch stamps at their end one duration before their timestamp', function (RecordType $type, float $startedAt) {
     ingest([syntheticRecord($type)->with(['timestamp' => 1767225600.25, 'duration' => 250000])]);
 
-    [$record] = selectFromStore('SELECT started_at FROM records');
+    [$record] = storeRows('SELECT started_at FROM records');
 
     expect($record['started_at'])->toBe($startedAt);
 })->with([
@@ -167,7 +149,7 @@ it('starts the types Nightwatch stamps at their end one duration before their ti
 it('keeps the timestamp of a type Nightwatch stamps at its end when its duration is not a number', function () {
     ingest([syntheticRecord(RecordType::MAIL)->with(['timestamp' => 1767225600.25, 'duration' => 'slow'])]);
 
-    [$record] = selectFromStore('SELECT started_at FROM records');
+    [$record] = storeRows('SELECT started_at FROM records');
 
     expect($record['started_at'])->toBe(1767225600.25);
 });
@@ -175,7 +157,7 @@ it('keeps the timestamp of a type Nightwatch stamps at its end when its duration
 it('links a fatal error, which Nightwatch sends without an execution, to its trace unless it ended a job', function (string $source, ?string $executionId) {
     ingest([syntheticRecord(RecordType::EXCEPTION)->with(['trace_id' => 'trace-1', 'execution_source' => $source, 'execution_id' => '', 'trace' => ''])]);
 
-    [$exception] = selectFromStore('SELECT execution_id, trace FROM exceptions');
+    [$exception] = storeRows('SELECT execution_id, trace FROM exceptions');
 
     expect($exception)->toBe(['execution_id' => $executionId, 'trace' => null]);
 })->with([
@@ -188,7 +170,7 @@ it('links a fatal error, which Nightwatch sends without an execution, to its tra
 it('keeps a JSON-string field that is not JSON as sent', function () {
     ingest([syntheticRecord(RecordType::LOG)->with(['context' => '{"order":'])]);
 
-    [$log] = selectFromStore("SELECT context, json_type(data, '$.extra') AS extra FROM logs");
+    [$log] = storeRows("SELECT context, json_type(data, '$.extra') AS extra FROM logs");
 
     expect($log)->toBe(['context' => '{"order":', 'extra' => 'object']);
 });
@@ -196,7 +178,7 @@ it('keeps a JSON-string field that is not JSON as sent', function () {
 it('keeps an unknown field in data under its wire name, even one named like a column', function () {
     ingest([syntheticRecord(RecordType::LOG)->with(['duration' => 5, 'colour' => 'red'])]);
 
-    [$log] = selectFromStore("SELECT data ->> '$.duration' AS data_duration, data ->> '$.colour' AS colour, duration FROM records");
+    [$log] = storeRows("SELECT data ->> '$.duration' AS data_duration, data ->> '$.colour' AS colour, duration FROM records");
 
     expect($log)->toBe(['data_duration' => 5, 'colour' => 'red', 'duration' => null]);
 });
@@ -204,7 +186,7 @@ it('keeps an unknown field in data under its wire name, even one named like a co
 it('stores a record of an unknown type with its common columns filled from the wire and the rest in data', function () {
     ingest([syntheticRecord(RecordType::QUEUED_JOB)->with(['t' => 'future-type', 'timestamp' => 1767225600.25, 'duration' => 5, 'job_id' => 'job-1', 'user' => '7', 'colour' => 'red'])->without('name', 'connection', 'queue')]);
 
-    [$record] = selectFromStore('SELECT type, started_at, duration, group_hash, trace_id, execution_id, source, job_id, user_id, deploy, server, data FROM records');
+    [$record] = storeRows('SELECT type, started_at, duration, group_hash, trace_id, execution_id, source, job_id, user_id, deploy, server, data FROM records');
 
     expect($record)->toBe([
         'type' => 'future-type',

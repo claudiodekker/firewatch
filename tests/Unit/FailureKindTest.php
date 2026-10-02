@@ -3,7 +3,7 @@
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 
-test('a failure is classified by its SQLite result code, or by the kind the store gave it', function (Throwable $exception, FailureKind $kind) {
+it('classifies a failure by its SQLite result code, or by the kind the store gave it', function (Throwable $exception, FailureKind $kind) {
     expect(FailureKind::of($exception))->toBe($kind);
 })->with([
     'busy' => [new SQLite3Exception('database is locked', 5), FailureKind::BUSY],

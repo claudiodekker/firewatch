@@ -2,13 +2,31 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 /**
  * @internal
  */
 class Instant
 {
+    /**
+     * Get the clock's current moment as Unix seconds with microseconds.
+     */
+    public static function now(): float
+    {
+        return self::of(Date::now());
+    }
+
+    /**
+     * Get a moment as Unix seconds with microseconds.
+     */
+    public static function of(CarbonInterface $moment): float
+    {
+        return (float) $moment->format('U.u');
+    }
+
     /**
      * Format Unix seconds as local time in the timezone, in full, so that it can be read back and passed as a boundary.
      */

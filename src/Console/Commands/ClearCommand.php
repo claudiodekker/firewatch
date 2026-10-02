@@ -4,21 +4,26 @@ namespace ClaudioDekker\Firewatch\Console\Commands;
 
 use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Console\Concerns\ReadsFlags;
 use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
+use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Number;
-use Throwable;
+use SQLite3Exception;
 
 /**
- * @internal
+ * @api
  */
 class ClearCommand extends Command
 {
+    use ReadsFlags;
+
     /**
      * The name and signature of the console command.
      *
@@ -44,7 +49,7 @@ class ClearCommand extends Command
             return self::FAILURE;
         }
 
-        if ($this->option('drop') && $type !== null) {
+        if ($this->flag('drop') && $type !== null) {
             $this->error(__('firewatch::messages.clear.drop_with_type'));
 
             return self::FAILURE;
@@ -53,7 +58,7 @@ class ClearCommand extends Command
         $unusable = $clear->unusable();
 
         // A dropped store may be damaged or of another schema version, which is what a drop is for.
-        $rebuildable = $this->option('drop') && in_array($unusable?->state, [StoreState::SCHEMA_MISMATCH, StoreState::CORRUPT], true);
+        $rebuildable = $this->flag('drop') && $unusable?->state->isRebuildable() === true;
 
         if ($unusable !== null && ! $rebuildable) {
             return $this->refuse($unusable, $configuration->database);
@@ -63,27 +68,32 @@ class ClearCommand extends Command
             return self::FAILURE;
         }
 
-        if ($this->option('drop')) {
+        if ($this->flag('drop')) {
             return $this->drop($clear, $unusable?->state, $configuration->database);
         }
 
-        try {
-            $result = $clear->clear($type);
-        } catch (Throwable $exception) {
-            if (FailureKind::of($exception) !== FailureKind::BUSY) {
-                throw $exception;
-            }
+        $result = $this->unlessBusy(fn () => $clear->clear($type));
 
-            $this->error(__('firewatch::messages.clear.busy'));
-
+        if ($result === null) {
             return self::FAILURE;
         }
 
-        $sizes = ['before' => Number::fileSize($result['before'], precision: 1), 'after' => Number::fileSize($result['after'], precision: 1)];
+        $sizes = [
+            'before' => Number::fileSize($result['before'], precision: 1),
+            'after' => Number::fileSize($result['after'], precision: 1),
+        ];
 
         $this->line($type === null
-            ? __('firewatch::messages.clear.cleared', ['records' => number_format($result['records']), 'users' => number_format($result['users']), ...$sizes])
-            : __('firewatch::messages.clear.cleared_type', ['records' => number_format($result['records']), 'type' => $type->value, ...$sizes]));
+            ? __('firewatch::messages.clear.cleared', [
+                'records' => number_format($result['records']),
+                'users' => number_format($result['users']),
+                ...$sizes,
+            ])
+            : __('firewatch::messages.clear.cleared_type', [
+                'records' => number_format($result['records']),
+                'type' => $type->value,
+                ...$sizes,
+            ]));
 
         if ($result['truncated']) {
             $this->line(__('firewatch::messages.clear.log_in_use'));
@@ -97,27 +107,48 @@ class ClearCommand extends Command
      */
     protected function drop(ClearStore $clear, ?StoreState $state, string $path): int
     {
-        try {
-            $result = $clear->drop($state);
-        } catch (Throwable $exception) {
-            if (FailureKind::of($exception) !== FailureKind::BUSY) {
-                throw $exception;
-            }
+        $result = $this->unlessBusy(fn () => $clear->drop($state));
 
-            $this->error(__('firewatch::messages.clear.busy'));
-
+        if ($result === null) {
             return self::FAILURE;
         }
 
         $this->line($result['damaged']
             ? __('firewatch::messages.clear.replaced_damaged', ['file' => basename($path).'.corrupt'])
-            : __('firewatch::messages.clear.rebuilt', ['path' => $path, 'before' => Number::fileSize($result['before'], precision: 1), 'after' => Number::fileSize($result['after'], precision: 1)]));
+            : __('firewatch::messages.clear.rebuilt', [
+                'path' => $path,
+                'before' => Number::fileSize($result['before'], precision: 1),
+                'after' => Number::fileSize($result['after'], precision: 1),
+            ]));
 
         if ($result['truncated']) {
             $this->line(__('firewatch::messages.clear.log_in_use'));
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Run a clear or a drop, and say so and get null when the store stays busy for the whole wait.
+     *
+     * @template TResult of array
+     *
+     * @param  Closure(): TResult  $action
+     * @return TResult|null
+     */
+    protected function unlessBusy(Closure $action): ?array
+    {
+        try {
+            return $action();
+        } catch (SQLite3Exception|StoreFailure $exception) {
+            if (FailureKind::of($exception) !== FailureKind::BUSY) {
+                throw $exception;
+            }
+
+            $this->error(__('firewatch::messages.clear.busy'));
+
+            return null;
+        }
     }
 
     /**
@@ -150,7 +181,7 @@ class ClearCommand extends Command
      */
     protected function confirmed(?RecordType $type, string $path): bool
     {
-        if ($this->option('force')) {
+        if ($this->flag('force')) {
             return true;
         }
 
@@ -161,9 +192,12 @@ class ClearCommand extends Command
         }
 
         $question = match (true) {
-            (bool) $this->option('drop') => __('firewatch::messages.clear.confirm_drop', ['path' => $path]),
+            $this->flag('drop') => __('firewatch::messages.clear.confirm_drop', ['path' => $path]),
             $type === null => __('firewatch::messages.clear.confirm', ['path' => $path]),
-            default => __('firewatch::messages.clear.confirm_type', ['path' => $path, 'type' => $type->value]),
+            default => __('firewatch::messages.clear.confirm_type', [
+                'path' => $path,
+                'type' => $type->value,
+            ]),
         };
 
         if ($this->confirm($question, false)) {
@@ -187,10 +221,16 @@ class ClearCommand extends Command
         }
 
         $this->error(match ($unusable->state) {
-            StoreState::SCHEMA_MISMATCH => __('firewatch::messages.clear.schema', ['found' => (string) $unusable->found, 'expected' => Schema::VERSION]),
+            StoreState::SCHEMA_MISMATCH => __('firewatch::messages.clear.schema', [
+                'found' => (string) $unusable->found,
+                'expected' => Schema::VERSION,
+            ]),
             StoreState::CORRUPT => __('firewatch::messages.clear.damaged'),
             StoreState::FOREIGN => __('firewatch::messages.clear.foreign', ['path' => $path]),
-            StoreState::UNAVAILABLE => __('firewatch::messages.clear.sqlite', ['version' => (string) $unusable->found, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]),
+            StoreState::UNAVAILABLE => __('firewatch::messages.clear.sqlite', [
+                'version' => (string) $unusable->found,
+                'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+            ]),
             StoreState::BUSY => __('firewatch::messages.clear.busy'),
         });
 

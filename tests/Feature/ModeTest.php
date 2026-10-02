@@ -59,10 +59,10 @@ it('writes no Nightwatch key when stepped aside', function () {
 });
 
 it('ignores the NIGHTWATCH_ variables for the keys it writes', function (bool $enabled, array $expected) {
-    setEnvironmentVariable('NIGHTWATCH_ENABLED', $enabled ? 'false' : 'true');
-    setEnvironmentVariable('NIGHTWATCH_TOKEN', 'application-token');
-    setEnvironmentVariable('NIGHTWATCH_INGEST_URI', 'ingest.example.com:2407');
-    setEnvironmentVariable('NIGHTWATCH_INGEST_EVENT_BUFFER', '7');
+    setEnvironmentVariable(name: 'NIGHTWATCH_ENABLED', value: $enabled ? 'false' : 'true');
+    setEnvironmentVariable(name: 'NIGHTWATCH_TOKEN', value: 'application-token');
+    setEnvironmentVariable(name: 'NIGHTWATCH_INGEST_URI', value: 'ingest.example.com:2407');
+    setEnvironmentVariable(name: 'NIGHTWATCH_INGEST_EVENT_BUFFER', value: '7');
     config()->set('nightwatch', []);
     config()->set('firewatch.enabled', $enabled);
 

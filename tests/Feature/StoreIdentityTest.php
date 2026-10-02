@@ -2,7 +2,6 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
-use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -13,7 +12,7 @@ function identityConnection(Writer $writer): SQLite3
 }
 
 /**
- * Register Firewatch with a writer on a SQLite release without the WAL-reset bug, which is the one that keeps its connection.
+ * Register Firewatch with a writer that keeps its connection.
  */
 function identityWriter(?Closure $pid = null): Writer
 {
@@ -36,18 +35,7 @@ function identityStorePath(): string
  */
 function identityCacheKeys(): array
 {
-    $read = function (SQLite3 $connection) {
-        $result = $connection->query('SELECT key FROM cache_events ORDER BY id');
-        $keys = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $keys[] = $row['key'];
-        }
-
-        return $keys;
-    };
-
-    return app(Reader::class)->snapshot($read);
+    return array_column(storeRows('SELECT key FROM cache_events ORDER BY id'), 'key');
 }
 
 /**
@@ -60,7 +48,7 @@ function identityWriteBatch(string $key): void
 }
 
 /**
- * Put another store holding a different batch where the store is, as a deploy or a restore would, leaving the old file unlinked.
+ * Replace the store file with another one, as a deploy or a restore would.
  */
 function replaceStore(string $key): void
 {

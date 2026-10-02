@@ -67,6 +67,16 @@ class Answer
     }
 
     /**
+     * Create a new answer that holds no result and states why.
+     *
+     * @param  list<array<string, mixed>>  $blindSpots
+     */
+    public static function empty(string $tool, float $now, string $timezone, Window $window, Emptiness $empty, Coverage $coverage, array $blindSpots): self
+    {
+        return new self(tool: $tool, now: $now, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+    }
+
+    /**
      * Get the answer in the requested format: one text block of markdown, or the envelope as structured content beside the same JSON as one text block.
      */
     public function response(AnswerFormat $format): Response|ResponseFactory
@@ -99,12 +109,26 @@ class Answer
         if ($this->bounded === null) {
             [$result, $truncated] = Bounds::capCells($this->result, $this->truncated);
 
-            [$fitted, $truncated] = Bounds::fitAnswer($result, $truncated, fn (array $result, array $truncated) => mb_strlen(json_encode($this->envelope($result, $truncated), RecordMapper::JSON_FLAGS)));
+            [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $this->size(...));
+            $recounted = Bounds::recountCaps(original: $this->result, fitted: $fitted, truncated: $truncated);
 
-            $this->bounded = [$fitted, Bounds::recountCaps($this->result, $fitted, $truncated)];
+            $this->bounded = [$fitted, $recounted];
         }
 
         return $this->bounded;
+    }
+
+    /**
+     * Get the length in characters of the envelope for a result and truncated entries.
+     *
+     * @param  array<string, mixed>  $result
+     * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
+     */
+    protected function size(array $result, array $truncated): int
+    {
+        $envelope = $this->envelope($result, $truncated);
+
+        return mb_strlen(json_encode($envelope, RecordMapper::JSON_FLAGS));
     }
 
     /**
@@ -146,7 +170,10 @@ class Answer
             "## {$this->tool}",
             $this->summary,
             $this->window->line(),
-            __('firewatch::messages.store_clock', ['time' => Instant::format($this->now, $this->timezone), 'epoch' => Instant::epoch($this->now)]),
+            __('firewatch::messages.store_clock', [
+                'time' => Instant::format($this->now, $this->timezone),
+                'epoch' => Instant::epoch($this->now),
+            ]),
         ];
 
         if ($this->empty !== null) {
@@ -158,11 +185,16 @@ class Answer
         $lines[] = $this->coverage->line($this->timezone);
 
         foreach ($truncated as $entry) {
-            $lines[] = __(match (true) {
-                $entry['reason'] === 'cap' => 'firewatch::messages.truncated_cap',
+            $key = match (true) {
+                $entry['reason'] === TruncationReason::CAP->value => 'firewatch::messages.truncated_cap',
                 $entry['matched'] === null => 'firewatch::messages.truncated_unknown',
                 default => 'firewatch::messages.truncated',
-            }, $entry);
+            };
+
+            $lines[] = __($key, [
+                ...$entry,
+                'characters' => number_format(Bounds::CELL_CHARACTERS),
+            ]);
         }
 
         foreach ($this->notes as $note) {
@@ -170,7 +202,10 @@ class Answer
         }
 
         foreach ($this->blindSpots as $blindSpot) {
-            $lines[] = __('firewatch::messages.blind_spot', ['id' => $blindSpot['id'], 'message' => $blindSpot['message']]);
+            $lines[] = __('firewatch::messages.blind_spot', [
+                'id' => $blindSpot['id'],
+                'message' => $blindSpot['message'],
+            ]);
         }
 
         if ($this->next !== []) {

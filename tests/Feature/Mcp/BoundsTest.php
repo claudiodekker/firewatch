@@ -8,6 +8,16 @@ use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\Window;
 
+function capHow(): string
+{
+    return __('firewatch::messages.cap_how', ['characters' => '2,000', 'next' => 2001]);
+}
+
+function sizeHow(): string
+{
+    return __('firewatch::messages.size_how', ['characters' => '24,000']);
+}
+
 function boundedAnswer(array $result, array $truncated = []): Answer
 {
     return new Answer(
@@ -94,8 +104,8 @@ describe('cells', function () {
         ]);
 
         expect($answer->toArray()['truncated'])->toBe([
-            ['section' => 'plain', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how')],
-            ['section' => 'rows', 'shown' => 3, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how')],
+            ['section' => 'plain', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => capHow()],
+            ['section' => 'rows', 'shown' => 3, 'matched' => null, 'reason' => 'cap', 'how' => capHow()],
         ]);
     });
 
@@ -103,7 +113,7 @@ describe('cells', function () {
         $markdown = boundedAnswer(['plain' => str_repeat('x', 2001)])->toMarkdown();
 
         expect($markdown)->toContain('- **plain**: '.str_repeat('x', 2000).'... [truncated, 1 characters]')
-            ->and($markdown)->toContain('Truncated: plain had cells cut at 2,000 characters, 1 in all (cap). '.__('firewatch::messages.cap_how'));
+            ->and($markdown)->toContain('Truncated: plain had cells cut at 2,000 characters, 1 in all (cap). '.capHow());
     });
 
     it('does not cut a key or a number', function () {
@@ -133,7 +143,7 @@ describe('the answer budget', function () {
             ->and(jsonCharacters($answer) + mb_strlen(json_encode(bulkyRows(1)[0])))->toBeGreaterThan(24000)
             ->and($envelope['result']['second'])->toBe(array_slice(bulkyRows(30), 0, count($envelope['result']['second'])))
             ->and($envelope['truncated'])->toBe([
-                ['section' => 'second', 'shown' => count($envelope['result']['second']), 'matched' => 30, 'reason' => 'size', 'how' => __('firewatch::messages.size_how')],
+                ['section' => 'second', 'shown' => count($envelope['result']['second']), 'matched' => 30, 'reason' => 'size', 'how' => sizeHow()],
             ]);
     });
 
@@ -181,7 +191,7 @@ describe('the answer budget', function () {
         );
 
         expect($answer->toArray()['truncated'])->toHaveCount(1)
-            ->and($answer->toArray()['truncated'][0])->toMatchArray(['section' => 'second', 'matched' => 45, 'reason' => 'size', 'how' => __('firewatch::messages.size_how')]);
+            ->and($answer->toArray()['truncated'][0])->toMatchArray(['section' => 'second', 'matched' => 45, 'reason' => 'size', 'how' => sizeHow()]);
     });
 
     it('keeps a cut by the limit that the budget did not touch', function () {
@@ -195,7 +205,7 @@ describe('the answer budget', function () {
         $kept = count($answer->toArray()['result']['second']);
 
         expect(substr_count($answer->toMarkdown(), "\n| "))->toBe(5 + $kept + 4)
-            ->and($answer->toMarkdown())->toContain("Truncated: second shows {$kept} of 30 (size). ".__('firewatch::messages.size_how'));
+            ->and($answer->toMarkdown())->toContain("Truncated: second shows {$kept} of 30 (size). ".sizeHow());
     });
 
     it('keeps an answer of exactly 24,000 characters and drops a row from one of 24,001', function () {
@@ -223,7 +233,7 @@ describe('the answer budget', function () {
 
         expect($kept)->toBeLessThan(30)
             ->and($envelope['truncated'])->toHaveCount(2)
-            ->and($envelope['truncated'])->toContain(['section' => 'second', 'shown' => $kept, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how')])
+            ->and($envelope['truncated'])->toContain(['section' => 'second', 'shown' => $kept, 'matched' => null, 'reason' => 'cap', 'how' => capHow()])
             ->and(array_column($envelope['truncated'], 'reason'))->toEqualCanonicalizing(['cap', 'size']);
     });
 });

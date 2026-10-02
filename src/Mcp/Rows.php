@@ -34,7 +34,9 @@ class Rows
      */
     public static function bound(array $fetched, int $limit): self
     {
-        return new self(array_slice($fetched, 0, $limit), count($fetched) > $limit);
+        $kept = array_slice($fetched, 0, $limit);
+
+        return new self(rows: $kept, more: count($fetched) > $limit);
     }
 
     /**
@@ -44,8 +46,16 @@ class Rows
      */
     public function truncation(string $section, string $how): ?array
     {
-        return $this->more
-            ? ['section' => $section, 'shown' => count($this->rows), 'matched' => null, 'reason' => 'limit', 'how' => $how]
-            : null;
+        if (! $this->more) {
+            return null;
+        }
+
+        return [
+            'section' => $section,
+            'shown' => count($this->rows),
+            'matched' => null,
+            'reason' => TruncationReason::LIMIT->value,
+            'how' => $how,
+        ];
     }
 }

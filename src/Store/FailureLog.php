@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use RuntimeException;
 use SQLite3Exception;
 use Throwable;
@@ -85,7 +86,11 @@ class FailureLog
             $entry = json_decode($line, associative: true);
 
             if (is_array($entry) && is_numeric($entry['at'] ?? null) && is_string($entry['kind'] ?? null) && is_int($entry['dropped'] ?? null) && $entry['dropped'] > 0) {
-                $dropped[] = ['at' => (float) $entry['at'], 'kind' => $entry['kind'], 'dropped' => $entry['dropped']];
+                $dropped[] = [
+                    'at' => (float) $entry['at'],
+                    'kind' => $entry['kind'],
+                    'dropped' => $entry['dropped'],
+                ];
             }
         }
 
@@ -119,7 +124,7 @@ class FailureLog
     protected function line(Throwable $exception, int $dropped): string
     {
         return json_encode([
-            'at' => (float) now()->format('U.u'),
+            'at' => Instant::now(),
             'kind' => FailureKind::of($exception)->value,
             'code' => $exception instanceof SQLite3Exception ? $exception->getCode() : null,
             'message' => $exception->getMessage(),

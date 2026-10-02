@@ -5,7 +5,7 @@ namespace ClaudioDekker\Firewatch\Console\Commands;
 use Illuminate\Console\Command;
 
 /**
- * @internal
+ * @api
  */
 class DoctorCommand extends Command
 {

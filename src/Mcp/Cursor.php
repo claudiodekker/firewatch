@@ -25,7 +25,7 @@ class Cursor
         public readonly array $last,
         public readonly ?float $since,
         public readonly ?float $until,
-        protected readonly string $createdAt,
+        protected readonly ?float $createdAt,
     ) {
         //
     }
@@ -36,9 +36,16 @@ class Cursor
      * @param  array<string, mixed>  $arguments
      * @param  array{value: int|float|null, occurrences: int, hash: string}  $last
      */
-    public static function make(string $tool, array $arguments, string $createdAt, array $last, ?float $since, ?float $until): string
+    public static function make(string $tool, array $arguments, ?float $createdAt, array $last, ?float $since, ?float $until): string
     {
-        $payload = json_encode(['tool' => $tool, 'arguments' => self::hash($arguments), 'created_at' => $createdAt, 'last' => $last, 'since' => $since, 'until' => $until], JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
+        $payload = json_encode([
+            'tool' => $tool,
+            'arguments' => self::hash($arguments),
+            'created_at' => $createdAt,
+            'last' => $last,
+            'since' => $since,
+            'until' => $until,
+        ], JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
 
         return rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
     }
@@ -64,15 +71,19 @@ class Cursor
 
         $last = $fields['last'] ?? null;
 
-        if (! is_array($last) || ! array_key_exists('value', $last) || ! (is_int($last['value']) || is_float($last['value']) || $last['value'] === null) || ! is_int($last['occurrences'] ?? null) || ! is_string($last['hash'] ?? null) || ! is_string($fields['created_at'] ?? null)) {
+        if (! is_array($last) || ! array_key_exists('value', $last) || ! (is_int($last['value']) || is_float($last['value']) || $last['value'] === null) || ! is_int($last['occurrences'] ?? null) || ! is_string($last['hash'] ?? null) || ! array_key_exists('created_at', $fields)) {
             throw Refusal::badCursor($tool);
         }
 
         return new self(
-            ['value' => $last['value'], 'occurrences' => $last['occurrences'], 'hash' => $last['hash']],
-            self::instant($fields['since'] ?? null),
-            self::instant($fields['until'] ?? null),
-            $fields['created_at'],
+            last: [
+                'value' => $last['value'],
+                'occurrences' => $last['occurrences'],
+                'hash' => $last['hash'],
+            ],
+            since: self::instant($fields['since'] ?? null),
+            until: self::instant($fields['until'] ?? null),
+            createdAt: self::instant($fields['created_at']),
         );
     }
 
@@ -87,7 +98,7 @@ class Cursor
     /**
      * Fail unless the store is the one the cursor was made for: a rebuild starts the ids again, a clear does not.
      */
-    public function belongsTo(string $createdAt, string $tool): void
+    public function belongsTo(?float $createdAt, string $tool): void
     {
         if ($this->createdAt !== $createdAt) {
             throw Refusal::badCursor($tool);

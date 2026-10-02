@@ -91,7 +91,9 @@ class QueryBindings
             $values = array_values($event->connection->prepareBindings($event->bindings));
 
             return $this->fit(array_map($this->value(...), $values));
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            report($exception);
+
             return null;
         }
     }

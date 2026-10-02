@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
 use SQLite3Result;
 use SQLite3Stmt;
@@ -21,6 +22,51 @@ class Ranking
      * The records a group needs before its 95th percentile is shown.
      */
     public const P95_FLOOR = 20;
+
+    /**
+     * The nearest rank of the median, as a percentile.
+     */
+    protected const P50_RANK = 50;
+
+    /**
+     * The nearest rank of the 95th percentile, as a percentile.
+     */
+    protected const P95_RANK = 95;
+
+    /**
+     * The whole of a percentile scale.
+     */
+    protected const PERCENT = 100;
+
+    /**
+     * The decimals a failure percentage is rounded to.
+     */
+    protected const PERCENT_DECIMALS = 1;
+
+    /**
+     * The decimals a duration in milliseconds is rounded to.
+     */
+    protected const MILLISECOND_DECIMALS = 2;
+
+    /**
+     * The first HTTP status code that counts as a failure.
+     */
+    protected const FIRST_FAILED_STATUS_CODE = 400;
+
+    /**
+     * The status of a job attempt or scheduled task that failed.
+     */
+    protected const STATUS_FAILED = 'failed';
+
+    /**
+     * The status of a job attempt that was released back to the queue.
+     */
+    protected const STATUS_RELEASED = 'released';
+
+    /**
+     * The status of a scheduled task that was skipped.
+     */
+    protected const STATUS_SKIPPED = 'skipped';
 
     /**
      * The key a record without a deploy has among the deploys of a breakdown, which no deploy string is.
@@ -59,10 +105,10 @@ class Ranking
     public static function failureDefinition(RecordType $type): ?string
     {
         return match ($type) {
-            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'status >= 400',
+            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'status >= '.self::FIRST_FAILED_STATUS_CODE,
             RecordType::COMMAND => 'exit_code <> 0',
-            RecordType::JOB_ATTEMPT => 'status is failed or released',
-            RecordType::SCHEDULED_TASK => 'status is failed',
+            RecordType::JOB_ATTEMPT => 'status is '.self::STATUS_FAILED.' or '.self::STATUS_RELEASED,
+            RecordType::SCHEDULED_TASK => 'status is '.self::STATUS_FAILED,
             default => null,
         };
     }
@@ -92,12 +138,16 @@ class Ranking
 
         usort($groups, fn (array $a, array $b) => self::compare($this->key($a, $orderedBy), $this->key($b, $orderedBy)));
 
+        $timedGroups = $this->hasDuration() ? $groups : [];
+        $untimedPerGroup = array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $timedGroups);
+        $untimed = array_sum($untimedPerGroup);
+
         return [
             'rows' => array_map($this->row(...), $groups),
             'keys' => array_map(fn (array $group) => $this->key($group, $orderedBy), $groups),
             'records' => $records,
             'withoutGroup' => $withoutGroup,
-            'untimed' => array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $this->hasDuration() ? $groups : [])),
+            'untimed' => $untimed,
             'orderedBy' => $orderedBy,
         ];
     }
@@ -123,7 +173,12 @@ class Ranking
 
         usort($shown, fn (array $a, array $b) => ($a['wfirst'] <=> $b['wfirst']) ?: strcmp($a['hash'], $b['hash']));
 
-        return ['rows' => array_map($this->deployRow(...), $shown), 'matched' => count($deploys), 'records' => $records, 'label' => $label];
+        return [
+            'rows' => array_map($this->deployRow(...), $shown),
+            'matched' => count($deploys),
+            'records' => $records,
+            'label' => $label,
+        ];
     }
 
     /**
@@ -144,34 +199,61 @@ class Ranking
         $groups = [];
 
         foreach ($aggregates as $aggregate) {
-            $groups[$aggregate['group_hash']] = [...$aggregate, 'hash' => $aggregate['group_hash'], 'p50' => null, 'p95' => null, 'raw' => null, 'mem_p95' => null, 'mem_timed' => 0, 'first' => null, 'slowest' => null, 'label' => '', 'method' => null];
+            $groups[$aggregate['group_hash']] = [
+                ...$aggregate,
+                'hash' => $aggregate['group_hash'],
+                'p50' => null,
+                'p95' => null,
+                'raw' => null,
+                'mem_p95' => null,
+                'mem_timed' => 0,
+                'first' => null,
+                'slowest' => null,
+                'label' => '',
+                'method' => null,
+            ];
         }
 
         foreach ($this->percentiles($connection, 'd') as $hash => $percentiles) {
-            $groups[$hash] = [...$groups[$hash], 'p50' => $percentiles['p50'], 'p95' => $percentiles['p95'], 'raw' => $percentiles['raw']];
+            $groups[$hash] = [
+                ...$groups[$hash],
+                'p50' => $percentiles['p50'],
+                'p95' => $percentiles['p95'],
+                'raw' => $percentiles['raw'],
+            ];
         }
 
         if ($executions) {
             foreach ($this->percentiles($connection, 'm') as $hash => $percentiles) {
-                $groups[$hash] = [...$groups[$hash], 'mem_p95' => $percentiles['p95'], 'mem_timed' => $percentiles['n']];
+                $groups[$hash] = [
+                    ...$groups[$hash],
+                    'mem_p95' => $percentiles['p95'],
+                    'mem_timed' => $percentiles['n'],
+                ];
             }
         }
 
-        foreach ($this->group !== null ? [] : $this->query($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash', filtered: false) as $row) {
+        $firsts = $this->group !== null ? [] : $this->query($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash', filtered: false);
+
+        foreach ($firsts as $row) {
             if (isset($groups[$row['group_hash']])) {
                 $groups[$row['group_hash']]['first'] = $row['first'];
             }
         }
 
         if ($this->hasDuration() && $this->group === null) {
-            foreach ($this->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1') as $row) {
+            $slowest = $this->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1');
+
+            foreach ($slowest as $row) {
                 $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
             }
         }
 
         $method = $this->hasMethod() ? ', method' : '';
 
-        foreach ($this->query($connection, "SELECT group_hash, label{$method} FROM (SELECT group_hash, label{$method}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1") as $row) {
+        $latest = $this->query($connection, "SELECT group_hash, label{$method} FROM (SELECT group_hash, label{$method}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
+
+        foreach ($latest as $row) {
             $groups[$row['group_hash']]['label'] = is_string($row['label']) ? $row['label'] : '';
             $groups[$row['group_hash']]['method'] = $row['method'] ?? null;
         }
@@ -188,7 +270,11 @@ class Ranking
     {
         $percentiles = [];
 
-        $rows = $this->query($connection, 'SELECT group_hash, n, max(CASE WHEN rn = max(1, (n * 50 + 99) / 100) THEN v END) AS p50, max(CASE WHEN rn = max(1, (n * 95 + 99) / 100) THEN v END) AS p95, group_concat(CASE WHEN n < '.self::P50_FLOOR." THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL) GROUP BY group_hash");
+        $p50Rank = self::nearestRank(self::P50_RANK);
+        $p95Rank = self::nearestRank(self::P95_RANK);
+        $p50Floor = self::P50_FLOOR;
+
+        $rows = $this->query($connection, "SELECT group_hash, n, max(CASE WHEN rn = {$p50Rank} THEN v END) AS p50, max(CASE WHEN rn = {$p95Rank} THEN v END) AS p95, group_concat(CASE WHEN n < {$p50Floor} THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL) GROUP BY group_hash");
 
         foreach ($rows as $row) {
             /** @var list<int|float>|null $raw */
@@ -198,10 +284,31 @@ class Ranking
                 sort($raw);
             }
 
-            $percentiles[$row['group_hash']] = ['n' => $row['n'], 'p50' => $row['p50'], 'p95' => $row['p95'], 'raw' => $raw];
+            $percentiles[$row['group_hash']] = [
+                'n' => $row['n'],
+                'p50' => $row['p50'],
+                'p95' => $row['p95'],
+                'raw' => $raw,
+            ];
         }
 
         return $percentiles;
+    }
+
+    /**
+     * Get the SQL expression of the row a nearest-rank percentile of `n` values takes.
+     */
+    protected static function nearestRank(int $percentile): string
+    {
+        return 'max(1, (n * '.$percentile.' + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
+    }
+
+    /**
+     * Get microseconds as milliseconds rounded for an answer, or null for none.
+     */
+    protected static function milliseconds(int|float|null $microseconds): ?float
+    {
+        return $microseconds === null ? null : round($microseconds / Microseconds::PER_MILLISECOND, self::MILLISECOND_DECIMALS);
     }
 
     /**
@@ -232,7 +339,11 @@ class Ranking
      */
     protected function key(array $group, Measure $measure): array
     {
-        return ['value' => $this->value($group, $measure), 'occurrences' => $group['occurrences'], 'hash' => $group['hash']];
+        return [
+            'value' => $this->value($group, $measure),
+            'occurrences' => $group['occurrences'],
+            'hash' => $group['hash'],
+        ];
     }
 
     /**
@@ -268,7 +379,10 @@ class Ranking
      */
     protected function row(array $group): array
     {
-        $row = ['group' => $group['hash'], 'label' => $this->label($group)];
+        $row = [
+            'group' => $group['hash'],
+            'label' => $this->label($group),
+        ];
 
         if ($this->hasMethod()) {
             $row['method'] = $group['method'];
@@ -279,31 +393,45 @@ class Ranking
         $withheld = [];
 
         if ($this->hasDuration()) {
-            $ms = fn (int|float|null $value) => $value === null ? null : round($value / 1000, 2);
             $p50 = $this->floored($group, 'p50_ms', $group['timed'], self::P50_FLOOR, $withheld);
             $p95 = $this->floored($group, 'p95_ms', $group['timed'], self::P95_FLOOR, $withheld);
 
-            $row += ['min_ms' => $ms($group['min']), 'p50_ms' => $ms($p50), 'avg_ms' => $ms($group['avg']), 'p95_ms' => $ms($p95), 'max_ms' => $ms($group['max']), 'total_ms' => $ms($group['total'])];
+            $row += [
+                'min_ms' => self::milliseconds($group['min']),
+                'p50_ms' => self::milliseconds($p50),
+                'avg_ms' => self::milliseconds($group['avg']),
+                'p95_ms' => self::milliseconds($p95),
+                'max_ms' => self::milliseconds($group['max']),
+                'total_ms' => self::milliseconds($group['total']),
+            ];
         }
 
         if ($this->isExecution()) {
             $mb = fn (int|float|null $value) => $value === null ? null : round($value / self::MEGABYTE, 1);
             $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
 
-            $row += ['p95_memory_mb' => $mb($memory), 'max_memory_mb' => $mb($group['mem_max']), 'queries' => $group['queries'] ?? null];
+            $row += [
+                'p95_memory_mb' => $mb($memory),
+                'max_memory_mb' => $mb($group['mem_max']),
+                'queries' => $group['queries'] ?? null,
+            ];
         }
 
         $failed = $group['failed_of'] ?? 0;
 
         $row += [
-            'failure_pct' => $failed > 0 ? round(100 * $group['failed'] / $failed, 1) : null,
+            'failure_pct' => $failed > 0 ? round(self::PERCENT * $group['failed'] / $failed, self::PERCENT_DECIMALS) : null,
             'first_seen_at' => $group['first'],
             'last_seen_at' => $group['last'],
             'deploys' => $group['deploys'],
         ];
 
         if ($this->hasDuration()) {
-            $row += ['slowest_execution_id' => $group['slowest'], 'withheld' => $withheld === [] ? null : $withheld, 'values_ms' => $group['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $group['raw'])];
+            $row += [
+                'slowest_execution_id' => $group['slowest'],
+                'withheld' => $withheld === [] ? null : $withheld,
+                'values_ms' => $group['raw'] === null ? null : array_map(self::milliseconds(...), $group['raw']),
+            ];
         }
 
         return $row;
@@ -317,21 +445,33 @@ class Ranking
      */
     protected function deployRow(array $deploy): array
     {
-        $row = ['deploy' => $deploy['hash'] === self::NO_DEPLOY ? __('firewatch::messages.rank_no_deploy') : $deploy['hash'], 'occurrences' => $deploy['occurrences']];
+        $row = [
+            'deploy' => $deploy['hash'] === self::NO_DEPLOY ? __('firewatch::messages.rank_no_deploy') : $deploy['hash'],
+            'occurrences' => $deploy['occurrences'],
+        ];
         $withheld = [];
 
         if ($this->hasDuration()) {
-            $ms = fn (int|float|null $value) => $value === null ? null : round($value / 1000, 2);
             $p50 = $this->floored($deploy, 'p50_ms', $deploy['timed'], self::P50_FLOOR, $withheld);
             $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], self::P95_FLOOR, $withheld);
 
-            $row += ['p50_ms' => $ms($p50), 'p95_ms' => $ms($p95), 'max_ms' => $ms($deploy['max'])];
+            $row += [
+                'p50_ms' => self::milliseconds($p50),
+                'p95_ms' => self::milliseconds($p95),
+                'max_ms' => self::milliseconds($deploy['max']),
+            ];
         }
 
-        $row += ['first_at' => $deploy['wfirst'], 'last_at' => $deploy['last']];
+        $row += [
+            'first_at' => $deploy['wfirst'],
+            'last_at' => $deploy['last'],
+        ];
 
         if ($this->hasDuration()) {
-            $row += ['withheld' => $withheld === [] ? null : $withheld, 'values_ms' => $deploy['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $deploy['raw'])];
+            $row += [
+                'withheld' => $withheld === [] ? null : $withheld,
+                'values_ms' => $deploy['raw'] === null ? null : array_map(self::milliseconds(...), $deploy['raw']),
+            ];
         }
 
         return $row;
@@ -352,7 +492,11 @@ class Ranking
         }
 
         if ($have > 0) {
-            $withheld[$name] = ['reason' => 'sample_too_small', 'have' => $have, 'needed' => $needed];
+            $withheld[$name] = [
+                'reason' => 'sample_too_small',
+                'have' => $have,
+                'needed' => $needed,
+            ];
         }
 
         return null;
@@ -403,10 +547,10 @@ class Ranking
     protected function failure(): ?string
     {
         return match ($this->type) {
-            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'CASE WHEN status_code IS NULL THEN NULL WHEN status_code >= 400 THEN 1 ELSE 0 END',
+            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'CASE WHEN status_code IS NULL THEN NULL WHEN status_code >= '.self::FIRST_FAILED_STATUS_CODE.' THEN 1 ELSE 0 END',
             RecordType::COMMAND => 'CASE WHEN exit_code IS NULL THEN NULL WHEN exit_code <> 0 THEN 1 ELSE 0 END',
-            RecordType::JOB_ATTEMPT => "CASE WHEN status IS NULL THEN NULL WHEN status IN ('failed', 'released') THEN 1 ELSE 0 END",
-            RecordType::SCHEDULED_TASK => "CASE WHEN status IS NULL THEN NULL WHEN status = 'failed' THEN 1 ELSE 0 END",
+            RecordType::JOB_ATTEMPT => "CASE WHEN status IS NULL THEN NULL WHEN status IN ('".self::STATUS_FAILED."', '".self::STATUS_RELEASED."') THEN 1 ELSE 0 END",
+            RecordType::SCHEDULED_TASK => "CASE WHEN status IS NULL THEN NULL WHEN status = '".self::STATUS_FAILED."' THEN 1 ELSE 0 END",
             default => null,
         };
     }
@@ -420,7 +564,7 @@ class Ranking
     {
         if ($filtered) {
             // A skipped scheduled task has no duration of its own: it never ran.
-            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = 'skipped' THEN NULL ELSE duration END" : ($this->hasDuration() ? 'duration' : 'NULL');
+            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".self::STATUS_SKIPPED."' THEN NULL ELSE duration END" : ($this->hasDuration() ? 'duration' : 'NULL');
             $columns = [$this->group === null ? 'group_hash' : 'COALESCE(deploy, char(1)) AS group_hash', 'id', 'started_at', 'deploy', 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
 
             if ($this->hasMethod()) {
