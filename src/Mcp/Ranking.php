@@ -23,6 +23,11 @@ class Ranking
     public const P95_FLOOR = 20;
 
     /**
+     * The key a record without a deploy has among the deploys of a breakdown, which no deploy string is.
+     */
+    protected const NO_DEPLOY = "\x01";
+
+    /**
      * The bytes in a megabyte of peak memory.
      */
     protected const MEGABYTE = 1048576;
@@ -42,6 +47,8 @@ class Ranking
         protected Measure $by,
         protected Window $window,
         protected ?string $deploy,
+        protected ?string $matching = null,
+        protected ?string $group = null,
     ) {
         //
     }
@@ -65,28 +72,58 @@ class Ranking
      *
      * When no group has enough records for the percentile, the order falls back to the maximum of the same quantity, and the answer says which measure ordered the rows.
      *
-     * @return array{rows: list<array<string, mixed>>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
+     * @return array{rows: list<array<string, mixed>>, keys: list<array{value: int|float|null, occurrences: int, hash: string}>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
      */
     public function read(SQLite3 $connection): array
     {
         [$records, $withoutGroup] = array_values($this->query($connection, 'SELECT count(*) AS records, count(*) FILTER (WHERE group_hash IS NULL) AS without FROM base')[0]);
 
         $groups = $this->groups($connection);
+
+        if ($this->matching !== null) {
+            $groups = array_values(array_filter($groups, fn (array $group) => mb_stripos($this->label($group), $this->matching) !== false));
+        }
+
         $orderedBy = $this->by;
 
         if (($fallback = $this->by->fallback()) !== null && $groups !== [] && array_filter($groups, fn (array $group) => $this->value($group, $this->by) !== null) === []) {
             $orderedBy = $fallback;
         }
 
-        usort($groups, fn (array $a, array $b) => $this->compare($a, $b, $orderedBy));
+        usort($groups, fn (array $a, array $b) => self::compare($this->key($a, $orderedBy), $this->key($b, $orderedBy)));
 
         return [
             'rows' => array_map($this->row(...), $groups),
+            'keys' => array_map(fn (array $group) => $this->key($group, $orderedBy), $groups),
             'records' => $records,
             'withoutGroup' => $withoutGroup,
             'untimed' => array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $this->hasDuration() ? $groups : [])),
             'orderedBy' => $orderedBy,
         ];
+    }
+
+    /**
+     * Read the deploys one group was recorded under in the window, in the order they were first seen, and only the most recent ones when there are more than the limit.
+     *
+     * @return array{rows: list<array<string, mixed>>, matched: int, records: int, label: string}
+     */
+    public function breakdown(SQLite3 $connection, int $limit): array
+    {
+        [$records] = array_values($this->query($connection, 'SELECT count(*) AS records FROM base')[0]);
+
+        $deploys = $this->groups($connection);
+        $label = '';
+
+        if ($deploys !== []) {
+            usort($deploys, fn (array $a, array $b) => $b['last'] <=> $a['last']);
+            $label = $this->label($deploys[0]);
+        }
+
+        $shown = array_slice($deploys, 0, $limit);
+
+        usort($shown, fn (array $a, array $b) => ($a['wfirst'] <=> $b['wfirst']) ?: strcmp($a['hash'], $b['hash']));
+
+        return ['rows' => array_map($this->deployRow(...), $shown), 'matched' => count($deploys), 'records' => $records, 'label' => $label];
     }
 
     /**
@@ -99,7 +136,7 @@ class Ranking
         $executions = $this->isExecution();
         $failure = $this->failure() !== null;
 
-        $aggregates = $this->query($connection, 'SELECT group_hash, count(*) AS occurrences, count(d) AS timed, min(d) AS min, avg(d) AS avg, max(d) AS max, sum(d) AS total, max(started_at) AS last, count(DISTINCT deploy) AS deploys'
+        $aggregates = $this->query($connection, 'SELECT group_hash, count(*) AS occurrences, count(d) AS timed, min(d) AS min, avg(d) AS avg, max(d) AS max, sum(d) AS total, max(started_at) AS last, min(started_at) AS wfirst, count(DISTINCT deploy) AS deploys'
             .($executions ? ', max(m) AS mem_max, sum(q) AS queries' : '')
             .($failure ? ', sum(f) AS failed, count(f) AS failed_of' : '')
             .' FROM base WHERE group_hash IS NOT NULL GROUP BY group_hash');
@@ -120,13 +157,13 @@ class Ranking
             }
         }
 
-        foreach ($this->query($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash', filtered: false) as $row) {
+        foreach ($this->group !== null ? [] : $this->query($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash', filtered: false) as $row) {
             if (isset($groups[$row['group_hash']])) {
                 $groups[$row['group_hash']]['first'] = $row['first'];
             }
         }
 
-        if ($this->hasDuration()) {
+        if ($this->hasDuration() && $this->group === null) {
             foreach ($this->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1') as $row) {
                 $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
             }
@@ -188,21 +225,39 @@ class Ranking
     }
 
     /**
-     * Order two groups worst first; a group without the value comes last, and ties go to the group with more records, then to the lower hash.
+     * Get the sort key of a group, which is also the identity a cursor resumes after.
      *
-     * @param  array<string, mixed>  $a
-     * @param  array<string, mixed>  $b
+     * @param  array<string, mixed>  $group
+     * @return array{value: int|float|null, occurrences: int, hash: string}
      */
-    protected function compare(array $a, array $b, Measure $measure): int
+    protected function key(array $group, Measure $measure): array
     {
-        $left = $this->value($a, $measure);
-        $right = $this->value($b, $measure);
+        return ['value' => $this->value($group, $measure), 'occurrences' => $group['occurrences'], 'hash' => $group['hash']];
+    }
 
+    /**
+     * Order two keys worst first; a group without the value comes last, and ties go to the group with more records, then to the lower hash.
+     *
+     * @param  array{value: int|float|null, occurrences: int, hash: string}  $a
+     * @param  array{value: int|float|null, occurrences: int, hash: string}  $b
+     */
+    public static function compare(array $a, array $b): int
+    {
         return match (true) {
-            $left === null && $right !== null => 1,
-            $left !== null && $right === null => -1,
-            default => ($right <=> $left) ?: ($b['occurrences'] <=> $a['occurrences']) ?: strcmp($a['hash'], $b['hash']),
+            $a['value'] === null && $b['value'] !== null => 1,
+            $a['value'] !== null && $b['value'] === null => -1,
+            default => ($b['value'] <=> $a['value']) ?: ($b['occurrences'] <=> $a['occurrences']) ?: strcmp($a['hash'], $b['hash']),
         };
+    }
+
+    /**
+     * Get the label of a group as it is shown and matched: requests that matched no route have one of their own.
+     *
+     * @param  array<string, mixed>  $group
+     */
+    protected function label(array $group): string
+    {
+        return $group['label'] === '' && $this->type === RecordType::REQUEST ? __('firewatch::messages.rank_no_route') : $group['label'];
     }
 
     /**
@@ -213,7 +268,7 @@ class Ranking
      */
     protected function row(array $group): array
     {
-        $row = ['group' => $group['hash'], 'label' => $group['label'] === '' && $this->type === RecordType::REQUEST ? __('firewatch::messages.rank_no_route') : $group['label']];
+        $row = ['group' => $group['hash'], 'label' => $this->label($group)];
 
         if ($this->hasMethod()) {
             $row['method'] = $group['method'];
@@ -249,6 +304,34 @@ class Ranking
 
         if ($this->hasDuration()) {
             $row += ['slowest_execution_id' => $group['slowest'], 'withheld' => $withheld === [] ? null : $withheld, 'values_ms' => $group['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $group['raw'])];
+        }
+
+        return $row;
+    }
+
+    /**
+     * Get the row of the breakdown for a deploy: a record without a deploy is the deploy that has no identity.
+     *
+     * @param  array<string, mixed>  $deploy
+     * @return array<string, mixed>
+     */
+    protected function deployRow(array $deploy): array
+    {
+        $row = ['deploy' => $deploy['hash'] === self::NO_DEPLOY ? __('firewatch::messages.rank_no_deploy') : $deploy['hash'], 'occurrences' => $deploy['occurrences']];
+        $withheld = [];
+
+        if ($this->hasDuration()) {
+            $ms = fn (int|float|null $value) => $value === null ? null : round($value / 1000, 2);
+            $p50 = $this->floored($deploy, 'p50_ms', $deploy['timed'], self::P50_FLOOR, $withheld);
+            $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], self::P95_FLOOR, $withheld);
+
+            $row += ['p50_ms' => $ms($p50), 'p95_ms' => $ms($p95), 'max_ms' => $ms($deploy['max'])];
+        }
+
+        $row += ['first_at' => $deploy['wfirst'], 'last_at' => $deploy['last']];
+
+        if ($this->hasDuration()) {
+            $row += ['withheld' => $withheld === [] ? null : $withheld, 'values_ms' => $deploy['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $deploy['raw'])];
         }
 
         return $row;
@@ -302,7 +385,7 @@ class Ranking
     /**
      * Get the field a group is labelled by.
      */
-    protected function label(): string
+    protected function labelField(): string
     {
         return match ($this->type) {
             RecordType::REQUEST => 'route_path',
@@ -338,7 +421,7 @@ class Ranking
         if ($filtered) {
             // A skipped scheduled task has no duration of its own: it never ran.
             $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = 'skipped' THEN NULL ELSE duration END" : ($this->hasDuration() ? 'duration' : 'NULL');
-            $columns = ['group_hash', 'id', 'started_at', 'deploy', 'execution_id', "{$duration} AS d", "{$this->label()} AS label"];
+            $columns = [$this->group === null ? 'group_hash' : 'COALESCE(deploy, char(1)) AS group_hash', 'id', 'started_at', 'deploy', 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
 
             if ($this->hasMethod()) {
                 $columns[] = 'method';
@@ -352,7 +435,7 @@ class Ranking
                 $columns[] = "{$this->failure()} AS f";
             }
 
-            $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->type->view().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy)) '.$sql;
+            $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->type->view().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
         }
 
         /** @var SQLite3Stmt $statement */
@@ -361,6 +444,7 @@ class Ranking
         if ($filtered) {
             $this->window->bind($statement);
             $statement->bindValue(':deploy', $this->deploy, $this->deploy === null ? SQLITE3_NULL : SQLITE3_TEXT);
+            $statement->bindValue(':group', $this->group, $this->group === null ? SQLITE3_NULL : SQLITE3_TEXT);
         }
 
         /** @var SQLite3Result $result */
