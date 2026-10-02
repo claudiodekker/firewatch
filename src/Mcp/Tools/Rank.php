@@ -133,7 +133,7 @@ class Rank extends Tool
             $this->measure($request, $explicit, $group);
         }
 
-        $cursor = $request->get('cursor') === null ? null : Cursor::read($request->get('cursor'), $this->name(), $request->all());
+        $cursor = $request->get('cursor') === null ? null : Cursor::read($request->get('cursor'), $this->name(), $request->all(), $this->key(...));
 
         $epoch = (float) $now->format('U.u');
         $timezone = config()->string('app.timezone');
@@ -212,6 +212,7 @@ class Rank extends Tool
      *
      * @param  list<array<string, mixed>>  $blindSpots
      * @param  list<string>  $filters
+     * @param  Cursor<array{value: int|float|null, occurrences: int, hash: string}>|null  $cursor
      * @param  array{rows: list<array<string, mixed>>, keys: list<array{value: int|float|null, occurrences: int, hash: string}>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
      */
     protected function ranking(Request $request, float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, array $filters, int $inWindow, RecordType $type, Measure $by, ?Cursor $cursor, string $createdAt, int $limit, array $ranked): Answer
@@ -314,13 +315,28 @@ class Rank extends Tool
     }
 
     /**
-     * Get a call of the tool as it is written, from its arguments.
+     * Read the key of the last row a cursor continues after, or null when it is none.
      *
-     * @param  array<string, mixed>  $arguments
+     * @param  array<string, mixed>  $last
+     * @return array{value: int|float|null, occurrences: int, hash: string}|null
      */
-    protected function call(array $arguments): string
+    protected function key(array $last): ?array
     {
-        return $this->name().'('.implode(', ', array_map(fn (string $name, mixed $value) => $name.': '.json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), array_keys($arguments), $arguments)).')';
+        $value = $last['value'] ?? null;
+
+        if (! array_key_exists('value', $last) || ! (is_int($value) || is_float($value) || $value === null)) {
+            return null;
+        }
+
+        if (! is_int($last['occurrences'] ?? null) || ! is_string($last['hash'] ?? null)) {
+            return null;
+        }
+
+        return [
+            'value' => $value,
+            'occurrences' => $last['occurrences'],
+            'hash' => $last['hash'],
+        ];
     }
 
     /**

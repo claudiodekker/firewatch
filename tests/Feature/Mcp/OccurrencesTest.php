@@ -1,12 +1,15 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
+use SQLite3;
 
 const OCC_AT = 1790776000.0;
 
@@ -485,3 +488,89 @@ it('judges a filter by the type the group is held by', function (array $argument
     'an outcome of a job group with its attempt type' => [['group' => str_repeat('b', 32), 'type' => 'job-attempt', 'outcome' => 'failed'], null],
     'an outcome the job-attempt type does not have' => [['group' => str_repeat('b', 32), 'type' => 'job-attempt', 'outcome' => 'skipped'], 'invalid_argument'],
 ]);
+
+function occCursor(array $envelope): string
+{
+    preg_match('/cursor: "([^"]+)"/', $envelope['truncated'][0]['how'], $matches);
+
+    return $matches[1];
+}
+
+function occCreatedAt(): string
+{
+    return (string) app(Reader::class)->snapshot(fn (SQLite3 $connection) => $connection->querySingle("SELECT value FROM meta WHERE key = 'created_at'"));
+}
+
+/**
+ * Five requests, three of them tied on every measure.
+ */
+function occFiveRequests(): void
+{
+    ingest([
+        occRecord(RecordType::REQUEST, ['route_path' => '/a', 'duration' => 30000, 'peak_memory_usage' => 3000000, 'queries' => 3, 'timestamp' => OCC_AT + 1]),
+        occRecord(RecordType::REQUEST, ['route_path' => '/b', 'duration' => 20000, 'peak_memory_usage' => 2000000, 'queries' => 2, 'timestamp' => OCC_AT + 2]),
+        occRecord(RecordType::REQUEST, ['route_path' => '/c', 'duration' => 20000, 'peak_memory_usage' => 2000000, 'queries' => 2, 'timestamp' => OCC_AT + 2]),
+        occRecord(RecordType::REQUEST, ['route_path' => '/d', 'duration' => 20000, 'peak_memory_usage' => 2000000, 'queries' => 2, 'timestamp' => OCC_AT + 2]),
+        occRecord(RecordType::REQUEST, ['route_path' => '/e', 'duration' => null, 'timestamp' => OCC_AT + 3]),
+    ]);
+}
+
+it('continues a cut list with the cursor until it is complete, in every order, ties included', function (string $order) {
+    occFiveRequests();
+    $arguments = ['type' => 'request', 'order' => $order, 'limit' => 2];
+
+    $first = Envelope::assert(Occurrences::class, $arguments);
+    $second = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+    $third = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($second)]);
+    $all = Envelope::assert(Occurrences::class, [...$arguments, 'limit' => 100]);
+    $names = fn (array $envelope) => array_column($envelope['result']['rows'], 'name');
+
+    expect([...$names($first), ...$names($second), ...$names($third)])->toBe($names($all))
+        ->and($names($third))->toHaveCount(1)
+        ->and($third['truncated'])->toBe([]);
+})->with(['recent', 'slowest', 'memory', 'queries']);
+
+it('keeps the window of the first page, and the call the cursor continues', function () {
+    occFiveRequests();
+    $arguments = ['type' => 'request', 'limit' => 2];
+
+    $first = Envelope::assert(Occurrences::class, $arguments);
+    ingest([occRecord(RecordType::REQUEST, ['route_path' => '/later', 'timestamp' => $first['now'] + 100])]);
+    $second = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+
+    expect(array_column($second['result']['rows'], 'name'))->toBe(['/c', '/b'])
+        ->and($first['truncated'][0]['how'])->toStartWith('Call occurrences again with this cursor to see the rest: occurrences(type: "request", limit: 2, cursor: "');
+});
+
+it('refuses a cursor that is no cursor, or of another tool or call, or from before a rebuild', function (Closure $arrange) {
+    occFiveRequests();
+    $arguments = ['type' => 'request', 'limit' => 2];
+    $cursor = occCursor(Envelope::assert(Occurrences::class, $arguments));
+
+    $changed = $arrange($cursor, $arguments);
+
+    FirewatchServer::tool(Occurrences::class, $changed)->assertHasErrors([__('firewatch::messages.bad_cursor', ['tool' => 'occurrences'])]);
+})->with([
+    'a string that is no cursor' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => 'not a cursor']],
+    'a cursor of another tool' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => Cursor::make('rank', $arguments, occCreatedAt(), ['value' => 1, 'id' => 1], null, null)]],
+    'a key that is not one' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => Cursor::make('occurrences', $arguments, occCreatedAt(), ['value' => 'x', 'id' => 1], null, null)]],
+    'another order' => [fn (string $cursor, array $arguments) => [...$arguments, 'order' => 'slowest', 'cursor' => $cursor]],
+    'another type' => [fn (string $cursor, array $arguments) => [...$arguments, 'type' => 'command', 'cursor' => $cursor]],
+    'a rebuilt store' => [function (string $cursor, array $arguments) {
+        test()->travel(1)->seconds();
+        app(Writer::class)->rebuild();
+        occFiveRequests();
+
+        return [...$arguments, 'cursor' => $cursor];
+    }],
+]);
+
+it('keeps a cursor valid across a clear', function () {
+    occFiveRequests();
+    $arguments = ['type' => 'request', 'limit' => 2];
+    $cursor = occCursor(Envelope::assert(Occurrences::class, $arguments));
+
+    $this->artisan('firewatch:clear', ['--force' => true])->assertExitCode(0);
+
+    expect(Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => $cursor])['empty']['kind'])->toBe('store_empty');
+});

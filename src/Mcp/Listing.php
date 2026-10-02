@@ -33,15 +33,15 @@ class Listing
     ];
 
     /**
-     * The sort key of each order, the store id breaking ties.
+     * The sort key of each order, which the store id breaks ties of, newest first. A record without the measure sorts last.
      *
      * @var array<string, string>
      */
     protected const ORDERS = [
-        'recent' => 'started_at DESC, id DESC',
-        'slowest' => 'COALESCE(duration, -1) DESC, id DESC',
-        'memory' => "COALESCE(json_extract(data, '$.peak_memory_usage'), -1) DESC, id DESC",
-        'queries' => "COALESCE(json_extract(data, '$.queries'), -1) DESC, id DESC",
+        'recent' => 'COALESCE(started_at, -1)',
+        'slowest' => 'COALESCE(duration, -1)',
+        'memory' => "COALESCE(json_extract(data, '$.peak_memory_usage'), -1)",
+        'queries' => "COALESCE(json_extract(data, '$.queries'), -1)",
     ];
 
     /**
@@ -137,19 +137,29 @@ class Listing
     }
 
     /**
-     * Read the first rows of the selection that the filters keep, one more than the limit.
+     * Read the first rows of the selection that the filters keep, one more than the limit, with the key of each in its order.
      *
-     * @return list<array<string, mixed>>
+     * @param  array{value: int|float, id: int}|null  $after  the key of the last row already shown
+     * @return array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}
      */
-    public function rows(SQLite3 $connection, int $limit, int|float|null $threshold): array
+    public function rows(SQLite3 $connection, int $limit, int|float|null $threshold, ?array $after = null): array
     {
         [$where, $bindings] = $this->where($threshold);
-        $order = self::ORDERS[$this->order];
+        $key = self::ORDERS[$this->order];
         $fetch = Rows::fetch($limit);
 
-        $rows = self::run($connection, "SELECT id, type, started_at, duration, source, execution_id, trace_id, group_hash, job_id, user_id, deploy, data FROM records WHERE {$where} ORDER BY {$order} LIMIT {$fetch}", $bindings, $this->window);
+        if ($after !== null) {
+            $where .= " AND ({$key} < :after_value OR ({$key} = :after_value AND id < :after_id))";
+            $bindings[':after_value'] = $after['value'];
+            $bindings[':after_id'] = $after['id'];
+        }
 
-        return array_map($this->row(...), $rows);
+        $records = self::run($connection, "SELECT id, type, started_at, duration, source, execution_id, trace_id, group_hash, job_id, user_id, deploy, data, {$key} AS sort_key FROM records WHERE {$where} ORDER BY {$key} DESC, id DESC LIMIT {$fetch}", $bindings, $this->window);
+
+        return [
+            'rows' => array_map($this->row(...), $records),
+            'keys' => array_map(fn (array $record) => ['value' => $record['sort_key'], 'id' => $record['id']], $records),
+        ];
     }
 
     /**

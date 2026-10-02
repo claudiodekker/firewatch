@@ -260,9 +260,11 @@ return [
 
     'occurrences_limit_argument' => 'The most rows to list, 1 to 100. Default 20.',
 
+    'occurrences_cursor_argument' => 'The cursor of a cut answer, from its truncated entry, with the same arguments.',
+
     'occurrences_summary' => 'Listed :count record, ordered by :order.|Listed :count records, ordered by :order.',
 
-    'occurrences_truncated_how' => 'Pass a larger `limit`, up to 100, or narrow the selection.',
+    'occurrences_cursor_how' => 'Call occurrences again with this cursor to see the rest: :call',
 
     'occurrences_baseline_withheld' => 'The :percentile baseline has :have records and needs :needed; no record was left out for being below it.',
 

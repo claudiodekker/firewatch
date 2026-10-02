@@ -10,6 +10,7 @@ use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
+use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Listing;
@@ -138,6 +139,7 @@ class Occurrences extends Tool
             'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
             'deploy' => $schema->string()->description(__('firewatch::messages.rank_deploy_argument')),
             'limit' => $schema->integer()->description(__('firewatch::messages.occurrences_limit_argument')),
+            'cursor' => $schema->string()->description(__('firewatch::messages.occurrences_cursor_argument')),
             ...$this->formatSchema($schema),
         ];
     }
@@ -174,15 +176,17 @@ class Occurrences extends Tool
         $with = $group !== null ? 'group' : (array_key_first(array_filter($ids)) ?? 'type');
         $filters = $this->filters($request, $type, $group !== null, $with, $order);
 
+        $cursor = $request->get('cursor') === null ? null : Cursor::read($request->get('cursor'), $this->name(), $request->all(), $this->key(...));
+
         $epoch = (float) $now->format('U.u');
         $timezone = config()->string('app.timezone');
-        $window = Window::read($request, $now, $timezone, $this->name());
+        $window = $cursor === null ? Window::read($request, $now, $timezone, $this->name()) : Window::between($cursor->since, $cursor->until, $timezone);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
         $typesRead = $type === null ? RecordType::events() : [$type];
         $structural = BlindSpots::for($typesRead, actor: $ids['user_id'] !== null);
 
         try {
-            $read = $this->reader->snapshot(function (SQLite3 $connection) use ($window, $order, $group, $type, $ids, $deploy, $filters, $limit, $with) {
+            $read = $this->reader->snapshot(function (SQLite3 $connection) use ($window, $order, $group, $type, $ids, $deploy, $filters, $limit, $with, $cursor) {
                 [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
                 $facts = StoreFacts::read($connection);
 
@@ -219,10 +223,10 @@ class Occurrences extends Tool
                 }
 
                 $threshold = $baseline['threshold'] ?? null;
-                $rows = $listing->rows($connection, $limit, $threshold);
+                $listed = $listing->rows($connection, $limit, $threshold, $cursor?->last);
                 $sites = $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null;
 
-                return compact('total', 'inWindow', 'oldest', 'newest', 'facts', 'baseline', 'rows', 'sites');
+                return compact('total', 'inWindow', 'oldest', 'newest', 'facts', 'baseline', 'listed', 'sites');
             });
         } catch (StoreUnusable $unusable) {
             $blindSpots = [...$structural, ...$this->conditions->for(null, $typesRead, $window)];
@@ -230,6 +234,10 @@ class Occurrences extends Tool
 
             return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable, $typesRead, History::unknown(...$retention)), $blindSpots);
         }
+
+        $createdAt = $read['facts']->meta['created_at'] ?? '';
+
+        $cursor?->belongsTo($createdAt, $this->name());
 
         $blindSpots = [...$structural, ...$this->conditions->for($read['facts'], $typesRead, $window)];
         $history = History::of($read['facts']->meta, $typesRead, ...$retention);
@@ -248,7 +256,7 @@ class Occurrences extends Tool
             return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
         }
 
-        if (! isset($read['rows']) || $read['rows'] === []) {
+        if (! isset($read['listed']) || $read['listed']['rows'] === []) {
             $given = [
                 'group' => $group,
                 'type' => $type?->value,
@@ -268,7 +276,7 @@ class Occurrences extends Tool
             return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
         }
 
-        $rows = Rows::bound($read['rows'], $limit);
+        $rows = Rows::bound($read['listed']['rows'], $limit);
         $result = [
             'order' => $order,
             'rows' => $rows->rows,
@@ -301,7 +309,18 @@ class Occurrences extends Tool
             'count' => $count,
             'order' => $order,
         ]);
-        $truncation = $rows->truncation('rows', __('firewatch::messages.occurrences_truncated_how'));
+        $truncation = null;
+
+        if ($rows->more) {
+            $last = $read['listed']['keys'][$count - 1];
+            $continued = Cursor::make($this->name(), $request->all(), $createdAt, $last, $window->since(), $window->until() ?? $epoch);
+            $arguments = [
+                ...array_diff_key($request->all(), ['cursor' => 0, 'format' => 0]),
+                'cursor' => $continued,
+            ];
+            $truncation = $rows->truncation('rows', __('firewatch::messages.occurrences_cursor_how', ['call' => $this->call($arguments)]));
+        }
+
         $first = $rows->rows[0]['group'];
         $next = [];
 
@@ -327,6 +346,27 @@ class Occurrences extends Tool
             $truncation === null ? [] : [$truncation],
             $next,
         );
+    }
+
+    /**
+     * Read the key of the last row a cursor continues after, or null when it is none.
+     *
+     * @param  array<string, mixed>  $last
+     * @return array{value: int|float, id: int}|null
+     */
+    protected function key(array $last): ?array
+    {
+        $value = $last['value'] ?? null;
+        $id = $last['id'] ?? null;
+
+        if (! (is_int($value) || is_float($value)) || ! is_int($id)) {
+            return null;
+        }
+
+        return [
+            'value' => $value,
+            'id' => $id,
+        ];
     }
 
     /**

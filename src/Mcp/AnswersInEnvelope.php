@@ -82,4 +82,14 @@ trait AnswersInEnvelope
                 : Refusal::unknown($argument, $this->name(), $accepted);
         }
     }
+
+    /**
+     * Get a call of the tool as it is written, from its arguments.
+     *
+     * @param  array<string, mixed>  $arguments
+     */
+    protected function call(array $arguments): string
+    {
+        return $this->name().'('.implode(', ', array_map(fn (string $name, mixed $value) => $name.': '.json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), array_keys($arguments), $arguments)).')';
+    }
 }
