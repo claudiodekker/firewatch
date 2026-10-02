@@ -17,12 +17,14 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
 use ClaudioDekker\Firewatch\Mcp\ExecutionHeader;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Timeline;
+use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -115,9 +117,9 @@ class Execution extends Tool
         $type = $this->type($request, $id);
         $limit = $this->limit($request);
 
-        $epoch = (float) $now->format('U.u');
+        $epoch = Instant::of($now);
         $timezone = config()->string('app.timezone');
-        $window = Window::none(__('firewatch::messages.execution_window_reason'), $timezone);
+        $window = Window::none(reason: __('firewatch::messages.execution_window_reason'), timezone: $timezone);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
         $searched = $type === null ? $this->executionTypes() : [RecordType::from($type->value)];
 
@@ -126,8 +128,9 @@ class Execution extends Tool
         } catch (StoreUnusable $unusable) {
             $blindSpots = [...BlindSpots::for($searched, anchored: $id === null), ...$this->conditions->for(null, $searched, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
+            $coverage = Coverage::of($unusable, $searched, History::unknown(...$retention));
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable, $searched, History::unknown(...$retention)), $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $types = $found === null ? $searched : [RecordType::from($found['row']['type']), ...Children::types()];
@@ -136,8 +139,9 @@ class Execution extends Tool
 
         if ($total === 0) {
             $empty = Emptiness::storeEmpty($this->configuration->database);
+            $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
 
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], new Coverage(CoverageState::EMPTY, $types, $history, records: 0), $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
@@ -153,7 +157,7 @@ class Execution extends Tool
         $filters = [$type === null ? __('firewatch::messages.execution_any_type') : "type: {$type->value}"];
         $empty = Emptiness::noMatch($total, $filters);
 
-        return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
+        return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
     }
 
     /**
@@ -191,13 +195,28 @@ class Execution extends Tool
             $this->timelineCut($timeline, count($entries)),
         ]));
 
+        $outcome = Markdown::cell($header['outcome']);
         $summary = __('firewatch::messages.execution_summary', [
             'type' => $type->value,
             'id' => $row['execution_id'],
-            'outcome' => Markdown::cell($header['outcome']),
+            'outcome' => $outcome,
         ]);
 
-        return new Answer($this->name(), $epoch, $timezone, $window, $summary, null, $result, $coverage, $blindSpots, [], $truncated, $this->next($row));
+        $next = $this->next($row);
+
+        return new Answer(
+            tool: $this->name(),
+            now: $epoch,
+            timezone: $timezone,
+            window: $window,
+            summary: $summary,
+            empty: null,
+            result: $result,
+            coverage: $coverage,
+            blindSpots: $blindSpots,
+            truncated: $truncated,
+            next: $next,
+        );
     }
 
     /**
@@ -208,11 +227,9 @@ class Execution extends Tool
      */
     protected function request(array $row): array
     {
-        $data = Stored::json($row['data']);
-
         return [
-            'headers' => is_array($data) ? Stored::blank($data['headers'] ?? null) : null,
-            'payload' => is_array($data) ? Stored::blank($data['payload'] ?? null) : null,
+            'headers' => Stored::json($row['headers']),
+            'payload' => Stored::json($row['payload']),
         ];
     }
 
@@ -232,7 +249,7 @@ class Execution extends Tool
             'section' => 'exceptions',
             'shown' => count($exceptions['rows']),
             'matched' => $exceptions['matched'],
-            'reason' => 'limit',
+            'reason' => TruncationReason::LIMIT->value,
             'how' => __('firewatch::messages.execution_exceptions_how'),
         ];
     }
@@ -244,7 +261,7 @@ class Execution extends Tool
      */
     protected function timelineCut(Rows $timeline, int $entries): ?array
     {
-        $cut = $timeline->truncation('timeline', __('firewatch::messages.execution_timeline_how'));
+        $cut = $timeline->truncation(section: 'timeline', how: __('firewatch::messages.execution_timeline_how'));
 
         if ($cut === null) {
             return null;
@@ -286,8 +303,8 @@ class Execution extends Tool
         $example = 'execution(execution_id: "<execution id>")';
 
         return $traced
-            ? Refusal::traceIdNotExecution('execution_id', $id, $accepted, $example)
-            : Refusal::notFound('execution_id', $id, $accepted, $example);
+            ? Refusal::traceIdNotExecution(argument: 'execution_id', id: $id, accepted: $accepted, example: $example)
+            : Refusal::notFound(argument: 'execution_id', id: $id, accepted: $accepted, example: $example);
     }
 
     /**
@@ -301,8 +318,9 @@ class Execution extends Tool
         $total = is_int($span['total']) ? $span['total'] : 0;
         $found = $total === 0 ? null : $this->find($connection, $id, $type);
         $traced = $id !== null && $this->isTrace($connection, $id);
+        $facts = StoreFacts::read($connection);
 
-        return [$total, $span['oldest'], $span['newest'], StoreFacts::read($connection), $found, $traced];
+        return [$total, $span['oldest'], $span['newest'], $facts, $found, $traced];
     }
 
     /**
@@ -335,13 +353,14 @@ class Execution extends Tool
         $view = RecordType::from($match['type'])->view();
         $row = Stored::rows($connection, "SELECT * FROM {$view} WHERE id = :id", ['id' => $match['id']])[0];
         $executionId = $row['execution_id'];
+        $children = is_string($executionId) ? Children::read($connection, $executionId) : [];
 
         return [
             'row' => [
                 ...$row,
                 'type' => $match['type'],
             ],
-            'children' => is_string($executionId) ? Children::read($connection, $executionId) : [],
+            'children' => $children,
         ];
     }
 
@@ -378,7 +397,9 @@ class Execution extends Tool
             return $value;
         }
 
-        throw Refusal::invalid('execution_id', 'an execution id', json_encode($value, JSON_THROW_ON_ERROR), 'an execution id', 'execution(execution_id: "<execution id>")');
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'execution_id', expected: 'an execution id', value: $shown, accepted: 'an execution id', example: 'execution(execution_id: "<execution id>")');
     }
 
     /**
@@ -396,12 +417,13 @@ class Execution extends Tool
 
         if ($type === null) {
             $accepted = implode(', ', array_map(fn (ExecutionType $case) => $case->value, ExecutionType::cases()));
+            $shown = json_encode($value, JSON_THROW_ON_ERROR);
 
-            throw Refusal::invalid('type', 'one of the four execution types', json_encode($value, JSON_THROW_ON_ERROR), $accepted, 'execution(type: "request")');
+            throw Refusal::invalid(argument: 'type', expected: 'one of the four execution types', value: $shown, accepted: $accepted, example: 'execution(type: "request")');
         }
 
         if ($id !== null) {
-            throw Refusal::conflicting('type', 'execution_id', 'a call with `execution_id` or with `type`, not both', 'execution(execution_id: "<execution id>")');
+            throw Refusal::conflicting(argument: 'type', with: 'execution_id', accepted: 'a call with `execution_id` or with `type`, not both', example: 'execution(execution_id: "<execution id>")');
         }
 
         return $type;
@@ -422,6 +444,8 @@ class Execution extends Tool
             return $value;
         }
 
-        throw Refusal::invalid('limit', '1 to '.self::MAXIMUM_LIMIT, json_encode($value, JSON_THROW_ON_ERROR), 'a whole number from 1 to '.self::MAXIMUM_LIMIT, 'execution(limit: '.self::DEFAULT_LIMIT.')');
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'execution(limit: '.self::DEFAULT_LIMIT.')');
     }
 }

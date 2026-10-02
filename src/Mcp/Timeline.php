@@ -12,8 +12,6 @@ class Timeline
     /**
      * Get the children as timeline rows in the order they came, with repeated identical queries collapsed into one row at the first of them.
      *
-     * Identical means the same SQL, connection and location; the bindings may differ.
-     *
      * @param  list<array<string, mixed>>  $children
      * @return list<array<string, mixed>>
      */
@@ -29,7 +27,7 @@ class Timeline
             if ($key !== null && array_key_exists($key, $positions)) {
                 $position = $positions[$key];
                 $entries[$position]['count']++;
-                $totals[$position] += self::duration($child);
+                $totals[$position] = self::sum($totals[$position], self::duration($child));
 
                 continue;
             }
@@ -46,7 +44,7 @@ class Timeline
     }
 
     /**
-     * Get the key repeated queries share, or null for a child that is never collapsed.
+     * Get the key repeated queries share: the same SQL, connection and location, whatever the bindings, or null for a child that is never collapsed.
      *
      * @param  array<string, mixed>  $child
      */
@@ -60,15 +58,23 @@ class Timeline
     }
 
     /**
-     * Get the microseconds a child took, none for one that has no duration.
+     * Get the microseconds a child took, or null for one that has no duration.
      *
      * @param  array<string, mixed>  $child
      */
-    protected static function duration(array $child): int|float
+    protected static function duration(array $child): int|float|null
     {
         $duration = $child['duration'] ?? null;
 
-        return is_int($duration) || is_float($duration) ? $duration : 0;
+        return is_int($duration) || is_float($duration) ? $duration : null;
+    }
+
+    /**
+     * Get the sum of two durations that may be unknown, which is unknown only when both are.
+     */
+    protected static function sum(int|float|null $first, int|float|null $second): int|float|null
+    {
+        return $first === null && $second === null ? null : ($first ?? 0) + ($second ?? 0);
     }
 
     /**
@@ -87,7 +93,7 @@ class Timeline
             'stage' => Stored::blank($child['execution_stage'] ?? null),
             'duration_ms' => Stored::milliseconds($child['duration'] ?? null),
             'name' => self::name($type, $child),
-            'location' => Stored::location($child['file'] ?? null, $child['line'] ?? null),
+            'location' => Stored::location(file: $child['file'] ?? null, line: $child['line'] ?? null),
             'count' => 1,
             'total_ms' => null,
             'detail' => self::detail($type, $child),
@@ -100,7 +106,7 @@ class Timeline
      * @param  array<string, mixed>  $entry
      * @return array<string, mixed>
      */
-    protected static function collapsed(array $entry, int|float $microseconds): array
+    protected static function collapsed(array $entry, int|float|null $microseconds): array
     {
         if ($entry['count'] === 1) {
             return [

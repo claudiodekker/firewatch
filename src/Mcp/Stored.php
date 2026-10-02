@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Store\Microseconds;
 use JsonException;
 use SQLite3;
 use SQLite3Result;
@@ -16,6 +17,16 @@ class Stored
      * The bytes in a megabyte.
      */
     protected const MEGABYTE = 1048576;
+
+    /**
+     * The decimals of a millisecond in an answer.
+     */
+    protected const MILLISECOND_DECIMALS = 2;
+
+    /**
+     * The decimals of a megabyte in an answer.
+     */
+    protected const MEGABYTE_DECIMALS = 1;
 
     /**
      * Read the rows of a query in the snapshot of the connection.
@@ -64,7 +75,7 @@ class Stored
      */
     public static function milliseconds(mixed $microseconds): ?float
     {
-        return is_numeric($microseconds) ? round($microseconds / 1000, 2) : null;
+        return is_numeric($microseconds) ? round($microseconds / Microseconds::PER_MILLISECOND, self::MILLISECOND_DECIMALS) : null;
     }
 
     /**
@@ -72,7 +83,7 @@ class Stored
      */
     public static function megabytes(mixed $bytes): ?float
     {
-        return is_numeric($bytes) ? round($bytes / self::MEGABYTE, 1) : null;
+        return is_numeric($bytes) ? round($bytes / self::MEGABYTE, self::MEGABYTE_DECIMALS) : null;
     }
 
     /**

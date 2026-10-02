@@ -7,10 +7,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
-function oneExecutionRequest(): void
+function oneExecutionApplication(): void
 {
     forceRequests();
     config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+}
+
+function oneExecutionRequest(): void
+{
+    oneExecutionApplication();
 
     Route::get('/orders', function () {
         DB::select('select 1');
@@ -75,8 +80,7 @@ it('opens the latest command, which has stages but no request details', function
 });
 
 it('shows the exception a failing request raised, with the frames Nightwatch stored', function () {
-    forceRequests();
-    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+    oneExecutionApplication();
     Route::get('/boom', fn () => throw new DomainException('No stock left.'));
 
     $this->get('/boom');
@@ -98,8 +102,8 @@ it('answers that no command ran, among the records of the request that did', fun
     $envelope = Envelope::assert(Execution::class, ['type' => 'command']);
 
     expect($envelope['empty']['kind'])->toBe('no_match')
-        ->and($envelope['empty']['message'])->toContain('type: command')
-        ->and($envelope['empty']['population'])->toBeGreaterThanOrEqual(1);
+        ->and($envelope['empty']['population'])->toBeGreaterThanOrEqual(1)
+        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => $envelope['empty']['population'], 'filters' => 'type: command']));
 });
 
 it('says what it cannot see: running work, the process peak of memory and a payload only for server errors', function () {

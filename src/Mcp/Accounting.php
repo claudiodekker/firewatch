@@ -27,7 +27,7 @@ class Accounting
             $type = $counter->type();
             $counted = is_int($execution[$counter->value] ?? null) ? $execution[$counter->value] : 0;
             $captured = $held[$type->value] ?? 0;
-            $state = AccountingState::of($counted, $captured);
+            $state = AccountingState::of(counted: $counted, captured: $captured);
 
             $counters[] = [
                 'counter' => $counter->value,
@@ -45,7 +45,7 @@ class Accounting
             }
 
             if ($state === AccountingState::FEWER) {
-                $lines[] = self::missing($counter, $captured, $counted, $meta, $startedAt, $timezone);
+                $lines[] = self::missing(counter: $counter, captured: $captured, counted: $counted, meta: $meta, startedAt: $startedAt, timezone: $timezone);
             }
         }
 

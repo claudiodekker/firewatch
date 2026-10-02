@@ -50,16 +50,14 @@ class ExceptionSection
             'class' => $exception['class'] ?? null,
             'message' => $exception['message'] ?? null,
             'handled' => Stored::flag($exception['handled'] ?? null),
-            'location' => Stored::location($exception['file'] ?? null, $exception['line'] ?? null),
+            'location' => Stored::location(file: $exception['file'] ?? null, line: $exception['line'] ?? null),
             'frames' => $frames,
             'frames_note' => $note,
         ];
     }
 
     /**
-     * Get the frames of a trace: each application frame with the lines Nightwatch stored for it, and each run of vendor frames as one entry.
-     *
-     * The note says why an application frame has no lines when one has none.
+     * Get the frames of a trace: each application frame with the lines Nightwatch stored for it, and each run of vendor frames as one entry, with a note on why a frame has no lines.
      *
      * @return array{list<array<string, mixed>>, string|null}
      */
