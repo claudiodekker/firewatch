@@ -436,26 +436,49 @@ class Writer
                 throw $this->foreign();
             }
 
-            $this->dropEverything($connection);
-
-            foreach ((new Schema)->statements() as $statement) {
-                $connection->exec($statement);
-            }
-
-            $now = Date::now()->format('U.u');
-            $connection->exec("INSERT INTO meta (key, value) VALUES ('created_at', '{$now}')");
-
-            // A store that replaces another says when and why, so answers can state that earlier data is gone.
-            $why = $stamp->isFresh() ? $this->rebuildReason : 'schema';
-
-            if ($why !== null) {
-                $connection->exec("INSERT INTO meta (key, value) VALUES ('rebuilt_at', '{$now}'), ('rebuilt_why', '{$why}')");
-            }
-
-            $this->rebuildReason = null;
-            $connection->exec('PRAGMA application_id = '.Schema::APPLICATION_ID);
-            $connection->exec('PRAGMA user_version = '.Schema::VERSION);
+            $this->build($connection, $stamp->isFresh() ? $this->rebuildReason : 'schema');
         });
+    }
+
+    /**
+     * Drop everything in the store and build the current schema and its stamps in its place; a store that replaces another says when and why, so answers can state that earlier data is gone.
+     */
+    protected function build(SQLite3 $connection, ?string $why): void
+    {
+        $this->dropEverything($connection);
+
+        foreach ((new Schema)->statements() as $statement) {
+            $connection->exec($statement);
+        }
+
+        $now = Date::now()->format('U.u');
+        $connection->exec("INSERT INTO meta (key, value) VALUES ('created_at', '{$now}')");
+
+        if ($why !== null) {
+            $connection->exec("INSERT INTO meta (key, value) VALUES ('rebuilt_at', '{$now}'), ('rebuilt_why', '{$why}')");
+        }
+
+        $this->rebuildReason = null;
+        $connection->exec('PRAGMA application_id = '.Schema::APPLICATION_ID);
+        $connection->exec('PRAGMA user_version = '.Schema::VERSION);
+    }
+
+    /**
+     * Rebuild the store in place as a fresh one, without unlinking its file; ids restart and every record, user and drift row goes.
+     */
+    public function rebuild(): void
+    {
+        $this->transaction(fn (SQLite3 $connection) => $this->build($connection, null));
+    }
+
+    /**
+     * Move a damaged store aside and create a new one in its place.
+     */
+    public function replaceDamaged(): void
+    {
+        $this->moveAside(new SQLite3Exception('database disk image is malformed', 11));
+
+        $this->transaction(fn () => null);
     }
 
     /**
