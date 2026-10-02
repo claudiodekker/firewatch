@@ -25,7 +25,6 @@ class Stored
      */
     public static function rows(SQLite3 $connection, string $sql, array $bindings = []): array
     {
-
         /** @var SQLite3Stmt $statement */
         $statement = $connection->prepare($sql);
 
