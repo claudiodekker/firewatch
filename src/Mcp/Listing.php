@@ -82,9 +82,10 @@ class Listing
      */
     public static function typesOf(SQLite3 $connection, string $group): array
     {
+        $rows = self::run($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group ORDER BY type', [':group' => $group]);
         $types = [];
 
-        foreach (self::run($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group ORDER BY type', [':group' => $group]) as $row) {
+        foreach ($rows as $row) {
             $type = RecordType::tryFrom($row['type']);
 
             if ($type !== null) {
@@ -118,13 +119,21 @@ class Listing
         $samples = self::run($connection, "SELECT count(duration) AS samples FROM records WHERE {$selection}", $bindings, $this->window)[0]['samples'];
 
         if ($samples < $needed) {
-            return ['samples' => $samples, 'needed' => $needed, 'threshold' => null];
+            return [
+                'samples' => $samples,
+                'needed' => $needed,
+                'threshold' => null,
+            ];
         }
 
         $offset = intdiv($samples * $share + 99, 100) - 1;
         $row = self::run($connection, "SELECT duration FROM records WHERE {$selection} AND duration IS NOT NULL ORDER BY duration LIMIT 1 OFFSET {$offset}", $bindings, $this->window)[0];
 
-        return ['samples' => $samples, 'needed' => $needed, 'threshold' => $row['duration']];
+        return [
+            'samples' => $samples,
+            'needed' => $needed,
+            'threshold' => $row['duration'],
+        ];
     }
 
     /**
@@ -155,7 +164,10 @@ class Listing
 
         $sites = self::run($connection, "SELECT json_extract(data, '\$.file') AS file, json_extract(data, '\$.line') AS line, count(*) AS count FROM records WHERE {$where} AND json_extract(data, '\$.file') IS NOT NULL GROUP BY file, line ORDER BY count DESC, file, line LIMIT {$limit}", $bindings, $this->window);
 
-        return array_map(fn (array $site) => ['location' => self::location($site['file'], $site['line']), 'count' => $site['count']], $sites);
+        return array_map(fn (array $site) => [
+            'location' => self::location($site['file'], $site['line']),
+            'count' => $site['count'],
+        ], $sites);
     }
 
     /**
@@ -168,7 +180,17 @@ class Listing
         $conditions = [$this->window->condition()];
         $bindings = [];
 
-        foreach (['group_hash' => $this->group, 'execution_id' => $this->executionId, 'trace_id' => $this->traceId, 'job_id' => $this->jobId, 'user_id' => $this->userId, 'deploy' => $this->deploy, 'type' => $this->type?->value] as $column => $value) {
+        $selectors = [
+            'group_hash' => $this->group,
+            'execution_id' => $this->executionId,
+            'trace_id' => $this->traceId,
+            'job_id' => $this->jobId,
+            'user_id' => $this->userId,
+            'deploy' => $this->deploy,
+            'type' => $this->type?->value,
+        ];
+
+        foreach ($selectors as $column => $value) {
             if ($value !== null) {
                 $conditions[] = "{$column} = :{$column}";
                 $bindings[":{$column}"] = $value;
@@ -244,6 +266,7 @@ class Listing
         /** @var array<string, mixed> $data */
         $data = json_decode($record['data'], true, flags: JSON_THROW_ON_ERROR);
         $type = RecordType::from($record['type']);
+        $located = in_array($type, [RecordType::QUERY, RecordType::EXCEPTION], true) && isset($data['file']);
 
         $row = [
             'started_at' => $record['started_at'],
@@ -255,7 +278,7 @@ class Listing
             'trace_id' => $record['trace_id'],
             'group' => $record['group_hash'],
             'name' => $this->name($type, $data),
-            'location' => in_array($type, [RecordType::QUERY, RecordType::EXCEPTION], true) && isset($data['file']) ? self::location($data['file'], $data['line'] ?? null) : null,
+            'location' => $located ? self::location($data['file'], $data['line'] ?? null) : null,
             'user_id' => $record['user_id'],
             'deploy' => $record['deploy'],
         ];
@@ -317,18 +340,70 @@ class Listing
         $memory = isset($data['peak_memory_usage']) ? round($data['peak_memory_usage'] / 1048576, 1) : null;
 
         return match ($type) {
-            RecordType::REQUEST => ['method' => $data['method'] ?? null, 'url' => $data['url'] ?? null, 'status_code' => $data['status_code'] ?? null, 'queries' => $data['queries'] ?? null, 'memory_mb' => $memory],
-            RecordType::COMMAND => ['command' => $data['command'] ?? null, 'exit_code' => $data['exit_code'] ?? null, 'queries' => $data['queries'] ?? null, 'memory_mb' => $memory],
-            RecordType::JOB_ATTEMPT => ['job_id' => $record['job_id'], 'attempt' => $data['attempt'] ?? null, 'status' => $data['status'] ?? null, 'queue' => $data['queue'] ?? null, 'connection' => $data['connection'] ?? null, 'queries' => $data['queries'] ?? null, 'memory_mb' => $memory],
-            RecordType::SCHEDULED_TASK => ['cron' => $data['cron'] ?? null, 'status' => $data['status'] ?? null, 'queries' => $data['queries'] ?? null, 'memory_mb' => $memory],
-            RecordType::QUERY => ['sql' => $data['sql'] ?? null, 'connection' => $data['connection'] ?? null, 'bindings' => $data['bindings'] ?? null],
-            RecordType::EXCEPTION => ['message' => $data['message'] ?? null, 'handled' => $data['handled'] ?? null, 'code' => $data['code'] ?? null],
-            RecordType::LOG => ['level' => $data['level'] ?? null, 'message' => $data['message'] ?? null],
-            RecordType::CACHE_EVENT => ['store' => $data['store'] ?? null, 'key' => $data['key'] ?? null, 'event' => $data['event'] ?? null],
-            RecordType::MAIL => ['mailer' => $data['mailer'] ?? null, 'subject' => $data['subject'] ?? null],
+            RecordType::REQUEST => [
+                'method' => $data['method'] ?? null,
+                'url' => $data['url'] ?? null,
+                'status_code' => $data['status_code'] ?? null,
+                'queries' => $data['queries'] ?? null,
+                'memory_mb' => $memory,
+            ],
+            RecordType::COMMAND => [
+                'command' => $data['command'] ?? null,
+                'exit_code' => $data['exit_code'] ?? null,
+                'queries' => $data['queries'] ?? null,
+                'memory_mb' => $memory,
+            ],
+            RecordType::JOB_ATTEMPT => [
+                'job_id' => $record['job_id'],
+                'attempt' => $data['attempt'] ?? null,
+                'status' => $data['status'] ?? null,
+                'queue' => $data['queue'] ?? null,
+                'connection' => $data['connection'] ?? null,
+                'queries' => $data['queries'] ?? null,
+                'memory_mb' => $memory,
+            ],
+            RecordType::SCHEDULED_TASK => [
+                'cron' => $data['cron'] ?? null,
+                'status' => $data['status'] ?? null,
+                'queries' => $data['queries'] ?? null,
+                'memory_mb' => $memory,
+            ],
+            RecordType::QUERY => [
+                'sql' => $data['sql'] ?? null,
+                'connection' => $data['connection'] ?? null,
+                'bindings' => $data['bindings'] ?? null,
+            ],
+            RecordType::EXCEPTION => [
+                'message' => $data['message'] ?? null,
+                'handled' => $data['handled'] ?? null,
+                'code' => $data['code'] ?? null,
+            ],
+            RecordType::LOG => [
+                'level' => $data['level'] ?? null,
+                'message' => $data['message'] ?? null,
+            ],
+            RecordType::CACHE_EVENT => [
+                'store' => $data['store'] ?? null,
+                'key' => $data['key'] ?? null,
+                'event' => $data['event'] ?? null,
+            ],
+            RecordType::MAIL => [
+                'mailer' => $data['mailer'] ?? null,
+                'subject' => $data['subject'] ?? null,
+            ],
             RecordType::NOTIFICATION => ['channel' => $data['channel'] ?? null],
-            RecordType::OUTGOING_REQUEST => ['host' => $data['host'] ?? null, 'method' => $data['method'] ?? null, 'url' => $data['url'] ?? null, 'status_code' => $data['status_code'] ?? null, 'response_size_bytes' => $data['response_size'] ?? null],
-            RecordType::QUEUED_JOB => ['job_id' => $record['job_id'], 'connection' => $data['connection'] ?? null, 'queue' => $data['queue'] ?? null],
+            RecordType::OUTGOING_REQUEST => [
+                'host' => $data['host'] ?? null,
+                'method' => $data['method'] ?? null,
+                'url' => $data['url'] ?? null,
+                'status_code' => $data['status_code'] ?? null,
+                'response_size_bytes' => $data['response_size'] ?? null,
+            ],
+            RecordType::QUEUED_JOB => [
+                'job_id' => $record['job_id'],
+                'connection' => $data['connection'] ?? null,
+                'queue' => $data['queue'] ?? null,
+            ],
             RecordType::USER => [],
         };
     }

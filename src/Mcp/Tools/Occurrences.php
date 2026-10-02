@@ -78,7 +78,10 @@ class Occurrences extends Tool
      *
      * @var array<string, list<string>>
      */
-    protected const OUTCOMES = ['job-attempt' => ['processed', 'failed', 'released'], 'scheduled-task' => ['processed', 'failed', 'skipped']];
+    protected const OUTCOMES = [
+        'job-attempt' => ['processed', 'failed', 'released'],
+        'scheduled-task' => ['processed', 'failed', 'skipped'],
+    ];
 
     /**
      * The longest `matching` there is.
@@ -154,7 +157,12 @@ class Occurrences extends Tool
     {
         $group = $this->group($request);
         $type = $this->type($request);
-        $ids = ['execution_id' => $this->id($request, 'execution_id'), 'trace_id' => $this->id($request, 'trace_id'), 'job_id' => $this->id($request, 'job_id'), 'user_id' => $this->id($request, 'user_id')];
+        $ids = [
+            'execution_id' => $this->id($request, 'execution_id'),
+            'trace_id' => $this->id($request, 'trace_id'),
+            'job_id' => $this->id($request, 'job_id'),
+            'user_id' => $this->id($request, 'user_id'),
+        ];
 
         if ($group === null && $type === null && array_filter($ids, fn (?string $id) => $id !== null) === []) {
             throw Refusal::missing('selector', 'group, type, execution_id, trace_id, job_id or user_id', self::EXAMPLE);
@@ -200,13 +208,21 @@ class Occurrences extends Tool
                 }
 
                 $listing = new Listing($window, $order, $group, $resolved, $ids['execution_id'], $ids['trace_id'], $ids['job_id'], $ids['user_id'], $deploy, $filters['method'], $filters['status'], $filters['outcome'], $filters['levels'], $filters['slower_than_ms'], $filters['matching']);
-                $baseline = $filters['at_or_above'] === null ? null : [...$listing->baseline($connection, $filters['at_or_above']), 'percentile' => $filters['at_or_above']];
-                $threshold = $baseline['threshold'] ?? null;
+                $baseline = null;
 
-                return compact('total', 'inWindow', 'oldest', 'newest', 'facts', 'baseline') + [
-                    'rows' => $listing->rows($connection, $limit, $threshold),
-                    'sites' => $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null,
-                ];
+                if ($filters['at_or_above'] !== null) {
+                    $measured = $listing->baseline($connection, $filters['at_or_above']);
+                    $baseline = [
+                        ...$measured,
+                        'percentile' => $filters['at_or_above'],
+                    ];
+                }
+
+                $threshold = $baseline['threshold'] ?? null;
+                $rows = $listing->rows($connection, $limit, $threshold);
+                $sites = $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null;
+
+                return compact('total', 'inWindow', 'oldest', 'newest', 'facts', 'baseline', 'rows', 'sites');
             });
         } catch (StoreUnusable $unusable) {
             $blindSpots = [...$structural, ...$this->conditions->for(null, $typesRead, $window)];
@@ -233,14 +249,30 @@ class Occurrences extends Tool
         }
 
         if (! isset($read['rows']) || $read['rows'] === []) {
-            $named = array_filter(['group' => $group, 'type' => $type?->value, ...$ids, 'method' => $filters['method'], 'status' => $filters['status_text'], 'outcome' => $filters['outcome'], 'level' => $filters['level'], 'slower_than_ms' => $filters['slower_than_ms'], 'at_or_above' => $filters['at_or_above'], 'matching' => $filters['matching'], 'deploy' => $deploy], fn (mixed $value) => $value !== null);
+            $given = [
+                'group' => $group,
+                'type' => $type?->value,
+                ...$ids,
+                'method' => $filters['method'],
+                'status' => $filters['status_text'],
+                'outcome' => $filters['outcome'],
+                'level' => $filters['level'],
+                'slower_than_ms' => $filters['slower_than_ms'],
+                'at_or_above' => $filters['at_or_above'],
+                'matching' => $filters['matching'],
+                'deploy' => $deploy,
+            ];
+            $named = array_filter($given, fn (mixed $value) => $value !== null);
             $empty = Emptiness::noMatch($read['inWindow'], array_map(fn (string $name, mixed $value) => "{$name}: {$value}", array_keys($named), $named));
 
             return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
         }
 
         $rows = Rows::bound($read['rows'], $limit);
-        $result = ['order' => $order, 'rows' => $rows->rows];
+        $result = [
+            'order' => $order,
+            'rows' => $rows->rows,
+        ];
 
         if ($read['baseline'] !== null) {
             $result['baseline'] = $this->baseline($read['baseline']);
@@ -253,28 +285,47 @@ class Occurrences extends Tool
         $notes = [];
 
         if ($read['baseline'] !== null && $read['baseline']['threshold'] === null) {
-            $notes[] = __('firewatch::messages.occurrences_baseline_withheld', ['percentile' => $read['baseline']['percentile'], 'have' => $read['baseline']['samples'], 'needed' => $read['baseline']['needed']]);
+            $notes[] = __('firewatch::messages.occurrences_baseline_withheld', [
+                'percentile' => $read['baseline']['percentile'],
+                'have' => $read['baseline']['samples'],
+                'needed' => $read['baseline']['needed'],
+            ]);
         }
 
         if ($ids['user_id'] !== null) {
             $notes[] = __('firewatch::messages.occurrences_user_only');
         }
 
+        $count = count($rows->rows);
+        $summary = trans_choice('firewatch::messages.occurrences_summary', $count, [
+            'count' => $count,
+            'order' => $order,
+        ]);
+        $truncation = $rows->truncation('rows', __('firewatch::messages.occurrences_truncated_how'));
         $first = $rows->rows[0]['group'];
+        $next = [];
+
+        if ($group === null && $first !== null) {
+            $next[] = [
+                'tool' => 'rank',
+                'arguments' => ['group' => $first],
+                'why' => __('firewatch::messages.occurrences_next_group'),
+            ];
+        }
 
         return new Answer(
             $this->name(),
             $epoch,
             $timezone,
             $window,
-            trans_choice('firewatch::messages.occurrences_summary', count($rows->rows), ['count' => count($rows->rows), 'order' => $order]),
+            $summary,
             null,
             $result,
             $coverage,
             $blindSpots,
             $notes,
-            ($truncated = $rows->truncation('rows', __('firewatch::messages.occurrences_truncated_how'))) === null ? [] : [$truncated],
-            $group !== null || $first === null ? [] : [['tool' => 'rank', 'arguments' => ['group' => $first], 'why' => __('firewatch::messages.occurrences_next_group')]],
+            $truncation === null ? [] : [$truncation],
+            $next,
         );
     }
 
@@ -286,9 +337,25 @@ class Occurrences extends Tool
      */
     protected function baseline(array $baseline): array
     {
-        $withheld = $baseline['threshold'] === null ? ['reason' => 'sample_too_small', 'have' => $baseline['samples'], 'needed' => $baseline['needed']] : null;
+        $withheld = null;
+        $thresholdMilliseconds = null;
 
-        return ['percentile' => $baseline['percentile'], 'threshold_ms' => $baseline['threshold'] === null ? null : $baseline['threshold'] / 1000, 'samples' => $baseline['samples'], 'withheld' => $withheld];
+        if ($baseline['threshold'] === null) {
+            $withheld = [
+                'reason' => 'sample_too_small',
+                'have' => $baseline['samples'],
+                'needed' => $baseline['needed'],
+            ];
+        } else {
+            $thresholdMilliseconds = $baseline['threshold'] / 1000;
+        }
+
+        return [
+            'percentile' => $baseline['percentile'],
+            'threshold_ms' => $thresholdMilliseconds,
+            'samples' => $baseline['samples'],
+            'withheld' => $withheld,
+        ];
     }
 
     /**
@@ -474,7 +541,14 @@ class Occurrences extends Tool
      */
     protected function status(string $status): array
     {
-        $class = ['1xx' => 100, '2xx' => 200, '3xx' => 300, '4xx' => 400, '5xx' => 500][$status] ?? null;
+        $classes = [
+            '1xx' => 100,
+            '2xx' => 200,
+            '3xx' => 300,
+            '4xx' => 400,
+            '5xx' => 500,
+        ];
+        $class = $classes[$status] ?? null;
 
         if ($class !== null) {
             return [$class, $class + 99];
@@ -505,8 +579,6 @@ class Occurrences extends Tool
 
     /**
      * Refuse a filter, or an order, that does not fit the type, naming what it fits.
-     *
-     * A filter that needs a type is refused without one unless a group may still give it.
      *
      * @param  array<string, mixed>  $filters
      */
