@@ -145,6 +145,23 @@ return [
         'redaction-active' => 'Some request headers or payload fields are redacted and read [N bytes redacted].',
     ],
 
+    'clear' => [
+        'nothing' => 'Nothing to clear.',
+        'cleared' => 'Cleared :records records and :users users. Store size :before -> :after.',
+        'cleared_type' => 'Cleared :records :type records. Store size :before -> :after.',
+        'log_in_use' => 'The write-ahead log was not truncated because the store is in use.',
+        'confirm' => 'This deletes all captured records, users and failure lines from :path. Continue?',
+        'confirm_type' => 'This deletes all :type records from :path. Continue?',
+        'declined' => 'Aborted.',
+        'not_forced' => 'Aborted: pass --force to clear without confirmation.',
+        'unknown_type' => 'Unknown type ":type". Valid types: :types.',
+        'busy' => 'The store is busy; try again.',
+        'schema' => 'The store was written by another Firewatch schema (found :found, expected :expected). Run with --drop to rebuild it now, or let the next captured batch do it.',
+        'damaged' => 'The store file is damaged; run with --drop or let the next capture replace it.',
+        'foreign' => ':path is not a Firewatch store; nothing was changed.',
+        'sqlite' => 'SQLite :version is older than the :minimum Firewatch needs; nothing was changed.',
+    ],
+
     'blind_spot' => 'Blind spot (:id): :message',
 
     'next' => 'Next:',

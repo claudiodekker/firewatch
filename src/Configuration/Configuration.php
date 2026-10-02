@@ -35,4 +35,28 @@ readonly class Configuration
     ) {
         //
     }
+
+    /**
+     * Get the same configuration with another busy timeout, for work that waits longer than capture does.
+     */
+    public function withBusyTimeout(int $milliseconds): self
+    {
+        return new self(
+            $this->enabled,
+            $this->environments,
+            $this->database,
+            $milliseconds,
+            $this->retentionAge,
+            $this->retentionAgeSeconds,
+            $this->retentionRecords,
+            $this->deploy,
+            $this->captureLogs,
+            $this->captureRequestPayload,
+            $this->redactPayloadFields,
+            $this->redactHeaders,
+            $this->budgets,
+            $this->ignoredBudgetEntries,
+            $this->issues,
+        );
+    }
 }
