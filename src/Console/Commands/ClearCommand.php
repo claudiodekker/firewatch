@@ -160,11 +160,11 @@ class ClearCommand extends Command
             return false;
         }
 
-        $question = $this->option('drop')
-            ? __('firewatch::messages.clear.confirm_drop', ['path' => $path])
-            : ($type === null
-            ? __('firewatch::messages.clear.confirm', ['path' => $path])
-            : __('firewatch::messages.clear.confirm_type', ['path' => $path, 'type' => $type->value]));
+        $question = match (true) {
+            (bool) $this->option('drop') => __('firewatch::messages.clear.confirm_drop', ['path' => $path]),
+            $type === null => __('firewatch::messages.clear.confirm', ['path' => $path]),
+            default => __('firewatch::messages.clear.confirm_type', ['path' => $path, 'type' => $type->value]),
+        };
 
         if ($this->confirm($question, false)) {
             return true;

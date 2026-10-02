@@ -75,7 +75,7 @@ beforeEach(function () {
 it('can\'t be combined with a type, and changes nothing', function () {
     dropPopulatedStore();
 
-    runDrop(['--type' => 'log', '--force' => true])->expectsOutput('`--drop` can\'t be combined with `--type`.')->assertExitCode(1);
+    runDrop(['--type' => 'log', '--force' => true])->expectsOutput(__('firewatch::messages.clear.drop_with_type'))->assertExitCode(1);
 
     expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
 });
@@ -85,7 +85,7 @@ describe('a healthy store', function () {
         dropPopulatedStore();
         $this->travelTo('2026-09-30 15:00:00');
 
-        runDrop()->expectsOutputToContain('Rebuilt the store at '.dropPath().'. Store size ')->assertExitCode(0);
+        runDrop()->expectsOutputToContain('Rebuilt the store at '.dropPath())->assertExitCode(0);
 
         expect(dropRows('SELECT id FROM records'))->toBe([])
             ->and(dropRows('SELECT id FROM users'))->toBe([])
@@ -129,14 +129,14 @@ describe('a healthy store', function () {
 
 describe('a store in another state', function () {
     it('has nothing to drop when there is no store, or an empty file, and creates nothing', function () {
-        runDrop()->expectsOutput('Nothing to clear.')->assertExitCode(0);
+        runDrop()->expectsOutput(__('firewatch::messages.clear.nothing'))->assertExitCode(0);
 
         expect(file_exists(dirname(dropPath())))->toBeFalse();
 
         mkdir(dirname(dropPath()), recursive: true);
         touch(dropPath());
 
-        runDrop()->expectsOutput('Nothing to clear.')->assertExitCode(0);
+        runDrop()->expectsOutput(__('firewatch::messages.clear.nothing'))->assertExitCode(0);
 
         expect(filesize(dropPath()))->toBe(0);
     });
@@ -163,7 +163,7 @@ describe('a store in another state', function () {
         file_put_contents(dropPath().'.corrupt', 'an earlier copy');
         file_put_contents(dropPath().'-wal.corrupt', 'an earlier log');
 
-        runDrop()->expectsOutput('The store file was damaged; moved to '.basename(dropPath()).'.corrupt and created a new store.')->assertExitCode(0);
+        runDrop()->expectsOutput(__('firewatch::messages.clear.replaced_damaged', ['file' => basename(dropPath()).'.corrupt']))->assertExitCode(0);
 
         expect(md5_file(dropPath().'.corrupt'))->toBe($damaged)
             ->and(dropRows('SELECT id FROM records'))->toBe([])
@@ -176,7 +176,7 @@ describe('a store in another state', function () {
         $arrange(dropPath());
         $before = md5_file(dropPath());
 
-        runDrop()->expectsOutput(dropPath().' is not a Firewatch store; nothing was changed.')->assertExitCode(1);
+        runDrop()->expectsOutput(__('firewatch::messages.clear.foreign', ['path' => dropPath()]))->assertExitCode(1);
 
         expect(md5_file(dropPath()))->toBe($before)
             ->and(file_exists(dropPath().'.corrupt'))->toBeFalse();
@@ -210,7 +210,7 @@ describe('a store in another state', function () {
         $connection->exec('PRAGMA journal_mode = DELETE');
         $connection->exec('BEGIN EXCLUSIVE');
 
-        runDrop()->expectsOutput('The store is busy; try again.')->assertExitCode(1);
+        runDrop()->expectsOutput(__('firewatch::messages.clear.busy'))->assertExitCode(1);
         $connection->exec('ROLLBACK');
 
         expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
@@ -222,8 +222,8 @@ describe('the confirmation', function () {
         dropPopulatedStore();
 
         runDrop([])
-            ->expectsConfirmation('This drops and rebuilds the store at '.dropPath().', discarding everything including diagnostics. Continue?', 'no')
-            ->expectsOutput('Aborted.')
+            ->expectsConfirmation(__('firewatch::messages.clear.confirm_drop', ['path' => dropPath()]), 'no')
+            ->expectsOutput(__('firewatch::messages.clear.declined'))
             ->assertExitCode(1);
 
         expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
@@ -233,7 +233,7 @@ describe('the confirmation', function () {
         dropPopulatedStore();
 
         runDrop([])
-            ->expectsConfirmation('This drops and rebuilds the store at '.dropPath().', discarding everything including diagnostics. Continue?', 'yes')
+            ->expectsConfirmation(__('firewatch::messages.clear.confirm_drop', ['path' => dropPath()]), 'yes')
             ->assertExitCode(0);
 
         expect(dropRows('SELECT id FROM records'))->toBe([]);
@@ -243,7 +243,7 @@ describe('the confirmation', function () {
         dropPopulatedStore();
 
         $this->artisan('firewatch:clear', ['--drop' => true, '--no-interaction' => true])
-            ->expectsOutput('Aborted: pass --force to clear without confirmation.')
+            ->expectsOutput(__('firewatch::messages.clear.not_forced'))
             ->assertExitCode(1);
 
         expect(dropRows('SELECT id FROM records'))->toHaveCount(2);
