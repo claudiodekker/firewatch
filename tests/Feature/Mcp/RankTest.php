@@ -449,7 +449,7 @@ it('matches the label of a group as a case-insensitive substring', function (str
     'a substring in another case' => ['orDERS', ['/Orders/{order}']],
     'a substring in the middle' => ['ser', ['/users']],
     'a percent sign, literally' => ['%', ['/100%_done']],
-    'an underscore, literally' => ['0_d', ['/100%_done']],
+    'an underscore, literally' => ['_d', ['/100%_done']],
     'the label of requests that matched no route' => ['no route', ['(no route matched)']],
     'a substring of three labels' => ['/', ['/100%_done', '/users', '/Orders/{order}']],
 ]);

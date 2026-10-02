@@ -129,6 +129,10 @@ class Rank extends Tool
             $this->refuseWithGroup($request);
         }
 
+        if ($explicit !== null) {
+            $this->measure($request, $explicit, $group);
+        }
+
         $cursor = $request->get('cursor') === null ? null : Cursor::read($request->get('cursor'), $this->name(), $request->all());
 
         $epoch = (float) $now->format('U.u');

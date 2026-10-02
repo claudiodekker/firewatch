@@ -97,6 +97,32 @@ class ClearStore
     }
 
     /**
+     * Rebuild the store in place as a fresh one, moving a damaged file aside first, vacuum it and empty the failure log; the state is why the store was unusable, or null when it was healthy.
+     *
+     * @return array{damaged: bool, before: int, after: int, truncated: bool}
+     */
+    public function drop(?StoreState $state): array
+    {
+        $before = $this->size();
+        $writer = $this->writer();
+
+        match ($state) {
+            StoreState::CORRUPT => $writer->replaceDamaged(),
+            // The writer rebuilds a store of another schema version when it opens it.
+            StoreState::SCHEMA_MISMATCH => $writer->transaction(fn () => null),
+            default => $writer->rebuild(),
+        };
+
+        $writer->maintain(fn (SQLite3 $connection) => $connection->exec('VACUUM'));
+
+        (new FailureLog($this->configuration))->clear();
+
+        $truncated = $this->reclaim();
+
+        return ['damaged' => $state === StoreState::CORRUPT, 'before' => $before, 'after' => $this->size(), 'truncated' => $truncated];
+    }
+
+    /**
      * Write the marker of the clear and read the newest id, in one transaction before any row is deleted; a marker never moves back.
      */
     protected function stamp(?RecordType $type, float $instant): int
