@@ -156,7 +156,8 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - The public surface is explicit: internal classes are marked `@internal`, supported entry points `@api`. It is the commands, the config keys, the tool names, arguments and answer shape, and the seam.
 - Every framework API used exists in the lowest supported version (PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2, SQLite 3.38.0). Newer APIs are gated behind one compatibility check whose `@see` links the upstream change. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
 - Nightwatch's output reaches Firewatch only through Firewatch's own ingest; the public `IngestingEvents` event only vetoes. The one `@internal` Nightwatch surface touched is `Core::$ingest`, swapped for Firewatch's own `Contracts\Ingest` only after reflection confirms the interface's signatures and the property, so a changed Nightwatch leaves its ingest in place behind the dead values instead of crashing the host (ADR 0001). The verified line, the wire fixtures and the contract tests move together in one PR.
-- User-facing changes update `CHANGELOG.md`. The README's config, tool, detector and command tables equal the code.
+- User-facing changes add one line to `CHANGELOG.md`, about one feature, not one ticket. The README's config and command tables equal the code.
+- The README is a short guide: install, connect, configure, commands and troubleshooting. Internals, wire details and design rationale go in `CONTEXT.md` or an ADR, never the README. `tests/Contract/DocumentationTest.php` caps its length.
 
 ## 16. Capture and ingest
 
