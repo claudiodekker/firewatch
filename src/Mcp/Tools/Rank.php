@@ -339,7 +339,7 @@ class Rank extends Tool
         $held = [];
 
         while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $held[] = RecordType::tryFrom((string) $row[0]);
+            $held[] = is_string($row[0]) ? RecordType::tryFrom($row[0]) : null;
         }
 
         return array_values(array_filter(Measure::types(), fn (RecordType $type) => in_array($type, $held, true)));

@@ -81,7 +81,7 @@ class Ranking
         $groups = $this->groups($connection);
 
         if ($this->matching !== null) {
-            $groups = array_values(array_filter($groups, fn (array $group) => str_contains(strtolower($this->label($group)), strtolower($this->matching))));
+            $groups = array_values(array_filter($groups, fn (array $group) => mb_stripos($this->label($group), $this->matching) !== false));
         }
 
         $orderedBy = $this->by;
@@ -95,8 +95,8 @@ class Ranking
         return [
             'rows' => array_map($this->row(...), $groups),
             'keys' => array_map(fn (array $group) => $this->key($group, $orderedBy), $groups),
-            'records' => (int) $records,
-            'withoutGroup' => (int) $withoutGroup,
+            'records' => $records,
+            'withoutGroup' => $withoutGroup,
             'untimed' => array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $this->hasDuration() ? $groups : [])),
             'orderedBy' => $orderedBy,
         ];

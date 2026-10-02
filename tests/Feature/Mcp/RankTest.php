@@ -442,16 +442,18 @@ it('matches the label of a group as a case-insensitive substring', function (str
         rankRecord(RecordType::REQUEST, 'b', 20, ['route_path' => '/users']),
         rankRecord(RecordType::REQUEST, 'c', 30, ['route_path' => '/100%_done']),
         rankRecord(RecordType::REQUEST, 'd', 40, ['route_path' => '']),
+        rankRecord(RecordType::REQUEST, 'e', 50, ['route_path' => '/Éclair']),
     ]);
 
     expect(array_column(rankRows(['type' => 'request', 'by' => 'max_duration', 'matching' => $matching]), 'label'))->toBe($labels);
 })->with([
     'a substring in another case' => ['orDERS', ['/Orders/{order}']],
     'a substring in the middle' => ['ser', ['/users']],
+    'a non-ASCII substring in another case' => ['éCLAIR', ['/Éclair']],
     'a percent sign, literally' => ['%', ['/100%_done']],
     'an underscore, literally' => ['_d', ['/100%_done']],
     'the label of requests that matched no route' => ['no route', ['(no route matched)']],
-    'a substring of three labels' => ['/', ['/100%_done', '/users', '/Orders/{order}']],
+    'a substring of every label' => ['/', ['/Éclair', '/100%_done', '/users', '/Orders/{order}']],
 ]);
 
 it('answers that nothing matched, naming the filters', function () {
@@ -488,6 +490,30 @@ it('continues a cut list with the cursor, until the list is complete', function 
         ->and($third['truncated'])->toBe([])
         ->and($second['result']['groups_ranked'])->toBe(25);
 });
+
+it('pages through ties and groups without the measure in the order of one unpaged list', function (array $groups, string $by) {
+    ingest(array_merge(...array_map(fn (string $letter, array $milliseconds) => rankGroup(RecordType::REQUEST, $letter, $milliseconds), array_keys($groups), $groups)));
+    $arguments = ['type' => 'request', 'by' => $by];
+    $expected = array_column(rankRows($arguments), 'group');
+    $seen = [];
+    $page = Envelope::assert(Rank::class, [...$arguments, 'limit' => 1]);
+
+    while (true) {
+        array_push($seen, ...array_column($page['result']['groups'], 'group'));
+
+        if ($page['truncated'] === []) {
+            break;
+        }
+
+        $page = Envelope::assert(Rank::class, [...$arguments, 'limit' => 1, 'cursor' => rankCursor($page)]);
+    }
+
+    expect($seen)->toBe($expected)->and($expected)->toHaveCount(count($groups));
+})->with([
+    'ties, then groups below the floor' => [['a' => array_fill(0, 20, 5), 'b' => array_fill(0, 20, 5), 'c' => [9, 9], 'd' => [9, 9], 'e' => [7]], 'p95_duration'],
+    'the fallback to the maximum' => [['a' => [5, 5], 'b' => [5, 5], 'c' => [8], 'd' => [1, 9], 'e' => [9, 1]], 'p95_duration'],
+    'the median with a null before ties' => [['a' => [4, 4, 4], 'b' => [4, 4, 4], 'c' => [4, 4], 'd' => [4]], 'p50_duration'],
+]);
 
 it('lets the limit and the format change between pages', function () {
     rankTwentyFiveGroups();
