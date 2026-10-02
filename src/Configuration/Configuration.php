@@ -42,21 +42,21 @@ readonly class Configuration
     public function withBusyTimeout(int $milliseconds): self
     {
         return new self(
-            $this->enabled,
-            $this->environments,
-            $this->database,
-            $milliseconds,
-            $this->retentionAge,
-            $this->retentionAgeSeconds,
-            $this->retentionRecords,
-            $this->deploy,
-            $this->captureLogs,
-            $this->captureRequestPayload,
-            $this->redactPayloadFields,
-            $this->redactHeaders,
-            $this->budgets,
-            $this->ignoredBudgetEntries,
-            $this->issues,
+            enabled: $this->enabled,
+            environments: $this->environments,
+            database: $this->database,
+            busyTimeoutMilliseconds: $milliseconds,
+            retentionAge: $this->retentionAge,
+            retentionAgeSeconds: $this->retentionAgeSeconds,
+            retentionRecords: $this->retentionRecords,
+            deploy: $this->deploy,
+            captureLogs: $this->captureLogs,
+            captureRequestPayload: $this->captureRequestPayload,
+            redactPayloadFields: $this->redactPayloadFields,
+            redactHeaders: $this->redactHeaders,
+            budgets: $this->budgets,
+            ignoredBudgetEntries: $this->ignoredBudgetEntries,
+            issues: $this->issues,
         );
     }
 }

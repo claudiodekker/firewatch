@@ -3,11 +3,11 @@
 namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use Illuminate\Support\Facades\Date;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use SQLite3;
+use SQLite3Exception;
 use SQLite3Result;
 use SQLite3Stmt;
-use Throwable;
 
 /**
  * @internal
@@ -53,17 +53,17 @@ class Pruner
     /**
      * Run a pass after a batch was stored, if no process ran one in the last minute: a busy store ends it silently.
      *
-     * @throws Throwable for a step that fails for any reason but the store being busy
+     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
      */
     public function run(): void
     {
-        $now = (float) Date::now()->format('U.u');
+        $now = Instant::now();
 
         try {
             if ($this->claim($now)) {
                 $this->prune($now);
             }
-        } catch (Throwable $exception) {
+        } catch (SQLite3Exception|StoreFailure $exception) {
             if (FailureKind::of($exception) !== FailureKind::BUSY) {
                 throw $exception;
             }
@@ -114,15 +114,7 @@ class Pruner
         }
 
         return $this->writer->transaction(function (SQLite3 $connection) use ($now) {
-            $connection->exec("INSERT OR IGNORE INTO meta (key, value) VALUES ('prune_claimed_at', '0')");
-
-            /** @var SQLite3Stmt $statement */
-            $statement = $connection->prepare("UPDATE meta SET value = :now WHERE key = 'prune_claimed_at' AND CAST(value AS REAL) < :before");
-            $statement->bindValue(':now', $this->text($now));
-            $statement->bindValue(':before', $now - static::CLAIM_SECONDS, SQLITE3_FLOAT);
-            $statement->execute();
-
-            return $connection->changes() === 1;
+            return Markers::claimPrune($connection, $now, static::CLAIM_SECONDS);
         });
     }
 
@@ -132,12 +124,10 @@ class Pruner
     protected function lastClaim(): ?float
     {
         try {
-            $value = $this->reader->snapshot(fn (SQLite3 $connection) => $connection->querySingle("SELECT value FROM meta WHERE key = 'prune_claimed_at'"));
+            return $this->reader->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->pruneClaimedAt);
         } catch (StoreUnusable) {
             return null;
         }
-
-        return is_numeric($value) ? (float) $value : null;
     }
 
     /**
@@ -163,7 +153,7 @@ class Pruner
         $transactions = $this->passTransactions();
 
         while ($transactions > 0) {
-            $removed = $this->chunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows(), 'age');
+            $removed = $this->chunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows(), PruneReason::AGE);
             $deleted = $deleted || $removed > 0;
 
             // A transaction that found nothing to delete does not count against the pass.
@@ -182,7 +172,7 @@ class Pruner
             while ($transactions > 0 && $excess > 0) {
                 $transactions--;
                 $limit = min($this->chunkRows(), $excess);
-                $removed = $this->chunk('1 = 1', [], $limit, 'cap');
+                $removed = $this->chunk('1 = 1', [], $limit, PruneReason::CAP);
                 $excess -= $removed;
                 $deleted = $deleted || $removed > 0;
 
@@ -202,7 +192,7 @@ class Pruner
             $transactions--;
 
             // Freed pages land on the freelist at once, so the counts are read again after each committed chunk.
-            if ($this->chunk('1 = 1', [], $this->chunkRows(), 'size') === 0) {
+            if ($this->chunk('1 = 1', [], $this->chunkRows(), PruneReason::SIZE) === 0) {
                 break;
             }
 
@@ -237,7 +227,7 @@ class Pruner
             foreach (['PRAGMA wal_checkpoint(PASSIVE)', 'PRAGMA optimize'] as $statement) {
                 try {
                     $connection->exec($statement);
-                } catch (Throwable) {
+                } catch (SQLite3Exception) {
                     //
                 }
             }
@@ -252,11 +242,15 @@ class Pruner
     protected function pages(): array
     {
         return $this->reader->snapshot(function (SQLite3 $connection) {
-            $total = $connection->querySingle('PRAGMA page_count');
-            $free = $connection->querySingle('PRAGMA freelist_count');
-            $size = $connection->querySingle('PRAGMA page_size');
+            $totalPages = Cell::integer($connection->querySingle('PRAGMA page_count'));
+            $freePages = Cell::integer($connection->querySingle('PRAGMA freelist_count'));
+            $pageSizeBytes = Cell::integer($connection->querySingle('PRAGMA page_size'));
 
-            return ['live' => (int) $total - (int) $free, 'free' => (int) $free, 'size' => (int) $size];
+            return [
+                'live' => $totalPages - $freePages,
+                'free' => $freePages,
+                'size' => $pageSizeBytes,
+            ];
         });
     }
 
@@ -275,7 +269,7 @@ class Pruner
      *
      * @param  array<string, float>  $bindings
      */
-    protected function chunk(string $condition, array $bindings, int $limit, string $reason): int
+    protected function chunk(string $condition, array $bindings, int $limit, PruneReason $reason): int
     {
         return $this->writer->transaction(function (SQLite3 $connection) use ($condition, $bindings, $limit, $reason) {
             /** @var SQLite3Stmt $statement */
@@ -292,48 +286,51 @@ class Pruner
 
             /** @var SQLite3Result $result */
             while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-                $ids[] = (int) $row[0];
-                $newest = (float) $row[1];
+                $ids[] = Cell::integer($row[0]);
+                $newest = Cell::float($row[1]);
             }
 
             if ($ids === []) {
                 return 0;
             }
 
-            $connection->exec('DELETE FROM records WHERE id IN ('.implode(',', $ids).')');
+            $this->deleteIds($connection, $ids);
+            $this->deleteUnstartedBelow($connection, max($ids));
 
-            // Records without a start age with their neighbours by arrival.
-            $connection->exec('DELETE FROM records WHERE id IN (SELECT id FROM records WHERE started_at IS NULL AND id < '.max($ids).' ORDER BY id LIMIT '.$this->chunkRows().')');
-
-            $this->mark($connection, $newest, $reason);
+            Markers::advancePrunedThrough($connection, $newest, $reason);
 
             return count($ids);
         });
     }
 
     /**
-     * Record that history was removed through an instant, which never moves back, with the reason of the pass that advanced it.
+     * Delete the records with the given ids.
+     *
+     * @param  non-empty-list<int>  $ids
      */
-    protected function mark(SQLite3 $connection, float $through, string $reason): void
+    protected function deleteIds(SQLite3 $connection, array $ids): void
     {
-        $current = $connection->querySingle("SELECT value FROM meta WHERE key = 'pruned_through'");
-
-        if (is_numeric($current) && (float) $current >= $through) {
-            return;
-        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
         /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("INSERT INTO meta (key, value) VALUES ('pruned_through', :through), ('pruned_by', :reason) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
-        $statement->bindValue(':through', $this->text($through));
-        $statement->bindValue(':reason', $reason);
+        $statement = $connection->prepare("DELETE FROM records WHERE id IN ({$placeholders})");
+
+        foreach ($ids as $position => $id) {
+            $statement->bindValue($position + 1, $id, SQLITE3_INTEGER);
+        }
+
         $statement->execute();
     }
 
     /**
-     * Write an instant as meta holds it: Unix seconds with microseconds.
+     * Delete a chunk of the records without a start that arrived before an id, as they age with their neighbours by arrival.
      */
-    protected function text(float $instant): string
+    protected function deleteUnstartedBelow(SQLite3 $connection, int $id): void
     {
-        return sprintf('%.6F', $instant);
+        /** @var SQLite3Stmt $statement */
+        $statement = $connection->prepare('DELETE FROM records WHERE id IN (SELECT id FROM records WHERE started_at IS NULL AND id < :id ORDER BY id LIMIT :limit)');
+        $statement->bindValue(':id', $id, SQLITE3_INTEGER);
+        $statement->bindValue(':limit', $this->chunkRows(), SQLITE3_INTEGER);
+        $statement->execute();
     }
 }

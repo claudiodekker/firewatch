@@ -46,7 +46,7 @@ it('attaches the blind spots of how the call read the records, for the types it 
 
 it('gives each blind spot its kind and sentence', function () {
     expect(BlindSpots::for([RecordType::MAIL]))->toBe([
-        ['id' => 'failed-flag-unpopulated', 'kind' => 'structural', 'message' => 'The failed flag on mail and notification records is always false; failures are not recorded.'],
-        ['id' => 'mail-by-notification', 'kind' => 'structural', 'message' => 'Mail sent by a notification is recorded as a notification, not as mail.'],
+        ['id' => 'failed-flag-unpopulated', 'kind' => 'structural', 'message' => __('firewatch::messages.blind_spots.failed-flag-unpopulated')],
+        ['id' => 'mail-by-notification', 'kind' => 'structural', 'message' => __('firewatch::messages.blind_spots.mail-by-notification')],
     ]);
 });

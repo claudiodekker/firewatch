@@ -28,7 +28,7 @@ class Cursor
         public readonly array $last,
         public readonly ?float $since,
         public readonly ?float $until,
-        protected readonly string $createdAt,
+        protected readonly ?float $createdAt,
     ) {
         //
     }
@@ -39,9 +39,16 @@ class Cursor
      * @param  array<string, mixed>  $arguments
      * @param  array<string, mixed>  $last
      */
-    public static function make(string $tool, array $arguments, string $createdAt, array $last, ?float $since, ?float $until): string
+    public static function make(string $tool, array $arguments, ?float $createdAt, array $last, ?float $since, ?float $until): string
     {
-        $payload = json_encode(['tool' => $tool, 'arguments' => self::hash($arguments), 'created_at' => $createdAt, 'last' => $last, 'since' => $since, 'until' => $until], JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
+        $payload = json_encode([
+            'tool' => $tool,
+            'arguments' => self::hash($arguments),
+            'created_at' => $createdAt,
+            'last' => $last,
+            'since' => $since,
+            'until' => $until,
+        ], JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
 
         return rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
     }
@@ -71,15 +78,15 @@ class Cursor
 
         $last = is_array($fields['last'] ?? null) ? $key($fields['last']) : null;
 
-        if ($last === null || ! is_string($fields['created_at'] ?? null)) {
+        if ($last === null || ! array_key_exists('created_at', $fields)) {
             throw Refusal::badCursor($tool);
         }
 
         return new self(
-            $last,
-            self::instant($fields['since'] ?? null),
-            self::instant($fields['until'] ?? null),
-            $fields['created_at'],
+            last: $last,
+            since: self::instant($fields['since'] ?? null),
+            until: self::instant($fields['until'] ?? null),
+            createdAt: self::instant($fields['created_at']),
         );
     }
 
@@ -94,7 +101,7 @@ class Cursor
     /**
      * Fail unless the store is the one the cursor was made for: a rebuild starts the ids again, a clear does not.
      */
-    public function belongsTo(string $createdAt, string $tool): void
+    public function belongsTo(?float $createdAt, string $tool): void
     {
         if ($this->createdAt !== $createdAt) {
             throw Refusal::badCursor($tool);

@@ -8,9 +8,7 @@ use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Server\Tool;
 use PHPUnit\Framework\Assert;
 
-/**
- * Asserts a tool's answer in both formats, so that the markdown layout is asserted once for every tool and the tool's own tests assert its facts.
- */
+// The markdown layout is asserted here once for every tool; the tool's own tests assert its facts.
 class Envelope
 {
     /**
@@ -39,6 +37,8 @@ class Envelope
     }
 
     /**
+     * Call the tool in both formats and assert the answers against each other.
+     *
      * @param  class-string<Tool>  $tool
      * @param  array<string, mixed>  $arguments
      * @return array<string, mixed>

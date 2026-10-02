@@ -2,6 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Capture\QueryBindings;
+use ClaudioDekker\Firewatch\Capture\Truncator;
 use ClaudioDekker\Firewatch\RecordType;
 
 /**
@@ -52,23 +54,40 @@ class BlindSpots
         $catalogue = [];
 
         foreach (array_keys(self::ATTACHES_TO) as $id) {
-            $catalogue[$id] = __("firewatch::messages.blind_spots.{$id}");
+            $catalogue[$id] = self::sentence($id);
         }
 
         return $catalogue;
     }
 
     /**
-     * Get the blind spots of the record types a call examined, whether or not it found any, so an empty answer carries them.
-     *
-     * The three flags attach what depends on how the call read the records, for the types it examined: by actor, anchored on the latest execution, a split or a trend, or about the whole store.
+     * Get the sentence of a structural blind spot, with the limits it states.
+     */
+    protected static function sentence(string $id): string
+    {
+        return __("firewatch::messages.blind_spots.{$id}", [
+            'field_bytes' => number_format(Truncator::FIELD_LIMIT_BYTES),
+            'bindings_bytes' => number_format(QueryBindings::TOTAL_LIMIT_BYTES),
+            'characters' => number_format(Bounds::CELL_CHARACTERS),
+        ]);
+    }
+
+    /**
+     * Get the blind spots of the record types a call examined, found or not, so an empty answer carries them.
      *
      * @param  list<RecordType>  $types
+     * @param  bool  $actor  attach what depends on reading by actor
+     * @param  bool  $anchored  attach what depends on anchoring on the latest execution, a split or a trend
+     * @param  bool  $storeLevel  attach what is about the whole store
      * @return list<array{id: string, kind: string, message: string}>
      */
     public static function for(array $types, bool $actor = false, bool $anchored = false, bool $storeLevel = false): array
     {
-        $flags = ['actor' => $actor, 'anchored' => $anchored, 'storeLevel' => $storeLevel];
+        $flags = [
+            'actor' => $actor,
+            'anchored' => $anchored,
+            'storeLevel' => $storeLevel,
+        ];
         $blindSpots = [];
 
         foreach (self::ATTACHES_TO as $id => $attaches) {
@@ -77,7 +96,11 @@ class BlindSpots
                 : array_filter($attaches, fn (RecordType $type) => in_array($type, $types, true)) !== [];
 
             if ($applies) {
-                $blindSpots[] = ['id' => $id, 'kind' => 'structural', 'message' => __("firewatch::messages.blind_spots.{$id}")];
+                $blindSpots[] = [
+                    'id' => $id,
+                    'kind' => BlindSpotKind::STRUCTURAL->value,
+                    'message' => self::sentence($id),
+                ];
             }
         }
 

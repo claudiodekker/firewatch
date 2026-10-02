@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
+use ClaudioDekker\Firewatch\Configuration\DurationUnit;
 
 /**
  * @internal
@@ -14,9 +15,11 @@ class Markdown
      */
     public static function duration(int $seconds): string
     {
-        foreach (['d' => 86400, 'h' => 3600, 'm' => 60] as $unit => $length) {
+        foreach ([DurationUnit::DAY, DurationUnit::HOUR, DurationUnit::MINUTE] as $unit) {
+            $length = $unit->seconds();
+
             if ($seconds >= $length && $seconds % $length === 0) {
-                return intdiv($seconds, $length).$unit;
+                return intdiv($seconds, $length).$unit->value;
             }
         }
 

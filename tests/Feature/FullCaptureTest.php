@@ -1,6 +1,5 @@
 <?php
 
-use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Notifications\AnonymousNotifiable;
@@ -25,29 +24,12 @@ use Workbench\App\Notifications\OrderDelayed;
 use Workbench\App\Notifications\OrderShipped;
 
 /**
- * @return list<array<string, mixed>>
- */
-function capturedRows(string $sql): array
-{
-    return app(Reader::class)->snapshot(function (SQLite3 $connection) use ($sql) {
-        $result = $connection->query($sql);
-        $rows = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $rows[] = $row;
-        }
-
-        return $rows;
-    });
-}
-
-/**
  * @param  array<string, string>  $variables
  */
 function configureNightwatchWith(array $variables): void
 {
     foreach ($variables as $name => $value) {
-        setEnvironmentVariable($name, $value);
+        setEnvironmentVariable(name: $name, value: $value);
     }
 
     test()->refreshApplication();
@@ -76,7 +58,7 @@ it('captures every execution Nightwatch\'s sample rates would drop', function (C
     $traffic();
     Nightwatch::digest();
 
-    expect(capturedRows("SELECT count(*) AS captured FROM {$view}"))->toBe([['captured' => 1]]);
+    expect(storeRows("SELECT count(*) AS captured FROM {$view}"))->toBe([['captured' => 1]]);
 })->with([
     'a request' => ['traffic' => fn () => requestTo('/'), 'view' => 'requests'],
     'a command' => ['traffic' => fn () => runArtisan(['command' => 'env']), 'view' => 'commands'],
@@ -133,7 +115,7 @@ it('captures the events Nightwatch\'s filtering would ignore', function (Closure
     $traffic();
     Nightwatch::digest();
 
-    expect(capturedRows("SELECT count(*) AS captured FROM {$view}"))->toBe([['captured' => 1]]);
+    expect(storeRows("SELECT count(*) AS captured FROM {$view}"))->toBe([['captured' => 1]]);
 })->with([
     'a cache event' => ['traffic' => fn () => Cache::get('orders'), 'view' => 'cache_events'],
     'a mail' => ['traffic' => fn () => Mail::raw('Your order shipped.', fn ($message) => $message->to('taylor@example.com')), 'view' => 'mail'],
@@ -151,7 +133,7 @@ it('drops what an in-code opt-out targets and keeps the rest', function (Closure
     $traffic();
     Nightwatch::digest();
 
-    expect(capturedRows($query))->toBe($kept);
+    expect(storeRows($query))->toBe($kept);
 })->with([
     'ignore' => ['traffic' => function () {
         Nightwatch::ignore(fn () => Cache::get('orders'));
@@ -236,7 +218,7 @@ it('captures the source lines of an exception\'s frames even when Nightwatch is 
 
     Nightwatch::report(new RuntimeException('The payment failed.'));
 
-    [$exception] = capturedRows("SELECT trace -> '$[0].code' AS code FROM exceptions");
+    [$exception] = storeRows("SELECT trace -> '$[0].code' AS code FROM exceptions");
 
     expect($exception['code'])->toContain('The payment failed.');
 });
@@ -247,7 +229,7 @@ it('writes the deploy setting to Nightwatch, or leaves Nightwatch\'s own when it
     Cache::get('orders');
     Nightwatch::digest();
 
-    expect(capturedRows('SELECT deploy FROM cache_events'))->toBe([['deploy' => $deploy]]);
+    expect(storeRows('SELECT deploy FROM cache_events'))->toBe([['deploy' => $deploy]]);
 })->with([
     'set' => ['variables' => ['FIREWATCH_DEPLOY' => 'firewatch-deploy'], 'deploy' => 'firewatch-deploy'],
     'unset' => ['variables' => [], 'deploy' => 'nightwatch-deploy'],

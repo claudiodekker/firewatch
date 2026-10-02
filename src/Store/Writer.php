@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Sleep;
 use SQLite3;
 use SQLite3Exception;
-use Throwable;
+use SQLite3Result;
+use SQLite3Stmt;
 
 /**
  * @internal
@@ -55,6 +56,11 @@ class Writer
     ];
 
     /**
+     * The share of the backstop's pages a burst between two passes may reach, as a multiple.
+     */
+    protected const BURST_HEADROOM = 1.25;
+
+    /**
      * The interval the lock file is polled at, in milliseconds.
      */
     protected const LOCK_POLL_MILLISECONDS = 5;
@@ -92,19 +98,19 @@ class Writer
     protected string $sqliteVersion;
 
     /**
-     * Reads the identity of the store file.
+     * The reader of the identity of the store file.
      */
     protected FileIdentity $identity;
 
     /**
-     * Reads the id of the process.
+     * The reader of the id of the process.
      *
      * @var Closure(): int
      */
     protected Closure $pid;
 
     /**
-     * Records the store's recoveries.
+     * The log of the store's recoveries.
      */
     protected FailureLog $failures;
 
@@ -296,7 +302,7 @@ class Writer
 
                 $poll = min($remaining, static::LOCK_POLL_MILLISECONDS);
 
-                Sleep::usleep($poll * 1_000);
+                Sleep::usleep($poll * Microseconds::PER_MILLISECOND);
 
                 $remaining -= $poll;
             }
@@ -347,6 +353,8 @@ class Writer
 
         $connection = new SQLite3($path, SQLITE3_OPEN_READWRITE);
 
+        $ready = false;
+
         // A connection left to the exception's trace could close, and checkpoint, after the lock is released.
         try {
             $connection->enableExceptions(true);
@@ -354,10 +362,12 @@ class Writer
 
             $this->configure($connection);
             $this->createSchema($connection);
-        } catch (Throwable $exception) {
-            $connection->close();
 
-            throw $exception;
+            $ready = true;
+        } finally {
+            if (! $ready) {
+                $connection->close();
+            }
         }
 
         return $connection;
@@ -403,7 +413,7 @@ class Writer
         $connection->exec('PRAGMA journal_size_limit = '.static::JOURNAL_SIZE_LIMIT_BYTES);
 
         // A burst between two passes lands, up to 125% of the backstop; a flood beyond that fails as `full`.
-        $connection->exec('PRAGMA max_page_count = '.intdiv(static::SIZE_BACKSTOP_BYTES * 5, 4 * static::PAGE_SIZE));
+        $connection->exec('PRAGMA max_page_count = '.(int) floor(static::SIZE_BACKSTOP_BYTES * static::BURST_HEADROOM / static::PAGE_SIZE));
     }
 
     /**
@@ -451,11 +461,12 @@ class Writer
             $connection->exec($statement);
         }
 
-        $now = Date::now()->format('U.u');
-        $connection->exec("INSERT INTO meta (key, value) VALUES ('created_at', '{$now}')");
+        $now = Date::now();
+
+        Markers::markCreated($connection, $now);
 
         if ($why !== null) {
-            $connection->exec("INSERT INTO meta (key, value) VALUES ('rebuilt_at', '{$now}'), ('rebuilt_why', '{$why}')");
+            Markers::markRebuilt($connection, $now, $why);
         }
 
         $this->rebuildReason = null;
@@ -476,7 +487,7 @@ class Writer
      */
     public function replaceDamaged(): void
     {
-        $this->moveAside(new SQLite3Exception('database disk image is malformed', 11));
+        $this->moveAside(new SQLite3Exception('database disk image is malformed', FailureKind::SQLITE_CORRUPT));
 
         $this->transaction(fn () => null);
     }
@@ -488,14 +499,21 @@ class Writer
     {
         // Views go first, as they read the tables.
         foreach (['view', 'table'] as $type) {
-            $drops = $connection->querySingle(<<<SQL
+            /** @var SQLite3Stmt $statement */
+            $statement = $connection->prepare(<<<'SQL'
                 SELECT group_concat('DROP ' || upper(type) || ' "' || replace(name, '"', '""') || '"', ';')
                 FROM sqlite_master
-                WHERE type = '{$type}' AND name NOT LIKE 'sqlite\_%' ESCAPE '\\'
+                WHERE type = :type AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
                 SQL);
+            $statement->bindValue(':type', $type);
 
-            if (is_string($drops)) {
-                $connection->exec($drops);
+            /** @var SQLite3Result $result */
+            $result = $statement->execute();
+            $row = $result->fetchArray(SQLITE3_NUM);
+            $statement->close();
+
+            if (is_array($row) && is_string($row[0])) {
+                $connection->exec($row[0]);
             }
         }
     }
@@ -545,19 +563,23 @@ class Writer
     {
         $connection->exec('BEGIN IMMEDIATE');
 
+        $committed = false;
+
         try {
             $result = $callback();
 
             $connection->exec('COMMIT');
-        } catch (Throwable $exception) {
-            // SQLite rolls a transaction back itself when the store is full, and there is then nothing left to roll back.
-            try {
-                $connection->exec('ROLLBACK');
-            } catch (SQLite3Exception) {
-                //
-            }
 
-            throw $exception;
+            $committed = true;
+        } finally {
+            // SQLite rolls a transaction back itself when the store is full, and there is then nothing left to roll back.
+            if (! $committed) {
+                try {
+                    $connection->exec('ROLLBACK');
+                } catch (SQLite3Exception) {
+                    //
+                }
+            }
         }
 
         return $result;
