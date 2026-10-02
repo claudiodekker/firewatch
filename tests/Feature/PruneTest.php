@@ -177,9 +177,11 @@ describe('by record count', function () {
         $this->travelTo('2026-09-30 14:01:01');
         requestsStartedAt([1790776800.0]);
 
+        $markers = pruneMarkers();
+
         expect(startedAts())->toBe([...range(1790776703.0, 1790776710.0), 1790776800.0])
-            ->and(pruneMarkers()->prunedThrough)->toBe(1790776702.0)
-            ->and(pruneMarkers()->prunedReason)->toBe('cap');
+            ->and($markers->prunedThrough)->toBe(1790776702.0)
+            ->and($markers->prunedReason)->toBe('cap');
     });
 
     it('counts records of unknown start, and leaves them when it trims the oldest known ones above them', function () {
