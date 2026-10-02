@@ -158,7 +158,10 @@ class Listing
 
         return [
             'rows' => array_map($this->row(...), $records),
-            'keys' => array_map(fn (array $record) => ['value' => $record['sort_key'], 'id' => $record['id']], $records),
+            'keys' => array_map(fn (array $record) => [
+                'value' => $record['sort_key'],
+                'id' => $record['id'],
+            ], $records),
         ];
     }
 

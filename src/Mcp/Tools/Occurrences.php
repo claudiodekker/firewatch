@@ -5,8 +5,8 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
@@ -37,7 +37,7 @@ use SQLite3Result;
 use SQLite3Stmt;
 
 /**
- * @internal
+ * @api
  */
 #[Name('occurrences')]
 #[Title('Occurrences')]
@@ -235,7 +235,7 @@ class Occurrences extends Tool
             return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], Coverage::of($unusable, $typesRead, History::unknown(...$retention)), $blindSpots);
         }
 
-        $createdAt = $read['facts']->meta['created_at'] ?? '';
+        $createdAt = $read['facts']->meta->createdAt;
 
         $cursor?->belongsTo($createdAt, $this->name());
 
@@ -313,12 +313,17 @@ class Occurrences extends Tool
 
         if ($rows->more) {
             $last = $read['listed']['keys'][$count - 1];
-            $continued = Cursor::make($this->name(), $request->all(), $createdAt, $last, $window->since(), $window->until() ?? $epoch);
-            $arguments = [
-                ...array_diff_key($request->all(), ['cursor' => 0, 'format' => 0]),
-                'cursor' => $continued,
-            ];
-            $truncation = $rows->truncation('rows', __('firewatch::messages.occurrences_cursor_how', ['call' => $this->call($arguments)]));
+            $continued = Cursor::make(
+                tool: $this->name(),
+                arguments: $request->all(),
+                createdAt: $createdAt,
+                last: $last,
+                since: $window->since(),
+                until: $window->until() ?? $epoch,
+            );
+            $arguments = array_diff_key($request->all(), array_flip(['cursor', 'format']));
+            $arguments['cursor'] = $continued;
+            $truncation = $rows->truncation(section: 'rows', how: __('firewatch::messages.occurrences_cursor_how', ['call' => $this->call($arguments)]));
         }
 
         $first = $rows->rows[0]['group'];

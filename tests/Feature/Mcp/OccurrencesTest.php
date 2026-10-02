@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
@@ -496,9 +497,9 @@ function occCursor(array $envelope): string
     return $matches[1];
 }
 
-function occCreatedAt(): string
+function occCreatedAt(): ?float
 {
-    return (string) app(Reader::class)->snapshot(fn (SQLite3 $connection) => $connection->querySingle("SELECT value FROM meta WHERE key = 'created_at'"));
+    return app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->createdAt);
 }
 
 /**

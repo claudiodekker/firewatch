@@ -6,7 +6,7 @@ use Closure;
 use JsonException;
 
 /**
- * @template TLast of array<string, mixed>
+ * @template-covariant TLast of array<string, mixed>
  *
  * @internal
  */

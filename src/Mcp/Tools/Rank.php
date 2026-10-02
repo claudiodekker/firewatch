@@ -225,6 +225,8 @@ class Rank extends Tool
 
     /**
      * Get the window of the call: the one a cursor was issued for, or the one its `since` and `until` give.
+     *
+     * @param  Cursor<array<string, mixed>>|null  $cursor
      */
     protected function window(Request $request, CarbonImmutable $now, string $timezone, ?Cursor $cursor): Window
     {
