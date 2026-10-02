@@ -2,8 +2,9 @@
 
 - TDD for all code (`/mattpocock-skills:tdd`): red, green, refactor. No untested logic.
 - No documentation beyond `README.md`, `CHANGELOG.md`, `CONTEXT.md`, ADRs and `docs/agents/`. The design set lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`. A PR that changes what a user installs, configures or runs updates the README, which stays a short guide, and adds one line to the changelog. Internals belong in `CONTEXT.md` and the ADRs, not the README. No docblocks that restate types.
-- Small PRs: one issue, one vertical slice per PR.
-- Laravel package and Pest guidance: @docs/agents/laravel.md
+- Work in the `skills:claudio-mode` skill.
+- One PR delivers one complete, reviewable feature or fix. Never split a feature into "part 1, 2, 3" PRs; if it is too big to review, split the ticket.
+- Package guardrails and store-specific test rules: @docs/agents/laravel.md
 
 ## Opening PRs
 
@@ -17,7 +18,7 @@ If the diff changes after the PR is open, re-run /mattpocock-skills:pr to update
 
 - Keep a PR a draft until its checks are green; then mark it ready.
 - Answer review comments on the PR itself; fix feedback in the PR it was left on.
-- After `CODING_STANDARDS.md` changes, re-review every open PR against it.
+- After `CODING_STANDARDS.md` or the claudio-mode rulebook changes, re-review every open PR against it.
 
 ## Agent skills
 

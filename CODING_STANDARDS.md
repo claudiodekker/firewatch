@@ -4,27 +4,25 @@ The reviewer reads this file. Apply every rule to each changed hunk in the diff.
 
 This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`; these rules govern how it is implemented.
 
+The general rules for Laravel apps and packages live in `references/laravel-standards.md` of the `skills:claudio-mode` skill, from the `skills@claudiodekker` plugin this repo enables. Read that file and apply it too. Without the Skill tool, read it at `~/.claude/plugins/marketplaces/claudiodekker/skills/claudio-mode/references/laravel-standards.md`. If neither works, say so in the review rather than reviewing against this file alone. The rules below are Firewatch's own and win where the two differ.
+
 ## 1. Sibling changes
 
-- A fix to one member of a **sibling set** (MCP tools, detectors, doctor checks, commands, listeners of the same kind, record types with their view and contract-table entry) must also cover the other members in the same diff. Grep for them. If a sibling is left alone, the PR description says why.
-- Changing a shared value (config key, enum case, a function's signature) updates every place it is used, not just the one in the issue.
+- Firewatch's sibling sets are MCP tools, detectors, doctor checks, commands, listeners of the same kind, and record types with their view and contract-table entry.
 - A closed set of the design (detector shapes, blind-spot ids, error codes, doctor check ids, drift kinds, empty kinds, store states, config keys) changes only by changing its contract, and the test that pins it changes in the same diff.
 
 ## 2. Actions
 
-- Actions are the state-changing use cases a command, tool or Firewatch's ingest triggers (append a batch, prune, clear, drop or rebuild the store), each with one public `handle()` method. Only Actions write to the store: the writers are Firewatch's ingest (a batch, then the prune pass) and `firewatch:clear`. Reading never writes.
-- Action names are verb then entity. A use case that isn't plain create/update/delete takes its own verb.
-- Actions inject other Actions through the constructor as `protected` properties.
+- Actions are the state-changing use cases a command, tool or Firewatch's ingest triggers (append a batch, prune, clear, drop or rebuild the store). Only Actions write to the store: the writers are Firewatch's ingest (a batch, then the prune pass) and `firewatch:clear`. Reading never writes.
 - The store is reached only through its own raw `SQLite3` connection, never Laravel's database layer (no `DB`, PDO, Eloquent or migrations), so its queries are never observed by Nightwatch (ADR 0005).
 - Every write runs in an explicit, short `BEGIN IMMEDIATE` transaction on that connection, so `DB::transaction()` is not used. A batch is one transaction; pruning and clearing work in chunks, each with its coverage marker in the same transaction (ADR 0006).
-- Enum-driven branching uses `match`.
 
 ## 3. Entry points
 
 - Artisan commands and MCP tools validate their input, call one Action or query, and return. They hold no business logic.
 - Tool and command input is validated at the boundary. Numbers such as `limit` and `window` are refused with an actionable error when out of range, never silently clamped, so the answer always reflects what was asked. A malformed time is refused, never read as unbounded.
 - An unknown, misspelt or inapplicable argument is refused with the accepted values, never ignored. Enumerated values are matched exactly.
-- Output is shaped data (an array or value object), never a raw driver result. Call `->values()` after filtering a collection that becomes a JSON list. An empty object result serializes as `{}`, not `[]`.
+- Output is an array or value object, never a raw driver result. An empty object result serializes as `{}`, not `[]`.
 - Every tool answers with the one fixed envelope. A failed call is a plain-text tool error with a closed code and no envelope, never a protocol error, stack trace or path. A valid selector that matches nothing is an empty answer, not an error.
 - Tool and command names say what they do. Errors reach the caller as a message it can act on; an install fix says "run `php artisan firewatch:doctor`".
 - Commands and the server exist only where Firewatch is not stepped aside, and every signature starts with `firewatch:`. The server starts only through `firewatch:server`; no laravel/mcp handle is registered (ADR 0010).
@@ -33,9 +31,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 4. Queries
 
 - Queries use bound parameters. Values are never interpolated into SQL text. The one exception is the SQL tool, whose single statement is the assistant's own (section 18).
-- Queries with an explicit column list include every column the consumer reads. Adding a field means checking those selects.
 - Queries behind an entry point are bounded by a row limit (fetch `limit + 1`, so exactly `limit` rows is a complete list) or by design to one execution, one trace or one job lineage. An absent window bound means unbounded, so the limit is what bounds the answer.
-- A loop over rows doesn't query or write per row. Load the set once, match in memory, and write the changes in one statement or one chunked transaction.
 - One tool call reads inside one deferred snapshot, so every query of one answer sees the same data.
 - Instants are bound as floats, never text. Durations are integer microseconds and computed unrounded; rounding happens only when a value is written into an answer.
 - Windows are half-open (`[since, until)`) on the record's own `started_at`. An execution-scoped analysis selects executions by their own `started_at` and reads their children whole by `execution_id`, with no window.
@@ -43,42 +39,36 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 5. Null-safety
 
-- Every nullable value is guarded (`?->`, `?? default`, early return) before it is dereferenced or passed to a non-nullable parameter. That covers optional payload keys, nullable columns and framework/event properties.
 - A new column doesn't duplicate one the store already keeps.
 - A stored value keeps the wire's word: a wire `0` or `''` is stored as sent, and NULL only where the wire omits the field. NULL means unknown, never zero and never clean.
 
 ## 6. Types and values
 
-- Arrays carry shapes (`array{host: string, port: int}`) or `list<T>`. Keep `mixed` out of APIs you own. A shape that keeps growing is a sign it should become a value object.
-- Fixed sets of values are backed enums with UPPER_CASE cases whose values are spelled exactly as the design spells them (`job-attempt`, `not_evaluated`). An enum that renders text owns it through a `label()` method. Status and type literals are replaced by enum cases or constants.
-- Variables and columns that carry a unit include it in the name, e.g. `$retentionDays`, `$sizeBytes`, `$timeoutSeconds`. Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool returns raw values. An instant held as Unix seconds is named for the moment it marks (`$now`, `$since`, `$cutoff`) and needs no suffix.
-- Calls with several parameters of the same type use named arguments.
+- Enum values are spelled exactly as the design spells them (`job-attempt`, `not_evaluated`).
+- Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool returns raw values. An instant held as Unix seconds is named for the moment it marks (`$now`, `$since`, `$cutoff`) and needs no suffix.
 - Each step that does real work (reads rows, plans, writes, hashes, calls another class) gets its own statement and a named variable. Don't nest it inside another call's argument, where a reader skims past it. Resolving a dependency isn't real work in this sense: don't split a call's arguments into single-use locals, e.g. `new SignInAttempt(Keystone::guard(), app(AccountLookup::class))` stays inline.
-- `json_encode()` on external or user data uses `JSON_THROW_ON_ERROR`, plus `JSON_INVALID_UTF8_SUBSTITUTE` where binary data is possible. Record data uses the seam's flag set, so wire floats keep their fraction.
+- Record data is JSON-encoded with the seam's flag set, so wire floats keep their fraction.
 - A string is cut only by the design's rules: 65,535 bytes at a UTF-8 boundary with the `... [truncated, N bytes total]` suffix counted in the limit, bindings and answer cells with their own caps, and a record's `data` capped as a whole. The trace and JSON-string fields are exempt. Limits are constants, and no `truncated` flag is stored.
-- External input (wire records, tool arguments) is parsed defensively: check that a key or delimiter exists before indexing.
 
 ## 7. Errors and integrations
 
 - Two seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process) and the clock (`Stopwatch`). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
-- Catch the specific exception. Catch `Throwable` only at a boundary that must not break its host (Firewatch's ingest, provider boot, process entry points, the tool layer), and `report()` it there.
+- The boundaries that may catch `Throwable` and `report()` it are Firewatch's ingest, provider boot, process entry points and the tool layer.
 - Nothing is thrown into the host application. The tool layer turns an unexpected failure into the `internal` tool error, also when `app.debug` is on, because a rethrow ends the stdio process.
 - Calls that could act on nothing (an empty batch, an empty result set) check for empty input first.
 
 ## 8. Long-running processes
 
-- Static properties and singletons that hold call-specific data are reset between executions, because Octane and queue workers (which run Firewatch's ingest) and the MCP server reuse the process.
+- The MCP server reuses its process like Octane and queue workers do, so call-specific statics and singletons are reset between tool calls too.
 - The mode and the configuration are read once per process. A store connection is keyed by `getmypid()`: after a fork the inherited handle is abandoned unused and a new one is opened. Every write batch and reader call checks the file's identity, so a file deleted or replaced under a live connection is reopened; where no identity exists (Windows) the check does nothing and never throws.
 - The MCP server and the SQL child write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
 - Windows is supported: no code assumes POSIX (file modes, `stream_select()` on `proc_open` pipes) without a Windows path that the platform job runs (ADR 0012).
 
 ## 9. Configuration
 
-- `env()` is called only in `config/`.
-- Config values are cacheable: scalars, class-strings and arrays of them, never objects or closures.
 - Config is read only through the configuration normaliser, never with `config('firewatch.…')` elsewhere. An invalid value falls back to its default, alone, with an issue; it never throws, never stops capture and never changes the mode.
 - The closed key set is the only configuration. Limits, ceilings, thresholds, sample floors, chunk sizes and the size backstop are named constants, never settings. `FIREWATCH_ENABLED` is the only on/off switch, and the values forced onto Nightwatch are not configurable.
-- New options default to off or the least surprising behaviour and are documented in the config file with a Laravel `|` header block (section 13).
+- New options default to off or the least surprising behaviour and are documented in the config file with a Laravel `|` header block.
 
 ## 10. Store
 
@@ -93,72 +83,40 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 11. Tests
 
-- Every behaviour change and every bug fix ships with a test. A fix's test fails without the fix.
-- Changing an existing assertion's expected value needs a stated reason in the PR.
 - The tests each design decision lists are the definition of what must be covered; boundaries are tested from both sides (19 vs 20 records, 59 vs 60 percent, exactly the change band).
-- A test reads as three phases, arrange, act and assert, separated by a blank line. Capture the result (`$result = $this->artisan(...)`) and assert on it afterwards, rather than chaining the call into its assertions.
-- Data-driven cases use `->with([...])` with named dataset keys, and the test call uses named arguments when several share a type.
-- A test checks real values in both directions, not only that a round trip returns its input.
 - Tests have five layers with one job each. A scenario test (`tests/Scenario`, the default) builds a store from real Nightwatch sensor traffic, walks the tool ladder as an assistant would and asserts the structured answer, with a positive, a negative and a blind-spot case. A feature test (`tests/Feature`) drives one thing a user, an MCP client or Nightwatch triggers (a command, an ingest, a retention pass, a spawned second process) end to end and asserts the state it leaves. A contract test (`tests/Contract`) pins Nightwatch's output, the fixtures and Firewatch's fixed text and shapes, and holds no behaviour. A unit test (`tests/Unit`) covers only what a feature test can't reach (arithmetic tables, grammars, polling, error classification), and a unit test that a feature or scenario test already covers is deleted. An arch test (`tests/Arch`) enforces an invariant, not a style preference.
-- A unit test file is named after the class it covers (`tests/Unit/<Class>Test.php`), not the mechanism it tests.
 - Telemetry comes from the real sensors driven through the workbench. A synthetic record is allowed only for exact durations or timestamps, volume, many groups, deploy identities, drift shapes and other-process writers; it derives from a committed wire fixture through the record builder and goes through Firewatch's real ingest. Nothing inserts into the store except a corruption or foreign-file test. A wire fixture is generated by the workbench command, never edited by hand.
 - A real-sensor test asserts counts, relations, verdicts and shapes, never exact instants or durations.
 - Fixed wording (blind-spot sentences, empty kinds, error messages, detector caveats, doctor messages and other user-facing text) is asserted through its language key, `__('firewatch::messages.key')`, never a copy of the translated string. A contract test (`tests/Contract`) is the exception: it pins the English text itself, so a reworded sentence fails a test. Ids, error codes and closed sets are written as literals in the test, so changing one fails a test. Long text (the server instructions, tool descriptions) is asserted structurally, and limits numerically (40 words per blind spot, 150 per tool description, `tools/list` under 5,000 tokens). No snapshot files are committed.
 - JSON answers are asserted in full; the markdown rendering once per tool through the shared helper. Every `next` call an answer offers is executed and returns a non-error answer.
-- A test of an assertion helper (a fake's `assert*()`, a macro) has one failing case per condition the helper checks, as a dataset, so removing any condition fails a case. A test that would pass with the code under test removed is testing the framework.
-- A test's name says the behaviour it proves ("refuses a window before the coverage start"), not the mechanism ("fails").
 - A test that spawns a real process carries the `process` tag, and one that asserts a file mode or another POSIX-only fact carries `posix`. Real processes run with shortened deadlines passed through constructor arguments, never a real wait.
-- Deterministic tests use:
-    - a temporary store path per test
-    - order-insensitive assertions for sets (`toEqualCanonicalizing()`)
-    - a frozen or faked clock (`travelTo()`, the fake `Stopwatch`) rather than wall-clock time or loop-count thresholds
+- Each test uses its own temporary store path, and the fake `Stopwatch` when it needs a clock.
 - No test asserts timing, sleeps or belongs to a performance group. Correctness is asserted through bounds that are behaviour (bounded batches, ceilings, a deadline that returns control).
-- Global state a test changes (env, statics, config, Nightwatch's per-process state) is restored in teardown.
+- Nightwatch's per-process state counts as global state a test restores in teardown.
 
 ## 12. Methods and classes
 
-- Before writing a helper, check whether Laravel or an installed package already does it (`is()`, `value()`, `Arr` and `Str` helpers, collection methods, enum serialization). When a helper is still needed, the PR says why.
-- Guard clauses handle edge cases first and return early; the happy path comes last.
-- An orchestrating method reads as a short list of named steps. A phase that needs a comment to explain it becomes a named method.
-- Callers get named variants (`findOrFail()`, `readOrFail()`) instead of a `null` return they must branch on.
-- Verbs keep the framework's meaning: `make` builds without saving, `create` saves; `get`/`has`/`is`/`forget`/`flush` behave as they do in the framework.
-- Parameters are ordered subject first, then options, with the `$default` argument, callbacks and variadics last.
 - Traits live in a `Concerns` subfolder of their area (`Console/Concerns`, `Mcp/Concerns`), never beside the classes they serve.
-- Classes stay open to extension: no `final`, and members that aren't public are `protected` rather than `private`, so subclasses can override them.
-- An empty constructor body holds a single `//` line, as in Laravel's own stubs.
-- Builders and configurators return `$this`. Value objects are immutable and return `new static(...)` from each transform.
 - Exceptions the package defines carry state in public properties with fluent setters, and keep a short message.
 
 ## 13. Code hygiene
 
-- Delete code rather than commenting it out. Temporary disables ("re-enable after X") are not merged. Commented-out sample entries in the published config file, as in Laravel's own, may stay.
-- Method docblocks are one imperative line ending in a period (`Determine if…`, `Get the…`, `Create a new … instance.`), then tags. Property and constant docblocks are a noun phrase (`The event dispatcher instance.`). Class docblocks hold only tags (`@template`, `@mixin`, `@method`, `@internal`, `@api`).
-- `@param`/`@return` carry the type. Add a description only for a constraint the name can't express.
-- Inline `//` comments are kept only for a vendor quirk, a gotcha or a cross-reference. A comment that restates the next line is deleted.
-- Comments describe the domain. Comments aimed at tools or reviewers ("kills the mutant", "proves the X branch", "why this ignore exists") are removed; that belongs in the commit message.
-- A magic number becomes a named constant, not a number with a comment (`protected const EXCERPT_LENGTH = 160;`). A value used once and passed straight to a framework call stays inline.
-- An array in `src/` with more than one element and at least one key puts one element per line. A validation rule list and test datasets stay on one line.
-- A blank line separates two statements when either spans several lines.
-- A guard clause stays on one line. If it doesn't fit, shorten the message rather than wrapping it.
-- Multi-line `//` comments and config `|` header blocks use Laravel's **slope**: 3 lines, each 2–4 characters shorter than the one above. Count the text after the `// ` or `| ` prefix. Reword to fit rather than padding.
-- Every `TODO` has an owner or a linked issue.
-- Every `@phpstan-ignore` names the error identifier. No baseline: fix, don't baseline.
-- The diff touches only code related to the change.
+- Commented-out sample entries in the published config file, as in Laravel's own, may stay.
+- An `@param` or `@return` tag gets a description only for a constraint the name can't express.
+- No PHPStan baseline: fix, don't baseline.
 
 ## 14. Domain language and user-facing text
 
 - Long user-facing text (blind-spot sentences, tool descriptions, instructions, doctor messages) is a key in the package's `messages` language file, read through the package namespace (`__('firewatch::messages.failed')`). The file is loaded only where Firewatch is Active or Off. Tool classes override `description()` to read it, and set explicit tool names rather than relying on the default kebab-cased class name.
 - Notices and exceptions raised while the provider registers (stepped aside, ingest not replaced, provider order, a missing veto event) are literals in the provider, because the language file loads only after they fire. Command descriptions stay literals, as in Laravel.
-- A new language file for a narrow topic that won't grow is folded into `messages`.
-- A PR that adds a domain value (an enum case, a status, a mode) whose meaning isn't in `CONTEXT.md` or an ADR adds it to `CONTEXT.md`.
 - Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction. In prose, "the `query` tool" is the SQL tool and "the `query` record type" is the record.
 
 ## 15. Packages
 
-- The public surface is explicit: internal classes are marked `@internal`, supported entry points `@api`. It is the commands, the config keys, the tool names, arguments and answer shape, and the seam.
-- Every framework API used exists in the lowest supported version (PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2, SQLite 3.38.0). Newer APIs are gated behind one compatibility check whose `@see` links the upstream change. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
+- The public surface is the commands, the config keys, the tool names, arguments and answer shape, and the seam.
+- The lowest supported versions are PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2 and SQLite 3.38.0. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
 - Nightwatch's output reaches Firewatch only through Firewatch's own ingest; the public `IngestingEvents` event only vetoes. The one `@internal` Nightwatch surface touched is `Core::$ingest`, swapped for Firewatch's own `Contracts\Ingest` only after reflection confirms the interface's signatures and the property, so a changed Nightwatch leaves its ingest in place behind the dead values instead of crashing the host (ADR 0001). The verified line, the wire fixtures and the contract tests move together in one PR.
-- User-facing changes add one line to `CHANGELOG.md`, about one feature, not one ticket. The README's config and command tables equal the code.
+- A user-facing change adds one line to `CHANGELOG.md`, about one feature, not one ticket. The README's config and command tables equal the code.
 - The README is a short guide: install, connect, configure, commands and troubleshooting. Internals, wire details and design rationale go in `CONTEXT.md` or an ADR, never the README. `tests/Contract/DocumentationTest.php` caps its length.
 
 ## 16. Capture and ingest
