@@ -100,7 +100,7 @@ class Listing
      *
      * @return list<string>
      */
-    public static function matchedFields(RecordType $type): array
+    protected static function matchedFields(RecordType $type): array
     {
         return self::MATCHED_FIELDS[$type->value] ?? [];
     }
@@ -204,7 +204,14 @@ class Listing
         }
 
         if ($this->levels !== null) {
-            $conditions[] = "lower(json_extract(data, '\$.level')) IN ('".implode("', '", $this->levels)."')";
+            $names = [];
+
+            foreach ($this->levels as $at => $level) {
+                $names[] = ":level{$at}";
+                $bindings[":level{$at}"] = $level;
+            }
+
+            $conditions[] = "lower(json_extract(data, '\$.level')) IN (".implode(', ', $names).')';
         }
 
         if ($this->slowerThanMilliseconds !== null) {

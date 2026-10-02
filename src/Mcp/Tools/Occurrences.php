@@ -179,7 +179,7 @@ class Occurrences extends Tool
                 $facts = StoreFacts::read($connection);
 
                 if ($inWindow === 0) {
-                    return compact('total', 'inWindow', 'oldest', 'newest', 'facts') + ['held' => []];
+                    return compact('total', 'inWindow', 'oldest', 'newest', 'facts');
                 }
 
                 $held = $group === null ? [] : Listing::typesOf($connection, $group);
@@ -190,7 +190,7 @@ class Occurrences extends Tool
                 }
 
                 if ($group !== null && $held === []) {
-                    return compact('total', 'inWindow', 'oldest', 'newest', 'facts') + ['held' => []];
+                    return compact('total', 'inWindow', 'oldest', 'newest', 'facts');
                 }
 
                 $this->refuseMisfits($filters, $order, $resolved, $with, false);
@@ -199,11 +199,11 @@ class Occurrences extends Tool
                     $this->outcome($filters['outcome'], $resolved);
                 }
 
-                $listing = new Listing($window, $order, $group, $type, $ids['execution_id'], $ids['trace_id'], $ids['job_id'], $ids['user_id'], $deploy, $filters['method'], $filters['status'], $filters['outcome'], $filters['levels'], $filters['slower_than_ms'], $filters['matching']);
+                $listing = new Listing($window, $order, $group, $resolved, $ids['execution_id'], $ids['trace_id'], $ids['job_id'], $ids['user_id'], $deploy, $filters['method'], $filters['status'], $filters['outcome'], $filters['levels'], $filters['slower_than_ms'], $filters['matching']);
                 $baseline = $filters['at_or_above'] === null ? null : [...$listing->baseline($connection, $filters['at_or_above']), 'percentile' => $filters['at_or_above']];
                 $threshold = $baseline['threshold'] ?? null;
 
-                return compact('total', 'inWindow', 'oldest', 'newest', 'facts', 'held', 'baseline') + [
+                return compact('total', 'inWindow', 'oldest', 'newest', 'facts', 'baseline') + [
                     'rows' => $listing->rows($connection, $limit, $threshold),
                     'sites' => $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null,
                 ];

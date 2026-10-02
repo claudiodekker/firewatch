@@ -295,6 +295,15 @@ it('takes the type of a group that one type holds', function () {
     expect(array_column(array_column(occRows(['group' => occHash('a'), 'status' => '5xx']), 'detail'), 'status_code'))->toBe([500]);
 });
 
+it('applies a matching to the type of a group that one type holds, and says which field matched', function () {
+    ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a'), 'url' => 'http://localhost/needle']), occRecord(RecordType::REQUEST, ['_group' => occHash('a'), 'url' => 'http://localhost/hay'])]);
+
+    $rows = occRows(['group' => occHash('a'), 'matching' => 'needle']);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['matched_on'])->toBe('url');
+});
+
 it('lists the dispatches and the attempts of a job group together', function () {
     ingest([
         occRecord(RecordType::QUEUED_JOB, ['_group' => occHash('a'), 'timestamp' => OCC_AT]),
