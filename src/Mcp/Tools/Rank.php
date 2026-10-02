@@ -141,7 +141,7 @@ class Rank extends Tool
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
-            [$total, $inWindow, $oldest, $newest, $facts, $type, $held, $ranked] = $this->reader->snapshot(function (SQLite3 $connection) use ($request, $window, $group, $explicit, $matching, $deploy, $limit) {
+            [$total, $inWindow, $oldest, $newest, $facts, $type, $held, $by, $ranking, $breakdown] = $this->reader->snapshot(function (SQLite3 $connection) use ($request, $window, $group, $explicit, $matching, $deploy, $limit) {
                 [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
                 $held = $group === null ? [] : $this->holders($connection, $group);
 
@@ -152,13 +152,15 @@ class Rank extends Tool
                 $type = $explicit ?? ($group === null ? null : $this->preferred($held));
 
                 if ($type === null || ($group !== null && $held === [])) {
-                    return [$total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $held, null];
+                    return [$total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $held, null, null, null];
                 }
 
                 $by = $this->measure($request, $type, $group);
                 $ranking = new Ranking($type, $by, $window, $deploy, $matching, $group);
 
-                return [$total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $held, $inWindow === 0 ? null : ['by' => $by, ...($group === null ? ['ranked' => $ranking->read($connection)] : ['breakdown' => $ranking->breakdown($connection, $limit)])]];
+                $read = $inWindow !== 0;
+
+                return [$total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $held, $by, $read && $group === null ? $ranking->read($connection) : null, $read && $group !== null ? $ranking->breakdown($connection, $limit) : null];
             });
         } catch (StoreUnusable $unusable) {
             $types = $explicit === null ? [] : [$explicit];
@@ -182,7 +184,7 @@ class Rank extends Tool
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
 
-        if ($ranked === null && ($group === null || $held !== [])) {
+        if ($ranking === null && $breakdown === null && ($group === null || $held !== [])) {
             $empty = Emptiness::windowEmpty($total);
 
             return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
@@ -192,15 +194,17 @@ class Rank extends Tool
             ? ["type: {$type?->value}", ...($matching === null ? [] : ["matching: {$matching}"]), ...($deploy === null ? [] : ["deploy: {$deploy}"])]
             : ["group: {$group}", ...($explicit === null ? [] : ["type: {$explicit->value}"])];
 
-        if ($ranked === null) {
-            $empty = Emptiness::noMatch($inWindow, $filters);
-
-            return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
+        if ($type !== null && $by !== null && $ranking !== null) {
+            return $this->ranking($request, $epoch, $timezone, $window, $coverage, $blindSpots, $filters, $inWindow, $type, $by, $cursor, $facts->meta['created_at'] ?? '', $limit, $ranking);
         }
 
-        return isset($ranked['breakdown'])
-            ? $this->breakdown($request, $epoch, $timezone, $window, $coverage, $blindSpots, $filters, $inWindow, $type, $group, $held, $limit, $ranked['breakdown'])
-            : $this->ranking($request, $epoch, $timezone, $window, $coverage, $blindSpots, $filters, $inWindow, $type, $ranked['by'], $cursor, $facts->meta['created_at'] ?? '', $limit, $ranked['ranked']);
+        if ($type !== null && $group !== null && $breakdown !== null) {
+            return $this->breakdown($request, $epoch, $timezone, $window, $coverage, $blindSpots, $filters, $inWindow, $type, $group, $held, $limit, $breakdown);
+        }
+
+        $empty = Emptiness::noMatch($inWindow, $filters);
+
+        return new Answer($this->name(), $epoch, $timezone, $window, $empty->summary(), $empty, [], $coverage, $blindSpots);
     }
 
     /**
@@ -225,7 +229,8 @@ class Rank extends Tool
         if ($rows->more) {
             $last = $ranked['keys'][$page[count($rows->rows) - 1]];
             $arguments = [...array_diff_key($request->all(), ['cursor' => 0, 'format' => 0]), 'cursor' => Cursor::make($this->name(), $request->all(), $createdAt, $last, $window->since(), $window->until() ?? $epoch)];
-            $truncated[] = $rows->truncation('groups', __('firewatch::messages.rank_cursor_how', ['call' => $this->call($arguments)]));
+            $entry = $rows->truncation('groups', __('firewatch::messages.rank_cursor_how', ['call' => $this->call($arguments)]));
+            $truncated = $entry === null ? [] : [$entry];
         }
 
         return new Answer(
