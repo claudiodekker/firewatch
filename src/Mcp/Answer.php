@@ -99,15 +99,26 @@ class Answer
         if ($this->bounded === null) {
             [$result, $truncated] = Bounds::capCells($this->result, $this->truncated);
 
-            $size = fn (array $result, array $truncated) => mb_strlen(json_encode($this->envelope($result, $truncated), RecordMapper::JSON_FLAGS));
-
-            [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $size);
+            [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $this->size(...));
             $recounted = Bounds::recountCaps(original: $this->result, fitted: $fitted, truncated: $truncated);
 
             $this->bounded = [$fitted, $recounted];
         }
 
         return $this->bounded;
+    }
+
+    /**
+     * Get the length in characters of the envelope for a result and truncated entries.
+     *
+     * @param  array<string, mixed>  $result
+     * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
+     */
+    protected function size(array $result, array $truncated): int
+    {
+        $envelope = $this->envelope($result, $truncated);
+
+        return mb_strlen(json_encode($envelope, RecordMapper::JSON_FLAGS));
     }
 
     /**
