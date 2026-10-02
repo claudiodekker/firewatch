@@ -92,12 +92,14 @@ class Ranking
 
         usort($groups, fn (array $a, array $b) => self::compare($this->key($a, $orderedBy), $this->key($b, $orderedBy)));
 
+        $untimed = array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $this->hasDuration() ? $groups : []));
+
         return [
             'rows' => array_map($this->row(...), $groups),
             'keys' => array_map(fn (array $group) => $this->key($group, $orderedBy), $groups),
             'records' => $records,
             'withoutGroup' => $withoutGroup,
-            'untimed' => array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $this->hasDuration() ? $groups : [])),
+            'untimed' => $untimed,
             'orderedBy' => $orderedBy,
         ];
     }
@@ -123,7 +125,12 @@ class Ranking
 
         usort($shown, fn (array $a, array $b) => ($a['wfirst'] <=> $b['wfirst']) ?: strcmp($a['hash'], $b['hash']));
 
-        return ['rows' => array_map($this->deployRow(...), $shown), 'matched' => count($deploys), 'records' => $records, 'label' => $label];
+        return [
+            'rows' => array_map($this->deployRow(...), $shown),
+            'matched' => count($deploys),
+            'records' => $records,
+            'label' => $label,
+        ];
     }
 
     /**
@@ -144,16 +151,37 @@ class Ranking
         $groups = [];
 
         foreach ($aggregates as $aggregate) {
-            $groups[$aggregate['group_hash']] = [...$aggregate, 'hash' => $aggregate['group_hash'], 'p50' => null, 'p95' => null, 'raw' => null, 'mem_p95' => null, 'mem_timed' => 0, 'first' => null, 'slowest' => null, 'label' => '', 'method' => null];
+            $groups[$aggregate['group_hash']] = [
+                ...$aggregate,
+                'hash' => $aggregate['group_hash'],
+                'p50' => null,
+                'p95' => null,
+                'raw' => null,
+                'mem_p95' => null,
+                'mem_timed' => 0,
+                'first' => null,
+                'slowest' => null,
+                'label' => '',
+                'method' => null,
+            ];
         }
 
         foreach ($this->percentiles($connection, 'd') as $hash => $percentiles) {
-            $groups[$hash] = [...$groups[$hash], 'p50' => $percentiles['p50'], 'p95' => $percentiles['p95'], 'raw' => $percentiles['raw']];
+            $groups[$hash] = [
+                ...$groups[$hash],
+                'p50' => $percentiles['p50'],
+                'p95' => $percentiles['p95'],
+                'raw' => $percentiles['raw'],
+            ];
         }
 
         if ($executions) {
             foreach ($this->percentiles($connection, 'm') as $hash => $percentiles) {
-                $groups[$hash] = [...$groups[$hash], 'mem_p95' => $percentiles['p95'], 'mem_timed' => $percentiles['n']];
+                $groups[$hash] = [
+                    ...$groups[$hash],
+                    'mem_p95' => $percentiles['p95'],
+                    'mem_timed' => $percentiles['n'],
+                ];
             }
         }
 
@@ -198,7 +226,12 @@ class Ranking
                 sort($raw);
             }
 
-            $percentiles[$row['group_hash']] = ['n' => $row['n'], 'p50' => $row['p50'], 'p95' => $row['p95'], 'raw' => $raw];
+            $percentiles[$row['group_hash']] = [
+                'n' => $row['n'],
+                'p50' => $row['p50'],
+                'p95' => $row['p95'],
+                'raw' => $raw,
+            ];
         }
 
         return $percentiles;
@@ -232,7 +265,11 @@ class Ranking
      */
     protected function key(array $group, Measure $measure): array
     {
-        return ['value' => $this->value($group, $measure), 'occurrences' => $group['occurrences'], 'hash' => $group['hash']];
+        return [
+            'value' => $this->value($group, $measure),
+            'occurrences' => $group['occurrences'],
+            'hash' => $group['hash'],
+        ];
     }
 
     /**
@@ -268,7 +305,10 @@ class Ranking
      */
     protected function row(array $group): array
     {
-        $row = ['group' => $group['hash'], 'label' => $this->label($group)];
+        $row = [
+            'group' => $group['hash'],
+            'label' => $this->label($group),
+        ];
 
         if ($this->hasMethod()) {
             $row['method'] = $group['method'];
@@ -283,14 +323,25 @@ class Ranking
             $p50 = $this->floored($group, 'p50_ms', $group['timed'], self::P50_FLOOR, $withheld);
             $p95 = $this->floored($group, 'p95_ms', $group['timed'], self::P95_FLOOR, $withheld);
 
-            $row += ['min_ms' => $ms($group['min']), 'p50_ms' => $ms($p50), 'avg_ms' => $ms($group['avg']), 'p95_ms' => $ms($p95), 'max_ms' => $ms($group['max']), 'total_ms' => $ms($group['total'])];
+            $row += [
+                'min_ms' => $ms($group['min']),
+                'p50_ms' => $ms($p50),
+                'avg_ms' => $ms($group['avg']),
+                'p95_ms' => $ms($p95),
+                'max_ms' => $ms($group['max']),
+                'total_ms' => $ms($group['total']),
+            ];
         }
 
         if ($this->isExecution()) {
             $mb = fn (int|float|null $value) => $value === null ? null : round($value / self::MEGABYTE, 1);
             $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
 
-            $row += ['p95_memory_mb' => $mb($memory), 'max_memory_mb' => $mb($group['mem_max']), 'queries' => $group['queries'] ?? null];
+            $row += [
+                'p95_memory_mb' => $mb($memory),
+                'max_memory_mb' => $mb($group['mem_max']),
+                'queries' => $group['queries'] ?? null,
+            ];
         }
 
         $failed = $group['failed_of'] ?? 0;
@@ -303,7 +354,11 @@ class Ranking
         ];
 
         if ($this->hasDuration()) {
-            $row += ['slowest_execution_id' => $group['slowest'], 'withheld' => $withheld === [] ? null : $withheld, 'values_ms' => $group['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $group['raw'])];
+            $row += [
+                'slowest_execution_id' => $group['slowest'],
+                'withheld' => $withheld === [] ? null : $withheld,
+                'values_ms' => $group['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $group['raw']),
+            ];
         }
 
         return $row;
@@ -317,7 +372,10 @@ class Ranking
      */
     protected function deployRow(array $deploy): array
     {
-        $row = ['deploy' => $deploy['hash'] === self::NO_DEPLOY ? __('firewatch::messages.rank_no_deploy') : $deploy['hash'], 'occurrences' => $deploy['occurrences']];
+        $row = [
+            'deploy' => $deploy['hash'] === self::NO_DEPLOY ? __('firewatch::messages.rank_no_deploy') : $deploy['hash'],
+            'occurrences' => $deploy['occurrences'],
+        ];
         $withheld = [];
 
         if ($this->hasDuration()) {
@@ -325,13 +383,23 @@ class Ranking
             $p50 = $this->floored($deploy, 'p50_ms', $deploy['timed'], self::P50_FLOOR, $withheld);
             $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], self::P95_FLOOR, $withheld);
 
-            $row += ['p50_ms' => $ms($p50), 'p95_ms' => $ms($p95), 'max_ms' => $ms($deploy['max'])];
+            $row += [
+                'p50_ms' => $ms($p50),
+                'p95_ms' => $ms($p95),
+                'max_ms' => $ms($deploy['max']),
+            ];
         }
 
-        $row += ['first_at' => $deploy['wfirst'], 'last_at' => $deploy['last']];
+        $row += [
+            'first_at' => $deploy['wfirst'],
+            'last_at' => $deploy['last'],
+        ];
 
         if ($this->hasDuration()) {
-            $row += ['withheld' => $withheld === [] ? null : $withheld, 'values_ms' => $deploy['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $deploy['raw'])];
+            $row += [
+                'withheld' => $withheld === [] ? null : $withheld,
+                'values_ms' => $deploy['raw'] === null ? null : array_map(fn (int|float $value) => round($value / 1000, 2), $deploy['raw']),
+            ];
         }
 
         return $row;
@@ -352,7 +420,11 @@ class Ranking
         }
 
         if ($have > 0) {
-            $withheld[$name] = ['reason' => 'sample_too_small', 'have' => $have, 'needed' => $needed];
+            $withheld[$name] = [
+                'reason' => 'sample_too_small',
+                'have' => $have,
+                'needed' => $needed,
+            ];
         }
 
         return null;
