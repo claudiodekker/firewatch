@@ -207,6 +207,21 @@ describe('by record count', function () {
 
         expect($startedAts)->toBe([1790776703.0, null, null]);
     });
+
+    it('trims records of unknown start by arrival once none of known start are left above the cap', function () {
+        withRetention(10);
+        $counts = [];
+
+        foreach (['14:00:00', '14:01:01', '14:02:02'] as $time) {
+            $this->travelTo("2026-09-30 {$time}");
+            ingest(array_fill(0, 20, syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 'unknown'])));
+            $counts[] = count(startedAts());
+        }
+
+        expect($counts)->toBe([9, 9, 9])
+            ->and(array_column(storeRows('SELECT id FROM records ORDER BY id'), 'id'))->toBe(range(52, 60))
+            ->and(pruneMarkers()->prunedThrough)->toBeNull();
+    });
 });
 
 describe('the pass', function () {
@@ -435,6 +450,21 @@ describe('the size backstop', function () {
 
         expect(storePages()['live'])->toBeLessThanOrEqual($target)
             ->and(storePages()['live'])->toBeGreaterThan($target - 3);
+    });
+
+    it('trims records of unknown start by arrival once none of known start are left', function () {
+        ingest(array_fill(0, 200, syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 'unknown'])));
+        $this->travelTo('2026-09-30 14:03:00');
+        $live = storePages()['live'];
+
+        withBackstop($live - 1, chunk: 10);
+        app(Pruner::class)->run();
+
+        $ids = array_column(storeRows('SELECT id FROM records ORDER BY id'), 'id');
+
+        expect(storePages()['live'])->toBeLessThanOrEqual((int) floor(0.9 * ($live - 1)))
+            ->and($ids)->not->toContain(1)
+            ->and(end($ids))->toBe(200);
     });
 
     it('shares the pass transactions with the age and count trims', function () {
