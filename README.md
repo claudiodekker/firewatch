@@ -98,7 +98,7 @@ Capture never slows down or breaks your application. A batch that can't be writt
 | Command | What it does |
 |---|---|
 | `firewatch:server` | Runs the MCP server over stdio. `--list` prints its tools. |
-| `firewatch:clear` | Removes every record, or with `--type=<type>` one type's records, after a confirmation. `--force` skips the confirmation. |
+| `firewatch:clear` | Removes every record, the users and `failures.jsonl`, or with `--type=<type>` only that type's records, after a confirmation. `--force` skips the confirmation. |
 | `firewatch:clear --drop` | Rebuilds the store from scratch, including its diagnostics. Use it when the store is damaged or from another version. |
 | `firewatch:doctor` | Reserved for installation checks; it does nothing yet. |
 

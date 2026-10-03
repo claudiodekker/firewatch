@@ -11,6 +11,8 @@ use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 const CLEAR_NOW = '2026-09-30 14:00:00';
 
@@ -68,6 +70,20 @@ function clearResult(array $options = ['--force' => true]): array
     $exit = Artisan::call('firewatch:clear', $options);
 
     return ['exit' => $exit, 'output' => trim(Artisan::output())];
+}
+
+/**
+ * Run the command from the words a shell would pass, which parses options the way a terminal does.
+ *
+ * @param  list<string>  $words
+ * @return array{exit: int, output: string}
+ */
+function clearArgvResult(array $words): array
+{
+    $output = new BufferedOutput;
+    $exit = Artisan::handle(new ArgvInput(['artisan', 'firewatch:clear', ...$words]), $output);
+
+    return ['exit' => $exit, 'output' => trim($output->fetch())];
 }
 
 /**
@@ -366,6 +382,20 @@ describe('clearing one type', function () {
         'a plural' => 'logs',
         'an underscore' => 'job_attempt',
         'an empty value' => '',
+    ]);
+
+    it('refuses a type flag without a value, wherever it stands, instead of clearing everything', function (array $words) {
+        clearPopulatedStore();
+
+        $result = clearArgvResult($words);
+
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.unknown_type', ['type' => '', 'types' => 'request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request, queued-job']))
+            ->and(clearIds())->toHaveCount(6)
+            ->and(storeRows('SELECT id FROM users'))->toHaveCount(1);
+    })->with([
+        'before another option' => [['--type', '--force']],
+        'last' => [['--force', '--type']],
     ]);
 });
 
