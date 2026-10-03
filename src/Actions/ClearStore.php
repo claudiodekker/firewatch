@@ -115,8 +115,7 @@ class ClearStore
 
         match ($state) {
             StoreState::CORRUPT => $writer->replaceDamaged(),
-            // The writer rebuilds a store of another schema version when it opens it.
-            StoreState::SCHEMA_MISMATCH => $writer->transaction(fn () => null),
+            StoreState::SCHEMA_MISMATCH => $writer->replaceOtherSchema(),
             default => $writer->rebuild(),
         };
 

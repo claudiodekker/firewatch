@@ -91,7 +91,7 @@ The store is a plain SQLite file, created by the first captured batch in a direc
 
 Records older than `retention.age` are pruned, and the store is trimmed when it holds more than `retention.records`. A hard size limit of 512 MiB sits behind both. Answers say from when their history is complete, so a pruned or cleared period never reads as quiet.
 
-Capture never slows down or breaks your application. A batch that can't be written within `busy_timeout` is dropped, and the drop is noted in `failures.jsonl` beside the store, which answers then report. A store from another Firewatch version is rebuilt, and a damaged one is moved aside as `firewatch.sqlite.corrupt`. A file that isn't Firewatch's is never touched.
+Capture never slows down or breaks your application. A batch that can't be written within `busy_timeout` is dropped, and the drop is noted in `failures.jsonl` beside the store, which answers then report. A store from an earlier Firewatch version is rebuilt, one from a later version is left alone, and a damaged one is moved aside as `firewatch.sqlite.corrupt`. A file that isn't Firewatch's is never touched.
 
 ## Commands
 

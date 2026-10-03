@@ -138,11 +138,20 @@ class Writer
      * @param  Closure(SQLite3): TResult  $callback
      * @return TResult
      *
-     * @throws StoreFailure when the file is not a Firewatch store
+     * @throws StoreFailure when the file is not a Firewatch store, or a later release wrote it
      */
     public function transaction(Closure $callback): mixed
     {
         $identity = $this->identity->of($this->configuration->database);
+
+        $callback = function (SQLite3 $connection) use ($callback) {
+            // A later release may also have rebuilt the store in place under a connection this writer kept.
+            if (StoreStamp::read($connection)->isNewer()) {
+                throw new StoreFailure(FailureKind::SCHEMA, 'The store at ['.$this->configuration->database.'] was written by a later release of Firewatch.');
+            }
+
+            return $callback($connection);
+        };
 
         try {
             return $this->write($callback);
@@ -417,13 +426,13 @@ class Writer
     }
 
     /**
-     * Create the schema and its stamps in a new store, or rebuild a store of another schema version.
+     * Create the schema and its stamps in a new store, or rebuild a store of an earlier schema version.
      */
     protected function createSchema(SQLite3 $connection): void
     {
         $stamp = StoreStamp::read($connection);
 
-        if ($stamp->isCurrent()) {
+        if ($stamp->isCurrent() || $stamp->isNewer()) {
             return;
         }
 
@@ -438,7 +447,7 @@ class Writer
             // Another writer may have created or rebuilt the store since the first read.
             $stamp = StoreStamp::read($connection);
 
-            if ($stamp->isCurrent()) {
+            if ($stamp->isCurrent() || $stamp->isNewer()) {
                 return;
             }
 
@@ -480,6 +489,14 @@ class Writer
     public function rebuild(): void
     {
         $this->transaction(fn (SQLite3 $connection) => $this->build($connection, null));
+    }
+
+    /**
+     * Rebuild a store of another schema version in place, one a later release wrote too, as the developer asked.
+     */
+    public function replaceOtherSchema(): void
+    {
+        $this->write(fn (SQLite3 $connection) => StoreStamp::read($connection)->isCurrent() ? null : $this->build($connection, 'schema'));
     }
 
     /**

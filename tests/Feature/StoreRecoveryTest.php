@@ -5,6 +5,8 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreState;
+use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
@@ -89,6 +91,27 @@ function recoveryFailures(): array
 }
 
 /**
+ * Stamp the store with the schema version of a later release, as that release would after rebuilding it in place.
+ */
+function recoveryNewerSchema(): void
+{
+    $store = new SQLite3(recoveryPath());
+    $store->exec('PRAGMA user_version = '.(Schema::VERSION + 1));
+    $store->close();
+}
+
+function recoveryUnusable(): ?StoreUnusable
+{
+    try {
+        app(Reader::class)->snapshot(fn () => null);
+    } catch (StoreUnusable $unusable) {
+        return $unusable;
+    }
+
+    return null;
+}
+
+/**
  * @return list<string>
  */
 function recoveryObjects(SQLite3 $connection): array
@@ -130,8 +153,35 @@ describe('a store of another schema version', function () {
             ->and(file_exists(dirname($path).'/failures.jsonl'))->toBeFalse();
     })->with([
         'an older schema' => 'PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0',
-        'a newer schema' => 'PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = '.(Schema::VERSION + 1),
     ]);
+
+    it('is left as it is when a later release wrote it, and the batch is dropped', function (string $sqliteVersion) {
+        recoveryStore();
+        recoveryNewerSchema();
+        recoveryWriter($sqliteVersion);
+
+        recoveryBatch('new');
+
+        expect(recoveryUnusable()?->state)->toBe(StoreState::SCHEMA_MISMATCH)
+            ->and(recoveryUnusable()?->found)->toBe(Schema::VERSION + 1)
+            ->and(recoveryFailures())->toHaveCount(1)
+            ->and(recoveryFailures()[0])->toMatchArray(['kind' => 'schema', 'dropped' => 1]);
+    })->with([
+        'a writer that closes its connection per batch' => '3.45.1',
+        'a writer that keeps its connection' => '3.51.3',
+    ]);
+
+    it('is left as it is when a later release rebuilt it under a connection this writer kept', function () {
+        recoveryWriter('3.51.3');
+        recoveryBatch('old');
+        recoveryNewerSchema();
+
+        recoveryBatch('new');
+
+        expect(recoveryUnusable()?->found)->toBe(Schema::VERSION + 1)
+            ->and(recoveryFailures())->toHaveCount(1)
+            ->and(recoveryFailures()[0])->toMatchArray(['kind' => 'schema', 'dropped' => 1]);
+    });
 
     it('starts its history again at the rebuild', function () {
         $this->travelTo('2026-09-30 14:00:00');
@@ -151,7 +201,7 @@ describe('a store of another schema version', function () {
         $path = recoveryPath();
         mkdir(dirname($path), recursive: true);
         $store = new SQLite3($path);
-        $store->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)');
+        $store->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0; CREATE TABLE records (id INTEGER)');
         $store->close();
         $other = new Writer(app(Configuration::class), sqliteVersion: '3.51.3');
 
