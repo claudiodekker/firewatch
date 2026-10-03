@@ -1,14 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-# Cloud sessions don't install enabled marketplace plugins on their own.
+# Cloud sessions start without enabled marketplace plugins.
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-# The install rewrites settings.json's formatting; keep the committed file as is.
-settings="$CLAUDE_PROJECT_DIR/.claude/settings.json"
-saved="$(cat "$settings")"
-claude plugin marketplace add mattpocock/skills >/dev/null 2>&1 || true
-claude plugin install mattpocock-skills@mattpocock --scope project >/dev/null 2>&1 || true
-printf '%s\n' "$saved" > "$settings"
+# For cloud sessions started directly on this repo, which don't install the marketplaces declared in settings.json on their own.
+# User scope keeps the committed settings.json untouched; a project-scope install rewrites it.
+timeout 60 claude plugin marketplace add mattpocock/skills >/dev/null \
+  && timeout 60 claude plugin install mattpocock-skills@mattpocock --scope user >/dev/null \
+  || echo "session-start: could not install mattpocock-skills@mattpocock" >&2
+
+timeout 60 claude plugin marketplace add michael-denyer/pstack-claude >/dev/null \
+  && timeout 60 claude plugin install pstack@pstack-claude --scope user >/dev/null \
+  || echo "session-start: could not install pstack@pstack-claude" >&2
+
+# The private skills repo is cloned next to this one, and a local directory needs no GitHub credentials.
+timeout 60 claude plugin marketplace add "$CLAUDE_PROJECT_DIR/../skills" >/dev/null \
+  && timeout 60 claude plugin install skills@claudiodekker --scope user >/dev/null \
+  || echo "session-start: could not install skills@claudiodekker" >&2

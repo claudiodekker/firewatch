@@ -5,10 +5,24 @@
                 "source": "github",
                 "repo": "mattpocock/skills"
             }
+        },
+        "pstack-claude": {
+            "source": {
+                "source": "github",
+                "repo": "michael-denyer/pstack-claude"
+            }
+        },
+        "claudiodekker": {
+            "source": {
+                "source": "github",
+                "repo": "claudiodekker/skills"
+            }
         }
     },
     "enabledPlugins": {
-        "mattpocock-skills@mattpocock": true
+        "mattpocock-skills@mattpocock": true,
+        "pstack@pstack-claude": true,
+        "skills@claudiodekker": true
     },
     "hooks": {
         "SessionStart": [
