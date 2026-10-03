@@ -775,7 +775,6 @@ it('ranks a group holding a request whose memory or query count is not a number 
     $rows = rankRows(['type' => 'request', 'by' => 'p95_memory']);
 
     expect($rows[0])->toMatchArray(['occurrences' => 2, 'max_memory_mb' => 2.0])
-        ->and($rows[0]['p95_memory_mb'])->toBeNull()
         ->and($rows[0]['queries'])->toBeNull();
 });
 

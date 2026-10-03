@@ -853,3 +853,11 @@ it('lists a record the real sensor recorded without a user or a deploy with neit
     expect($row['user_id'])->toBeNull()
         ->and($row['deploy'])->toBeNull();
 });
+
+it('shows no stage for a record sent with an empty one, as the timeline does', function () {
+    ingest([occRecord(RecordType::QUERY, ['execution_stage' => ''])]);
+
+    $row = occRows(['type' => 'query'])[0];
+
+    expect($row['stage'])->toBeNull();
+});
