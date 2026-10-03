@@ -107,7 +107,14 @@ function trcJob(array $envelope, string $job): array
     return $jobs[0];
 }
 
-describe('the chain of executions', function () {
+dataset('trace inline connections', [
+    'sync' => ['sync'],
+    'deferred' => ['deferred'],
+    'background' => ['background'],
+    'null' => ['null'],
+]);
+
+describe('the executions of a trace', function () {
     it('lists the executions that share the trace in the order they started', function () {
         ingest([
             trcAttempt('job', 'attempt', fields: ['timestamp' => TRACE_AT + 5]),
@@ -147,14 +154,14 @@ describe('the chain of executions', function () {
         expect($envelope['result']['executions'])->toEqual([[
             'execution_id' => $expected['execution_id'],
             'source' => $expected['source'],
-            'label' => $expected['label'] === 'rank_no_route' ? __('firewatch::messages.rank_no_route') : $expected['label'],
+            'label' => $expected['label'],
             'started_at' => TRACE_AT,
             'duration_ms' => 2000.0,
             'outcome' => $expected['outcome'],
         ]]);
     })->with([
         'a request' => [RecordType::REQUEST, ['route_path' => '/orders', 'status_code' => 201], ['execution_id' => 'trace', 'source' => 'request', 'label' => '/orders', 'outcome' => 201]],
-        'a request that matched no route' => [RecordType::REQUEST, ['route_path' => '', 'status_code' => 404], ['execution_id' => 'trace', 'source' => 'request', 'label' => 'rank_no_route', 'outcome' => 404]],
+        'a request that matched no route' => [RecordType::REQUEST, ['route_path' => '', 'status_code' => 404], fn () => ['execution_id' => 'trace', 'source' => 'request', 'label' => __('firewatch::messages.rank_no_route'), 'outcome' => 404]],
         'a command' => [RecordType::COMMAND, ['name' => 'orders:sync', 'exit_code' => 1], ['execution_id' => 'trace', 'source' => 'command', 'label' => 'orders:sync', 'outcome' => 1]],
         'a job attempt' => [RecordType::JOB_ATTEMPT, ['name' => 'App\\Jobs\\Ship', 'status' => 'failed'], ['execution_id' => 'attempt', 'source' => 'job', 'label' => 'App\\Jobs\\Ship', 'outcome' => 'failed']],
         'a scheduled task' => [RecordType::SCHEDULED_TASK, ['name' => 'inspire', 'status' => 'processed'], ['execution_id' => 'trace', 'source' => 'schedule', 'label' => 'inspire', 'outcome' => 'processed']],
@@ -215,6 +222,28 @@ describe('the chain of executions', function () {
         $envelope = trcAnswer(['trace_id' => 'trace', 'limit' => 1]);
 
         expect($envelope['result']['jobs'])->toHaveCount(3);
+    });
+
+    it('cuts the jobs of a trace that dispatched hundreds from the tail to fit the answer, and says so', function () {
+        ingest([
+            trcRequest(),
+            ...array_map(fn (int $number) => trcDispatch(sprintf('job-%03d', $number), ['timestamp' => TRACE_AT + 0.125 + $number / 1000]), range(1, 300)),
+        ]);
+
+        $envelope = trcAnswer();
+        $shown = array_column($envelope['result']['jobs'], 'job_id');
+
+        expect($envelope['result']['executions'])->toHaveCount(1)
+            ->and(count($shown))->toBeGreaterThan(0)->toBeLessThan(300)
+            ->and($shown)->toBe(array_map(fn (int $number) => sprintf('job-%03d', $number), range(1, count($shown))))
+            ->and($envelope['truncated'])->toBe([[
+                'section' => 'jobs',
+                'shown' => count($shown),
+                'matched' => 300,
+                'reason' => 'size',
+                'how' => __('firewatch::messages.size_how', ['characters' => '24,000']),
+            ]])
+            ->and($envelope['summary'])->toBe(__('firewatch::messages.trace_summary', ['id' => 'trace', 'executions' => '1 execution', 'jobs' => '300 queued jobs']));
     });
 });
 
@@ -297,6 +326,14 @@ describe('the lineage of a queued job', function () {
         expect(array_column($job['attempts'], 'wait_ms'))->toEqual([875.0, 500.0]);
     });
 
+    it('keeps a negative wait, unclamped, when an attempt starts before its dispatch ended', function () {
+        ingest([trcDispatch('job'), trcAttempt('job', 'early', 1, ['timestamp' => TRACE_AT + 0.1])]);
+
+        $job = trcJob(trcAnswer(), 'job');
+
+        expect($job['attempts'][0]['wait_ms'])->toEqual(-25.0);
+    });
+
     it('has a null wait for the first attempt of a job whose dispatch is missing', function () {
         ingest([trcAttempt('job', 'first', 1), trcAttempt('job', 'second', 2, ['timestamp' => TRACE_AT + 3])]);
 
@@ -355,15 +392,15 @@ describe('the lineage of a queued job', function () {
         expect($job)->toMatchArray(['lineage' => 'no_attempts', 'outcome' => 'pending', 'attempts' => []]);
     });
 
-    it('shows a dispatch on the inline connection as having no attempts and no outcome, never pending', function () {
-        ingest([trcRequest(), trcDispatch('job', ['connection' => 'sync'])]);
+    it('shows a dispatch on an inline connection as having no attempts and no outcome, never pending', function (string $connection) {
+        ingest([trcRequest(), trcDispatch('job', ['connection' => $connection])]);
 
         $envelope = trcAnswer();
         $job = trcJob($envelope, 'job');
 
         expect($job)->toMatchArray(['lineage' => 'no_attempts', 'outcome' => null, 'attempts' => []])
             ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
-    });
+    })->with('trace inline connections');
 
     it('lists the jobs in the order their lineage began', function () {
         ingest([
@@ -406,13 +443,13 @@ describe('the lineage of a queued job', function () {
         ]);
     });
 
-    it('does not call a dispatch on the inline connection a partial lineage', function () {
-        ingest([trcRequest(), trcDispatch('job', ['connection' => 'sync'])]);
+    it('does not call a dispatch on an inline connection a partial lineage', function (string $connection) {
+        ingest([trcRequest(), trcDispatch('job', ['connection' => $connection])]);
 
         $envelope = trcAnswer();
 
         expect($envelope['notes'])->toBe([]);
-    });
+    })->with('trace inline connections');
 
     it('has no jobs for a trace that queued none', function () {
         ingest([trcRequest()]);
@@ -424,7 +461,7 @@ describe('the lineage of a queued job', function () {
 });
 
 describe('by job id', function () {
-    it('starts from the dispatch and shows the chain of its trace and the lineage of the job alone', function () {
+    it('starts from the dispatch and shows the executions of its trace and the lineage of the job alone', function () {
         ingest([
             trcRequest(),
             trcDispatch('job'),
@@ -475,8 +512,8 @@ describe('by job id', function () {
     });
 });
 
-describe('orphans', function () {
-    it('answers with an empty chain and the counts of the records that carry the trace, not not_found', function () {
+describe('a trace with no execution in the store', function () {
+    it('answers with no executions and the counts of the records that carry the trace, not not_found', function () {
         ingest([
             syntheticRecord(RecordType::QUERY)->with(['trace_id' => 'lost', 'execution_id' => 'lost']),
             syntheticRecord(RecordType::QUERY)->with(['trace_id' => 'lost', 'execution_id' => 'lost']),
@@ -489,7 +526,7 @@ describe('orphans', function () {
         expect($envelope['empty'])->toBeNull()
             ->and($envelope['result']['executions'])->toBe([])
             ->and($envelope['result']['jobs'])->toBe([])
-            ->and($envelope['notes'])->toBe([__('firewatch::messages.trace_orphans', ['id' => 'lost', 'counts' => '2 query, 1 log'])]);
+            ->and($envelope['notes'])->toBe([__('firewatch::messages.trace_no_execution', ['id' => 'lost', 'counts' => '2 query, 1 log'])]);
     });
 
     it('offers the records that carry the trace', function () {
@@ -504,14 +541,14 @@ describe('orphans', function () {
             ->and($listed['result']['rows'])->toHaveCount(1);
     });
 
-    it('answers a job whose dispatching execution is missing with an empty chain, its lineage and the records of the job', function () {
+    it('answers a job whose dispatching execution is missing with no executions, its lineage and the records of the job', function () {
         ingest([trcDispatch('job', ['connection' => 'redis'])]);
 
         $envelope = trcAnswer(['job_id' => 'job']);
 
         expect($envelope['result']['executions'])->toBe([])
             ->and($envelope['result']['jobs'][0]['job_id'])->toBe('job')
-            ->and($envelope['notes'])->toContain(__('firewatch::messages.trace_orphans', ['id' => 'trace', 'counts' => '1 queued-job']))
+            ->and($envelope['notes'])->toContain(__('firewatch::messages.trace_no_execution', ['id' => 'trace', 'counts' => '1 queued-job']))
             ->and($envelope['next'])->toBe([['tool' => 'occurrences', 'arguments' => ['job_id' => 'job'], 'why' => __('firewatch::messages.trace_next_occurrences')]]);
     });
 });

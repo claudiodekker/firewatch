@@ -39,7 +39,7 @@ return [
         'rank' => 'Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, worst first, to answer "what is slow, heavy or frequent?". Pass `type`, or `group` to break one group down by deploy (rows in first-seen order) to see whether it changed. `matching` finds a group by a substring of its label. `by` picks the measure, p95_duration by default and occurrences for exceptions. Percentiles are null with a `withheld` object when too few records support them; when no group has enough for the percentile, the order falls back to the maximum and a note says so. Rows carry when the group was first and last seen, its deploys and its slowest execution, and failure_pct where the type has a notion of failure. Windowed by since/until; `deploy` restricts the records; a cursor continues a cut list. Empty is not clean.',
         'execution' => 'One execution in full: a request, command, job attempt or scheduled task. Without arguments it returns the latest one that finished (greatest end time); `type` picks the latest of one kind; `execution_id` picks a specific one (a request\'s trace id is also its execution id). Shows outcome, stages, budget verdict, request headers and payload as captured, counted-versus-captured accounting for eight counters, up to five exceptions with application frames and source lines, and the child timeline. Not windowed. For the job lineage across attempts use `trace`. Recorded when finished: running work is absent.',
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
-        'trace' => 'The causal chain of one trace: the executions in start order, and the lineage of every queued job: dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. Sync-connection jobs have no attempts. Not windowed. Use `execution` for children, exceptions and source lines.',
+        'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
     ],
 
     /*
@@ -262,7 +262,7 @@ return [
 
     'trace_job_id_argument' => 'A job id: the lineage of that job and the executions of the trace it was dispatched in. Give this or trace_id, not both.',
 
-    'trace_limit_argument' => 'The most executions in the chain, 1 to 100. Default 50. The lineage of the jobs is never capped.',
+    'trace_limit_argument' => 'The most executions to list, 1 to 100. Default 50. It does not cap the jobs, whose list is cut only to fit the answer.',
 
     'trace_window_reason' => 'a trace is read whole, whenever it ran',
 
@@ -274,13 +274,13 @@ return [
 
     'trace_jobs_count' => ':count queued job|:count queued jobs',
 
-    'trace_executions_how' => 'Pass a larger `limit`, up to 100, to see more of the chain.',
+    'trace_executions_how' => 'Pass a larger `limit`, up to 100, to see more of the executions.',
 
     'trace_partial_no_attempts' => 'Partial lineage: dispatch without attempts.',
 
     'trace_partial_no_dispatch' => 'Partial lineage: attempts without dispatch.',
 
-    'trace_orphans' => 'Orphan child: its execution record is not in the store. Records that carry `:id`: :counts.',
+    'trace_no_execution' => 'No execution of trace `:id` is in the store. Records that carry it: :counts.',
 
     'trace_next_failed' => 'This execution failed: open it for its exceptions and children.',
 

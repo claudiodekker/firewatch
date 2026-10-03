@@ -14,49 +14,47 @@ class Lineage
      *
      * @var list<string>
      */
-    public const INLINE_CONNECTIONS = ['sync'];
+    protected const INLINE_CONNECTIONS = [
+        'sync',
+        'deferred',
+        'background',
+        'null',
+    ];
 
     /**
      * Get the lineage of each queued job: its dispatch, its attempts in order with the wait before each, and how it ended, in the order the lineages began.
      *
-     * @param  list<array<string, mixed>>  $dispatches  by when they started
-     * @param  list<array<string, mixed>>  $attempts  by when they started
-     * @param  string|null  $trace  the trace an attempt is not named for
      * @return list<array<string, mixed>>
      */
-    public static function jobs(array $dispatches, array $attempts, ?string $trace): array
+    public static function jobs(TraceRecords $records): array
     {
         $dispatched = [];
         $ran = [];
 
-        foreach ($dispatches as $dispatch) {
+        foreach ($records->dispatches as $dispatch) {
             $dispatched[$dispatch['job_id']] ??= $dispatch;
         }
 
-        foreach ($attempts as $attempt) {
+        foreach ($records->attempts as $attempt) {
             $ran[$attempt['job_id']][] = $attempt;
         }
 
-        $jobs = [];
+        $jobs = array_map(strval(...), array_unique([...array_keys($dispatched), ...array_keys($ran)]));
+        $began = fn (string $job) => ($dispatched[$job] ?? $ran[$job][0])['started_at'];
 
-        foreach (array_unique([...array_keys($dispatched), ...array_keys($ran)]) as $job) {
-            $jobs[] = self::job((string) $job, $dispatched[$job] ?? null, $ran[$job] ?? [], $dispatched[$job] ?? $ran[$job][0], $trace);
-        }
+        usort($jobs, fn (string $a, string $b) => [$began($a), $a] <=> [$began($b), $b]);
 
-        usort($jobs, fn (array $a, array $b) => [$a['began'], $a['job_id']] <=> [$b['began'], $b['job_id']]);
-
-        return array_map(fn (array $job) => array_diff_key($job, ['began' => 0]), $jobs);
+        return array_map(fn (string $job) => static::job($job, $dispatched[$job] ?? null, $ran[$job] ?? [], $records->trace), $jobs);
     }
 
     /**
-     * Get the lineage of one job, with when it began so that the jobs can be put in order.
+     * Get the lineage of one job, named after its dispatch, or its first attempt when it has none.
      *
      * @param  array<string, mixed>|null  $dispatch
      * @param  list<array<string, mixed>>  $attempts
-     * @param  array<string, mixed>  $first  the dispatch, or the first attempt of a job with none
      * @return array<string, mixed>
      */
-    protected static function job(string $job, ?array $dispatch, array $attempts, array $first, ?string $trace): array
+    protected static function job(string $job, ?array $dispatch, array $attempts, ?string $trace): array
     {
         $state = match (true) {
             $dispatch === null => LineageState::NO_DISPATCH,
@@ -66,12 +64,11 @@ class Lineage
 
         return [
             'job_id' => $job,
-            'name' => $first['name'],
+            'name' => ($dispatch ?? $attempts[0])['name'],
             'lineage' => $state->value,
-            'outcome' => self::outcome($dispatch, $attempts)?->value,
-            'dispatch' => $dispatch === null ? null : self::dispatch($dispatch),
-            'attempts' => self::attempts($dispatch, $attempts, $trace),
-            'began' => $first['started_at'],
+            'outcome' => static::outcome($dispatch, $attempts)?->value,
+            'dispatch' => $dispatch === null ? null : static::dispatch($dispatch),
+            'attempts' => static::attempts($dispatch, $attempts, $trace),
         ];
     }
 
@@ -87,7 +84,7 @@ class Lineage
             return JobOutcome::of($attempts[array_key_last($attempts)]['status']);
         }
 
-        return self::inline($dispatch) ? null : JobOutcome::PENDING;
+        return static::isInline($dispatch) ? null : JobOutcome::PENDING;
     }
 
     /**
@@ -95,9 +92,9 @@ class Lineage
      *
      * @param  array<string, mixed>|null  $dispatch
      */
-    protected static function inline(?array $dispatch): bool
+    protected static function isInline(?array $dispatch): bool
     {
-        return in_array($dispatch['connection'] ?? null, self::INLINE_CONNECTIONS, true);
+        return in_array($dispatch['connection'] ?? null, static::INLINE_CONNECTIONS, true);
     }
 
     /**
@@ -122,6 +119,7 @@ class Lineage
      *
      * @param  array<string, mixed>|null  $dispatch
      * @param  list<array<string, mixed>>  $attempts
+     * @param  string|null  $trace  the trace an attempt is not named for
      * @return list<array<string, mixed>>
      */
     protected static function attempts(?array $dispatch, array $attempts, ?string $trace): array
@@ -137,7 +135,7 @@ class Lineage
                 'started_at' => $attempt['started_at'],
                 'duration_ms' => Stored::milliseconds($attempt['duration']),
                 'trace_id' => $attempt['trace_id'] === $trace ? null : $attempt['trace_id'],
-                'wait_ms' => self::wait($attempt['started_at'], $waitingFrom),
+                'wait_ms' => static::wait($attempt['started_at'], $waitingFrom),
             ];
 
             $waitingFrom = $attempt['ended_at'];

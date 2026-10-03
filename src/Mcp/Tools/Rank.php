@@ -12,6 +12,7 @@ use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
+use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Measure;
@@ -286,7 +287,7 @@ class Rank extends Tool
             result: [
                 'type' => $type->value,
                 'by' => $by->value,
-                'failure_definition' => Ranking::failureDefinition($type),
+                'failure_definition' => Failure::definition($type),
                 'records' => $ranked['records'],
                 'groups_ranked' => $groupsRanked,
                 'records_without_group' => $ranked['withoutGroup'],

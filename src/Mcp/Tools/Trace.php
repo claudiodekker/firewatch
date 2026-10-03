@@ -143,38 +143,39 @@ class Trace extends Tool
             return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
-        if (! $found['held']) {
+        if (! $found->held) {
             throw $this->notFound($traceId, $jobId);
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
 
-        return $this->trace($epoch, $timezone, $window, $coverage, $blindSpots, $found, $traceId, $jobId, $limit);
+        return $this->trace(epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, found: $found, jobId: $jobId, limit: $limit);
     }
 
     /**
-     * Put the trace in the envelope: the chain of executions, the lineage of the jobs and what is partial about them.
+     * Put the trace in the envelope: its executions, the lineage of the jobs and what is partial about them.
      *
      * @param  list<array<string, mixed>>  $blindSpots
-     * @param  array{trace: string|null, held: bool, executions: list<array<string, mixed>>, dispatches: list<array<string, mixed>>, attempts: list<array<string, mixed>>, orphans: array<string, int>}  $found
+     * @param  string|null  $jobId  the job asked for, or null when the trace was
      */
-    protected function trace(float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, array $found, ?string $traceId, ?string $jobId, int $limit): Answer
+    protected function trace(float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, TraceRecords $found, ?string $jobId, int $limit): Answer
     {
-        $chain = Rows::bound(array_map($this->link(...), $found['executions']), $limit);
-        $jobs = Lineage::jobs(dispatches: $found['dispatches'], attempts: $found['attempts'], trace: $found['trace']);
-        $executions = trans_choice('firewatch::messages.trace_executions_count', count($found['executions']));
-        $queued = trans_choice('firewatch::messages.trace_jobs_count', count($jobs));
+        $executions = Rows::bound(array_map($this->link(...), $found->executions), $limit);
+        $jobs = Lineage::jobs($found);
+
+        $counts = [
+            'executions' => trans_choice('firewatch::messages.trace_executions_count', count($found->executions)),
+            'jobs' => trans_choice('firewatch::messages.trace_jobs_count', count($jobs)),
+        ];
 
         $summary = $jobId === null
             ? __('firewatch::messages.trace_summary', [
-                'id' => $traceId,
-                'executions' => $executions,
-                'jobs' => $queued,
+                'id' => $found->trace,
+                ...$counts,
             ])
             : __('firewatch::messages.trace_job_summary', [
                 'id' => $jobId,
-                'executions' => $executions,
-                'jobs' => $queued,
+                ...$counts,
             ]);
 
         return new Answer(
@@ -185,29 +186,28 @@ class Trace extends Tool
             summary: $summary,
             empty: null,
             result: [
-                'trace_id' => $found['trace'],
+                'trace_id' => $found->trace,
                 'job_id' => $jobId,
-                'executions' => $chain->rows,
+                'executions' => $executions->rows,
                 'jobs' => $jobs,
             ],
             coverage: $coverage,
             blindSpots: $blindSpots,
             notes: $this->notes($found, $jobs),
             truncated: array_filter([
-                $chain->truncation(section: 'executions', how: __('firewatch::messages.trace_executions_how'), matched: count($found['executions'])),
+                $executions->truncation(section: 'executions', how: __('firewatch::messages.trace_executions_how'), matched: count($found->executions)),
             ]),
-            next: $this->next($found, $traceId, $jobId),
+            next: $this->next($found, $jobId),
         );
     }
 
     /**
-     * Get what is partial about the answer: a job seen as one side only, and the records of an execution that is not held.
+     * Get what is partial about the answer: a job seen as one side only, and the records that carry the trace when none of its executions is in the store.
      *
-     * @param  array{trace: string|null, orphans: array<string, int>}  $found
      * @param  list<array<string, mixed>>  $jobs
      * @return list<string>
      */
-    protected function notes(array $found, array $jobs): array
+    protected function notes(TraceRecords $found, array $jobs): array
     {
         $outcomes = array_column($jobs, 'outcome');
         $lineages = array_column($jobs, 'lineage');
@@ -221,11 +221,11 @@ class Trace extends Tool
             $notes[] = __('firewatch::messages.trace_partial_no_dispatch');
         }
 
-        if ($found['orphans'] !== []) {
-            $counts = implode(', ', array_map(fn (string $type, int $records) => "{$records} {$type}", array_keys($found['orphans']), $found['orphans']));
+        if ($found->carrying !== []) {
+            $counts = implode(', ', array_map(fn (string $type, int $records) => "{$records} {$type}", array_keys($found->carrying), $found->carrying));
 
-            $notes[] = __('firewatch::messages.trace_orphans', [
-                'id' => $found['trace'],
+            $notes[] = __('firewatch::messages.trace_no_execution', [
+                'id' => $found->trace,
                 'counts' => $counts,
             ]);
         }
@@ -236,48 +236,47 @@ class Trace extends Tool
     /**
      * Get the calls that follow from the trace: each execution that failed, then the slowest, and the records that carry the id when no execution is held.
      *
-     * @param  array{executions: list<array<string, mixed>>, attempts: list<array<string, mixed>>}  $found
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(array $found, ?string $traceId, ?string $jobId): array
+    protected function next(TraceRecords $found, ?string $jobId): array
     {
         $links = [];
 
-        foreach ($found['executions'] as $execution) {
+        foreach ($found->executions as $execution) {
             if (! is_string($execution['execution_id'])) {
                 continue;
             }
 
-            $type = ExecutionType::from($execution['type']);
+            $type = RecordType::from($execution['type']);
             $links[$execution['execution_id']] = [
-                'failed' => Failure::of($type, ExecutionHeader::outcome(RecordType::from($type->value), $execution)),
+                'failed' => Failure::of($type, ExecutionHeader::outcome($type, $execution)),
                 'duration' => $execution['duration'],
             ];
         }
 
-        foreach ($found['attempts'] as $attempt) {
+        foreach ($found->attempts as $attempt) {
             if (! is_string($attempt['execution_id'])) {
                 continue;
             }
 
             $links[$attempt['execution_id']] ??= [
-                'failed' => Failure::of(ExecutionType::JOB_ATTEMPT, $attempt['status']),
+                'failed' => Failure::of(RecordType::JOB_ATTEMPT, $attempt['status']),
                 'duration' => $attempt['duration'],
             ];
         }
 
         $failed = array_map(strval(...), array_keys(array_filter($links, fn (array $link) => $link['failed'])));
         $slowest = $this->slowest($links);
-        $next = array_map(fn (string $id) => $this->execution($id, 'trace_next_failed'), $failed);
+        $next = array_map(fn (string $id) => $this->execution($id, __('firewatch::messages.trace_next_failed')), $failed);
 
         if ($slowest !== null && ! in_array($slowest, $failed, true)) {
-            $next[] = $this->execution($slowest, 'trace_next_slowest');
+            $next[] = $this->execution($slowest, __('firewatch::messages.trace_next_slowest'));
         }
 
-        if ($found['executions'] === []) {
+        if ($found->executions === []) {
             $next[] = [
                 'tool' => 'occurrences',
-                'arguments' => $jobId === null ? ['trace_id' => $traceId] : ['job_id' => $jobId],
+                'arguments' => $jobId === null ? ['trace_id' => $found->trace] : ['job_id' => $jobId],
                 'why' => __('firewatch::messages.trace_next_occurrences'),
             ];
         }
@@ -315,12 +314,12 @@ class Trace extends Tool
         return [
             'tool' => 'execution',
             'arguments' => ['execution_id' => $id],
-            'why' => __("firewatch::messages.{$why}"),
+            'why' => $why,
         ];
     }
 
     /**
-     * Get what the chain shows of an execution: what it was, when it ran and how it ended.
+     * Get what the answer shows of an execution: what it was, when it ran and how it ended.
      *
      * @param  array<string, mixed>  $execution
      * @return array<string, mixed>
@@ -342,7 +341,7 @@ class Trace extends Tool
     /**
      * Read the store's span and facts, and the records of the trace or the job, in one snapshot.
      *
-     * @return array{int, float|null, float|null, StoreFacts, array{trace: string|null, held: bool, executions: list<array<string, mixed>>, dispatches: list<array<string, mixed>>, attempts: list<array<string, mixed>>, orphans: array<string, int>}|null}
+     * @return array{int, float|null, float|null, StoreFacts, TraceRecords|null}
      */
     protected function load(SQLite3 $connection, ?string $traceId, ?string $jobId): array
     {

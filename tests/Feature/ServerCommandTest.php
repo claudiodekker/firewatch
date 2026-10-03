@@ -21,7 +21,7 @@ it('lists the tools under a header, one line each', function () {
             '  rank         Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
             '  occurrences  Lists individual records, newest first by default, for the selectors you give (at least o…',
             '  execution    One execution in full: a request, command, job attempt or scheduled task.',
-            '  trace        The causal chain of one trace: the executions in start order, and the lineage of every qu…',
+            '  trace        Follows one trace: its executions in start order and the lineage of every queued job.',
             '',
         ]));
 });

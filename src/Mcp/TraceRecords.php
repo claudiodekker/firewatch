@@ -8,51 +8,69 @@ use SQLite3;
 
 /**
  * @internal
+ *
+ * @phpstan-consistent-constructor
  */
-class TraceRecords
+readonly class TraceRecords
 {
     /**
-     * Read what the store holds for a trace: whether it holds the id at all, its executions, the lineage of every job it dispatched or ran and, when there is no execution, the records that carry it.
+     * Create a new trace records instance.
      *
-     * @return array{trace: string|null, held: bool, executions: list<array<string, mixed>>, dispatches: list<array<string, mixed>>, attempts: list<array<string, mixed>>, orphans: array<string, int>}
+     * @param  string|null  $trace  the trace asked for, or the one the job asked for started in
+     * @param  bool  $held  whether the store holds the id asked for at all
+     * @param  list<array<string, mixed>>  $executions  by when they started
+     * @param  list<array<string, mixed>>  $dispatches  by when they started
+     * @param  list<array<string, mixed>>  $attempts  by when they started
+     * @param  array<string, int>  $carrying  the records that carry the trace by type, the most first, when no execution of it is held
      */
-    public static function ofTrace(SQLite3 $connection, string $trace): array
-    {
-        $jobs = 'job_id IN (SELECT job_id FROM queued_jobs WHERE trace_id = :trace UNION SELECT job_id FROM job_attempts WHERE trace_id = :trace)';
-
-        return self::build($connection, $trace, self::carries($connection, $trace), $jobs, ['trace' => $trace]);
+    public function __construct(
+        public ?string $trace,
+        public bool $held,
+        public array $executions,
+        public array $dispatches,
+        public array $attempts,
+        public array $carrying,
+    ) {
+        //
     }
 
     /**
-     * Read what the store holds for a job: the lineage of the job alone, and the executions and orphans of the trace it was dispatched in.
-     *
-     * @return array{trace: string|null, held: bool, executions: list<array<string, mixed>>, dispatches: list<array<string, mixed>>, attempts: list<array<string, mixed>>, orphans: array<string, int>}
+     * Read what the store holds for a trace: its executions and the lineage of every job it dispatched or ran.
      */
-    public static function ofJob(SQLite3 $connection, string $job): array
+    public static function ofTrace(SQLite3 $connection, string $trace): static
     {
-        [$trace, $held] = self::start($connection, $job);
+        $jobs = 'job_id IN (SELECT job_id FROM queued_jobs WHERE trace_id = :trace UNION SELECT job_id FROM job_attempts WHERE trace_id = :trace)';
 
-        return self::build($connection, $trace, $held, 'job_id = :job', ['job' => $job]);
+        return static::build($connection, $trace, static::hasTrace($connection, $trace), $jobs, ['trace' => $trace]);
+    }
+
+    /**
+     * Read what the store holds for a job: the lineage of the job alone, and the executions of the trace it was dispatched in.
+     */
+    public static function ofJob(SQLite3 $connection, string $job): static
+    {
+        [$trace, $held] = static::start($connection, $job);
+
+        return static::build($connection, $trace, $held, 'job_id = :job', ['job' => $job]);
     }
 
     /**
      * Read the executions of the trace and the lineage records the condition picks out.
      *
      * @param  array<string, string>  $bindings
-     * @return array{trace: string|null, held: bool, executions: list<array<string, mixed>>, dispatches: list<array<string, mixed>>, attempts: list<array<string, mixed>>, orphans: array<string, int>}
      */
-    protected static function build(SQLite3 $connection, ?string $trace, bool $held, string $condition, array $bindings): array
+    protected static function build(SQLite3 $connection, ?string $trace, bool $held, string $condition, array $bindings): static
     {
-        $executions = $trace === null ? [] : self::executions($connection, $trace);
+        $executions = $trace === null ? [] : static::executions($connection, $trace);
 
-        return [
-            'trace' => $trace,
-            'held' => $held,
-            'executions' => $executions,
-            'dispatches' => Stored::rows($connection, "SELECT id, started_at, duration, ended_at, execution_id, job_id, name, connection, queue FROM queued_jobs WHERE {$condition} ORDER BY started_at, id", $bindings),
-            'attempts' => Stored::rows($connection, "SELECT id, started_at, duration, ended_at, trace_id, execution_id, job_id, attempt, name, status FROM job_attempts WHERE {$condition} ORDER BY started_at, attempt, id", $bindings),
-            'orphans' => $executions === [] && $trace !== null ? self::orphans($connection, $trace) : [],
-        ];
+        return new static(
+            trace: $trace,
+            held: $held,
+            executions: $executions,
+            dispatches: Stored::rows($connection, "SELECT id, started_at, duration, ended_at, execution_id, job_id, name, connection, queue FROM queued_jobs WHERE {$condition} ORDER BY started_at, id", $bindings),
+            attempts: Stored::rows($connection, "SELECT id, started_at, duration, ended_at, trace_id, execution_id, job_id, attempt, name, status FROM job_attempts WHERE {$condition} ORDER BY started_at, attempt, id", $bindings),
+            carrying: $executions === [] && $trace !== null ? static::carrying($connection, $trace) : [],
+        );
     }
 
     /**
@@ -71,7 +89,7 @@ class TraceRecords
     /**
      * Determine if any record in the store carries the value as its trace id.
      */
-    protected static function carries(SQLite3 $connection, string $trace): bool
+    protected static function hasTrace(SQLite3 $connection, string $trace): bool
     {
         return Stored::rows($connection, 'SELECT 1 AS held FROM records WHERE trace_id = :trace LIMIT 1', ['trace' => $trace]) !== [];
     }
@@ -111,7 +129,7 @@ class TraceRecords
      *
      * @return array<string, int>
      */
-    protected static function orphans(SQLite3 $connection, string $trace): array
+    protected static function carrying(SQLite3 $connection, string $trace): array
     {
         $counts = [];
 
