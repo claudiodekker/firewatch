@@ -83,7 +83,7 @@ The list of known record types and versions with each one's fields and accepted 
 _Avoid_: Schema, whitelist
 
 **Partly interpreted**:
-The state of a captured record whose shape differs from the contract table, so some of its data is kept but not understood.
+The state of a captured record whose shape differs from the contract table, so some of its data is kept but not understood. A value of a type the contract does not accept is stored as sent, a list or object bound for a column as its JSON, and answers read it as absent.
 _Avoid_: Corrupt, invalid
 
 ### Records
