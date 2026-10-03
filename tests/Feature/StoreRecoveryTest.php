@@ -62,6 +62,18 @@ function recoveryCorrupt(int $offset = 4096): void
     fclose($handle);
 }
 
+/**
+ * Damage the page size in the store's header, leaving the SQLite magic string and Firewatch's application id intact.
+ */
+function recoveryDamageHeader(): void
+{
+    $handle = fopen(recoveryPath(), 'r+b');
+
+    fseek($handle, 16);
+    fwrite($handle, "\x00\x07");
+    fclose($handle);
+}
+
 function recoveryForeignStore(): void
 {
     $connection = new SQLite3(recoveryPath());
@@ -257,6 +269,23 @@ describe('a damaged Firewatch store', function () {
         'a writer that closes its connection per batch, damaged in its tables' => ['3.45.1', 4096],
         'a writer that keeps its connection, damaged in its tables' => ['3.51.3', 4096],
         'a writer that keeps its connection, damaged in its first page' => ['3.51.3', 100],
+    ]);
+
+    it('is moved aside and replaced when its header is damaged', function (string $sqliteVersion) {
+        recoveryStore();
+        recoveryDamageHeader();
+        $damaged = md5_file(recoveryPath());
+        recoveryWriter($sqliteVersion);
+
+        recoveryBatch('new');
+
+        expect(recoveryKeys())->toBe(['new'])
+            ->and(md5_file(recoveryPath().'.corrupt'))->toBe($damaged)
+            ->and(recoveryFailures())->toHaveCount(1)
+            ->and(recoveryFailures()[0])->toMatchArray(['kind' => 'corrupt', 'code' => 26, 'dropped' => 0]);
+    })->with([
+        'a writer that closes its connection per batch' => '3.45.1',
+        'a writer that keeps its connection' => '3.51.3',
     ]);
 
     it('moves aside its write-ahead log and shared memory too, replacing the copies of an earlier recovery', function () {

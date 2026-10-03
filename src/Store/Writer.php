@@ -156,7 +156,8 @@ class Writer
         try {
             return $this->write($callback);
         } catch (SQLite3Exception $exception) {
-            if (FailureKind::of($exception) !== FailureKind::CORRUPT) {
+            // A store damaged in its header reads to SQLite as a file that is not a database; the stamp tells them apart.
+            if (! in_array(FailureKind::of($exception), [FailureKind::CORRUPT, FailureKind::FOREIGN], true)) {
                 throw $exception;
             }
 
