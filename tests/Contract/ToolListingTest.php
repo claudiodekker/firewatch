@@ -16,8 +16,9 @@ test('every tool description is at most 150 words', function () {
 });
 
 test('every tool the assistant-facing text names in backticks is registered', function () {
-    $tools = array_column(toolListing()['tools'], 'name');
-    $arguments = array_merge(...array_map(fn (array $tool) => array_keys($tool['inputSchema']['properties']), toolListing()['tools']));
+    $listed = toolListing()['tools'];
+    $tools = array_column($listed, 'name');
+    $arguments = array_merge(...array_map(fn (array $tool) => array_keys($tool['inputSchema']['properties']), $listed));
     $answerFields = ['next', 'withheld', 'detail'];
     $otherWords = ['database', 'split_at'];
     $text = implode("\n", Arr::flatten(trans('firewatch::messages')));
