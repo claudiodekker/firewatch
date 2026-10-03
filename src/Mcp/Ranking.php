@@ -564,10 +564,11 @@ class Ranking
     {
         if ($filtered) {
             $number = Stored::number('duration');
+            $deploy = "NULLIF(deploy, '')";
 
             // A skipped scheduled task has no duration of its own: it never ran.
             $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".self::STATUS_SKIPPED."' THEN NULL ELSE {$number} END" : ($this->hasDuration() ? $number : 'NULL');
-            $columns = [$this->group === null ? 'group_hash' : 'COALESCE(deploy, char(1)) AS group_hash', 'id', 'started_at', 'deploy', 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
+            $columns = [$this->group === null ? 'group_hash' : "COALESCE({$deploy}, char(1)) AS group_hash", 'id', 'started_at', "{$deploy} AS deploy", 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
 
             if ($this->hasMethod()) {
                 $columns[] = 'method';

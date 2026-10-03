@@ -265,8 +265,8 @@ class Listing
             'group' => $record['group_hash'],
             'name' => $this->name($type, $data),
             'location' => $located ? Stored::location($data['file'] ?? null, $data['line'] ?? null) : null,
-            'user_id' => $record['user_id'],
-            'deploy' => $record['deploy'],
+            'user_id' => Stored::blank($record['user_id']),
+            'deploy' => Stored::blank($record['deploy']),
         ];
 
         if ($this->matching !== null && $type !== null) {

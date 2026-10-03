@@ -842,3 +842,14 @@ it('lists a query whose file is not a string without a location or a call site',
     expect(array_column($envelope['result']['rows'], 'location'))->toBe(['app/B.php:9', null])
         ->and($envelope['result']['call_sites'])->toBe([['location' => 'app/B.php:9', 'count' => 1]]);
 });
+
+it('lists a record the real sensor recorded without a user or a deploy with neither', function () {
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+    $this->get('/');
+
+    $row = occRows(['type' => 'request'])[0];
+
+    expect($row['user_id'])->toBeNull()
+        ->and($row['deploy'])->toBeNull();
+});
