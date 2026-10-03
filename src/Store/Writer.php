@@ -144,7 +144,7 @@ class Writer
     {
         $identity = $this->identity->of($this->configuration->database);
 
-        $callback = function (SQLite3 $connection) use ($callback) {
+        $guarded = function (SQLite3 $connection) use ($callback) {
             // A later release may also have rebuilt the store in place under a connection this writer kept.
             if (StoreStamp::read($connection)->isNewer()) {
                 throw new StoreFailure(FailureKind::SCHEMA, 'The store at ['.$this->configuration->database.'] was written by a later release of Firewatch.');
@@ -154,7 +154,7 @@ class Writer
         };
 
         try {
-            return $this->write($callback);
+            return $this->write($guarded);
         } catch (SQLite3Exception $exception) {
             // A store damaged in its header reads to SQLite as a file that is not a database; the stamp tells them apart.
             if (! in_array(FailureKind::of($exception), [FailureKind::CORRUPT, FailureKind::FOREIGN], true)) {
@@ -170,7 +170,7 @@ class Writer
                 $this->moveAside($exception);
             }
 
-            return $this->write($callback);
+            return $this->write($guarded);
         }
     }
 
