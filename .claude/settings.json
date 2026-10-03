@@ -6,6 +6,12 @@
                 "repo": "mattpocock/skills"
             }
         },
+        "pstack-claude": {
+            "source": {
+                "source": "github",
+                "repo": "michael-denyer/pstack-claude"
+            }
+        },
         "claudiodekker": {
             "source": {
                 "source": "github",
@@ -15,6 +21,7 @@
     },
     "enabledPlugins": {
         "mattpocock-skills@mattpocock": true,
+        "pstack@pstack-claude": true,
         "skills@claudiodekker": true
     },
     "hooks": {
