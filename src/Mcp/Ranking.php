@@ -563,8 +563,10 @@ class Ranking
     protected function query(SQLite3 $connection, string $sql, bool $filtered = true): array
     {
         if ($filtered) {
+            $number = Stored::number('duration');
+
             // A skipped scheduled task has no duration of its own: it never ran.
-            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".self::STATUS_SKIPPED."' THEN NULL ELSE duration END" : ($this->hasDuration() ? 'duration' : 'NULL');
+            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".self::STATUS_SKIPPED."' THEN NULL ELSE {$number} END" : ($this->hasDuration() ? $number : 'NULL');
             $columns = [$this->group === null ? 'group_hash' : 'COALESCE(deploy, char(1)) AS group_hash', 'id', 'started_at', 'deploy', 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
 
             if ($this->hasMethod()) {
@@ -572,7 +574,7 @@ class Ranking
             }
 
             if ($this->isExecution()) {
-                array_push($columns, 'peak_memory_usage AS m', 'queries AS q');
+                array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q');
             }
 
             if ($this->failure() !== null) {

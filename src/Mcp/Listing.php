@@ -19,11 +19,6 @@ class Listing
     protected const CALL_SITES = 20;
 
     /**
-     * The decimals the memory of a record is rounded to, in megabytes.
-     */
-    protected const MEMORY_DECIMALS = 1;
-
-    /**
      * Create a new listing instance.
      *
      * @param  array{int, int}|null  $status  the lowest and the highest status code that is kept
@@ -91,8 +86,9 @@ class Listing
     {
         [$selection, $bindings] = $this->selection();
         $needed = $percentile->floor();
+        $duration = Stored::number('duration');
 
-        $samples = self::run($connection, "SELECT count(duration) AS samples FROM records WHERE {$selection}", $bindings, $this->window)[0]['samples'];
+        $samples = self::run($connection, "SELECT count({$duration}) AS samples FROM records WHERE {$selection}", $bindings, $this->window)[0]['samples'];
 
         if ($samples < $needed) {
             return [
@@ -103,7 +99,7 @@ class Listing
         }
 
         $bindings[':offset'] = intdiv($samples * $percentile->share() + Ranking::PERCENT - 1, Ranking::PERCENT) - 1;
-        $row = self::run($connection, "SELECT duration FROM records WHERE {$selection} AND duration IS NOT NULL ORDER BY duration LIMIT 1 OFFSET :offset", $bindings, $this->window)[0];
+        $row = self::run($connection, "SELECT {$duration} AS duration FROM records WHERE {$selection} AND {$duration} IS NOT NULL ORDER BY {$duration} LIMIT 1 OFFSET :offset", $bindings, $this->window)[0];
 
         return [
             'samples' => $samples,
@@ -144,17 +140,17 @@ class Listing
     /**
      * Read the distinct call sites of the records the filters keep, most frequent first.
      *
-     * @return list<array{location: string, count: int}>
+     * @return list<array{location: string|null, count: int}>
      */
     public function callSites(SQLite3 $connection, int|float|null $threshold): array
     {
         [$where, $bindings] = $this->where($threshold);
         $bindings[':limit'] = self::CALL_SITES;
 
-        $sites = self::run($connection, "SELECT json_extract(data, '\$.file') AS file, json_extract(data, '\$.line') AS line, count(*) AS count FROM records WHERE {$where} AND json_extract(data, '\$.file') IS NOT NULL GROUP BY file, line ORDER BY count DESC, file, line LIMIT :limit", $bindings, $this->window);
+        $sites = self::run($connection, "SELECT json_extract(data, '\$.file') AS file, json_extract(data, '\$.line') AS line, count(*) AS count FROM records WHERE {$where} AND json_type(data, '\$.file') = 'text' GROUP BY file, line ORDER BY count DESC, file, line LIMIT :limit", $bindings, $this->window);
 
         return array_map(fn (array $site) => [
-            'location' => self::location($site['file'], $site['line']),
+            'location' => Stored::location($site['file'], $site['line']),
             'count' => $site['count'],
         ], $sites);
     }
@@ -198,6 +194,7 @@ class Listing
     {
         [$selection, $bindings] = $this->selection();
         $conditions = [$selection];
+        $duration = Stored::number('duration');
 
         if ($this->method !== null) {
             $conditions[] = "upper(json_extract(data, '\$.method')) = upper(:method)";
@@ -226,12 +223,12 @@ class Listing
         }
 
         if ($this->slowerThanMilliseconds !== null) {
-            $conditions[] = 'duration > :slower';
+            $conditions[] = "{$duration} > :slower";
             $bindings[':slower'] = $this->slowerThanMilliseconds * Microseconds::PER_MILLISECOND;
         }
 
         if ($threshold !== null) {
-            $conditions[] = 'duration >= :threshold';
+            $conditions[] = "{$duration} >= :threshold";
             $bindings[':threshold'] = $threshold;
         }
 
@@ -254,25 +251,25 @@ class Listing
     {
         /** @var array<string, mixed> $data */
         $data = json_decode($record['data'], true, flags: JSON_THROW_ON_ERROR);
-        $type = RecordType::from($record['type']);
-        $located = in_array($type, [RecordType::QUERY, RecordType::EXCEPTION], true) && isset($data['file']);
+        $type = RecordType::tryFrom($record['type'] ?? '');
+        $located = in_array($type, [RecordType::QUERY, RecordType::EXCEPTION], true);
 
         $row = [
             'started_at' => $record['started_at'],
-            'type' => $type->value,
+            'type' => $record['type'],
             'source' => $record['source'],
             'stage' => $data['execution_stage'] ?? null,
-            'duration_ms' => $record['duration'] === null ? null : round($record['duration'] / Microseconds::PER_MILLISECOND, Ranking::MILLISECOND_DECIMALS),
+            'duration_ms' => Stored::milliseconds($record['duration']),
             'execution_id' => $record['execution_id'],
             'trace_id' => $record['trace_id'],
             'group' => $record['group_hash'],
             'name' => $this->name($type, $data),
-            'location' => $located ? self::location($data['file'], $data['line'] ?? null) : null,
+            'location' => $located ? Stored::location($data['file'] ?? null, $data['line'] ?? null) : null,
             'user_id' => $record['user_id'],
             'deploy' => $record['deploy'],
         ];
 
-        if ($this->matching !== null) {
+        if ($this->matching !== null && $type !== null) {
             $row['matched_on'] = $this->matchedOn($type, $data, $this->matching);
         }
 
@@ -282,19 +279,19 @@ class Listing
     }
 
     /**
-     * Get the label of the group a record belongs to, or null for a type that has none.
+     * Get the label of the group a record belongs to, or null for a type that has none or that is unknown.
      *
      * @param  array<string, mixed>  $data
      */
-    protected function name(RecordType $type, array $data): ?string
+    protected function name(?RecordType $type, array $data): ?string
     {
         $name = match ($type) {
+            null, RecordType::LOG => null,
             RecordType::REQUEST => $data['route_path'] ?? null,
             RecordType::QUERY => $data['sql'] ?? null,
             RecordType::OUTGOING_REQUEST => $data['host'] ?? null,
             RecordType::CACHE_EVENT => $data['key'] ?? null,
             RecordType::EXCEPTION, RecordType::MAIL, RecordType::NOTIFICATION => $data['class'] ?? null,
-            RecordType::LOG => null,
             default => $data['name'] ?? null,
         };
 
@@ -318,15 +315,15 @@ class Listing
     }
 
     /**
-     * Get the fields that are particular to the type of a record.
+     * Get the fields that are particular to the type of a record, which a record of an unknown type has none of.
      *
      * @param  array<string, mixed>  $record
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    protected function detail(RecordType $type, array $record, array $data): array
+    protected function detail(?RecordType $type, array $record, array $data): array
     {
-        $memory = isset($data['peak_memory_usage']) ? round($data['peak_memory_usage'] / Ranking::MEGABYTE, self::MEMORY_DECIMALS) : null;
+        $memory = Stored::megabytes($data['peak_memory_usage'] ?? null);
 
         return match ($type) {
             RecordType::REQUEST => [
@@ -393,16 +390,8 @@ class Listing
                 'connection' => $data['connection'] ?? null,
                 'queue' => $data['queue'] ?? null,
             ],
-            RecordType::USER => [],
+            null, RecordType::USER => [],
         };
-    }
-
-    /**
-     * Get a file and line as `file:line`, or the file alone when there is no line.
-     */
-    protected static function location(mixed $file, mixed $line): string
-    {
-        return is_int($line) ? "{$file}:{$line}" : (string) $file;
     }
 
     /**

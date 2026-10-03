@@ -781,3 +781,64 @@ it('keeps a cursor valid across a clear', function () {
 
     expect($envelope['empty']['kind'])->toBe('store_empty');
 });
+
+it('lists a record of an unknown type beside the records it shares a trace with, as stored and without detail', function () {
+    ingest([
+        occRecord(RecordType::REQUEST, ['trace_id' => 'tr1', 'timestamp' => OCC_AT - 1]),
+        occRecord(RecordType::CACHE_EVENT, ['t' => 'future-type', '_group' => occHash('f'), 'trace_id' => 'tr1', 'execution_id' => 'e1', 'user' => 'u1', 'deploy' => 'v1', 'duration' => 2500]),
+    ]);
+
+    $rows = occRows(['trace_id' => 'tr1']);
+
+    expect(array_column($rows, 'type'))->toBe(['future-type', 'request'])
+        ->and($rows[0])->toEqual(['started_at' => OCC_AT, 'type' => 'future-type', 'source' => 'command', 'stage' => 'action', 'duration_ms' => 2.5, 'execution_id' => 'e1', 'trace_id' => 'tr1', 'group' => occHash('f'), 'name' => null, 'location' => null, 'user_id' => 'u1', 'deploy' => 'v1', 'detail' => []]);
+});
+
+it('lists and orders a record whose duration is not a number as one without a duration', function () {
+    ingest([
+        occRecord(RecordType::REQUEST, ['route_path' => '/slow', 'duration' => 'slow', 'timestamp' => OCC_AT + 1]),
+        ...array_map(fn (int $milliseconds) => occRecord(RecordType::REQUEST, ['route_path' => "/{$milliseconds}", 'duration' => $milliseconds * 1000]), [10, 20, 30]),
+    ]);
+    $arguments = ['type' => 'request', 'order' => 'slowest', 'limit' => 3];
+
+    $first = Envelope::assert(Occurrences::class, $arguments);
+    $rest = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+    $baseline = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'median']);
+    $slower = occRows(['type' => 'request', 'slower_than_ms' => 15]);
+
+    expect(array_column($first['result']['rows'], 'duration_ms'))->toEqual([30.0, 20.0, 10.0])
+        ->and($rest['result']['rows'])->toHaveCount(1)
+        ->and($rest['result']['rows'][0])->toMatchArray(['name' => '/slow', 'duration_ms' => null])
+        ->and($baseline['result']['baseline'])->toEqual(['percentile' => 'median', 'threshold_ms' => 20.0, 'samples' => 3, 'withheld' => null])
+        ->and(array_column($slower, 'name'))->toBe(['/30', '/20']);
+});
+
+it('lists and orders a request whose measure is not a number as one without it', function (string $order, string $field, int $value, array $detail) {
+    ingest([
+        occRecord(RecordType::REQUEST, ['route_path' => '/drifted', $field => 'lots', 'timestamp' => OCC_AT + 1]),
+        occRecord(RecordType::REQUEST, ['route_path' => '/counted', $field => $value]),
+    ]);
+    $arguments = ['type' => 'request', 'order' => $order, 'limit' => 1];
+
+    $first = Envelope::assert(Occurrences::class, $arguments);
+    $rest = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+
+    expect(array_column($first['result']['rows'], 'name'))->toBe(['/counted'])
+        ->and(array_column($rest['result']['rows'], 'name'))->toBe(['/drifted'])
+        ->and($rest['result']['rows'][0]['detail'])->toMatchArray($detail);
+})->with([
+    'memory' => ['order' => 'memory', 'field' => 'peak_memory_usage', 'value' => 2097152, 'detail' => ['memory_mb' => null]],
+    'queries' => ['order' => 'queries', 'field' => 'queries', 'value' => 2, 'detail' => ['queries' => 'lots']],
+]);
+
+it('lists a query whose file is not a string without a location or a call site', function () {
+    ingest([
+        occRecord(RecordType::QUERY, ['_group' => occHash('b'), 'file' => ['app/A.php'], 'line' => 1]),
+        occRecord(RecordType::QUERY, ['_group' => occHash('b'), 'file' => 'app/B.php', 'line' => 9]),
+    ]);
+
+    $envelope = Envelope::assert(Occurrences::class, ['type' => 'query', 'group' => occHash('b')]);
+
+    expect(array_column($envelope['result']['rows'], 'location'))->toBe(['app/B.php:9', null])
+        ->and($envelope['result']['call_sites'])->toBe([['location' => 'app/B.php:9', 'count' => 1]]);
+});

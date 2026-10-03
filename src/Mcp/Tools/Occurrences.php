@@ -216,7 +216,7 @@ class Occurrences extends Tool
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
      * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
-     * @return array{total: int, inWindow: int, oldest: float|null, newest: float|null, facts: StoreFacts, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string, count: int}>|null}
+     * @return array{total: int, inWindow: int, oldest: float|null, newest: float|null, facts: StoreFacts, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
      */
     protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, array $filters, int $limit, string $selector, ?Cursor $cursor): array
     {
@@ -292,7 +292,7 @@ class Occurrences extends Tool
      * Put the rows, newest or worst first, in the envelope: cut at the limit, with the cursor for the rest.
      *
      * @param  list<array<string, mixed>>  $blindSpots
-     * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string, count: int}>|null}  $read
+     * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read
      */
     protected function listing(Request $request, float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, Order $order, ?string $group, ?string $userId, int $limit, ?float $createdAt, array $read): Answer
     {

@@ -63,6 +63,14 @@ class Stored
     }
 
     /**
+     * Get the SQL of a stored value that is a number, which is NULL for any other value.
+     */
+    public static function number(string $expression): string
+    {
+        return "CASE WHEN typeof({$expression}) IN ('integer', 'real') THEN {$expression} END";
+    }
+
+    /**
      * Get a stored boolean, which SQLite returns as 1 or 0, or null for one that was not recorded.
      */
     public static function flag(mixed $value): ?bool
