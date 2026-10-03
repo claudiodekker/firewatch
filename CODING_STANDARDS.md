@@ -4,7 +4,7 @@ The reviewer reads this file. Apply every rule to each changed hunk in the diff.
 
 This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`; these rules govern how it is implemented.
 
-The general rules for Laravel apps and packages live in `references/laravel-standards.md` of the `skills:claudio-mode` skill, from the `skills@claudiodekker` plugin this repo enables. Read that file and apply it too. Without the Skill tool, read it at `~/.claude/plugins/marketplaces/claudiodekker/skills/claudio-mode/references/laravel-standards.md`. If neither works, say so in the review rather than reviewing against this file alone. The rules below are Firewatch's own and win where the two differ.
+The general rules for Laravel apps and packages live in `references/laravel-standards.md` of the `skills:claudio-mode` skill, from the `skills@claudiodekker` plugin this repo enables. Read that file and apply it too. Without the Skill tool, read it at `../skills/skills/claudio-mode/references/laravel-standards.md` (relative to this repo's root) in a cloud session, or at `~/.claude/plugins/marketplaces/claudiodekker/skills/claudio-mode/references/laravel-standards.md` on a laptop. If neither works, say so in the review rather than reviewing against this file alone. The rules below are Firewatch's own and win where the two differ.
 
 ## 1. Sibling changes
 
