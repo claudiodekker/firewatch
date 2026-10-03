@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Instant;
+use Closure;
 use SQLite3;
 use SQLite3Exception;
 use SQLite3Result;
@@ -59,10 +60,34 @@ class Pruner
     {
         $now = Instant::now();
 
-        try {
+        $this->unlessBusy(function () use ($now) {
             if ($this->claim($now)) {
                 $this->prune($now);
             }
+        });
+    }
+
+    /**
+     * Run a pass at once for a store that is full, whichever process claimed the minute, as no batch succeeds to start one: a busy store ends it silently.
+     *
+     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
+     */
+    public function runNow(): void
+    {
+        $this->unlessBusy(fn () => $this->prune(Instant::now()));
+    }
+
+    /**
+     * Run the steps of a pass, ending it silently when the store is busy.
+     *
+     * @param  Closure(): void  $steps
+     *
+     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
+     */
+    protected function unlessBusy(Closure $steps): void
+    {
+        try {
+            $steps();
         } catch (SQLite3Exception|StoreFailure $exception) {
             if (FailureKind::of($exception) !== FailureKind::BUSY) {
                 throw $exception;

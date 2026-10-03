@@ -513,3 +513,41 @@ it('drops a batch that would pass the ceiling as a full failure and never throws
         ->and($lines[0])->toMatchArray(['kind' => 'full'])
         ->and(startedAts())->toBe([]);
 });
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function pruneFailures(): array
+{
+    $path = dirname(app(Configuration::class)->database).'/failures.jsonl';
+
+    return is_file($path) ? array_map(fn (string $line) => json_decode($line, associative: true), file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES)) : [];
+}
+
+it('trims a full store at once, though the pass of the minute was claimed, so the next batch is taken', function (string $sqliteVersion) {
+    app()->instance(Writer::class, new class(app(Configuration::class), $sqliteVersion) extends Writer
+    {
+        public const SIZE_BACKSTOP_BYTES = 40 * 4096;
+    });
+    withBackstop(40, chunk: 5);
+    $first = 1790776001;
+
+    // The first batch claims the pass of the minute, and the burst after it fills the store.
+    while (pruneFailures() === [] && $first < 1790777001) {
+        requestsStartedAt(range($first, $first + 4));
+        $first += 5;
+    }
+
+    requestsStartedAt(range($first, $first + 4));
+
+    $startedAts = startedAts();
+
+    expect(pruneFailures())->toHaveCount(1)
+        ->and(pruneFailures()[0])->toMatchArray(['kind' => 'full', 'dropped' => 5])
+        ->and($startedAts)->toContain((float) $first + 4)
+        ->and($startedAts)->not->toContain(1790776001.0)
+        ->and(pruneMarkers()->prunedReason)->toBe(PruneReason::SIZE);
+})->with([
+    'a writer that closes its connection per batch' => '3.45.1',
+    'a writer that keeps its connection' => '3.51.3',
+]);

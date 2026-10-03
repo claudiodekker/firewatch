@@ -4,8 +4,10 @@ namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Actions\AppendBatch;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
+use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Pruner;
+use Closure;
 use Laravel\Nightwatch\Contracts\Ingest as IngestContract;
 use Throwable;
 
@@ -166,17 +168,32 @@ class Ingest implements IngestContract
         } catch (Throwable $exception) {
             $this->failures->record($exception, dropped: count($records));
 
+            // A full store fails every batch until it is trimmed, so its pass can't wait for one to succeed.
+            if (FailureKind::of($exception) === FailureKind::FULL) {
+                $this->prune($this->pruner->runNow(...));
+            }
+
             $this->storing = false;
 
             return;
         }
 
+        $this->prune($this->pruner->run(...));
+
+        $this->storing = false;
+    }
+
+    /**
+     * Run a pruning pass, recording any failure of it, which drops no records.
+     *
+     * @param  Closure(): void  $pass
+     */
+    protected function prune(Closure $pass): void
+    {
         try {
-            $this->pruner->run();
+            $pass();
         } catch (Throwable $exception) {
             $this->failures->record($exception, dropped: 0);
-        } finally {
-            $this->storing = false;
         }
     }
 }
