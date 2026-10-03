@@ -22,7 +22,7 @@ use Throwable;
 trait AnswersInEnvelope
 {
     /**
-     * The arguments the twelve tools take among them, to tell an argument of another tool from one no tool takes.
+     * The arguments the twelve tools of the design take among them, registered or not, to tell an argument of another tool from one no tool takes.
      *
      * @var list<string>
      */

@@ -162,7 +162,7 @@ it('refuses an execution id the store does not hold, as not found', function () 
 
     $text = execRefusal(['execution_id' => 'missing']);
 
-    expect($text)->toBe(__('firewatch::messages.not_found', ['id' => 'missing', 'argument' => 'execution_id', 'accepted' => 'an execution id; a trace id belongs to `trace`', 'example' => 'execution(execution_id: "<execution id>")']));
+    expect($text)->toBe(__('firewatch::messages.not_found', ['id' => 'missing', 'argument' => 'execution_id', 'accepted' => 'an execution id, not a trace id', 'example' => 'execution(execution_id: "<execution id>")']));
 });
 
 it('refuses an id that only children carry as not found, with no trace hint', function () {
@@ -170,15 +170,17 @@ it('refuses an id that only children carry as not found, with no trace hint', fu
 
     $text = execRefusal(['execution_id' => 'orphan-attempt']);
 
-    expect($text)->toBe(__('firewatch::messages.not_found', ['id' => 'orphan-attempt', 'argument' => 'execution_id', 'accepted' => 'an execution id; a trace id belongs to `trace`', 'example' => 'execution(execution_id: "<execution id>")']));
+    expect($text)->toBe(__('firewatch::messages.not_found', ['id' => 'orphan-attempt', 'argument' => 'execution_id', 'accepted' => 'an execution id, not a trace id', 'example' => 'execution(execution_id: "<execution id>")']));
 });
 
-it('says a trace id that is not an execution id is one, and points at trace', function () {
+it('says a trace id that is not an execution id is one, and points at its records', function () {
     ingest([execRecord(RecordType::JOB_ATTEMPT, 'attempt', ['trace_id' => 'job-trace'])]);
 
     $text = execRefusal(['execution_id' => 'job-trace']);
+    $rows = Envelope::assert(Occurrences::class, ['trace_id' => 'job-trace'])['result']['rows'];
 
-    expect($text)->toBe(__('firewatch::messages.execution_not_found_trace', ['id' => 'job-trace', 'argument' => 'execution_id', 'accepted' => 'an execution id; a trace id belongs to `trace`', 'example' => 'execution(execution_id: "<execution id>")']));
+    expect($text)->toBe(__('firewatch::messages.execution_not_found_trace', ['id' => 'job-trace', 'argument' => 'execution_id', 'accepted' => 'an execution id, not a trace id', 'example' => 'execution(execution_id: "<execution id>")']))
+        ->and($rows)->toHaveCount(1);
 });
 
 it('opens an execution whose id is also the trace id of other records', function () {
@@ -525,7 +527,7 @@ it('cuts a cell at 2,000 characters and says so', function () {
     $envelope = execAnswer();
 
     expect($envelope['result']['request']['payload']['body'])->toBe(str_repeat('x', 2000).__('firewatch::messages.cell_truncated', ['count' => 500]))
-        ->and($envelope['truncated'])->toBe([['section' => 'request', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how', ['characters' => '2,000', 'next' => 2001])]]);
+        ->and($envelope['truncated'])->toBe([['section' => 'request', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how', ['characters' => '2,000'])]]);
 });
 
 it('has no request details for the other types', function (RecordType $type) {
@@ -774,12 +776,25 @@ it('shows the earliest five of six exceptions and says there are six', function 
     $classes = array_column($envelope['result']['exceptions'], 'class');
 
     expect($classes)->toBe(array_slice(array_reverse(array_map(fn (int $index) => "Error{$index}", range(1, $count))), 0, 5))
-        ->and($envelope['truncated'])->toBe($cut ? [['section' => 'exceptions', 'shown' => 5, 'matched' => 6, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_exceptions_how')]] : [])
+        ->and($envelope['truncated'])->toBe($cut ? [['section' => 'exceptions', 'shown' => 5, 'matched' => 6, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_exceptions_how', ['id' => 'one'])]] : [])
         ->and($envelope['result']['accounting']['counters'][1]['captured'])->toBe($count);
 })->with([
     'five' => [5, false],
     'six' => [6, true],
 ]);
+
+it('points at the call that lists every exception, which lists all six', function () {
+    ingest([
+        execRecord(RecordType::REQUEST, 'one', ['exceptions' => 6]),
+        ...array_map(fn (int $index) => execException(fields: ['class' => "Error{$index}"]), range(1, 6)),
+    ]);
+
+    $how = execAnswer()['truncated'][0]['how'];
+    $rows = Envelope::assert(Occurrences::class, ['execution_id' => 'one', 'type' => 'exception'])['result']['rows'];
+
+    expect($how)->toBe(__('firewatch::messages.execution_exceptions_how', ['id' => 'one']))
+        ->and($rows)->toHaveCount(6);
+});
 
 it('orders exceptions that started together by the order they were stored', function () {
     ingest([
@@ -925,7 +940,20 @@ it('lists no more entries than the limit, and says how many there are', function
     $envelope = execAnswer(['limit' => 2]);
 
     expect(array_column($envelope['result']['timeline'], 'name'))->toBe(['select 1', 'select 2'])
-        ->and($envelope['truncated'])->toBe([['section' => 'timeline', 'shown' => 2, 'matched' => 3, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_timeline_how')]]);
+        ->and($envelope['truncated'])->toBe([['section' => 'timeline', 'shown' => 2, 'matched' => 3, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_timeline_how', ['id' => 'one'])]]);
+});
+
+it('points at the call that lists every record of a cut timeline, which lists them all', function () {
+    ingest([
+        execRecord(RecordType::REQUEST, 'one'),
+        ...array_map(fn (int $index) => execQuery("select {$index}", 0.1 * $index), range(1, 3)),
+    ]);
+
+    $how = execAnswer(['limit' => 2])['truncated'][0]['how'];
+    $rows = Envelope::assert(Occurrences::class, ['execution_id' => 'one'])['result']['rows'];
+
+    expect($how)->toBe(__('firewatch::messages.execution_timeline_how', ['id' => 'one']))
+        ->and($rows)->toHaveCount(4);
 });
 
 it('lists a timeline of exactly the limit as complete', function () {
@@ -988,7 +1016,7 @@ it('prints the cut timeline in markdown, with how to see the rest', function () 
     $response = FirewatchServer::tool(Execution::class, ['limit' => 2]);
     $markdown = (fn () => $this->content())->call($response)[0];
 
-    expect($markdown)->toContain(__('firewatch::messages.execution_timeline_how'));
+    expect($markdown)->toContain(__('firewatch::messages.execution_timeline_how', ['id' => 'one']));
 });
 
 it('totals the time of the repeated runs that have a duration, and none for runs that have none', function (array $durations, ?float $total) {

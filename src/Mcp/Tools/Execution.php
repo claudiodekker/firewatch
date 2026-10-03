@@ -191,8 +191,8 @@ class Execution extends Tool
         ];
 
         $truncated = array_values(array_filter([
-            $this->exceptionsCut($exceptions),
-            $this->timelineCut($timeline, count($entries)),
+            $this->exceptionsCut($exceptions, $row['execution_id']),
+            $this->timelineCut($timeline, count($entries), $row['execution_id']),
         ]));
 
         $outcome = Markdown::cell($header['outcome']);
@@ -234,12 +234,12 @@ class Execution extends Tool
     }
 
     /**
-     * Get the `truncated` entry for exceptions beyond the most shown, or null when all are.
+     * Get the `truncated` entry for exceptions beyond the most shown, naming the call that lists them all, or null when all are.
      *
      * @param  array{rows: list<array<string, mixed>>, matched: int}  $exceptions
      * @return array{section: string, shown: int, matched: int, reason: string, how: string}|null
      */
-    protected function exceptionsCut(array $exceptions): ?array
+    protected function exceptionsCut(array $exceptions, ?string $id): ?array
     {
         if ($exceptions['matched'] <= ExceptionSection::MAXIMUM) {
             return null;
@@ -250,18 +250,18 @@ class Execution extends Tool
             'shown' => count($exceptions['rows']),
             'matched' => $exceptions['matched'],
             'reason' => TruncationReason::LIMIT->value,
-            'how' => __('firewatch::messages.execution_exceptions_how'),
+            'how' => __('firewatch::messages.execution_exceptions_how', ['id' => $id]),
         ];
     }
 
     /**
-     * Get the `truncated` entry for a timeline the limit cut, or null for a complete one.
+     * Get the `truncated` entry for a timeline the limit cut, naming the call that lists every record of the execution, or null for a complete one.
      *
      * @return array{section: string, shown: int, matched: int, reason: string, how: string}|null
      */
-    protected function timelineCut(Rows $timeline, int $entries): ?array
+    protected function timelineCut(Rows $timeline, int $entries, ?string $id): ?array
     {
-        $cut = $timeline->truncation(section: 'timeline', how: __('firewatch::messages.execution_timeline_how'));
+        $cut = $timeline->truncation(section: 'timeline', how: __('firewatch::messages.execution_timeline_how', ['id' => $id]));
 
         if ($cut === null) {
             return null;
@@ -311,7 +311,7 @@ class Execution extends Tool
      */
     protected function notFound(string $id, bool $traced): Refusal
     {
-        $accepted = 'an execution id; a trace id belongs to `trace`';
+        $accepted = 'an execution id, not a trace id';
         $example = 'execution(execution_id: "<execution id>")';
 
         return $traced

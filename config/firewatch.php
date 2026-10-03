@@ -109,6 +109,7 @@ return [
     | A budget caps the cost of a request, command, job-attempt or scheduled
     | task. Requests match by methods and path, other types by their name.
     | Give it a duration ceiling in ms, a memory ceiling in MB, or both.
+    | No tool reads budgets yet, so they change no answer.
     |
     */
 
