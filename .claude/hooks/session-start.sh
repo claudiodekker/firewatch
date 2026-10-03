@@ -12,6 +12,10 @@ timeout 60 claude plugin marketplace add mattpocock/skills >/dev/null \
   && timeout 60 claude plugin install mattpocock-skills@mattpocock --scope user >/dev/null \
   || echo "session-start: could not install mattpocock-skills@mattpocock" >&2
 
+timeout 60 claude plugin marketplace add michael-denyer/pstack-claude >/dev/null \
+  && timeout 60 claude plugin install pstack@pstack-claude --scope user >/dev/null \
+  || echo "session-start: could not install pstack@pstack-claude" >&2
+
 # The private skills repo is cloned next to this one, and a local directory needs no GitHub credentials.
 timeout 60 claude plugin marketplace add "$CLAUDE_PROJECT_DIR/../skills" >/dev/null \
   && timeout 60 claude plugin install skills@claudiodekker --scope user >/dev/null \
