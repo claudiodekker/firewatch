@@ -1,6 +1,6 @@
 # Firewatch
 
-Firewatch is local telemetry for AI debugging. It stores what Laravel Nightwatch's sensors record in a SQLite file on your machine, and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and nothing leaves the machine.
+Firewatch is local telemetry for AI debugging. It stores what Laravel Nightwatch's sensors record in a SQLite file on your machine, and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and Firewatch itself sends nothing anywhere.
 
 ## Install
 
