@@ -119,6 +119,5 @@ it('stays silent about configuration issues in a web process', function () {
 
     $configuration = registerFirewatch();
 
-    expect($configuration->busyTimeoutMilliseconds)->toBe(300);
-    expect(notices())->toBe([]);
+    expect($configuration->busyTimeoutMilliseconds)->toBe(300)->and(notices())->toBe([]);
 });

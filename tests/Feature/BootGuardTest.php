@@ -58,8 +58,7 @@ it('reports only the stepped-aside notice about a provider registered first', fu
 
     app()->register(FirewatchServiceProvider::class);
 
-    expect(notices())->toHaveCount(1);
-    expect(notices()[0])->toStartWith('Firewatch is installed but stepped aside');
+    expect(notices())->toHaveCount(1)->and(notices()[0])->toStartWith('Firewatch is installed but stepped aside');
     Exceptions::assertNothingReported();
 });
 

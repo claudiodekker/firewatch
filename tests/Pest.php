@@ -49,6 +49,8 @@ function captureNotices(): void
 }
 
 /**
+ * Get the notices Firewatch wrote to the PHP error log.
+ *
  * @return list<string>
  */
 function notices(): array
