@@ -32,9 +32,10 @@ class Stored
      * Read the rows of a query in the snapshot of the connection.
      *
      * @param  array<string, int|float|string>  $bindings
+     * @param  Window|null  $window  bound as `:since` and `:until`, for a query that names its condition
      * @return list<array<string, mixed>>
      */
-    public static function rows(SQLite3 $connection, string $sql, array $bindings = []): array
+    public static function rows(SQLite3 $connection, string $sql, array $bindings = [], ?Window $window = null): array
     {
         /** @var SQLite3Stmt $statement */
         $statement = $connection->prepare($sql);
@@ -42,6 +43,8 @@ class Stored
         foreach ($bindings as $name => $value) {
             $statement->bindValue(":{$name}", $value);
         }
+
+        $window?->bind($statement);
 
         /** @var SQLite3Result $result */
         $result = $statement->execute();

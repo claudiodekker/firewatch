@@ -11,6 +11,10 @@ use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Deadline;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
@@ -55,6 +59,7 @@ class Overview extends Tool
         protected Configuration $configuration,
         protected Reader $reader,
         protected Conditions $conditions,
+        protected Detectors $detectors,
     ) {
         //
     }
@@ -103,7 +108,11 @@ class Overview extends Tool
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
-            [[$total, $records, $requests, $oldest, $newest], $facts] = $this->reader->snapshot(fn (SQLite3 $connection) => [$this->countRecords($connection, $window), StoreFacts::read($connection)]);
+            [[$total, $records, $requests, $oldest, $newest], $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
+                $this->countRecords($connection, $window),
+                StoreFacts::read($connection),
+                $this->detectors->count($connection, $window, new Deadline($epoch)),
+            ]);
         } catch (StoreUnusable $unusable) {
             $blindSpots = [...$structural, ...$this->conditions->for(null, $types, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
@@ -134,7 +143,7 @@ class Overview extends Tool
         $summary = __('firewatch::messages.overview_summary', [
             'records' => $records,
             'requests' => $requests,
-        ]);
+        ]).' '.$this->detectorSummary($judgements);
 
         return new Answer(
             tool: 'overview',
@@ -146,10 +155,78 @@ class Overview extends Tool
             result: [
                 'records' => $records,
                 'requests' => $requests,
+                'detectors' => $this->detectorRows($judgements),
             ],
             coverage: $coverage,
             blindSpots: $blindSpots,
+            next: $this->next($judgements),
         );
+    }
+
+    /**
+     * Get the rows of the detector table: the shapes with findings first, then the clean ones, then those not evaluated, in the order of the catalogue within each.
+     *
+     * @param  list<Judgement>  $judgements
+     * @return list<array<string, mixed>>
+     */
+    protected function detectorRows(array $judgements): array
+    {
+        $order = [Verdict::FINDINGS->value, Verdict::CLEAN->value, Verdict::NOT_EVALUATED->value];
+        $rows = array_map(fn (Judgement $judgement) => $judgement->row(), $judgements);
+
+        usort($rows, fn (array $a, array $b) => array_search($a['verdict'], $order, true) <=> array_search($b['verdict'], $order, true));
+
+        return $rows;
+    }
+
+    /**
+     * Get the sentence that names the shapes with findings first, then those not evaluated, and says there are no findings only when every shape is clean.
+     *
+     * @param  list<Judgement>  $judgements
+     */
+    protected function detectorSummary(array $judgements): string
+    {
+        $with = array_filter($judgements, fn (Judgement $judgement) => $judgement->verdict === Verdict::FINDINGS);
+        $without = array_filter($judgements, fn (Judgement $judgement) => $judgement->verdict === Verdict::NOT_EVALUATED);
+
+        if ($with === [] && $without === []) {
+            return trans_choice('firewatch::messages.overview_detectors_clean', count($judgements), ['count' => count($judgements)]);
+        }
+
+        $sentences = [];
+
+        if ($with !== []) {
+            $sentences[] = __('firewatch::messages.overview_detectors_findings', ['shapes' => implode(', ', array_map(fn (Judgement $judgement) => "{$judgement->detector->value} ({$judgement->total})", $with))]);
+        }
+
+        if ($without !== []) {
+            $sentences[] = __('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => implode(', ', array_map(fn (Judgement $judgement) => $judgement->detector->value, $without))]);
+        }
+
+        return implode(' ', $sentences);
+    }
+
+    /**
+     * Get the calls that list the findings of each shape that has some.
+     *
+     * @param  list<Judgement>  $judgements
+     * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
+     */
+    protected function next(array $judgements): array
+    {
+        $calls = [];
+
+        foreach ($judgements as $judgement) {
+            if ($judgement->verdict === Verdict::FINDINGS) {
+                $calls[] = [
+                    'tool' => 'detect',
+                    'arguments' => ['shape' => $judgement->detector->value],
+                    'why' => __('firewatch::messages.detect_next_shape'),
+                ];
+            }
+        }
+
+        return array_slice($calls, 0, Answer::LISTED);
     }
 
     /**
