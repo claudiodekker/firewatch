@@ -287,8 +287,8 @@ describe('the shape', function () {
 
         expect($refusal)->toStartWith('error: invalid_argument')
             ->toContain('argument: shape')
-            ->toContain('n-plus-one, failing-routes');
-    })->with(['nonsense', 'database-bound', '']);
+            ->toContain('n-plus-one, database-bound, failing-routes');
+    })->with(['nonsense', 'failing-jobs', '']);
 
     it('runs every shape that ships when none is named, one result each', function () {
         ingest([dtcRequest('/orders', 500)]);
@@ -296,9 +296,13 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect(array_keys($envelope['result']))->toBe(['detectors'])
-            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'failing-routes'])
-            ->and($envelope['result']['detectors'][1])->toMatchArray(['verdict' => 'findings', 'total' => 1])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => __('firewatch::messages.detect_part_findings', ['detector' => 'failing-routes', 'total' => 1]).'; '.__('firewatch::messages.detect_part_not_evaluated', ['detector' => 'n-plus-one', 'reason' => 'no_records'])]));
+            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes'])
+            ->and($envelope['result']['detectors'][2])->toMatchArray(['verdict' => 'findings', 'total' => 1])
+            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
+                __('firewatch::messages.detect_part_findings', ['detector' => 'failing-routes', 'total' => 1]),
+                __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'n-plus-one', 'reason' => 'no_records']),
+                __('firewatch::messages.detect_part_clean', ['detector' => 'database-bound']),
+            ])]));
     });
 
     it('says all the shapes are clean only when each one is', function () {
@@ -306,7 +310,7 @@ describe('the shape', function () {
 
         $envelope = dtcAnswer([]);
 
-        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 2, ['count' => 2]));
+        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 3, ['count' => 3]));
     });
 
     it('names the shapes that were not evaluated, and why', function () {
@@ -314,7 +318,7 @@ describe('the shape', function () {
 
         $envelope = dtcAnswer([]);
 
-        expect($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'n-plus-one', 'reason' => 'no_records']).'; '.__('firewatch::messages.detect_part_not_evaluated', ['detector' => 'failing-routes', 'reason' => 'no_records'])]));
+        expect($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', array_map(fn (string $detector) => __('firewatch::messages.detect_part_not_evaluated', ['detector' => $detector, 'reason' => 'no_records']), ['n-plus-one', 'database-bound', 'failing-routes']))]));
     });
 
     it('refuses a threshold for a shape that takes none, and states none for it', function () {
@@ -640,7 +644,7 @@ test('the tool is listed with its description, arguments and annotations', funct
 
     expect($tool['description'])->toBe(__('firewatch::messages.tools.detect'))
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['shape', 'threshold', 'group', 'since', 'until', 'limit', 'format'])
-        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'failing-routes'])
+        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes'])
         ->and($tool['annotations'])->toMatchArray(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
 });
 
