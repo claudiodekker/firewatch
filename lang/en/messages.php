@@ -296,7 +296,7 @@ return [
     'trace_next_occurrences' => 'List the records that carry this id, since the execution they belong to is not in the store.',
 
     'detect_shape_argument' => 'The shape to run: failing-routes. Absent: every shape that ships.',
-    'detect_threshold_argument' => 'Overrides the shape\'s default, in its unit; the answer states the unit, the range and whether the default applied. failing-routes: the lowest status that counts as failed, a whole number from 100 to 599, default 400. Needs `shape`.',
+    'detect_threshold_argument' => 'Overrides the shape\'s default, in its unit. failing-routes: the lowest status that counts as failed, a whole number from 100 to 599, default 400. Needs `shape`.',
     'detect_group_argument' => 'One group id (32 hex) to restrict the shape to. A group that holds no records is an empty answer. Needs `shape`.',
     'detect_limit_argument' => 'The most findings to list, 1 to 100. Default 20.',
     'detect_input' => [

@@ -76,7 +76,7 @@ class FailingRoutes implements Detector
         $failing = array_values(array_filter($groups, fn (array $row) => $row['failed'] > 0));
 
         if ($failing === []) {
-            return Judgement::of($this->name(), $this->threshold()->describe($threshold), $examined, total: 0, findings: []);
+            return Judgement::of($this->name(), $this->threshold()->describe($threshold), examined: $examined, total: 0, findings: []);
         }
 
         $latest = Stored::rows($connection, "SELECT group_hash, execution_id, route_path, method FROM (
@@ -84,26 +84,29 @@ class FailingRoutes implements Detector
             FROM requests WHERE {$failed}) WHERE position = 1", $bindings, $window);
         $statuses = Stored::rows($connection, "SELECT group_hash, status_code, count(*) AS requests FROM requests WHERE {$failed} GROUP BY group_hash, status_code ORDER BY status_code", $bindings, $window);
 
-        $findings = array_map(fn (array $row) => $this->finding($row, $latest, $statuses), $failing);
+        $findings = array_map(fn (array $row) => $this->finding(
+            row: $row,
+            latest: $this->ofGroup($latest, $row['group_hash'])[0] ?? [],
+            statuses: $this->ofGroup($statuses, $row['group_hash']),
+        ), $failing);
 
         usort($findings, fn (array $a, array $b) => [$b['evidence']['server_errors'], $b['evidence']['failed'], $b['evidence']['failure_pct'], $a['group']] <=> [$a['evidence']['server_errors'], $a['evidence']['failed'], $a['evidence']['failure_pct'], $b['group']]);
 
-        return Judgement::of($this->name(), $this->threshold()->describe($threshold), $examined, total: count($findings), findings: array_slice($findings, 0, $limit));
+        return Judgement::of($this->name(), $this->threshold()->describe($threshold), examined: $examined, total: count($findings), findings: array_slice($findings, 0, $limit));
     }
 
     /**
      * Get the finding of a group that failed.
      *
      * @param  array<string, mixed>  $row
-     * @param  list<array<string, mixed>>  $latest
-     * @param  list<array<string, mixed>>  $statuses
+     * @param  array<string, mixed>  $latest  the latest failed request of the group
+     * @param  list<array<string, mixed>>  $statuses  the failed requests of the group by status
      * @return array<string, mixed>
      */
     protected function finding(array $row, array $latest, array $statuses): array
     {
         $group = $row['group_hash'];
-        $last = collect($latest)->firstWhere('group_hash', $group) ?? [];
-        $route = $last['route_path'] ?? '';
+        $route = $latest['route_path'] ?? '';
         $unmatched = $route === '';
 
         return [
@@ -112,7 +115,7 @@ class FailingRoutes implements Detector
             'count' => $row['failed'],
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $last['execution_id'] ?? null,
+            'latest_execution_id' => $latest['execution_id'] ?? null,
             'reaches' => [
                 'signed_in_actors' => $row['actors'],
                 'without_actor' => $row['anonymous'],
@@ -122,30 +125,22 @@ class FailingRoutes implements Detector
                 'requests' => $row['requests'],
                 'failure_pct' => round(100 * $row['failed'] / $row['with_status'], self::PERCENT_DECIMALS),
                 'server_errors' => $row['server_errors'],
-                'status_counts' => $this->statusCounts($group, $statuses),
+                'status_counts' => array_column($statuses, 'requests', 'status_code'),
                 'with_exception' => $row['with_exception'],
                 'unmatched' => $unmatched,
-                'method' => $last['method'] ?? null,
+                'method' => $latest['method'] ?? null,
             ],
         ];
     }
 
     /**
-     * Get how many requests of a group ended in each failing status.
+     * Get the rows of one group, by its hash compared as text, so that two hashes that read as the same number stay apart.
      *
-     * @param  list<array<string, mixed>>  $statuses
-     * @return array<int, int>
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
      */
-    protected function statusCounts(?string $group, array $statuses): array
+    protected function ofGroup(array $rows, ?string $group): array
     {
-        $counts = [];
-
-        foreach ($statuses as $row) {
-            if ($row['group_hash'] === $group) {
-                $counts[$row['status_code']] = $row['requests'];
-            }
-        }
-
-        return $counts;
+        return array_values(array_filter($rows, fn (array $row) => $row['group_hash'] === $group));
     }
 }

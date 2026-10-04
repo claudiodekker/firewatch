@@ -19,3 +19,15 @@ test('the tool listing is under 5,000 tokens at three characters a token', funct
 
     expect(intdiv($characters, 3))->toBeLessThan(5000);
 });
+
+test('every argument description is at most 30 words', function () {
+    $words = [];
+
+    foreach (toolListing()['tools'] as $tool) {
+        foreach ($tool['inputSchema']['properties'] as $argument => $schema) {
+            $words["{$tool['name']}.{$argument}"] = str_word_count($schema['description']);
+        }
+    }
+
+    expect(array_filter($words, fn (int $count) => $count > 30))->toBe([]);
+});

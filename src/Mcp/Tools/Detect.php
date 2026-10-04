@@ -141,7 +141,16 @@ class Detect extends Tool
             $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for(null, $types, $window)];
             $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
 
-            return $this->answerFor($shape, $judgements, $epoch, $timezone, $window, Emptiness::of($unusable, $this->configuration->database), $coverage, $blindSpots);
+            return $this->answerFor(
+                shape: $shape,
+                judgements: $judgements,
+                epoch: $epoch,
+                timezone: $timezone,
+                window: $window,
+                empty: Emptiness::of($unusable, $this->configuration->database),
+                coverage: $coverage,
+                blindSpots: $blindSpots,
+            );
         }
 
         $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for($facts, $types, $window)];
@@ -158,7 +167,16 @@ class Detect extends Tool
             default => null,
         };
 
-        return $this->answerFor($shape, $judgements, $epoch, $timezone, $window, $empty, $coverage, $blindSpots);
+        return $this->answerFor(
+            shape: $shape,
+            judgements: $judgements,
+            epoch: $epoch,
+            timezone: $timezone,
+            window: $window,
+            empty: $empty,
+            coverage: $coverage,
+            blindSpots: $blindSpots,
+        );
     }
 
     /**

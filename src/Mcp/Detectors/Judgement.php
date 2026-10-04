@@ -2,6 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use stdClass;
+
 /**
  * @internal
  */
@@ -45,7 +47,7 @@ class Judgement
             default => [Verdict::NOT_EVALUATED, Reason::NO_RECORDS],
         };
 
-        return new self($detector, $threshold, $verdict, $reason, $examined, $total, $findings, $saw, $caveats);
+        return new self($detector, $threshold, $verdict, $reason, examined: $examined, total: $total, findings: $findings, saw: $saw, caveats: $caveats);
     }
 
     /**
@@ -73,7 +75,7 @@ class Judgement
             'examined' => $this->examined,
             'total' => $this->total,
             'findings' => $this->findings,
-            'saw' => $this->saw,
+            'saw' => $this->saw === [] ? new stdClass : $this->saw,
             'caveats' => $this->caveats,
         ];
     }

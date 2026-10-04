@@ -104,6 +104,14 @@ describe('the verdict', function () {
             ->and($envelope['empty'])->toBeNull();
     });
 
+    it('states what it set aside as an empty object, as it sets nothing aside', function () {
+        ingest([dtcRequest('/orders', 500)]);
+
+        $text = (fn () => $this->content())->call(FirewatchServer::tool(Detect::class, ['shape' => 'failing-routes', 'format' => 'json']))[0];
+
+        expect($text)->toContain('"saw":{}');
+    });
+
     it('is clean over the requests examined when none failed', function () {
         ingest([dtcRequest('/orders', 200), dtcRequest('/orders', 204), dtcRequest('/health', 301)]);
 
@@ -440,10 +448,39 @@ describe('the findings', function () {
             dtcRequest('/orders', 500, ['user' => '7']),
             dtcRequest('/orders', 500, ['user' => '8']),
             dtcRequest('/orders', 500, ['user' => '']),
+            dtcRequest('/orders', 500)->without('user'),
             dtcRequest('/orders', 200, ['user' => '9']),
         ]);
 
-        expect(dtcFinding(dtcAnswer(), '/orders')['reaches'])->toBe(['signed_in_actors' => 2, 'without_actor' => 1]);
+        expect(dtcFinding(dtcAnswer(), '/orders')['reaches'])->toBe(['signed_in_actors' => 2, 'without_actor' => 2]);
+    });
+
+    it('keeps apart groups whose hashes read as the same number', function () {
+        ingest([
+            dtcRequest('/first', 500, ['_group' => str_repeat('0', 28).'1e03', 'trace_id' => 'first']),
+            dtcRequest('/second', 404, ['_group' => str_repeat('0', 28).'1000', 'trace_id' => 'second']),
+        ]);
+
+        $findings = array_column(dtcAnswer()['result']['findings'], null, 'name');
+
+        expect($findings['/first']['latest_execution_id'])->toBe('first')
+            ->and($findings['/first']['evidence']['status_counts'])->toEqual([500 => 1])
+            ->and($findings['/second']['latest_execution_id'])->toBe('second')
+            ->and($findings['/second']['evidence']['status_counts'])->toEqual([404 => 1]);
+    });
+
+    it('lists the failures of requests that carry no group, with no group to follow', function () {
+        ingest([
+            dtcRequest('/orders', 500, ['trace_id' => 'grouped']),
+            dtcRequest('/orders', 500, ['trace_id' => 'loose'])->without('_group'),
+        ]);
+
+        $envelope = dtcAnswer();
+        $loose = collect($envelope['result']['findings'])->firstWhere('group', null);
+
+        expect($envelope['result']['total'])->toBe(2)
+            ->and($loose)->toMatchArray(['name' => '/orders', 'count' => 1, 'latest_execution_id' => 'loose'])
+            ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'execution']);
     });
 
     it('orders the groups by server errors, then failures, then failure share, then group', function () {

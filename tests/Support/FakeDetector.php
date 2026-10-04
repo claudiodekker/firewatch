@@ -76,6 +76,6 @@ class FakeDetector implements Detector
             'count' => $this->total,
         ]];
 
-        return Judgement::of($this->name, $this->threshold?->describe($threshold), $this->examined, $this->total, $findings);
+        return Judgement::of($this->name, $this->threshold?->describe($threshold), examined: $this->examined, total: $this->total, findings: $findings);
     }
 }
