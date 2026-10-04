@@ -16,11 +16,12 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 4]),
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 5]),
             '  overview     Entry point.',
             '  rank         Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
             '  occurrences  Lists individual records, newest first by default, for the selectors you give (at least o…',
             '  execution    One execution in full: a request, command, job attempt or scheduled task.',
+            '  trace        Follows one trace: its executions in start order and the lineage of every queued job.',
             '',
         ]));
 });
@@ -115,6 +116,17 @@ it('lists the tools as JSON with the server name and version', function () {
                         'execution_id' => ['description' => __('firewatch::messages.execution_id_argument'), 'type' => 'string'],
                         'type' => ['description' => __('firewatch::messages.execution_type_argument'), 'type' => 'string'],
                         'limit' => ['description' => __('firewatch::messages.execution_limit_argument'), 'type' => 'integer'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object'],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
+                    'name' => 'trace',
+                    'description' => __('firewatch::messages.tools.trace'),
+                    'inputSchema' => ['properties' => [
+                        'trace_id' => ['description' => __('firewatch::messages.trace_id_argument'), 'type' => 'string'],
+                        'job_id' => ['description' => __('firewatch::messages.trace_job_id_argument'), 'type' => 'string'],
+                        'limit' => ['description' => __('firewatch::messages.trace_limit_argument'), 'type' => 'integer'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],

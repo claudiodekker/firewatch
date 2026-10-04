@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
+use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
@@ -353,7 +354,7 @@ it('offers to rank the group of the execution, and the call runs', function () {
     $call = $envelope['next'][0];
     $ranked = Envelope::assert(Rank::class, $call['arguments']);
 
-    expect($envelope['next'])->toHaveCount(1)
+    expect($envelope['next'])->toHaveCount(2)
         ->and($call)->toBe(['tool' => 'rank', 'arguments' => ['group' => str_repeat('b', 32)], 'why' => __('firewatch::messages.execution_next_rank')])
         ->and($ranked['empty'])->toBeNull();
 });
@@ -368,7 +369,7 @@ it('offers to list the queries of an execution that captured some, and the call 
     $call = $envelope['next'][1];
     $listed = Envelope::assert(Occurrences::class, $call['arguments']);
 
-    expect($envelope['next'])->toHaveCount(2)
+    expect($envelope['next'])->toHaveCount(3)
         ->and($call)->toBe(['tool' => 'occurrences', 'arguments' => ['execution_id' => 'request', 'type' => 'query'], 'why' => __('firewatch::messages.execution_next_occurrences')])
         ->and($listed['result']['rows'])->toHaveCount(1);
 });
@@ -381,15 +382,37 @@ it('offers no list of queries for an execution that captured none', function () 
 
     $envelope = execAnswer();
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['rank']);
+    expect(array_column($envelope['next'], 'tool'))->toBe(['rank', 'trace']);
 });
 
-it('offers nothing to follow for an execution without a group', function () {
+it('offers to follow the trace of the execution, and the call runs', function () {
+    ingest([
+        execRecord(RecordType::REQUEST, 'request'),
+        syntheticRecord(RecordType::JOB_ATTEMPT)->with(['trace_id' => 'request', 'job_id' => 'job', 'attempt_id' => 'attempt', 'timestamp' => EXECUTION_AT + 5]),
+    ]);
+
+    $envelope = execAnswer();
+    $call = $envelope['next'][1];
+    $traced = Envelope::assert(Trace::class, $call['arguments']);
+
+    expect($call)->toBe(['tool' => 'trace', 'arguments' => ['trace_id' => 'request'], 'why' => __('firewatch::messages.execution_next_trace')])
+        ->and(array_column($traced['result']['executions'], 'execution_id'))->toBe(['request', 'attempt']);
+});
+
+it('offers no trace to follow for an execution that has none', function () {
+    ingest([execRecord(RecordType::JOB_ATTEMPT, 'attempt', ['trace_id' => null])]);
+
+    $envelope = execAnswer(['execution_id' => 'attempt']);
+
+    expect(array_column($envelope['next'], 'tool'))->not->toContain('trace');
+});
+
+it('offers only the trace for an execution without a group', function () {
     ingest([execRecord(RecordType::COMMAND, 'command')->without('_group')]);
 
     $envelope = execAnswer();
 
-    expect($envelope['next'])->toBe([]);
+    expect(array_column($envelope['next'], 'tool'))->toBe(['trace']);
 });
 
 test('the tool is listed with its description, arguments and annotations', function () {
