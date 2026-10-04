@@ -419,6 +419,7 @@ describe('the problem shapes', function () {
                 'total' => 1,
                 'worst' => ['name' => '/orders', 'group' => md5('/orders')],
             ],
+            ['detector' => 'database-bound', 'verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'worst' => null],
             ['detector' => 'n-plus-one', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
         ])->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => 3, 'requests' => 3]).' '.__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one']));
     });
@@ -426,7 +427,7 @@ describe('the problem shapes', function () {
     it('is clean over the requests examined, with no worst finding', function () {
         ovwRequests(200, 201);
 
-        $row = Envelope::assert(Overview::class)['result']['detectors'][0];
+        $row = collect(Envelope::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'failing-routes');
 
         expect($row)->toBe(['detector' => 'failing-routes', 'verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'worst' => null]);
     });
@@ -436,9 +437,9 @@ describe('the problem shapes', function () {
 
         $envelope = Envelope::assert(Overview::class);
 
-        expect(array_column($envelope['result']['detectors'], 'reason'))->toBe(['no_records', 'no_records'])
-            ->and($envelope['result']['detectors'][1])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
-            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-routes']));
+        expect(array_column($envelope['result']['detectors'], 'reason'))->toBe(['no_records', 'no_records', 'no_records'])
+            ->and($envelope['result']['detectors'][2])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
+            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, database-bound, failing-routes']));
     });
 
     it('judges the requests of the window', function () {
@@ -449,7 +450,7 @@ describe('the problem shapes', function () {
 
         $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
 
-        expect($envelope['result']['detectors'][0])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect(collect($envelope['result']['detectors'])->firstWhere('detector', 'failing-routes'))->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 
     it('offers to list the findings of a shape that has some, and the call runs', function () {

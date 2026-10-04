@@ -33,7 +33,7 @@ Six tools exist so far:
 - `occurrences` lists individual records for a group, type, execution, trace, job or user, newest first or by duration, memory or queries, with filters that fit each type and a cursor for the rest.
 - `execution` shows one request, command, job attempt or scheduled task in full: its outcome, stages, exceptions with their frames and a timeline of its children.
 - `trace` follows one trace or queued job: the request, commands and job attempts it touched in start order, and each job's path from dispatch to its attempts, with the wait before each.
-- `detect` runs named problem shapes and lists their findings worst first. `n-plus-one` lists the query a single execution ran three or more times, with how many different bindings it had and where it was called from; `failing-routes` lists the routes with a request at or above a status, 400 by default. A clean answer says how many executions or requests it examined.
+- `detect` runs named problem shapes and lists their findings worst first. `n-plus-one` lists the query a single execution ran three or more times, with how many different bindings it had and where it was called from; `database-bound` lists the routes whose requests typically spend 60 percent or more of their time in queries; `failing-routes` lists the routes with a request at or above a status, 400 by default. A clean answer says how many executions or requests it examined.
 
 Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see.
 
