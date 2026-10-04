@@ -53,7 +53,7 @@ class DatabaseBound implements Detector
      */
     public function threshold(): Threshold
     {
-        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: 100);
+        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: 100, whole: false);
     }
 
     /**

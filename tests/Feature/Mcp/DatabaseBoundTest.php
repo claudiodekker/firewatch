@@ -225,14 +225,25 @@ describe('the verdict', function () {
         'a share of 100' => [100, 'findings'],
     ]);
 
+    it('takes a fraction of a percent as the threshold', function (int $queryMicros, string $verdict) {
+        ingest(dbbRequest('one', 100_000, $queryMicros));
+
+        $envelope = dbbAnswer(['threshold' => 59.5]);
+
+        expect($envelope['result']['verdict'])->toBe($verdict)
+            ->and($envelope['result']['threshold'])->toMatchArray(['value' => 59.5, 'is_default' => false]);
+    })->with([
+        'a share of 59.4' => [59_400, 'clean'],
+        'a share of 59.5' => [59_500, 'findings'],
+    ]);
+
     it('refuses a threshold out of range, and states the range', function (mixed $threshold) {
         expect(dbbRefusal(['threshold' => $threshold]))->toStartWith('error: invalid_argument')
             ->toContain('argument: threshold')
-            ->toContain('a whole number of 1 to 100');
+            ->toContain('a number of 1 to 100');
     })->with([
-        'zero' => [0],
-        'above a hundred' => [101],
-        'a fraction' => [59.5],
+        'below one' => [0.9],
+        'above a hundred' => [100.1],
     ]);
 });
 

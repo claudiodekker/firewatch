@@ -46,3 +46,7 @@ it('states the value in force, the default, the unit and the range', function ()
     expect(thrKind('whole')->describe(500))->toBe(['name' => 'status', 'value' => 500, 'default' => 400, 'unit' => 'status', 'range' => ['min' => 100, 'max' => 599], 'is_default' => false])
         ->and(thrKind('fractional')->describe())->toBe(['name' => 'peak', 'value' => 64, 'default' => 64, 'unit' => 'mb', 'range' => ['min' => 1, 'max' => null], 'is_default' => true]);
 });
+
+it('states a default written as a float as the default', function () {
+    expect(thrKind('fractional')->describe(64.0)['is_default'])->toBeTrue();
+});

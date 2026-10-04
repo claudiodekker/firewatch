@@ -63,7 +63,7 @@ class Threshold
                 'min' => $this->minimum,
                 'max' => $this->maximum,
             ],
-            'is_default' => $value === null || $value === $this->default,
+            'is_default' => $value === null || (float) $value === (float) $this->default,
         ];
     }
 }
