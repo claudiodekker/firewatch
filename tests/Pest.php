@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use ClaudioDekker\Firewatch\Tests\TestCase;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
@@ -40,7 +41,10 @@ pest()->group('arch')->in('Arch');
  */
 function notices(): array
 {
-    return app(Notices::class)->written();
+    /** @var FakeNotices $notices */
+    $notices = app(Notices::class);
+
+    return $notices->written();
 }
 
 function registerFirewatch(): Configuration
