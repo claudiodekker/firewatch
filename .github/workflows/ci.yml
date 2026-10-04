@@ -19,6 +19,11 @@ jobs:
         php: ['8.4']
         laravel: ['13.*']
         nightwatch: ['~1.30.2']
+        include:
+          - php: '8.3'
+            laravel: '12.41.1'
+            nightwatch: '~1.30.2'
+            no-security-blocking: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +35,9 @@ jobs:
           coverage: none
 
       - name: Install dependencies
+        env:
+          # Composer 2.9 refuses to resolve releases that have security advisories, and the floor has some.
+          COMPOSER_NO_SECURITY_BLOCKING: ${{ matrix.no-security-blocking }}
         run: composer update --prefer-dist --no-interaction --no-progress --with "laravel/framework:${{ matrix.laravel }}" --with "laravel/nightwatch:${{ matrix.nightwatch }}"
 
       - name: Lint
