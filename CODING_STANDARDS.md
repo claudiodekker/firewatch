@@ -111,7 +111,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 ## 14. Domain language and user-facing text
 
 - Long user-facing text (blind-spot sentences, tool descriptions, instructions, doctor messages) is a key in the package's `messages` language file, read through the package namespace (`__('firewatch::messages.failed')`). The file is loaded only where Firewatch is Active or Off. Tool classes override `description()` to read it, and set explicit tool names rather than relying on the default kebab-cased class name.
-- Notices and exceptions raised while the provider registers (stepped aside, ingest not replaced, provider order, a missing veto event) are literals in the provider, because the language file loads only after they fire. Command descriptions stay literals, as in Laravel.
+- Notices written while the provider registers (stepped aside, ingest not replaced, provider order, a missing veto event, configuration issues) go to the PHP error log, never through `report()`, so they stay out of the application's own telemetry. They are literals in the provider, because the language file loads only after they fire. Command descriptions stay literals, as in Laravel.
 - Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction. In prose, "the `query` tool" is the SQL tool and "the `query` record type" is the record.
 
 ## 15. Packages
