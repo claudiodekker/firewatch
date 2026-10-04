@@ -163,7 +163,7 @@ class Detect extends Tool
         $empty = match (true) {
             $total === 0 => Emptiness::storeEmpty($this->configuration->database),
             $inWindow === 0 => Emptiness::windowEmpty($total),
-            $group !== null && $judgements[0]->examined === 0 => Emptiness::noMatch($inWindow, ["group: {$group}"]),
+            $group !== null && $judgements[0]->examined === 0 && $judgements[0]->reason !== Reason::OUTSIDE_COVERAGE => Emptiness::noMatch($inWindow, ["group: {$group}"]),
             default => null,
         };
 

@@ -63,10 +63,11 @@ class NPlusOne implements Detector
     {
         $this->refuseQueryGroup($connection, $group);
 
+        $meta = Markers::read($connection);
         $bindings = [
             'runs' => $threshold ?? $this->threshold()->default,
             'group' => $group ?? '',
-            'from' => History::removedThrough(Markers::read($connection), [RecordType::QUERY]),
+            'from' => History::removedThrough($meta, [RecordType::QUERY]),
         ];
         $executions = $this->executions($window);
         $population = $this->population($connection, $window, $executions, $bindings);
@@ -235,7 +236,7 @@ class NPlusOne implements Detector
         $worst = $details['executions'][$key]['worst'];
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
-        $label = $worst['label'] === '' ? __('firewatch::messages.rank_no_route') : $worst['label'];
+        $label = Stored::blank($worst['label']) ?? __('firewatch::messages.rank_no_route');
         $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(100 * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
 
         return [

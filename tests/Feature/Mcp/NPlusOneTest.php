@@ -298,6 +298,15 @@ describe('a finding', function () {
         expect(npoAnswer()['result']['findings'][0]['name'])->toStartWith(__('firewatch::messages.rank_no_route').': ');
     });
 
+    it('names an execution that was stored without a route as such', function () {
+        ingest(npoRun('one', 3, execution: ['route_path' => null]));
+
+        $finding = npoAnswer()['result']['findings'][0];
+
+        expect($finding['name'])->toStartWith(__('firewatch::messages.rank_no_route').': ')
+            ->and($finding['evidence']['unit']['label'])->toBe(__('firewatch::messages.rank_no_route'));
+    });
+
     it('labels a command, a job and a task by their names', function (RecordType $type, string $label, string $source) {
         ingest(npoRun('one', 3, $label, type: $type));
 
@@ -534,6 +543,16 @@ describe('the group', function () {
 
         expect($envelope['result']['verdict'])->toBe('not_evaluated')
             ->and($envelope['empty']['kind'])->toBe('no_match');
+    });
+
+    it('does not call a group no match when history left out its executions', function () {
+        ingest([npoExecution('one', fields: ['queries' => 3])]);
+        npoClearThenRun(NPO_AT + 600, ['one']);
+
+        $envelope = npoAnswer(['group' => md5('/orders')]);
+
+        expect($envelope['result']['reason'])->toBe('outside_coverage')
+            ->and($envelope['empty'])->toBeNull();
     });
 
     it('refuses the hash of a query group, which is a different question', function () {
