@@ -56,8 +56,6 @@ class IngestReplacer
 
     /**
      * Determine if the interface has a method Firewatch's ingests were not written against.
-     *
-     * A method the interface dropped is harmless, as the ingests still satisfy it.
      */
     protected function hasUnexpectedSignatures(): bool
     {

@@ -34,7 +34,10 @@ interface WiderIngest
     public function write(array $record, bool $now = false): void;
 }
 
-interface NarrowerIngest {}
+interface NarrowerIngest
+{
+    //
+}
 
 /**
  * @param  list<string>  $expected
