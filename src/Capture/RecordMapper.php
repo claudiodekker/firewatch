@@ -136,8 +136,8 @@ class RecordMapper
 
         return [
             'id' => $wire['id'],
-            'name' => $wire['name'] ?? null,
-            'username' => $wire['username'] ?? null,
+            'name' => $this->flatten($wire['name'] ?? null),
+            'username' => $this->flatten($wire['username'] ?? null),
             'seen_at' => $seenAt,
         ];
     }
@@ -302,6 +302,8 @@ class RecordMapper
             }
 
             if (array_key_exists($name, $columns)) {
+                $value = $this->flatten($value);
+
                 $columns[$name] = is_string($value) ? $this->truncator->cut($value) : $value;
             } else {
                 $data[$name] = $value;
@@ -313,6 +315,14 @@ class RecordMapper
         }
 
         return [$columns, $data, $dataJsonFields];
+    }
+
+    /**
+     * Get a list or an object as its JSON, so a column can hold it, and any other value as it is.
+     */
+    protected function flatten(mixed $value): mixed
+    {
+        return is_array($value) || is_object($value) ? json_encode($value, static::JSON_FLAGS) : $value;
     }
 
     /**
