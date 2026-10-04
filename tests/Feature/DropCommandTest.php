@@ -196,6 +196,23 @@ describe('a store in another state', function () {
             ->and(filesize(dropFailuresPath()))->toBe(0);
     });
 
+    it('moves aside a store whose header is damaged, and creates a new one', function () {
+        dropPopulatedStore();
+        $handle = fopen(dropPath(), 'r+b');
+        fseek($handle, 16);
+        fwrite($handle, "\x00\x07");
+        fclose($handle);
+        $damaged = md5_file(dropPath());
+
+        $result = dropResult();
+
+        expect($result['exit'])->toBe(0)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.replaced_damaged', ['file' => basename(dropPath()).'.corrupt']))
+            ->and(md5_file(dropPath().'.corrupt'))->toBe($damaged)
+            ->and(storeRows('SELECT id FROM records'))->toBe([])
+            ->and(dropMarkers()->rebuiltWhy)->toBe('corrupt');
+    });
+
     it('leaves a file that is not a Firewatch store as it is', function (Closure $arrange) {
         mkdir(dirname(dropPath()), recursive: true);
         $arrange(dropPath());

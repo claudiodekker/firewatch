@@ -49,26 +49,6 @@ class Ranking
     public const MILLISECOND_DECIMALS = 2;
 
     /**
-     * The first HTTP status code that counts as a failure.
-     */
-    protected const FIRST_FAILED_STATUS_CODE = 400;
-
-    /**
-     * The status of a job attempt or scheduled task that failed.
-     */
-    protected const STATUS_FAILED = 'failed';
-
-    /**
-     * The status of a job attempt that was released back to the queue.
-     */
-    protected const STATUS_RELEASED = 'released';
-
-    /**
-     * The status of a scheduled task that was skipped.
-     */
-    protected const STATUS_SKIPPED = 'skipped';
-
-    /**
      * The key a record without a deploy has among the deploys of a breakdown, which no deploy string is.
      */
     protected const NO_DEPLOY = "\x01";
@@ -97,20 +77,6 @@ class Ranking
         protected ?string $group = null,
     ) {
         //
-    }
-
-    /**
-     * Get what the failure_pct of a type counts as failed, or null for a type that has no such rule.
-     */
-    public static function failureDefinition(RecordType $type): ?string
-    {
-        return match ($type) {
-            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'status >= '.self::FIRST_FAILED_STATUS_CODE,
-            RecordType::COMMAND => 'exit_code <> 0',
-            RecordType::JOB_ATTEMPT => 'status is '.self::STATUS_FAILED.' or '.self::STATUS_RELEASED,
-            RecordType::SCHEDULED_TASK => 'status is '.self::STATUS_FAILED,
-            default => null,
-        };
     }
 
     /**
@@ -189,7 +155,7 @@ class Ranking
     protected function groups(SQLite3 $connection): array
     {
         $executions = $this->isExecution();
-        $failure = $this->failure() !== null;
+        $failure = Failure::expression($this->type) !== null;
 
         $aggregates = $this->query($connection, 'SELECT group_hash, count(*) AS occurrences, count(d) AS timed, min(d) AS min, avg(d) AS avg, max(d) AS max, sum(d) AS total, max(started_at) AS last, min(started_at) AS wfirst, count(DISTINCT deploy) AS deploys'
             .($executions ? ', max(m) AS mem_max, sum(q) AS queries' : '')
@@ -542,20 +508,6 @@ class Ranking
     }
 
     /**
-     * Get the expression that is 1 for a failed record, 0 for one that did not fail and null for one without the field it is judged by, or null for a type with no such rule.
-     */
-    protected function failure(): ?string
-    {
-        return match ($this->type) {
-            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'CASE WHEN status_code IS NULL THEN NULL WHEN status_code >= '.self::FIRST_FAILED_STATUS_CODE.' THEN 1 ELSE 0 END',
-            RecordType::COMMAND => 'CASE WHEN exit_code IS NULL THEN NULL WHEN exit_code <> 0 THEN 1 ELSE 0 END',
-            RecordType::JOB_ATTEMPT => "CASE WHEN status IS NULL THEN NULL WHEN status IN ('".self::STATUS_FAILED."', '".self::STATUS_RELEASED."') THEN 1 ELSE 0 END",
-            RecordType::SCHEDULED_TASK => "CASE WHEN status IS NULL THEN NULL WHEN status = '".self::STATUS_FAILED."' THEN 1 ELSE 0 END",
-            default => null,
-        };
-    }
-
-    /**
      * Run a query over the records of the type that the window and the deploy leave, as the table `base`.
      *
      * @return list<array<string, mixed>>
@@ -567,7 +519,7 @@ class Ranking
             $deploy = "NULLIF(deploy, '')";
 
             // A skipped scheduled task has no duration of its own: it never ran.
-            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".self::STATUS_SKIPPED."' THEN NULL ELSE {$number} END" : ($this->hasDuration() ? $number : 'NULL');
+            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".Outcome::SKIPPED->value."' THEN NULL ELSE {$number} END" : ($this->hasDuration() ? $number : 'NULL');
             $columns = [$this->group === null ? 'group_hash' : "COALESCE({$deploy}, char(1)) AS group_hash", 'id', 'started_at', "{$deploy} AS deploy", 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
 
             if ($this->hasMethod()) {
@@ -578,8 +530,10 @@ class Ranking
                 array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q');
             }
 
-            if ($this->failure() !== null) {
-                $columns[] = "{$this->failure()} AS f";
+            $failure = Failure::expression($this->type);
+
+            if ($failure !== null) {
+                $columns[] = "{$failure} AS f";
             }
 
             $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->type->view().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;

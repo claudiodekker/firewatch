@@ -197,11 +197,11 @@ The named condition of the store a reader reports when it cannot be read as usua
 _Avoid_: Health, error
 
 **Schema version**:
-The integer stamped in the store that says which shape it was created with; any other value causes a rebuild, not a migration.
+The integer stamped in the store that says which shape it was created with; an earlier value causes a rebuild, not a migration, and a later one, from a newer release, is never written or rebuilt except by a drop.
 _Avoid_: Migration number, database version
 
 **Rebuild**:
-Dropping and recreating everything in the store in place when its schema version differs, which discards its data.
+Dropping and recreating everything in the store in place when its schema version is earlier than the writer's, which discards its data.
 _Avoid_: Migration, upgrade, reset
 
 **Dropped batch**:

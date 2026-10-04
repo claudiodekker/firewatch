@@ -364,7 +364,7 @@ class Occurrences extends Tool
      * Get the `truncated` entries of the answer: the cut list and the call that continues it, or none for a complete list.
      *
      * @param  list<array{value: int|float, id: int}>  $keys
-     * @return list<array{section: string, shown: int, matched: null, reason: string, how: string}>
+     * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
      */
     protected function truncated(Request $request, Rows $rows, array $keys, float $epoch, Window $window, ?float $createdAt): array
     {

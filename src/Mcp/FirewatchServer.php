@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
+use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use Composer\InstalledVersions;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Name;
@@ -37,6 +38,7 @@ class FirewatchServer extends Server
         Rank::class,
         Occurrences::class,
         Execution::class,
+        Trace::class,
     ];
 
     /**
