@@ -41,7 +41,7 @@ class IngestReplacer
         // The ingest is loaded only after this check, as a class that no longer
         // fits its interface is a fatal error. Preloading every class through
         // opcache declares it sooner, and then this guard can't protect it.
-        if (! interface_exists($this->interface()) || $this->signatures() !== $this->expectedSignatures()) {
+        if (! interface_exists($this->interface()) || $this->hasUnexpectedSignatures()) {
             throw new RuntimeException('its ingest interface changed');
         }
 
@@ -52,6 +52,16 @@ class IngestReplacer
         $replacement = $ingest();
 
         (new ReflectionProperty($core, 'ingest'))->setValue($core, $replacement);
+    }
+
+    /**
+     * Determine if the interface has a method Firewatch's ingests were not written against.
+     */
+    protected function hasUnexpectedSignatures(): bool
+    {
+        $unexpected = array_diff($this->signatures(), $this->expectedSignatures());
+
+        return $unexpected !== [];
     }
 
     /**

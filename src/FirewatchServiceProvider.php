@@ -82,17 +82,17 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const STEPPED_ASIDE_NOTICE = 'Firewatch is installed but stepped aside in environment `%s`; install with `composer install --no-dev` in production.';
 
     /**
-     * The start of the report when Nightwatch's ingest could not be swapped.
+     * The start of the notice when Nightwatch's ingest could not be swapped.
      */
     protected const INGEST_NOT_REPLACED = 'Firewatch left Nightwatch\'s ingest in place: ';
 
     /**
-     * The report when Nightwatch's provider was registered before Firewatch's.
+     * The notice when Nightwatch's provider was registered before Firewatch's.
      */
     protected const REGISTERED_FIRST = 'Nightwatch\'s provider was registered before Firewatch\'s, so Nightwatch read its configuration before Firewatch set it. Remove `Laravel\\Nightwatch\\NightwatchServiceProvider` from your providers and run `php artisan package:discover`.';
 
     /**
-     * The report when the event the veto listens on is missing.
+     * The notice when the event the veto listens on is missing.
      */
     protected const VETO_EVENT_MISSING = 'Firewatch cannot veto Nightwatch\'s transmit: `%s` is missing from Nightwatch %s.';
 
@@ -130,13 +130,13 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         if ($this->mode === Mode::STEPPED_ASIDE) {
-            report(new RuntimeException(sprintf(static::STEPPED_ASIDE_NOTICE, $this->app->environment())));
+            $this->notify(sprintf(static::STEPPED_ASIDE_NOTICE, $this->app->environment()));
 
             return;
         }
 
-        $this->reportConfigurationIssues();
-        $this->reportNightwatchInstall();
+        $this->notifyConfigurationIssues();
+        $this->notifyNightwatchInstall();
 
         $this->loadTranslationsFrom(__DIR__.'/../lang', 'firewatch');
 
@@ -392,7 +392,7 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         if (! $this->app->bound(Core::class)) {
-            $this->reportIngestNotReplaced(new RuntimeException('its core is not registered'));
+            $this->notifyIngestNotReplaced(new RuntimeException('its core is not registered'));
 
             return;
         }
@@ -403,52 +403,58 @@ class FirewatchServiceProvider extends ServiceProvider
                 Mode::OFF => new NullIngest,
             });
         } catch (RuntimeException $exception) {
-            $this->reportIngestNotReplaced($exception);
+            $this->notifyIngestNotReplaced($exception);
         }
     }
 
     /**
-     * Report once in a console process that Nightwatch's ingest stayed in place.
+     * Write a notice once in a console process that Nightwatch's ingest stayed in place.
      */
-    protected function reportIngestNotReplaced(RuntimeException $reason): void
+    protected function notifyIngestNotReplaced(RuntimeException $reason): void
     {
         if (! $this->app->runningInConsole()) {
             return;
         }
 
-        report(new RuntimeException(static::INGEST_NOT_REPLACED.$reason->getMessage().'.', previous: $reason));
+        $this->notify(static::INGEST_NOT_REPLACED.$reason->getMessage().'.');
     }
 
     /**
-     * Report the configuration issues once.
+     * Write a notice once about the configuration issues.
      */
-    protected function reportConfigurationIssues(): void
+    protected function notifyConfigurationIssues(): void
     {
         $issues = $this->app->make(Configuration::class)->issues;
-
         if ($issues === []) {
             return;
         }
 
         $lines = array_map(fn (ConfigurationIssue $issue) => $issue->line(), $issues);
 
-        report(new RuntimeException('Firewatch configuration: '.implode("\n", $lines)));
+        $this->notify('Firewatch configuration: '.implode("\n", $lines));
     }
 
     /**
-     * Report once what the boot guards found wrong with how Nightwatch is installed.
+     * Write a notice once about what the boot guards found wrong with how Nightwatch is installed.
      */
-    protected function reportNightwatchInstall(): void
+    protected function notifyNightwatchInstall(): void
     {
         $install = $this->app->make(NightwatchInstall::class);
-
         if ($install->registeredFirst) {
-            report(new RuntimeException(static::REGISTERED_FIRST));
+            $this->notify(static::REGISTERED_FIRST);
         }
 
         // Only Active registers the veto.
         if ($this->mode === Mode::ACTIVE && ! $install->hasVetoEvent()) {
-            report(new RuntimeException(sprintf(static::VETO_EVENT_MISSING, $install->vetoEvent(), $install->version)));
+            $this->notify(sprintf(static::VETO_EVENT_MISSING, $install->vetoEvent(), $install->version));
         }
+    }
+
+    /**
+     * Write a notice to the PHP error log, outside the exception handler and so outside the application's telemetry.
+     */
+    protected function notify(string $message): void
+    {
+        error_log($message);
     }
 }

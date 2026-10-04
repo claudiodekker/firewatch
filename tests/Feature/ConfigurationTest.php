@@ -95,14 +95,14 @@ it('publishes the config file with the firewatch-config tag', function () {
     expect(file_get_contents($this->storeDirectory.'/config/firewatch.php'))->toBe(file_get_contents(__DIR__.'/../../config/firewatch.php'));
 });
 
-it('reports every configuration issue once through the exception handler in a console process', function () {
+it('reports every configuration issue once in a console process', function () {
     config()->set('firewatch.busy_timeout', 'soon');
     config()->set('firewatch.environments', 'testing,prod*');
 
     registerFirewatch();
 
-    Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === "Firewatch configuration: firewatch.environments: \"prod*\" is not an environment name (letters, digits, _ . -); dropped\nfirewatch.busy_timeout: \"soon\" is not an integer from 0 to 5000; using 300");
+    expect(notices())->toBe(["Firewatch configuration: firewatch.environments: \"prod*\" is not an environment name (letters, digits, _ . -); dropped\nfirewatch.busy_timeout: \"soon\" is not an integer from 0 to 5000; using 300"]);
+    Exceptions::assertNothingReported();
 });
 
 it('reports nothing for a valid configuration', function () {
@@ -110,7 +110,7 @@ it('reports nothing for a valid configuration', function () {
 
     registerFirewatch();
 
-    Exceptions::assertNothingReported();
+    expect(notices())->toBe([]);
 });
 
 it('stays silent about configuration issues in a web process', function () {
@@ -119,6 +119,5 @@ it('stays silent about configuration issues in a web process', function () {
 
     $configuration = registerFirewatch();
 
-    expect($configuration->busyTimeoutMilliseconds)->toBe(300);
-    Exceptions::assertNothingReported();
+    expect($configuration->busyTimeoutMilliseconds)->toBe(300)->and(notices())->toBe([]);
 });

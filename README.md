@@ -1,6 +1,6 @@
 # Firewatch
 
-Firewatch is local telemetry for AI debugging. It stores what Laravel Nightwatch's sensors record in a SQLite file on your machine, and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and nothing leaves the machine.
+Firewatch is local telemetry for AI debugging. It stores what Laravel Nightwatch's sensors record in a SQLite file on your machine, and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and Firewatch itself sends nothing anywhere.
 
 ## Install
 
@@ -41,7 +41,7 @@ Every tool answers in markdown, or in JSON with `format: json`, and each answer 
 
 In the `local` and `testing` environments, Firewatch captures every request, command, job and scheduled task, with their queries, logs, exceptions, cache events, mail, notifications and outgoing requests. It overrides Nightwatch's sampling and filters so nothing is skipped, but anything you opt out of in code (`Nightwatch::ignore()`, `pause()`, `dontSample()`, `reject*` callbacks) still stays out. Query records also get their bindings, which Nightwatch itself never records.
 
-Nothing is redacted by default, because the store never leaves your machine and the redacted value is often the answer. Passwords, `Authorization` headers and cookies are stored as sent, so treat the store as sensitive. To redact, list payload fields in `FIREWATCH_REDACT_PAYLOAD_FIELDS` and headers in `FIREWATCH_REDACT_HEADERS`.
+Nothing is redacted by default, because the store stays on your machine and the redacted value is often the answer. Passwords, `Authorization` headers and cookies are kept as sent, and the tools return them, so they reach your assistant's model provider. Treat the store as sensitive. To redact, list payload fields in `FIREWATCH_REDACT_PAYLOAD_FIELDS` and headers in `FIREWATCH_REDACT_HEADERS`.
 
 Nightwatch's own settings for enabling, tokens, sampling, filtering and redaction have no effect while Firewatch runs. Restart queue workers, Octane and Horizon after changing Firewatch's configuration.
 
