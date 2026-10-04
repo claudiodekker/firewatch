@@ -38,7 +38,7 @@ return [
         'execution' => 'One execution in full: a request, command, job attempt or scheduled task. Without arguments it returns the latest one that finished (greatest end time); `type` picks the latest of one kind; `execution_id` picks a specific one (a request\'s trace id is also its execution id). Shows outcome, stages, request headers and payload as captured, counted-versus-captured accounting for eight counters, up to five exceptions with application frames and source lines, and the child timeline. Not windowed. For every attempt of a job use `occurrences` with `job_id`. Recorded when finished: running work is absent.',
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
         'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
-        'detect' => 'Runs named problem shapes and returns evidence, worst first. Shape `failing-routes`: the request groups that had a request at or above a status; `threshold` is the lowest status that counts as failed, a whole number from 100 to 599, default 400. Without `shape` it runs every shape; `threshold` and `group` need one shape. Each shape returns a verdict (findings, clean, not_evaluated) over the records it examined, its threshold with unit, range and whether the default applied, the exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean means none among what was captured, and over few records it is weak: read the examined count. `group` restricts a shape to one group. Windowed by since/until.',
+        'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: a read query shape that one execution ran at least `threshold` times, in runs (a whole number from 2, default 3), with distinct bindings and call sites. `failing-routes`: the request groups that had a request at or above a status (a whole number from 100 to 599, default 400). Without `shape` it runs every shape; `threshold` and `group` need one shape. Each shape returns a verdict (findings, clean, not_evaluated) over the records it examined, its threshold with unit, range and whether the default applied, the exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean means none among what was captured, and over few records it is weak: read the examined count. `group` restricts a shape to one group. Windowed by since/until.',
     ],
 
     /*
@@ -295,13 +295,16 @@ return [
 
     'trace_next_occurrences' => 'List the records that carry this id, since the execution they belong to is not in the store.',
 
-    'detect_shape_argument' => 'The shape to run: failing-routes. Absent: every shape that ships.',
-    'detect_threshold_argument' => 'Overrides the shape\'s default, in its unit. failing-routes: the lowest status that counts as failed, a whole number from 100 to 599, default 400. Needs `shape`.',
-    'detect_group_argument' => 'One group id (32 hex) to restrict the shape to. A group that holds no records is an empty answer. Needs `shape`.',
+    'detect_shape_argument' => 'The shape to run: n-plus-one or failing-routes. Absent: every shape that ships.',
+    'detect_threshold_argument' => 'Overrides the shape\'s default, in its unit. n-plus-one: runs of one query, a whole number from 2, default 3. failing-routes: lowest failed status, 100 to 599, default 400. Needs `shape`.',
+    'detect_group_argument' => 'One group id (32 hex) to restrict the shape to; for n-plus-one an execution\'s group, not a query group. A group that holds no records is an empty answer. Needs `shape`.',
     'detect_limit_argument' => 'The most findings to list, 1 to 100. Default 20.',
     'detect_input' => [
+        'n-plus-one' => 'executions',
         'failing-routes' => 'requests',
     ],
+    'detect_caveat_reads' => 'Reads are recognised by the first keyword; a WITH statement that writes counts as a read.',
+    'detect_caveat_incomplete' => '{1} :count examined execution has fewer captured than counted queries; run counts and shares are lower bounds.|[2,*] :count examined executions have fewer captured than counted queries; run counts and shares are lower bounds.',
     'detect_findings_summary' => ':detector: :total findings over :examined :input.',
     'detect_clean_summary' => ':detector: clean over :examined :input.',
     'detect_not_evaluated_summary' => ':detector: not evaluated (:reason).',
