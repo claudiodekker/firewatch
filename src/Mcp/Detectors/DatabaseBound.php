@@ -26,6 +26,11 @@ class DatabaseBound implements Detector
     protected const TOP_QUERIES = 3;
 
     /**
+     * The percent a share is of its whole.
+     */
+    protected const PERCENT = 100;
+
+    /**
      * The decimals of a share in an answer.
      */
     protected const PERCENT_DECIMALS = 1;
@@ -66,6 +71,7 @@ class DatabaseBound implements Detector
         $bindings = [
             'group' => $group ?? '',
             'from' => History::removedThrough($meta, [RecordType::QUERY]),
+            'share' => Percentile::MEDIAN->share(),
         ];
         $selected = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
         $described = $this->threshold()->describe($threshold);
@@ -83,13 +89,10 @@ class DatabaseBound implements Detector
         }
 
         $caveats = $this->caveats($population['incomplete']);
-        $requests = Stored::rows($connection, 'SELECT group_hash, id, execution_id, started_at, NULLIF(user_id, \'\') AS user_id, '.Stored::number('duration').' AS duration, route_path,
-            (SELECT total(queries.duration) FROM queries WHERE queries.execution_id = requests.execution_id) AS query_micros
-            FROM requests WHERE '.$selected.' AND (:from IS NULL OR started_at >= :from)', $bindings, $window);
-
-        $judged = array_values(array_filter($requests, fn (array $request) => is_numeric($request['duration']) && $request['duration'] > 0));
-        $saw = count($requests) === count($judged) ? [] : ['without_duration' => count($requests) - count($judged)];
-        $findings = $this->findings($judged, $percent);
+        $groups = $this->groups($connection, $window, $selected, $bindings);
+        $judged = array_sum(array_column($groups, 'requests'));
+        $saw = $judged === $population['examined'] ? [] : ['without_duration' => $population['examined'] - $judged];
+        $findings = $this->findings($groups, $percent);
 
         if ($findings === []) {
             return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], saw: $saw, caveats: $caveats);
@@ -108,26 +111,54 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get the findings of the groups of the requests that have a duration, worst first.
+     * Get what the requests that have a duration say of each group: the sums of their durations and of the time they spent in queries, the median of their shares and of their durations at the nearest rank, and the latest of them.
      *
-     * @param  list<array<string, mixed>>  $judged
+     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function findings(array $judged, int|float $percent): array
+    protected function groups(SQLite3 $connection, Window $window, string $selected, array $bindings): array
     {
-        $groups = [];
+        $rank = 'max(1, (n * :share + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
+        $duration = Stored::number('duration');
 
-        foreach ($judged as $request) {
-            $groups[$request['group_hash']][] = $request;
-        }
+        return Stored::rows($connection, "WITH judged AS (
+            SELECT group_hash, id, started_at, execution_id, route_path, NULLIF(user_id, '') AS user_id, duration, query_micros FROM (
+                SELECT group_hash, id, started_at, execution_id, route_path, user_id, {$duration} AS duration,
+                    (SELECT total(queries.duration) FROM queries WHERE queries.execution_id = requests.execution_id) AS query_micros
+                FROM requests WHERE {$selected} AND (:from IS NULL OR started_at >= :from)) WHERE duration > 0
+        ), ranked AS (
+            SELECT *, count(*) OVER (PARTITION BY group_hash) AS n,
+                ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY query_micros * 1.0 / duration, id) AS by_share,
+                ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY duration, id) AS by_duration,
+                ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS by_latest
+            FROM judged
+        )
+        SELECT group_hash, count(*) AS requests, total(query_micros) AS query_micros, total(duration) AS duration,
+            max(CASE WHEN by_share = {$rank} THEN query_micros END) AS median_query_micros,
+            max(CASE WHEN by_share = {$rank} THEN duration END) AS median_share_duration,
+            max(CASE WHEN by_duration = {$rank} THEN duration END) AS median_duration,
+            max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
+            max(CASE WHEN by_latest = 1 THEN route_path END) AS route_path,
+            min(started_at) AS first_seen, max(started_at) AS last_seen,
+            count(DISTINCT user_id) AS actors, count(*) FILTER (WHERE user_id IS NULL) AS anonymous
+        FROM ranked GROUP BY group_hash", $bindings, $window);
+    }
 
+    /**
+     * Get the findings of the groups, worst first.
+     *
+     * @param  list<array<string, mixed>>  $groups
+     * @return list<array<string, mixed>>
+     */
+    protected function findings(array $groups, int|float $percent): array
+    {
         $findings = [];
 
-        foreach ($groups as $requests) {
-            $typical = $this->typical($requests);
+        foreach ($groups as $group) {
+            $typical = $this->typical($group);
 
-            if ($typical['share']['query_micros'] * 100 >= $percent * $typical['share']['duration'] && $typical['microseconds'] >= self::TYPICAL_FLOOR_MICROSECONDS) {
-                $findings[] = $this->finding($requests[0]['group_hash'], $requests, $typical);
+            if ($percent * $typical['duration'] <= $typical['query_micros'] * 100 && $typical['microseconds'] >= self::TYPICAL_FLOOR_MICROSECONDS) {
+                $findings[] = $this->finding($group, $typical);
             }
         }
 
@@ -137,79 +168,60 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get the typical share and duration of the requests of a group: the medians from three requests, otherwise the aggregate share and the mean duration.
+     * Get the typical share and duration of a group: the medians from three requests, otherwise the aggregate share and the mean duration.
      *
-     * @param  list<array<string, mixed>>  $requests
-     * @return array{basis: string, share: array{query_micros: float, duration: float}, microseconds: float}
+     * @param  array<string, mixed>  $group
+     * @return array{basis: string, query_micros: int|float, duration: int|float, microseconds: int|float}
      */
-    protected function typical(array $requests): array
+    protected function typical(array $group): array
     {
-        if (count($requests) < Percentile::MEDIAN->floor()) {
+        if ($group['requests'] < Percentile::MEDIAN->floor()) {
             return [
                 'basis' => 'aggregate',
-                'share' => [
-                    'query_micros' => array_sum(array_column($requests, 'query_micros')),
-                    'duration' => array_sum(array_column($requests, 'duration')),
-                ],
-                'microseconds' => array_sum(array_column($requests, 'duration')) / count($requests),
+                'query_micros' => $group['query_micros'],
+                'duration' => $group['duration'],
+                'microseconds' => $group['duration'] / $group['requests'],
             ];
         }
 
-        usort($requests, fn (array $a, array $b) => $a['query_micros'] / $a['duration'] <=> $b['query_micros'] / $b['duration']);
-        $durations = array_column($requests, 'duration');
-        sort($durations);
-
         return [
             'basis' => 'median',
-            'share' => [
-                'query_micros' => $requests[$this->rank(count($requests))]['query_micros'],
-                'duration' => $requests[$this->rank(count($requests))]['duration'],
-            ],
-            'microseconds' => $durations[$this->rank(count($durations))],
+            'query_micros' => $group['median_query_micros'],
+            'duration' => $group['median_share_duration'],
+            'microseconds' => $group['median_duration'],
         ];
     }
 
     /**
-     * Get the position of the nearest-rank median of a number of values, counted from zero.
-     */
-    protected function rank(int $count): int
-    {
-        return max(1, (int) ceil($count * Percentile::MEDIAN->share() / 100)) - 1;
-    }
-
-    /**
-     * Get the finding of a group of requests.
+     * Get the finding of a group.
      *
-     * @param  non-empty-list<array<string, mixed>>  $requests
-     * @param  array{basis: string, share: array{query_micros: float, duration: float}, microseconds: float}  $typical
+     * @param  array<string, mixed>  $group
+     * @param  array{basis: string, query_micros: int|float, duration: int|float, microseconds: int|float}  $typical
      * @return array<string, mixed>
      */
-    protected function finding(string $group, array $requests, array $typical): array
+    protected function finding(array $group, array $typical): array
     {
-        usort($requests, fn (array $a, array $b) => [$b['started_at'], $b['id']] <=> [$a['started_at'], $a['id']]);
-
-        $share = round(100 * $typical['share']['query_micros'] / $typical['share']['duration'], self::PERCENT_DECIMALS);
-        $aggregate = round(100 * array_sum(array_column($requests, 'query_micros')) / array_sum(array_column($requests, 'duration')), self::PERCENT_DECIMALS);
-        $route = Stored::blank($requests[0]['route_path']);
-        $users = array_filter(array_column($requests, 'user_id'), fn (mixed $user) => $user !== null);
+        $share = round(100 * $typical['query_micros'] / $typical['duration'], self::PERCENT_DECIMALS);
+        $aggregate = round(100 * $group['query_micros'] / $group['duration'], self::PERCENT_DECIMALS);
+        $route = Stored::blank($group['route_path']);
 
         return [
-            'group' => $group,
+            'group' => $group['group_hash'],
             'name' => $route ?? __('firewatch::messages.rank_no_route'),
             'count' => $share,
-            'first_seen_at' => $requests[count($requests) - 1]['started_at'],
-            'last_seen_at' => $requests[0]['started_at'],
-            'latest_execution_id' => $requests[0]['execution_id'],
+            'first_seen_at' => $group['first_seen'],
+            'last_seen_at' => $group['last_seen'],
+            'latest_execution_id' => $group['latest_execution_id'],
             'reaches' => [
-                'signed_in_actors' => count(array_unique($users)),
-                'without_actor' => count($requests) - count($users),
+                'signed_in_actors' => $group['actors'],
+                'without_actor' => $group['anonymous'],
             ],
             'evidence' => [
                 'share_pct' => $share,
                 'basis' => $typical['basis'],
                 'aggregate_share_pct' => $aggregate,
                 'typical_ms' => Stored::milliseconds($typical['microseconds']),
-                'requests' => count($requests),
+                'requests' => $group['requests'],
             ],
         ];
     }

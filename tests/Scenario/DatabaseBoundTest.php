@@ -41,6 +41,15 @@ it('finds the route whose request spent its time in a query, and names the query
         ->and($finding['evidence']['top_queries'][0])->toMatchArray(['sql' => DATABASE_BOUND_QUERY, 'calls' => 1]);
 });
 
+it('finds nothing in a request that ran no query, and says it looked at the request', function () {
+    forceRequests();
+
+    Route::get('/health', fn () => 'ok');
+    test()->get('/health');
+
+    expect(Envelope::assert(Detect::class, ['shape' => 'database-bound'])['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0]);
+});
+
 it('opens what a finding points at', function () {
     databaseBoundRequest();
 

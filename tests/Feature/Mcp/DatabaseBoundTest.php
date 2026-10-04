@@ -164,7 +164,7 @@ describe('the verdict', function () {
             ->and($envelope['result']['findings'][0]['name'])->toBe('/late');
     });
 
-    it('takes a threshold from the call, and refuses one that is no whole number from 1 to 100', function () {
+    it('takes a threshold from the call, and states that it is no default', function () {
         ingest(dbbShares([59, 59, 59]));
 
         $lowered = dbbAnswer(['threshold' => 50]);
