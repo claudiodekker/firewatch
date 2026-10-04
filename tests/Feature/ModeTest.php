@@ -106,8 +106,8 @@ it('reports the stepped-aside notice once in a console process', function () {
 
     registerFirewatch();
 
-    Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Firewatch is installed but stepped aside in environment `testing`; install with `composer install --no-dev` in production.');
+    expect(notices())->toBe(['Firewatch is installed but stepped aside in environment `testing`; install with `composer install --no-dev` in production.']);
+    Exceptions::assertNothingReported();
 });
 
 it('stays silent about stepping aside in a web process', function () {
@@ -116,7 +116,7 @@ it('stays silent about stepping aside in a web process', function () {
 
     registerFirewatch();
 
-    Exceptions::assertNothingReported();
+    expect(notices())->toBe([]);
 });
 
 it('registers the three commands and the publish tag only when Active or Off', function (array $config, array $commands, bool $tagged) {
@@ -181,8 +181,8 @@ it('reports once in a console process when the ingest cannot be swapped', functi
 
     registerFirewatch();
 
-    Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === "Firewatch left Nightwatch's ingest in place: {$reason}.");
+    expect(notices())->toBe(["Firewatch left Nightwatch's ingest in place: {$reason}."]);
+    Exceptions::assertNothingReported();
 })->with([
     'core not registered' => ['breakCore' => fn () => app()->offsetUnset(Core::class), 'reason' => 'its core is not registered'],
     'core without an ingest property' => ['breakCore' => fn () => app()->instance(Core::class, new stdClass), 'reason' => 'its core has no assignable ingest property'],
@@ -194,5 +194,5 @@ it('stays silent about an ingest it cannot swap in a web process', function () {
 
     registerFirewatch();
 
-    Exceptions::assertNothingReported();
+    expect(notices())->toBe([]);
 });

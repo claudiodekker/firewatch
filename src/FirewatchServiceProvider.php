@@ -130,7 +130,7 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         if ($this->mode === Mode::STEPPED_ASIDE) {
-            report(new RuntimeException(sprintf(static::STEPPED_ASIDE_NOTICE, $this->app->environment())));
+            $this->notify(sprintf(static::STEPPED_ASIDE_NOTICE, $this->app->environment()));
 
             return;
         }
@@ -416,7 +416,7 @@ class FirewatchServiceProvider extends ServiceProvider
             return;
         }
 
-        report(new RuntimeException(static::INGEST_NOT_REPLACED.$reason->getMessage().'.', previous: $reason));
+        $this->notify(static::INGEST_NOT_REPLACED.$reason->getMessage().'.');
     }
 
     /**
@@ -432,7 +432,7 @@ class FirewatchServiceProvider extends ServiceProvider
 
         $lines = array_map(fn (ConfigurationIssue $issue) => $issue->line(), $issues);
 
-        report(new RuntimeException('Firewatch configuration: '.implode("\n", $lines)));
+        $this->notify('Firewatch configuration: '.implode("\n", $lines));
     }
 
     /**
@@ -443,12 +443,20 @@ class FirewatchServiceProvider extends ServiceProvider
         $install = $this->app->make(NightwatchInstall::class);
 
         if ($install->registeredFirst) {
-            report(new RuntimeException(static::REGISTERED_FIRST));
+            $this->notify(static::REGISTERED_FIRST);
         }
 
         // Only Active registers the veto.
         if ($this->mode === Mode::ACTIVE && ! $install->hasVetoEvent()) {
-            report(new RuntimeException(sprintf(static::VETO_EVENT_MISSING, $install->vetoEvent(), $install->version)));
+            $this->notify(sprintf(static::VETO_EVENT_MISSING, $install->vetoEvent(), $install->version));
         }
+    }
+
+    /**
+     * Write a notice to the PHP error log, outside the exception handler and so outside the application's telemetry.
+     */
+    protected function notify(string $message): void
+    {
+        error_log($message);
     }
 }

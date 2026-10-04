@@ -12,8 +12,8 @@ it('reports once in a console process when Nightwatch\'s provider registered fir
 
     app()->register(FirewatchServiceProvider::class);
 
-    Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Nightwatch\'s provider was registered before Firewatch\'s, so Nightwatch read its configuration before Firewatch set it. Remove `Laravel\Nightwatch\NightwatchServiceProvider` from your providers and run `php artisan package:discover`.');
+    expect(notices())->toBe(['Nightwatch\'s provider was registered before Firewatch\'s, so Nightwatch read its configuration before Firewatch set it. Remove `Laravel\Nightwatch\NightwatchServiceProvider` from your providers and run `php artisan package:discover`.']);
+    Exceptions::assertNothingReported();
 })->with([
     'Active' => ['config' => []],
     'Off' => ['config' => ['firewatch.enabled' => false]],
@@ -25,7 +25,7 @@ it('reports nothing when Firewatch registers Nightwatch\'s provider itself', fun
 
     app()->register(FirewatchServiceProvider::class);
 
-    Exceptions::assertNothingReported();
+    expect(notices())->toBe([]);
 });
 
 it('keeps for the process whether Nightwatch\'s provider registered first', function (bool $first) {
@@ -58,8 +58,9 @@ it('reports only the stepped-aside notice about a provider registered first', fu
 
     app()->register(FirewatchServiceProvider::class);
 
-    Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Firewatch is installed but stepped aside'));
+    expect(notices())->toHaveCount(1);
+    expect(notices()[0])->toStartWith('Firewatch is installed but stepped aside');
+    Exceptions::assertNothingReported();
 });
 
 it('stays silent about the provider order in a web process', function () {
@@ -68,7 +69,7 @@ it('stays silent about the provider order in a web process', function () {
 
     app()->register(FirewatchServiceProvider::class);
 
-    Exceptions::assertNothingReported();
+    expect(notices())->toBe([]);
 });
 
 it('keeps the installed Nightwatch version', function () {
@@ -83,8 +84,8 @@ it('reports a missing veto event once in a console process when Active', functio
     registerFirewatch();
 
     $version = app(NightwatchInstall::class)->version;
-    Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === "Firewatch cannot veto Nightwatch's transmit: `Laravel\\Nightwatch\\Events\\MissingEvents` is missing from Nightwatch {$version}.");
+    expect(notices())->toBe(["Firewatch cannot veto Nightwatch's transmit: `Laravel\\Nightwatch\\Events\\MissingEvents` is missing from Nightwatch {$version}."]);
+    Exceptions::assertNothingReported();
 });
 
 it('reports no missing veto event when Off', function () {
@@ -93,7 +94,7 @@ it('reports no missing veto event when Off', function () {
 
     registerFirewatch();
 
-    Exceptions::assertNothingReported();
+    expect(notices())->toBe([]);
 });
 
 function bindInstallWithoutVetoEvent(): void
