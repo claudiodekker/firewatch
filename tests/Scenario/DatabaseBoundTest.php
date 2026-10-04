@@ -70,3 +70,13 @@ it('examines the request in the overview, at the default threshold', function ()
     expect($row)->toMatchArray(['examined' => 1])
         ->and($row['verdict'])->toBeIn(['findings', 'clean']);
 });
+
+it('states that query bindings may be unpaired on the real request', function () {
+    databaseBoundRequest();
+
+    $envelope = Envelope::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
+    $blindSpots = array_column($envelope['blind_spots'], 'message', 'id');
+
+    expect($blindSpots)->toHaveKey('query-bindings-unpaired')
+        ->and($blindSpots['query-bindings-unpaired'])->toBe(__('firewatch::messages.blind_spots.query-bindings-unpaired'));
+});

@@ -1,6 +1,6 @@
 <?php
 
-test('the n-plus-one caveats have their pinned wording', function (string $key, int $count, string $wording) {
+test('the detector caveats have their pinned wording', function (string $key, int $count, string $wording) {
     expect(trans_choice("firewatch::messages.{$key}", $count, ['count' => $count]))->toBe($wording);
 })->with([
     'reads' => ['detect_caveat_reads', 1, 'Reads are recognised by the first keyword; a WITH statement that writes counts as a read.'],

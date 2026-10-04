@@ -18,7 +18,7 @@ beforeEach(function () {
 });
 
 /**
- * The records of a request that spent some microseconds of its duration in queries, in one query.
+ * Build the records of a request that spent some microseconds in queries.
  *
  * @param  array<string, mixed>  $fields  the fields of the request
  * @return list<RecordBuilder>
@@ -38,6 +38,9 @@ function dbbRequest(string $id, int $duration, int $queryMicros, string $route =
     ];
 }
 
+/**
+ * Build a request's query record.
+ */
 function dbbQuery(string $id, int $micros, string $sql = 'select * from orders'): RecordBuilder
 {
     return syntheticRecord(RecordType::QUERY)->inExecution($id)->with([
@@ -49,7 +52,9 @@ function dbbQuery(string $id, int $micros, string $sql = 'select * from orders')
 }
 
 /**
- * The records of requests of one group with a share of their duration in queries, one of a hundred milliseconds for each percent.
+ * Build the records of requests of one group with a share in queries.
+ *
+ * Each request lasts a hundred milliseconds and spends a thousand microseconds in queries for each percent.
  *
  * @param  list<int>  $percents
  * @return list<RecordBuilder>
@@ -64,6 +69,8 @@ function dbbShares(array $percents, string $route = '/orders'): array
 }
 
 /**
+ * Get the `database-bound` answer of the tool.
+ *
  * @param  array<string, mixed>  $arguments
  * @return array<string, mixed>
  */
@@ -73,6 +80,8 @@ function dbbAnswer(array $arguments = []): array
 }
 
 /**
+ * Get the text of the tool's refusal.
+ *
  * @param  array<string, mixed>  $arguments
  */
 function dbbRefusal(array $arguments): string
@@ -123,6 +132,36 @@ describe('the verdict', function () {
         'exactly 5 ms' => [5_000, 'findings'],
     ]);
 
+    it('tells 4.999 milliseconds from 5, in the median duration of three requests, which a long request does not move', function (int $median, string $verdict) {
+        ingest(array_merge(...array_map(
+            fn (int $duration, int $index) => dbbRequest("r{$index}", $duration, $duration, '/orders', ['timestamp' => DBB_AT + $index]),
+            [4_000, $median, 90_000],
+            [0, 1, 2],
+        )));
+
+        $envelope = dbbAnswer();
+
+        expect($envelope['result']['verdict'])->toBe($verdict);
+    })->with([
+        'a median of just under 5 ms' => [4_999, 'clean'],
+        'a median of exactly 5 ms' => [5_000, 'findings'],
+    ]);
+
+    it('tells 4.9995 milliseconds from 5, in the mean duration of two requests', function (int $second, string $verdict) {
+        ingest(array_merge(...array_map(
+            fn (int $duration, int $index) => dbbRequest("r{$index}", $duration, $duration, '/orders', ['timestamp' => DBB_AT + $index]),
+            [4_999, $second],
+            [0, 1],
+        )));
+
+        $envelope = dbbAnswer();
+
+        expect($envelope['result']['verdict'])->toBe($verdict);
+    })->with([
+        'a mean of 4,999.5 microseconds' => [5_000, 'clean'],
+        'a mean of 5,000 microseconds' => [5_001, 'findings'],
+    ]);
+
     it('is clean over the requests examined, and says how many', function () {
         ingest([...dbbShares([5, 5, 5]), ...dbbRequest('quiet', 50_000, 0, '/quiet')]);
 
@@ -167,12 +206,24 @@ describe('the verdict', function () {
     it('takes a threshold from the call, and states that it is no default', function () {
         ingest(dbbShares([59, 59, 59]));
 
+        $default = dbbAnswer();
         $lowered = dbbAnswer(['threshold' => 50]);
 
-        expect(dbbAnswer()['result']['verdict'])->toBe('clean')
+        expect($default['result']['verdict'])->toBe('clean')
             ->and($lowered['result']['verdict'])->toBe('findings')
             ->and($lowered['result']['threshold'])->toMatchArray(['value' => 50, 'default' => 60, 'is_default' => false]);
     });
+
+    it('accepts a threshold of 100 percent, which only a request that spent all its time in queries reaches', function (int $percent, string $verdict) {
+        ingest(dbbShares([$percent, $percent, $percent]));
+
+        $envelope = dbbAnswer(['threshold' => 100]);
+
+        expect($envelope['result']['verdict'])->toBe($verdict);
+    })->with([
+        'a share of 99' => [99, 'clean'],
+        'a share of 100' => [100, 'findings'],
+    ]);
 
     it('refuses a threshold out of range, and states the range', function (mixed $threshold) {
         expect(dbbRefusal(['threshold' => $threshold]))->toStartWith('error: invalid_argument')
@@ -193,10 +244,11 @@ describe('the typical share', function () {
             ...dbbRequest('b', 100_000, 10_000, '/orders', ['timestamp' => DBB_AT + 2]),
         ]);
 
-        $envelope = dbbAnswer();
+        $default = dbbAnswer();
+        $lowered = dbbAnswer(['threshold' => 10]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean'])
-            ->and(dbbAnswer(['threshold' => 10])['result']['findings'][0]['evidence'])->toMatchArray(['share_pct' => 10.0, 'basis' => 'median', 'aggregate_share_pct' => 85.0]);
+        expect($default['result'])->toMatchArray(['verdict' => 'clean'])
+            ->and($lowered['result']['findings'][0]['evidence'])->toMatchArray(['share_pct' => 10.0, 'basis' => 'median', 'aggregate_share_pct' => 85.0]);
     });
 
     it('is the aggregate share below three requests, which a long request moves', function () {
@@ -234,7 +286,10 @@ describe('the typical share', function () {
 
     it('leaves out the requests with no duration, or none to speak of, and counts them apart', function (bool $recorded) {
         $without = dbbRequest('without', 0, 0, '/orders', ['timestamp' => DBB_AT + 10]);
-        $recorded ?: $without[0]->without('duration');
+
+        if (! $recorded) {
+            $without[0]->without('duration');
+        }
 
         ingest([...dbbShares([80, 80, 80]), ...$without]);
 
@@ -249,13 +304,13 @@ describe('the typical share', function () {
     ]);
 
     it('is clean when every request examined lacks a duration', function () {
-        ingest(dbbRequest('without', 0, 0, '/orders', ['duration' => 0]));
+        ingest(dbbRequest('without', 0, 0));
 
         expect(dbbAnswer()['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'saw' => ['without_duration' => 1]]);
     });
 
     it('counts a request that ran no query as a share of nothing', function () {
-        ingest([...dbbShares([0, 0, 90])]);
+        ingest(dbbShares([0, 0, 90]));
 
         expect(dbbAnswer()['result']['verdict'])->toBe('clean');
     });
@@ -499,7 +554,7 @@ describe('with the other shapes', function () {
 });
 
 describe('the blind spots', function () {
-    it('states that bindings may be unpaired, as the queries are read', function () {
+    it('states that query bindings may be unpaired and that console requests are not seen', function () {
         ingest(dbbRequest('one', 100_000, 90_000));
 
         expect(array_column(dbbAnswer()['blind_spots'], 'id'))->toContain('query-bindings-unpaired', 'console-requests');
