@@ -34,6 +34,11 @@ interface WiderIngest
     public function write(array $record, bool $now = false): void;
 }
 
+interface NarrowerIngest
+{
+    //
+}
+
 /**
  * @param  list<string>  $expected
  */
@@ -74,6 +79,14 @@ it('replaces the ingest when the interface\'s signatures match', function () {
     $core = assignableCore();
 
     ingestReplacerFor(MatchingIngest::class)->replace($core, fn () => new NullIngest);
+
+    expect($core->ingest)->toBeInstanceOf(NullIngest::class);
+});
+
+it('replaces the ingest when the interface only lost methods', function () {
+    $core = assignableCore();
+
+    ingestReplacerFor(NarrowerIngest::class, ['write(array $record): void', 'writeNow(array $record): void'])->replace($core, fn () => new NullIngest);
 
     expect($core->ingest)->toBeInstanceOf(NullIngest::class);
 });
