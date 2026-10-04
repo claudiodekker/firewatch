@@ -191,8 +191,8 @@ class Execution extends Tool
         ];
 
         $truncated = array_values(array_filter([
-            $this->exceptionsCut($exceptions),
-            $timeline->truncation(section: 'timeline', how: __('firewatch::messages.execution_timeline_how'), matched: count($entries)),
+            $this->exceptionsCut($exceptions, $row['execution_id']),
+            $timeline->truncation(section: 'timeline', how: __('firewatch::messages.execution_timeline_how', ['id' => $row['execution_id']]), matched: count($entries)),
         ]));
 
         $outcome = Markdown::cell($header['outcome']);
@@ -234,12 +234,12 @@ class Execution extends Tool
     }
 
     /**
-     * Get the `truncated` entry for exceptions beyond the most shown, or null when all are.
+     * Get the `truncated` entry for exceptions beyond the most shown, naming the call that lists them all, or null when all are.
      *
      * @param  array{rows: list<array<string, mixed>>, matched: int}  $exceptions
      * @return array{section: string, shown: int, matched: int, reason: string, how: string}|null
      */
-    protected function exceptionsCut(array $exceptions): ?array
+    protected function exceptionsCut(array $exceptions, ?string $id): ?array
     {
         if ($exceptions['matched'] <= ExceptionSection::MAXIMUM) {
             return null;
@@ -250,7 +250,7 @@ class Execution extends Tool
             'shown' => count($exceptions['rows']),
             'matched' => $exceptions['matched'],
             'reason' => TruncationReason::LIMIT->value,
-            'how' => __('firewatch::messages.execution_exceptions_how'),
+            'how' => __('firewatch::messages.execution_exceptions_how', ['id' => $id]),
         ];
     }
 
@@ -300,7 +300,7 @@ class Execution extends Tool
      */
     protected function notFound(string $id, bool $traced): Refusal
     {
-        $accepted = 'an execution id; a trace id belongs to `trace`';
+        $accepted = 'an execution id, not a trace id';
         $example = 'execution(execution_id: "<execution id>")';
 
         return $traced

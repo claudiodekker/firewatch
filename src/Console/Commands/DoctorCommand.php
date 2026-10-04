@@ -21,13 +21,15 @@ class DoctorCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Check the Firewatch installation, configuration and store';
+    protected $description = 'Check the Firewatch installation, configuration and store (not implemented yet)';
 
     /**
      * Execute the console command.
      */
     public function handle(): int
     {
-        return self::SUCCESS;
+        $this->error(__('firewatch::messages.doctor_not_implemented'));
+
+        return static::FAILURE;
     }
 }

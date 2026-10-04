@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\Mcp\Window;
 
 function capHow(): string
 {
-    return __('firewatch::messages.cap_how', ['characters' => '2,000', 'next' => 2001]);
+    return __('firewatch::messages.cap_how', ['characters' => '2,000']);
 }
 
 function sizeHow(): string
