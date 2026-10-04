@@ -26,12 +26,13 @@ claude mcp add firewatch -- php artisan firewatch:server
 
 The server speaks MCP over stdio. Use only this command to start it, never `mcp:start` or `mcp:inspector`. To see the tools an assistant would get, run `php artisan firewatch:server --list`.
 
-Four tools exist so far:
+Five tools exist so far:
 
 - `overview` counts what the store holds.
 - `rank` lists the worst groups of one record type by a measure such as `p95_duration`, over a time window, optionally matched by label, split by deploy and paged with a cursor.
 - `occurrences` lists individual records for a group, type, execution, trace, job or user, newest first or by duration, memory or queries, with filters that fit each type and a cursor for the rest.
 - `execution` shows one request, command, job attempt or scheduled task in full: its outcome, stages, exceptions with their frames and a timeline of its children.
+- `trace` follows one trace or queued job: the request, commands and job attempts it touched in start order, and each job's path from dispatch to its attempts, with the wait before each.
 
 Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see.
 
@@ -91,14 +92,14 @@ The store is a plain SQLite file, created by the first captured batch in a direc
 
 Records older than `retention.age` are pruned, and the store is trimmed when it holds more than `retention.records`. A hard size limit of 512 MiB sits behind both. Answers say from when their history is complete, so a pruned or cleared period never reads as quiet.
 
-Capture never slows down or breaks your application. A batch that can't be written within `busy_timeout` is dropped, and the drop is noted in `failures.jsonl` beside the store, which answers then report. A store from another Firewatch version is rebuilt, and a damaged one is moved aside as `firewatch.sqlite.corrupt`. A file that isn't Firewatch's is never touched.
+Capture never slows down or breaks your application. A batch that can't be written within `busy_timeout` is dropped, and the drop is noted in `failures.jsonl` beside the store, which answers then report. A store from an earlier Firewatch version is rebuilt, one from a later version is left alone, and a damaged one is moved aside as `firewatch.sqlite.corrupt`. A file that isn't Firewatch's is never touched.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `firewatch:server` | Runs the MCP server over stdio. `--list` prints its tools. |
-| `firewatch:clear` | Removes every record, or with `--type=<type>` one type's records, after a confirmation. `--force` skips the confirmation. |
+| `firewatch:clear` | Removes every record, the users and `failures.jsonl`, or with `--type=<type>` only that type's records, after a confirmation. `--force` skips the confirmation. |
 | `firewatch:clear --drop` | Rebuilds the store from scratch, including its diagnostics. Use it when the store is damaged or from another version. |
 | `firewatch:doctor` | Not implemented yet. It checks nothing and exits with a failure. |
 

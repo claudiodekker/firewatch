@@ -5,6 +5,8 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreState;
+use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
@@ -60,6 +62,18 @@ function recoveryCorrupt(int $offset = 4096): void
     fclose($handle);
 }
 
+/**
+ * Damage the page size in the store's header, leaving the SQLite magic string and Firewatch's application id intact.
+ */
+function recoveryDamageHeader(): void
+{
+    $handle = fopen(recoveryPath(), 'r+b');
+
+    fseek($handle, 16);
+    fwrite($handle, "\x00\x07");
+    fclose($handle);
+}
+
 function recoveryForeignStore(): void
 {
     $connection = new SQLite3(recoveryPath());
@@ -86,6 +100,27 @@ function recoveryFailures(): array
         fn (string $line) => json_decode($line, associative: true, flags: JSON_THROW_ON_ERROR),
         file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES),
     );
+}
+
+/**
+ * Stamp the store with the schema version of a later release, as that release would after rebuilding it in place.
+ */
+function recoveryNewerSchema(): void
+{
+    $store = new SQLite3(recoveryPath());
+    $store->exec('PRAGMA user_version = '.(Schema::VERSION + 1));
+    $store->close();
+}
+
+function recoveryUnusable(): ?StoreUnusable
+{
+    try {
+        app(Reader::class)->snapshot(fn () => null);
+    } catch (StoreUnusable $unusable) {
+        return $unusable;
+    }
+
+    return null;
 }
 
 /**
@@ -130,8 +165,35 @@ describe('a store of another schema version', function () {
             ->and(file_exists(dirname($path).'/failures.jsonl'))->toBeFalse();
     })->with([
         'an older schema' => 'PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0',
-        'a newer schema' => 'PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = '.(Schema::VERSION + 1),
     ]);
+
+    it('is left as it is when a later release wrote it, and the batch is dropped', function (string $sqliteVersion) {
+        recoveryStore();
+        recoveryNewerSchema();
+        recoveryWriter($sqliteVersion);
+
+        recoveryBatch('new');
+
+        expect(recoveryUnusable()?->state)->toBe(StoreState::SCHEMA_MISMATCH)
+            ->and(recoveryUnusable()?->found)->toBe(Schema::VERSION + 1)
+            ->and(recoveryFailures())->toHaveCount(1)
+            ->and(recoveryFailures()[0])->toMatchArray(['kind' => 'schema', 'dropped' => 1]);
+    })->with([
+        'a writer that closes its connection per batch' => '3.45.1',
+        'a writer that keeps its connection' => '3.51.3',
+    ]);
+
+    it('is left as it is when a later release rebuilt it under a connection this writer kept', function () {
+        recoveryWriter('3.51.3');
+        recoveryBatch('old');
+        recoveryNewerSchema();
+
+        recoveryBatch('new');
+
+        expect(recoveryUnusable()?->found)->toBe(Schema::VERSION + 1)
+            ->and(recoveryFailures())->toHaveCount(1)
+            ->and(recoveryFailures()[0])->toMatchArray(['kind' => 'schema', 'dropped' => 1]);
+    });
 
     it('starts its history again at the rebuild', function () {
         $this->travelTo('2026-09-30 14:00:00');
@@ -151,7 +213,7 @@ describe('a store of another schema version', function () {
         $path = recoveryPath();
         mkdir(dirname($path), recursive: true);
         $store = new SQLite3($path);
-        $store->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)');
+        $store->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0; CREATE TABLE records (id INTEGER)');
         $store->close();
         $other = new Writer(app(Configuration::class), sqliteVersion: '3.51.3');
 
@@ -207,6 +269,23 @@ describe('a damaged Firewatch store', function () {
         'a writer that closes its connection per batch, damaged in its tables' => ['3.45.1', 4096],
         'a writer that keeps its connection, damaged in its tables' => ['3.51.3', 4096],
         'a writer that keeps its connection, damaged in its first page' => ['3.51.3', 100],
+    ]);
+
+    it('is moved aside and replaced when its header is damaged', function (string $sqliteVersion) {
+        recoveryStore();
+        recoveryDamageHeader();
+        $damaged = md5_file(recoveryPath());
+        recoveryWriter($sqliteVersion);
+
+        recoveryBatch('new');
+
+        expect(recoveryKeys())->toBe(['new'])
+            ->and(md5_file(recoveryPath().'.corrupt'))->toBe($damaged)
+            ->and(recoveryFailures())->toHaveCount(1)
+            ->and(recoveryFailures()[0])->toMatchArray(['kind' => 'corrupt', 'code' => 26, 'dropped' => 0]);
+    })->with([
+        'a writer that closes its connection per batch' => '3.45.1',
+        'a writer that keeps its connection' => '3.51.3',
     ]);
 
     it('moves aside its write-ahead log and shared memory too, replacing the copies of an earlier recovery', function () {

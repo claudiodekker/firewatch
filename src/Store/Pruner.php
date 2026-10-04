@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Instant;
+use Closure;
 use SQLite3;
 use SQLite3Exception;
 use SQLite3Result;
@@ -59,10 +60,34 @@ class Pruner
     {
         $now = Instant::now();
 
-        try {
+        $this->unlessBusy(function () use ($now) {
             if ($this->claim($now)) {
                 $this->prune($now);
             }
+        });
+    }
+
+    /**
+     * Run a pass at once for a store that is full, whichever process claimed the minute, as no batch succeeds to start one: a busy store ends it silently.
+     *
+     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
+     */
+    public function runNow(): void
+    {
+        $this->unlessBusy(fn () => $this->prune(Instant::now()));
+    }
+
+    /**
+     * Run the steps of a pass, ending it silently when the store is busy.
+     *
+     * @param  Closure(): void  $steps
+     *
+     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
+     */
+    protected function unlessBusy(Closure $steps): void
+    {
+        try {
+            $steps();
         } catch (SQLite3Exception|StoreFailure $exception) {
             if (FailureKind::of($exception) !== FailureKind::BUSY) {
                 throw $exception;
@@ -272,35 +297,52 @@ class Pruner
     protected function chunk(string $condition, array $bindings, int $limit, PruneReason $reason): int
     {
         return $this->writer->transaction(function (SQLite3 $connection) use ($condition, $bindings, $limit, $reason) {
-            /** @var SQLite3Stmt $statement */
-            $statement = $connection->prepare("SELECT id, started_at FROM records WHERE started_at IS NOT NULL AND {$condition} ORDER BY started_at, id LIMIT :limit");
-            $statement->bindValue(':limit', $limit, SQLITE3_INTEGER);
+            $removed = $this->deleteOldest($connection, $condition, $bindings, $limit, $reason);
 
-            foreach ($bindings as $name => $value) {
-                $statement->bindValue(":{$name}", $value, SQLITE3_FLOAT);
+            // A record of unknown start has no age, but it counts towards the cap and the size, after every record of known start.
+            if ($removed < $limit && $reason->countsUnstarted()) {
+                $removed += $this->deleteUnstarted($connection, $limit - $removed);
             }
 
-            $result = $statement->execute();
-            $ids = [];
-            $newest = 0.0;
-
-            /** @var SQLite3Result $result */
-            while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-                $ids[] = Cell::integer($row[0]);
-                $newest = Cell::float($row[1]);
-            }
-
-            if ($ids === []) {
-                return 0;
-            }
-
-            $this->deleteIds($connection, $ids);
-            $this->deleteUnstartedBelow($connection, max($ids));
-
-            Markers::advancePrunedThrough($connection, $newest, $reason);
-
-            return count($ids);
+            return $removed;
         });
+    }
+
+    /**
+     * Delete the oldest records of known start that match, with the records of unknown start below them and the marker that says what was removed, and get how many matched.
+     *
+     * @param  array<string, float>  $bindings
+     */
+    protected function deleteOldest(SQLite3 $connection, string $condition, array $bindings, int $limit, PruneReason $reason): int
+    {
+        /** @var SQLite3Stmt $statement */
+        $statement = $connection->prepare("SELECT id, started_at FROM records WHERE started_at IS NOT NULL AND {$condition} ORDER BY started_at, id LIMIT :limit");
+        $statement->bindValue(':limit', $limit, SQLITE3_INTEGER);
+
+        foreach ($bindings as $name => $value) {
+            $statement->bindValue(":{$name}", $value, SQLITE3_FLOAT);
+        }
+
+        $result = $statement->execute();
+        $ids = [];
+        $newest = 0.0;
+
+        /** @var SQLite3Result $result */
+        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
+            $ids[] = Cell::integer($row[0]);
+            $newest = Cell::float($row[1]);
+        }
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        $this->deleteIds($connection, $ids);
+        $this->deleteUnstartedBelow($connection, max($ids));
+
+        Markers::advancePrunedThrough($connection, $newest, $reason);
+
+        return count($ids);
     }
 
     /**
@@ -332,5 +374,18 @@ class Pruner
         $statement->bindValue(':id', $id, SQLITE3_INTEGER);
         $statement->bindValue(':limit', $this->chunkRows(), SQLITE3_INTEGER);
         $statement->execute();
+    }
+
+    /**
+     * Delete the records of unknown start that arrived first, up to a limit, and get how many there were; they lie outside every window with a start, so no marker moves.
+     */
+    protected function deleteUnstarted(SQLite3 $connection, int $limit): int
+    {
+        /** @var SQLite3Stmt $statement */
+        $statement = $connection->prepare('DELETE FROM records WHERE id IN (SELECT id FROM records WHERE started_at IS NULL ORDER BY id LIMIT :limit)');
+        $statement->bindValue(':limit', $limit, SQLITE3_INTEGER);
+        $statement->execute();
+
+        return $connection->changes();
     }
 }

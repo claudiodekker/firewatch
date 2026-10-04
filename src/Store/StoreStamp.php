@@ -52,6 +52,14 @@ class StoreStamp
     }
 
     /**
+     * Determine if a later release of Firewatch stamped the store, which this one neither writes nor rebuilds on its own.
+     */
+    public function isNewer(): bool
+    {
+        return $this->isFirewatch() && $this->userVersion > Schema::VERSION;
+    }
+
+    /**
      * Determine if nothing was ever written to the store: no stamps and no tables.
      */
     public function isFresh(): bool

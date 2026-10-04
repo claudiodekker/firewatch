@@ -152,13 +152,14 @@ class ClearCommand extends Command
     }
 
     /**
-     * Read the type to clear: null for none, false after refusing one that is not among the twelve record types.
+     * Read the type to clear: null for none, false after refusing an empty one or one that is not among the twelve record types.
      */
     protected function type(): RecordType|false|null
     {
         $option = $this->option('type');
 
-        if ($option === null) {
+        // A bare `--type` also reads as null, so only its absence means no type.
+        if ($option === null && ! $this->input->hasParameterOption('--type')) {
             return null;
         }
 

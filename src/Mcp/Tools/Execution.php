@@ -121,7 +121,7 @@ class Execution extends Tool
         $timezone = config()->string('app.timezone');
         $window = Window::none(reason: __('firewatch::messages.execution_window_reason'), timezone: $timezone);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
-        $searched = $type === null ? $this->executionTypes() : [RecordType::from($type->value)];
+        $searched = $type === null ? ExecutionType::records() : [RecordType::from($type->value)];
 
         try {
             [$total, $oldest, $newest, $facts, $found, $traced] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $id, $type));
@@ -192,7 +192,7 @@ class Execution extends Tool
 
         $truncated = array_values(array_filter([
             $this->exceptionsCut($exceptions, $row['execution_id']),
-            $this->timelineCut($timeline, count($entries), $row['execution_id']),
+            $timeline->truncation(section: 'timeline', how: __('firewatch::messages.execution_timeline_how', ['id' => $row['execution_id']]), matched: count($entries)),
         ]));
 
         $outcome = Markdown::cell($header['outcome']);
@@ -255,26 +255,7 @@ class Execution extends Tool
     }
 
     /**
-     * Get the `truncated` entry for a timeline the limit cut, naming the call that lists every record of the execution, or null for a complete one.
-     *
-     * @return array{section: string, shown: int, matched: int, reason: string, how: string}|null
-     */
-    protected function timelineCut(Rows $timeline, int $entries, ?string $id): ?array
-    {
-        $cut = $timeline->truncation(section: 'timeline', how: __('firewatch::messages.execution_timeline_how', ['id' => $id]));
-
-        if ($cut === null) {
-            return null;
-        }
-
-        return [
-            ...$cut,
-            'matched' => $entries,
-        ];
-    }
-
-    /**
-     * Get the calls that follow from the execution: rank its group, and list its queries when it captured some.
+     * Get the calls that follow from the execution: rank its group, list its queries when it captured some, and follow its trace.
      *
      * @param  array<string, mixed>  $row
      * @param  list<array<string, mixed>>  $children
@@ -300,6 +281,14 @@ class Execution extends Tool
                     'type' => RecordType::QUERY->value,
                 ],
                 'why' => __('firewatch::messages.execution_next_occurrences'),
+            ];
+        }
+
+        if (is_string($row['trace_id'] ?? null)) {
+            $next[] = [
+                'tool' => 'trace',
+                'arguments' => ['trace_id' => $row['trace_id']],
+                'why' => __('firewatch::messages.execution_next_trace'),
             ];
         }
 
@@ -382,16 +371,6 @@ class Execution extends Tool
     protected function isTrace(SQLite3 $connection, string $id): bool
     {
         return Stored::rows($connection, 'SELECT 1 AS held FROM records WHERE trace_id = :id LIMIT 1', ['id' => $id]) !== [];
-    }
-
-    /**
-     * Get the four execution types as record types.
-     *
-     * @return list<RecordType>
-     */
-    protected function executionTypes(): array
-    {
-        return array_map(fn (ExecutionType $type) => RecordType::from($type->value), ExecutionType::cases());
     }
 
     /**

@@ -74,13 +74,13 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 
 ## 10. Store
 
-- The store is rebuilt, never migrated: no migration files, no `down()` methods, no backfills. On schema change, bump the schema version; the next writer drops and recreates every table, view and index in place inside one transaction. It never unlinks, renames or replaces a file other processes may hold open, and readers never create, migrate or rebuild anything.
+- The store is rebuilt, never migrated: no migration files, no `down()` methods, no backfills. On schema change, bump the schema version; the next writer drops and recreates every table, view and index in place inside one transaction. A writer never writes or rebuilds a store a later release stamped; only a drop does. It never unlinks, renames or replaces a file other processes may hold open, and readers never create, migrate or rebuild anything.
 - Any change to the generated DDL (a contract field, a view, an index) bumps the schema version; a hash of the DDL pins it in a test.
 - A filter or sort on a common column uses an existing index. A new index, or a `data` field promoted to an indexed generated column, is added only when a real tool or detector query needs it, measured, in the same schema version.
 - Records mirror the wire: wire names verbatim, except `user_id` (the wire `user`) and `event` (a cache event's wire `type`), and the wire group hash verbatim (ADR 0003). Fields without a common column go in `data`, unknown fields are kept, and every deviation is in the one list of the record model.
 - No `STRICT` tables and no `CHECK (json_valid(...))`: a rejected insert would drop a record.
 - The store id only pages and prunes. It is never an identity, a link or a shown value. Links resolve at read time (no foreign keys), the store is append-only, and nothing is deduplicated or merged.
-- Removal is recorded, not inferred: a prune or a clear writes its coverage marker in the same transaction as the delete (a clear writes it first), and readers derive every coverage start from the markers, never from configuration (ADR 0006). Only the capturing writer prunes, after a successful batch commit, never on a read path.
+- Removal is recorded, not inferred: a prune or a clear writes its coverage marker in the same transaction as the delete (a clear writes it first), and readers derive every coverage start from the markers, never from configuration (ADR 0006). Only the capturing writer prunes, after a successful batch commit or at once after a batch the full store refused, never on a read path.
 - The store file is `0600` in a `0700` directory with its own VCS ignore file, created lazily by the first writer; a read creates nothing. A file that lacks the Firewatch stamp is never written, moved or deleted; only a damaged file that bears it is moved aside.
 
 ## 11. Tests
