@@ -3,6 +3,8 @@
 namespace ClaudioDekker\Firewatch\Tests;
 
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\Notices;
+use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use Illuminate\Filesystem\Filesystem;
 use Laravel\Mcp\Server\McpServiceProvider;
 use Orchestra\Testbench\Concerns\WithWorkbench;
@@ -14,8 +16,15 @@ abstract class TestCase extends Orchestra
 
     protected string $storeDirectory;
 
+    /**
+     * The notices Firewatch writes during the test, in every application the test creates.
+     */
+    protected FakeNotices $notices;
+
     protected function setUp(): void
     {
+        $this->notices = new FakeNotices;
+
         $this->storeDirectory = sys_get_temp_dir().'/firewatch-tests/'.bin2hex(random_bytes(8));
 
         // Firewatch resolves its configuration while it registers, before defineEnvironment() runs.
@@ -38,6 +47,14 @@ abstract class TestCase extends Orchestra
         putenv('FIREWATCH_RETENTION_AGE');
 
         (new Filesystem)->deleteDirectory($this->storeDirectory);
+    }
+
+    /**
+     * Keep Firewatch's notices out of the error log, which PHPUnit prints after each test.
+     */
+    protected function overrideApplicationBindings($app): array
+    {
+        return [Notices::class => fn () => $this->notices];
     }
 
     protected function getPackageProviders($app): array

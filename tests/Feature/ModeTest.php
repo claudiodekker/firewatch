@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\Ingest as FirewatchIngest;
+use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\NullIngest;
 use Illuminate\Console\Application;
 use Illuminate\Contracts\Console\Kernel;
@@ -108,6 +109,14 @@ it('reports the stepped-aside notice once in a console process', function () {
 
     expect(notices())->toBe(['Firewatch is installed but stepped aside in environment `testing`; install with `composer install --no-dev` in production.']);
     Exceptions::assertNothingReported();
+});
+
+it('writes its notices to the PHP error log', function () {
+    $this->expectErrorLog();
+    app()->offsetUnset(Notices::class);
+    config()->set('firewatch.environments', 'local');
+
+    registerFirewatch();
 });
 
 it('stays silent about stepping aside in a web process', function () {
