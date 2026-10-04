@@ -163,7 +163,7 @@ class Detect extends Tool
         $empty = match (true) {
             $total === 0 => Emptiness::storeEmpty($this->configuration->database),
             $inWindow === 0 => Emptiness::windowEmpty($total),
-            $group !== null && $judgements[0]->examined === 0 => Emptiness::noMatch($inWindow, ["group: {$group}"]),
+            $group !== null && $judgements[0]->examined === 0 && $judgements[0]->reason !== Reason::OUTSIDE_COVERAGE => Emptiness::noMatch($inWindow, ["group: {$group}"]),
             default => null,
         };
 
@@ -283,7 +283,7 @@ class Detect extends Tool
     }
 
     /**
-     * Get the calls that follow the worst finding of a shape to its latest execution, its records and its group, and the next findings to their latest executions.
+     * Get the calls that follow the worst finding of a shape to its worst or latest execution, its records and its group, and the next findings to their latest executions.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
@@ -292,10 +292,12 @@ class Detect extends Tool
         $calls = [];
 
         foreach ($judgement->findings as $position => $finding) {
-            if ($finding['latest_execution_id'] !== null) {
+            $execution = $finding['worst_execution_id'] ?? $finding['latest_execution_id'];
+
+            if ($execution !== null) {
                 $calls[] = [
                     'tool' => 'execution',
-                    'arguments' => ['execution_id' => $finding['latest_execution_id']],
+                    'arguments' => ['execution_id' => $execution],
                     'why' => __('firewatch::messages.detect_next_execution'),
                 ];
             }

@@ -11,6 +11,11 @@ use ClaudioDekker\Firewatch\Store\Markers;
 class History
 {
     /**
+     * The reason of a start that is the creation of the store.
+     */
+    protected const CREATED = 'created';
+
+    /**
      * Create a new history instance.
      *
      * @param  string|null  $reason  created, cleared, cleared-type, pruned-age, pruned-cap or pruned-size
@@ -45,6 +50,26 @@ class History
     }
 
     /**
+     * Get the instant through which a clear or a prune removed records of the types, or null when none did: records of an execution that started before it may be missing, which the creation of a store never causes.
+     *
+     * @param  list<RecordType>  $types
+     */
+    public static function removedThrough(Markers $meta, array $types): ?float
+    {
+        $latest = null;
+
+        foreach ($types as $type) {
+            foreach (self::starts($meta, $type) as [$from, $reason]) {
+                if ($reason !== self::CREATED && ($latest === null || $from > $latest)) {
+                    $latest = $from;
+                }
+            }
+        }
+
+        return $latest;
+    }
+
+    /**
      * Get the history of a store that can't be read: it states no start.
      */
     public static function unknown(?int $retentionAge, ?int $retentionRecords): self
@@ -64,7 +89,7 @@ class History
             [$meta->clearedAt, 'cleared'],
             [$meta->clearedAtOf($type), 'cleared-type'],
             [$meta->prunedThrough, 'pruned-'.$meta->prunedReason?->value],
-            [$meta->createdAt, 'created'],
+            [$meta->createdAt, self::CREATED],
         ];
 
         return array_values(array_filter($candidates, fn (array $candidate) => $candidate[0] !== null));
