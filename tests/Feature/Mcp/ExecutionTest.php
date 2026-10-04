@@ -174,14 +174,14 @@ it('refuses an id that only children carry as not found, with no trace hint', fu
     expect($text)->toBe(__('firewatch::messages.not_found', ['id' => 'orphan-attempt', 'argument' => 'execution_id', 'accepted' => 'an execution id, not a trace id', 'example' => 'execution(execution_id: "<execution id>")']));
 });
 
-it('says a trace id that is not an execution id is one, and points at its records', function () {
+it('says a trace id that is not an execution id is one, and points at the trace tool', function () {
     ingest([execRecord(RecordType::JOB_ATTEMPT, 'attempt', ['trace_id' => 'job-trace'])]);
 
     $text = execRefusal(['execution_id' => 'job-trace']);
-    $rows = Envelope::assert(Occurrences::class, ['trace_id' => 'job-trace'])['result']['rows'];
+    $followed = Envelope::assert(Trace::class, ['trace_id' => 'job-trace']);
 
     expect($text)->toBe(__('firewatch::messages.execution_not_found_trace', ['id' => 'job-trace', 'argument' => 'execution_id', 'accepted' => 'an execution id, not a trace id', 'example' => 'execution(execution_id: "<execution id>")']))
-        ->and($rows)->toHaveCount(1);
+        ->and($followed['result']['executions'])->toHaveCount(1);
 });
 
 it('opens an execution whose id is also the trace id of other records', function () {

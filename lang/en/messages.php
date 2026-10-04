@@ -244,7 +244,7 @@ return [
 
     'execution_summary' => 'Showed the :type :id: outcome :outcome.',
 
-    'execution_not_found_trace' => "error: not_found\nNo execution `:id` exists in the store, but that value is a trace id; `occurrences(trace_id: \":id\")` lists its records.\nargument: :argument\naccepted: :accepted\nexample: :example",
+    'execution_not_found_trace' => "error: not_found\nNo execution `:id` exists in the store, but that value is a trace id; `trace(trace_id: \":id\")` follows it.\nargument: :argument\naccepted: :accepted\nexample: :example",
 
     'execution_next_rank' => 'Rank the group of this execution to see how it compares with the others of its kind.',
     'execution_next_occurrences' => 'List the queries this execution ran, to see which was slowest.',
