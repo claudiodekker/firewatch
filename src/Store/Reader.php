@@ -115,8 +115,8 @@ class Reader
     {
         return match (FailureKind::of($exception)) {
             FailureKind::BUSY => new StoreUnusable(StoreState::BUSY),
-            FailureKind::FOREIGN => new StoreUnusable(StoreState::FOREIGN),
-            FailureKind::CORRUPT => new StoreUnusable(FileKind::of($this->configuration->database) === FileKind::FIREWATCH ? StoreState::CORRUPT : StoreState::FOREIGN),
+            // A store damaged in its header reads to SQLite as a file that is not a database; the stamp tells them apart.
+            FailureKind::CORRUPT, FailureKind::FOREIGN => new StoreUnusable(FileKind::of($this->configuration->database) === FileKind::FIREWATCH ? StoreState::CORRUPT : StoreState::FOREIGN),
             default => null,
         };
     }

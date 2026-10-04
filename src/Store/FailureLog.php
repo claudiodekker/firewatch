@@ -48,7 +48,7 @@ class FailureLog
     public function record(Throwable $exception, int $dropped): void
     {
         try {
-            $this->append($this->line($exception, $dropped));
+            $this->append($this->line($exception, FailureKind::of($exception), $dropped));
         } catch (Throwable) {
             //
         }
@@ -61,12 +61,12 @@ class FailureLog
     }
 
     /**
-     * Record a store the writer recovered from, with nothing dropped, swallowing any failure.
+     * Record a damaged store the writer replaced, with nothing dropped, swallowing any failure; its damage may read as a file that is not a database.
      */
     public function recovered(Throwable $exception): void
     {
         try {
-            $this->append($this->line($exception, dropped: 0));
+            $this->append($this->line($exception, FailureKind::CORRUPT, dropped: 0));
         } catch (Throwable) {
             //
         }
@@ -121,11 +121,11 @@ class FailureLog
     /**
      * Get the line that records a dropped batch.
      */
-    protected function line(Throwable $exception, int $dropped): string
+    protected function line(Throwable $exception, FailureKind $kind, int $dropped): string
     {
         return json_encode([
             'at' => Instant::now(),
-            'kind' => FailureKind::of($exception)->value,
+            'kind' => $kind->value,
             'code' => $exception instanceof SQLite3Exception ? $exception->getCode() : null,
             'message' => $exception->getMessage(),
             'dropped' => $dropped,
