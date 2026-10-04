@@ -19,9 +19,9 @@ enum Order: string
     {
         return match ($this) {
             self::RECENT => 'COALESCE(started_at, -1)',
-            self::SLOWEST => 'COALESCE(duration, -1)',
-            self::MEMORY => "COALESCE(json_extract(data, '$.peak_memory_usage'), -1)",
-            self::QUERIES => "COALESCE(json_extract(data, '$.queries'), -1)",
+            self::SLOWEST => 'COALESCE('.Stored::number('duration').', -1)',
+            self::MEMORY => 'COALESCE('.Stored::number("json_extract(data, '$.peak_memory_usage')").', -1)',
+            self::QUERIES => 'COALESCE('.Stored::number("json_extract(data, '$.queries')").', -1)',
         };
     }
 }

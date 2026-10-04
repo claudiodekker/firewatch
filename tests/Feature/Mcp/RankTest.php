@@ -419,7 +419,7 @@ it('ranks the requests the real sensor recorded', function () {
     $rows = rankRows();
 
     expect($rows)->toHaveCount(1)
-        ->and($rows[0])->toMatchArray(['label' => '/', 'method' => 'GET', 'occurrences' => 2, 'failure_pct' => 0, 'deploys' => 1])
+        ->and($rows[0])->toMatchArray(['label' => '/', 'method' => 'GET', 'occurrences' => 2, 'failure_pct' => 0, 'deploys' => 0])
         ->and($rows[0]['values_ms'])->toHaveCount(2);
 });
 
@@ -751,4 +751,41 @@ it('points from a ranking to the breakdown of its worst group, in a call that ru
 
     expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => rankHash('b'), 'since' => RANK_AT - 1], 'why' => __('firewatch::messages.rank_next_group')]])
         ->and($breakdown['result']['deploys'])->toHaveCount(1);
+});
+
+it('ranks a group holding a record whose duration is not a number by the records that have one', function () {
+    ingest([
+        ...rankGroup(RecordType::REQUEST, 'a', [10, 20]),
+        rankRecord(RecordType::REQUEST, 'a', null, ['duration' => 'slow']),
+    ]);
+
+    $rows = rankRows(['type' => 'request']);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0])->toMatchArray(['occurrences' => 3, 'min_ms' => 10.0, 'max_ms' => 20.0, 'total_ms' => 30.0, 'values_ms' => [10.0, 20.0]])
+        ->and($rows[0]['withheld']['p50_ms'])->toBe(['reason' => 'sample_too_small', 'have' => 2, 'needed' => 3]);
+});
+
+it('ranks a group holding a request whose memory or query count is not a number as if it had none', function () {
+    ingest([
+        rankRecord(RecordType::REQUEST, 'a', 10, ['peak_memory_usage' => 2097152, 'queries' => 'lots']),
+        rankRecord(RecordType::REQUEST, 'a', 10, ['peak_memory_usage' => 'lots', 'queries' => 'lots']),
+    ]);
+
+    $rows = rankRows(['type' => 'request', 'by' => 'p95_memory']);
+
+    expect($rows[0])->toMatchArray(['occurrences' => 2, 'max_memory_mb' => 2.0])
+        ->and($rows[0]['queries'])->toBeNull();
+});
+
+it('counts no deploy for the requests the real sensor recorded without one, and breaks them down under no deploy identity', function () {
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+    $this->get('/');
+
+    $group = rankRows()[0];
+    $breakdown = Envelope::assert(Rank::class, ['type' => 'request', 'group' => $group['group']]);
+
+    expect($group['deploys'])->toBe(0)
+        ->and(array_column($breakdown['result']['deploys'], 'deploy'))->toBe([__('firewatch::messages.rank_no_deploy')]);
 });

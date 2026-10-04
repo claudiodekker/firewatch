@@ -515,16 +515,19 @@ class Ranking
     protected function query(SQLite3 $connection, string $sql, bool $filtered = true): array
     {
         if ($filtered) {
+            $number = Stored::number('duration');
+            $deploy = "NULLIF(deploy, '')";
+
             // A skipped scheduled task has no duration of its own: it never ran.
-            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".Outcome::SKIPPED->value."' THEN NULL ELSE duration END" : ($this->hasDuration() ? 'duration' : 'NULL');
-            $columns = [$this->group === null ? 'group_hash' : 'COALESCE(deploy, char(1)) AS group_hash', 'id', 'started_at', 'deploy', 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
+            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".Outcome::SKIPPED->value."' THEN NULL ELSE {$number} END" : ($this->hasDuration() ? $number : 'NULL');
+            $columns = [$this->group === null ? 'group_hash' : "COALESCE({$deploy}, char(1)) AS group_hash", 'id', 'started_at', "{$deploy} AS deploy", 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
 
             if ($this->hasMethod()) {
                 $columns[] = 'method';
             }
 
             if ($this->isExecution()) {
-                array_push($columns, 'peak_memory_usage AS m', 'queries AS q');
+                array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q');
             }
 
             $failure = Failure::expression($this->type);

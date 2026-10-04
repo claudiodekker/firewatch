@@ -132,6 +132,27 @@ it('stores the rest of a batch beside a record it cannot read', function () {
     ]);
 });
 
+it('stores a list or an object sent for a column as its JSON and counts it, beside the rest of the batch', function (string $field, string $column, mixed $value, string $stored, string $detail) {
+    ingest([syntheticRecord(RecordType::CACHE_EVENT), syntheticRecord(RecordType::CACHE_EVENT)->with([$field => $value]), syntheticRecord(RecordType::CACHE_EVENT)]);
+
+    $driftCounts = driftCounts();
+
+    expect($driftCounts)->toBe([['kind' => 'structure', 'type' => 'cache-event', 'v' => '1', 'detail' => $detail, 'count' => 1]])
+        ->and(storeRows('SELECT count(*) AS records FROM records'))->toBe([['records' => 3]])
+        ->and(storeRows("SELECT {$column} AS value FROM records ORDER BY id LIMIT 1 OFFSET 1"))->toBe([['value' => $stored]]);
+})->with([
+    'a list for a string' => ['field' => 'trace_id', 'column' => 'trace_id', 'value' => ['a'], 'stored' => '["a"]', 'detail' => 'trace_id: expected string, got array'],
+    'an object for a string' => ['field' => 'user', 'column' => 'user_id', 'value' => ['id' => '7'], 'stored' => '{"id":"7"}', 'detail' => 'user: expected string, got object'],
+    'a list for an integer' => ['field' => 'duration', 'column' => 'duration', 'value' => [1], 'stored' => '[1]', 'detail' => 'duration: expected integer, got array'],
+]);
+
+it('stores a list or an object sent as the name of a user as its JSON, beside the rest of the batch', function () {
+    ingest([syntheticRecord(RecordType::CACHE_EVENT), syntheticRecord(RecordType::USER)->with(['name' => ['first' => 'Taylor'], 'username' => ['taylor']]), syntheticRecord(RecordType::CACHE_EVENT)]);
+
+    expect(storeRows('SELECT count(*) AS records FROM records'))->toBe([['records' => 2]])
+        ->and(storeRows('SELECT id, name, username FROM users'))->toBe([['id' => '7', 'name' => '{"first":"Taylor"}', 'username' => '["taylor"]']]);
+});
+
 it('adds up the drift of a batch into one count per kind, type, version and detail', function () {
     ingest([syntheticRecord(RecordType::CACHE_EVENT)->with(['colour' => 'red']), syntheticRecord(RecordType::CACHE_EVENT)->with(['colour' => 'blue']), syntheticRecord(RecordType::CACHE_EVENT)->with(['v' => 2, 'colour' => 'red'])]);
 
