@@ -60,7 +60,7 @@ return [
     'store_unusable' => [
         'foreign_file' => 'The file at :path is not a Firewatch store, and Firewatch will not touch it: set `database` to another path.',
         'older_schema' => 'The store at :path was written by an older Firewatch schema (version :found, this release reads version :expected). The next captured batch rebuilds it; it holds no readable data until then.',
-        'newer_schema' => 'The store at :path was written by a newer Firewatch schema (version :found, this release reads version :expected). The next captured batch rebuilds it; it holds no readable data until then.',
+        'newer_schema' => 'The store at :path was written by a newer Firewatch schema (version :found, this release reads version :expected). This release never rebuilds it and drops what it captures; upgrade Firewatch to read it.',
         'sqlite_too_old' => 'SQLite :version is older than the :minimum Firewatch needs, so nothing is captured and the store at :path can not be read.',
         'unreadable' => 'The store at :path can not be read: :cause',
     ],
@@ -164,7 +164,7 @@ return [
         'not_forced' => 'Aborted: pass --force to clear without confirmation.',
         'unknown_type' => 'Unknown type ":type". Valid types: :types.',
         'busy' => 'The store is busy; try again.',
-        'schema' => 'The store was written by another Firewatch schema (found :found, expected :expected). Run with --drop to rebuild it now, or let the next captured batch do it.',
+        'schema' => 'The store was written by another Firewatch schema (found :found, expected :expected). Run with --drop to rebuild it now; a captured batch rebuilds only an older one.',
         'damaged' => 'The store file is damaged; run with --drop or let the next capture replace it.',
         'foreign' => ':path is not a Firewatch store; nothing was changed.',
         'sqlite' => 'SQLite :version is older than the :minimum Firewatch needs; nothing was changed.',

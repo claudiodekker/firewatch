@@ -23,7 +23,7 @@ test('each store state has its pinned wording', function (string $key, array $re
     'a newer schema' => [
         'store_unusable.newer_schema',
         ['path' => '/srv/app/storage/firewatch/firewatch.sqlite', 'found' => 3, 'expected' => 2],
-        'The store at /srv/app/storage/firewatch/firewatch.sqlite was written by a newer Firewatch schema (version 3, this release reads version 2). The next captured batch rebuilds it; it holds no readable data until then.',
+        'The store at /srv/app/storage/firewatch/firewatch.sqlite was written by a newer Firewatch schema (version 3, this release reads version 2). This release never rebuilds it and drops what it captures; upgrade Firewatch to read it.',
     ],
     'a SQLite below the floor' => [
         'store_unusable.sqlite_too_old',

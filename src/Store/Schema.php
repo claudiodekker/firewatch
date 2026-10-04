@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\RecordType;
 class Schema
 {
     /**
-     * The schema version the store is stamped with; any other value is rebuilt, never migrated.
+     * The schema version the store is stamped with; an earlier value is rebuilt, never migrated, and a later one is left alone.
      */
     public const VERSION = 1;
 
