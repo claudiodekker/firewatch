@@ -1,14 +1,18 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
+use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\FakeDetector;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Exceptions;
 
 it('answers that no store exists yet, with the store clock', function () {
@@ -62,7 +66,7 @@ it('counts the records the store holds, and the requests among them', function (
     expect($envelope['empty'])->toBeNull()
         ->and($envelope['result']['requests'])->toBe(1)
         ->and($envelope['result']['records'])->toBeGreaterThanOrEqual(1)
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'requests' => 1]))
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'requests' => 1]).' '.trans_choice('firewatch::messages.overview_detectors_clean', 1, ['count' => 1]))
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $envelope['result']['records']])
         ->and($envelope['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($envelope['coverage']['newest_at']);
 });
@@ -88,6 +92,8 @@ it('refuses an argument that is not the tool\'s, naming what it accepts', functi
     'an argument of another tool' => ['type', 'inapplicable_argument'],
     'an argument of fingerprint' => ['repeat_seconds', 'inapplicable_argument'],
     'a source fact of fingerprint' => ['path', 'inapplicable_argument'],
+    'the threshold of a shape' => ['threshold', 'inapplicable_argument'],
+    'the group of a shape' => ['group', 'inapplicable_argument'],
 ]);
 
 it('refuses the arguments before it reads the store', function () {
@@ -237,7 +243,8 @@ describe('windows', function () {
 
         $envelope = Envelope::assert(Overview::class, ['since' => '-2h']);
 
-        expect($envelope['result'])->toBe(['records' => 1, 'requests' => 1])
+        expect($envelope['result']['records'])->toBe(1)
+            ->and($envelope['result']['requests'])->toBe(1)
             ->and($envelope['window'])->toMatchArray(['windowed' => true, 'basis' => 'started_at', 'since' => 1790769600.0, 'until' => null, 'timezone' => 'Europe/Amsterdam'])
             ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'oldest_at' => 1790690400.0, 'newest_at' => 1790773200.0, 'records' => 3]);
     });
@@ -380,4 +387,153 @@ describe('coverage and blind spots', function () {
             return [];
         }],
     ]);
+});
+
+describe('the problem shapes', function () {
+    /**
+     * @return array<string, mixed>
+     */
+    function ovwJson(): array
+    {
+        $response = FirewatchServer::tool(Overview::class, ['format' => 'json']);
+
+        return (fn () => $this->structuredContent())->call($response);
+    }
+
+    function ovwRequests(int ...$statuses): void
+    {
+        ingest(array_map(fn (int $status) => syntheticRecord(RecordType::REQUEST)->with(['status_code' => $status, 'route_path' => '/orders', '_group' => md5('/orders')]), $statuses));
+    }
+
+    it('lists each shape that ships with its verdict, what it examined, its total and its worst finding', function () {
+        ovwRequests(200, 500, 404);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['detectors'])->toBe([[
+            'detector' => 'failing-routes',
+            'verdict' => 'findings',
+            'reason' => null,
+            'examined' => 3,
+            'total' => 1,
+            'worst' => ['name' => '/orders', 'group' => md5('/orders')],
+        ]])->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => 3, 'requests' => 3]).' '.__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (1)']));
+    });
+
+    it('is clean over the requests examined, with no worst finding', function () {
+        ovwRequests(200, 201);
+
+        $row = Envelope::assert(Overview::class)['result']['detectors'][0];
+
+        expect($row)->toBe(['detector' => 'failing-routes', 'verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'worst' => null]);
+    });
+
+    it('is not evaluated where there is nothing of the kind a shape judges', function () {
+        ingest([syntheticRecord(RecordType::COMMAND)]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['detectors'][0])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'failing-routes']));
+    });
+
+    it('judges the requests of the window', function () {
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['status_code' => 500, 'timestamp' => 1790690400.0]),
+            syntheticRecord(RecordType::REQUEST)->with(['status_code' => 200, 'timestamp' => 1790773200.0]),
+        ]);
+
+        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+
+        expect($envelope['result']['detectors'][0])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+    });
+
+    it('offers to list the findings of a shape that has some, and the call runs', function () {
+        ovwRequests(500);
+
+        $envelope = Envelope::assert(Overview::class);
+        $call = $envelope['next'][0];
+
+        expect($envelope['next'])->toHaveCount(1)
+            ->and($call)->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes'], 'why' => __('firewatch::messages.detect_next_shape')])
+            ->and(Envelope::assert(Detect::class, $call['arguments'])['result']['verdict'])->toBe('findings');
+    });
+
+    it('offers nothing to list when no shape has findings', function () {
+        ovwRequests(200);
+
+        expect(Envelope::assert(Overview::class)['next'])->toBe([]);
+    });
+
+    it('lists the shapes with findings first, then the clean ones, then those not evaluated, in the order of the catalogue within each', function () {
+        ovwRequests(200);
+        FakeDetector::ship(
+            new FakeDetector(DetectorName::N_PLUS_ONE),
+            new FakeDetector(DetectorName::DATABASE_BOUND, examined: 5),
+            new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4, total: 2),
+            new FakeDetector(DetectorName::FAILING_JOBS, examined: 4, total: 1),
+            new FakeDetector(DetectorName::FAILING_TASKS, examined: 1),
+            new FakeDetector(DetectorName::MEMORY),
+        );
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect(array_column($envelope['result']['detectors'], 'detector'))->toBe(['failing-routes', 'failing-jobs', 'database-bound', 'failing-tasks', 'n-plus-one', 'memory'])
+            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (2), failing-jobs (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, memory']))
+            ->and(array_column($envelope['next'], 'arguments'))->toBe([['shape' => 'failing-routes'], ['shape' => 'failing-jobs']]);
+    });
+
+    it('says there are no findings only when every shape is clean', function () {
+        ovwRequests(200);
+        FakeDetector::ship(new FakeDetector(DetectorName::DATABASE_BOUND, examined: 5), new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4));
+
+        expect(Envelope::assert(Overview::class)['summary'])->toEndWith(trans_choice('firewatch::messages.overview_detectors_clean', 2, ['count' => 2]));
+    });
+
+    it('offers at most five shapes to list', function () {
+        ovwRequests(200);
+        FakeDetector::ship(...array_map(fn (DetectorName $name) => new FakeDetector($name, examined: 1, total: 1), array_slice(DetectorName::cases(), 0, 6)));
+
+        expect(Envelope::assert(Overview::class)['next'])->toHaveCount(5);
+    });
+
+    it('does not start a shape once five seconds have passed since the call began', function (float $seconds, string $verdict) {
+        $this->travelTo('2026-09-30 14:00:00.123456');
+        ovwRequests(200);
+        $start = Date::now();
+        FakeDetector::ship(
+            new FakeDetector(DetectorName::DATABASE_BOUND, examined: 5, during: fn () => Date::setTestNow($start->copy()->addSeconds($seconds))),
+            new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4, total: 2),
+        );
+
+        $rows = ovwJson()['result']['detectors'];
+
+        expect(array_column($rows, 'verdict'))->toContain('clean')
+            ->and(collect($rows)->firstWhere('detector', 'failing-routes')['verdict'])->toBe($verdict);
+    })->with([
+        'just before the bound' => [4.999, 'findings'],
+        'at the bound' => [5.0, 'not_evaluated'],
+        'long after it' => [30.0, 'not_evaluated'],
+    ]);
+
+    it('says a shape that was not started was not evaluated by the deadline, with nothing examined', function () {
+        ovwRequests(200);
+        $start = Date::now();
+        FakeDetector::ship(
+            new FakeDetector(DetectorName::DATABASE_BOUND, examined: 5, during: fn () => Date::setTestNow($start->copy()->addSeconds(6))),
+            new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4, total: 2),
+        );
+
+        $envelope = ovwJson();
+
+        expect($envelope['result']['detectors'][1])->toBe(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'reason' => 'deadline', 'examined' => 0, 'total' => 0, 'worst' => null])
+            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'failing-routes']));
+    });
+
+    it('starts every shape when the call is quick', function () {
+        ovwRequests(200);
+        FakeDetector::ship(new FakeDetector(DetectorName::DATABASE_BOUND, examined: 5), new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4, total: 2));
+
+        expect(array_column(ovwJson()['result']['detectors'], 'reason'))->toBe([null, null]);
+    });
 });
