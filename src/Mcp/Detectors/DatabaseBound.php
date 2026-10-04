@@ -102,7 +102,10 @@ class DatabaseBound implements Detector
         $shown = array_slice($bound, 0, $limit);
         $shownGroups = array_column($shown, 'group');
         $queries = $this->topQueries($connection, $window, $selected, $bindings, array_column($shownGroups, 'group_hash'));
-        $findings = array_map(fn (array $entry) => $this->finding($entry['group'], $entry['typical'], $queries[$entry['group']['group_hash']] ?? []), $shown);
+        $findings = array_map(
+            fn (array $entry) => $this->finding($entry['group'], $entry['typical'], $queries[$entry['group']['group_hash']] ?? []),
+            $shown,
+        );
 
         return Judgement::of($this->name(), $described, examined: $population['examined'], total: count($bound), findings: $findings, saw: $saw, caveats: $caveats);
     }
@@ -179,7 +182,9 @@ class DatabaseBound implements Detector
 
         $bound = array_values(array_filter($entries, fn (array $entry) => $this->isBound($entry['typical'], $percent)));
 
-        usort($bound, fn (array $a, array $b) => [$this->share($b['typical']), Stored::milliseconds($b['typical']['microseconds']), $a['group']['group_hash']] <=> [$this->share($a['typical']), Stored::milliseconds($a['typical']['microseconds']), $b['group']['group_hash']]);
+        $worst = fn (array $entry) => [$this->share($entry['typical']), Stored::milliseconds($entry['typical']['microseconds'])];
+
+        usort($bound, fn (array $a, array $b) => [...$worst($b), $a['group']['group_hash']] <=> [...$worst($a), $b['group']['group_hash']]);
 
         return $bound;
     }
