@@ -106,6 +106,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->registerNotices();
         $this->registerNightwatchInstall();
         $this->registerConfiguration();
         $this->resolveMode();
@@ -147,6 +148,14 @@ class FirewatchServiceProvider extends ServiceProvider
             DoctorCommand::class,
             ClearCommand::class,
         ]);
+    }
+
+    /**
+     * Write notices to the PHP error log, unless they are already bound.
+     */
+    protected function registerNotices(): void
+    {
+        $this->app->bindIf(Notices::class, ErrorLogNotices::class);
     }
 
     /**
@@ -451,10 +460,10 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Write a notice to the PHP error log, outside the exception handler and so outside the application's telemetry.
+     * Write a notice outside the exception handler, and so outside the application's telemetry.
      */
     protected function notify(string $message): void
     {
-        error_log($message);
+        $this->app->make(Notices::class)->write($message);
     }
 }

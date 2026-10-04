@@ -31,6 +31,12 @@ test('the package source never calls env()', function () {
     expect($offences)->toBe([]);
 });
 
+test('the package source writes to the PHP error log only through its notices', function () {
+    $offences = PackageSource::offendingTokens('', fn (PhpToken $token, array $tokens, int $index) => PackageSource::calledFunction($token, $tokens, $index) === 'error_log');
+
+    expect($offences)->each->toStartWith('src/ErrorLogNotices.php:');
+});
+
 test('the package source holds no debugging or process-ending calls', function () {
     $offences = PackageSource::offendingTokens('', fn (PhpToken $token, array $tokens, int $index) => $token->is(T_EXIT)
         || in_array(PackageSource::calledFunction($token, $tokens, $index), ['dd', 'dump', 'var_dump', 'print_r'], true));

@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
@@ -23,7 +24,6 @@ pest()->extend(TestCase::class)
         Http::preventStrayRequests();
         Sleep::fake(syncWithCarbon: true);
         Exceptions::fake();
-        captureNotices();
     })
     ->in('Scenario', 'Feature', 'Contract');
 
@@ -34,31 +34,13 @@ pest()->group('unit')->in('Unit');
 pest()->group('arch')->in('Arch');
 
 /**
- * Collect what Firewatch writes to the PHP error log, instead of the process's standard error.
- */
-function captureNotices(): void
-{
-    $log = (string) tempnam(sys_get_temp_dir(), 'firewatch-notices');
-    $original = (string) ini_set('error_log', $log);
-
-    test()->beforeApplicationDestroyed(function () use ($log, $original) {
-        ini_set('error_log', $original);
-
-        @unlink($log);
-    });
-}
-
-/**
- * Get the notices Firewatch wrote to the PHP error log.
+ * Get the notices Firewatch wrote during the test.
  *
  * @return list<string>
  */
 function notices(): array
 {
-    $log = (string) file_get_contents((string) ini_get('error_log'));
-    $messages = preg_split('/^\[[^\]]+\] /m', $log, flags: PREG_SPLIT_NO_EMPTY);
-
-    return array_map(trim(...), $messages === false ? [] : $messages);
+    return app(Notices::class)->written();
 }
 
 function registerFirewatch(): Configuration
