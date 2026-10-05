@@ -53,7 +53,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 
 ## 7. Errors and integrations
 
-- Three seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process), the clock (`Stopwatch`) and the provider's notices (`Notices`, which the test case fakes for every application it creates). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
+- Two seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process) and the provider's notices (`Notices`, which the test case fakes for every application it creates). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
 - The boundaries that may catch `Throwable` and `report()` it are Firewatch's ingest, provider boot, process entry points and the tool layer.
 - Nothing is thrown into the host application. The tool layer turns an unexpected failure into the `internal` tool error, also when `app.debug` is on, because a rethrow ends the stdio process.
 - Calls that could act on nothing (an empty batch, an empty result set) check for empty input first.
@@ -92,7 +92,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 - Fixed wording (blind-spot sentences, empty kinds, error messages, detector caveats, doctor messages and other user-facing text) is asserted through its language key, `__('firewatch::messages.key')`, never a copy of the translated string. A contract test (`tests/Contract`) is the exception: it pins the English text itself, so a reworded sentence fails a test. Ids, error codes and closed sets are written as literals in the test, so changing one fails a test. Long text (the server instructions, tool descriptions) is asserted structurally, and limits numerically (40 words per blind spot, 150 per tool description, `tools/list` under 5,000 tokens). No snapshot files are committed.
 - JSON answers are asserted in full; the markdown rendering once per tool through the shared helper. Every `next` call an answer offers is executed and returns a non-error answer.
 - A test that spawns a real process carries the `process` tag, and one that asserts a file mode or another POSIX-only fact carries `posix`. Real processes run with shortened deadlines passed through constructor arguments, never a real wait.
-- Each test uses its own temporary store path, and the fake `Stopwatch` when it needs a clock.
+- Each test uses its own temporary store path. A test that needs a clock moves Laravel's (`travelTo()`, with `Sleep` faked to follow it).
 - No test asserts timing, sleeps or belongs to a performance group. Correctness is asserted through bounds that are behaviour (bounded batches, ceilings, a deadline that returns control).
 - A test that changes Nightwatch's per-process state restores it in teardown.
 

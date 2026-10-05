@@ -1,6 +1,6 @@
 # Firewatch
 
-A local, dev-only telemetry store fed by Laravel Nightwatch's sensors and read by an AI assistant over the Model Context Protocol. Nothing leaves the machine; the assistant is the only interface.
+A local, dev-only telemetry store fed by Laravel Nightwatch's sensors and read by an AI assistant over the Model Context Protocol. Firewatch itself sends nothing anywhere; the assistant is the only interface.
 
 ## Language
 
