@@ -98,6 +98,14 @@ class Stored
     }
 
     /**
+     * Get the bytes of a number of megabytes.
+     */
+    public static function bytes(int|float $megabytes): int|float
+    {
+        return $megabytes * self::MEGABYTE;
+    }
+
+    /**
      * Get the place in a file a record names, or null for a record with no file.
      */
     public static function location(mixed $file, mixed $line): ?string

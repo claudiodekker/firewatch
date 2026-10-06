@@ -53,7 +53,7 @@ class NPlusOne implements Detector
      */
     public function types(): array
     {
-        return [RecordType::QUERY, RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
+        return [RecordType::QUERY, ...Executions::TYPES];
     }
 
     /**
@@ -69,7 +69,7 @@ class NPlusOne implements Detector
             'group' => $group ?? '',
             'from' => History::removedThrough($meta, [RecordType::QUERY]),
         ];
-        $executions = $this->executions($window);
+        $executions = Executions::table($window);
         $population = $this->population($connection, $window, $executions, $bindings);
         $caveats = $this->caveats($population['incomplete']);
         $described = $this->threshold()->describe($threshold);
@@ -115,25 +115,6 @@ class NPlusOne implements Detector
             accepted: 'the group id of an execution; a query group is a different question: rank the queries with `rank`',
             example: 'detect(shape: "n-plus-one", group: "<group id of an execution>")',
         );
-    }
-
-    /**
-     * Get the SQL of the executions of the four kinds that started in the window and belong to the group, as the table `executions`.
-     */
-    protected function executions(Window $window): string
-    {
-        $selected = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
-        $branches = array_map(fn (RecordType $type) => sprintf(
-            "SELECT id, execution_id, started_at, group_hash, '%s' AS source, user_id, %s AS duration, %s AS counted, %s AS label FROM %s WHERE %s",
-            $type->source(),
-            Stored::number('duration'),
-            Stored::number('queries'),
-            $type === RecordType::REQUEST ? 'route_path' : 'name',
-            $type->view(),
-            $selected,
-        ), [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK]);
-
-        return 'WITH executions AS ('.implode(' UNION ALL ', $branches).')';
     }
 
     /**
