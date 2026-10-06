@@ -25,10 +25,11 @@ class Executions
     {
         $selected = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
         $branches = array_map(fn (RecordType $type) => sprintf(
-            "SELECT id, execution_id, started_at, group_hash, '%s' AS source, user_id, %s AS duration, %s AS counted, %s AS label FROM %s WHERE %s",
+            "SELECT id, execution_id, started_at, group_hash, '%s' AS source, user_id, %s AS duration, %s AS counted, %s AS peak, %s AS label FROM %s WHERE %s",
             $type->source(),
             Stored::number('duration'),
             Stored::number('queries'),
+            Stored::number('peak_memory_usage'),
             $type === RecordType::REQUEST ? 'route_path' : 'name',
             $type->view(),
             $selected,

@@ -264,7 +264,7 @@ class Ranking
     /**
      * Get the SQL expression of the row a nearest-rank percentile of `n` values takes.
      */
-    protected static function nearestRank(int $percentile): string
+    public static function nearestRank(int $percentile): string
     {
         return 'max(1, (n * '.$percentile.' + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
     }

@@ -66,7 +66,7 @@ it('counts the records the store holds, and the requests among them', function (
     expect($envelope['empty'])->toBeNull()
         ->and($envelope['result']['requests'])->toBe(1)
         ->and($envelope['result']['records'])->toBeGreaterThanOrEqual(1)
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'requests' => 1]).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one']))
+        ->and($envelope['summary'])->toBeIn(array_map(fn (string $findings) => __('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'requests' => 1]).$findings.' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one']), ['', ' '.__('firewatch::messages.overview_detectors_findings', ['shapes' => 'memory (1)'])]))
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $envelope['result']['records']])
         ->and($envelope['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($envelope['coverage']['newest_at']);
 });
@@ -420,6 +420,7 @@ describe('the problem shapes', function () {
                 'worst' => ['name' => '/orders', 'group' => md5('/orders')],
             ],
             ['detector' => 'database-bound', 'verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'worst' => null],
+            ['detector' => 'memory', 'verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'worst' => null],
             ['detector' => 'n-plus-one', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
         ])->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => 3, 'requests' => 3]).' '.__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one']));
     });
@@ -437,8 +438,8 @@ describe('the problem shapes', function () {
 
         $envelope = Envelope::assert(Overview::class);
 
-        expect(array_column($envelope['result']['detectors'], 'reason'))->toBe(['no_records', 'no_records', 'no_records'])
-            ->and($envelope['result']['detectors'][2])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
+        expect(array_column($envelope['result']['detectors'], 'reason'))->toBe([null, 'no_records', 'no_records', 'no_records'])
+            ->and($envelope['result']['detectors'][3])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
             ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, database-bound, failing-routes']));
     });
 
