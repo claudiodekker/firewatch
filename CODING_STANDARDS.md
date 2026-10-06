@@ -2,7 +2,7 @@
 
 The reviewer reads this file. Apply every rule to each changed hunk in the diff. Skip anything the repo's tooling already enforces (Pint, PHPStan/Larastan, arch tests).
 
-This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`; these rules govern how it is implemented.
+This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`; these rules govern how it is implemented.
 
 The general rules for Laravel apps and packages live in `references/laravel-standards.md` of the `claudiodekker-skills:claudio-mode` skill, from the `claudiodekker-skills@claudiodekker` plugin. Read that file and apply it too. Without the Skill tool, read it at `~/.claude/plugins/marketplaces/claudiodekker/skills/claudio-mode/references/laravel-standards.md`. If that doesn't work, say so in the review rather than reviewing against this file alone. The rules below are Firewatch's own and win where the two differ.
 
@@ -120,7 +120,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 - The lowest supported versions are PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2 and SQLite 3.38.0. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
 - Nightwatch's output reaches Firewatch only through Firewatch's own ingest; the public `IngestingEvents` event only vetoes. The one `@internal` Nightwatch surface touched is `Core::$ingest`, swapped for Firewatch's own `Contracts\Ingest` only after reflection confirms the interface's signatures and the property, so a changed Nightwatch leaves its ingest in place behind the dead values instead of crashing the host (ADR 0001). The verified line, the wire fixtures and the contract tests move together in one PR.
 - A user-facing change adds one line to `CHANGELOG.md`, about one feature, not one ticket. The README's config and command tables equal the code.
-- The README is a short guide: install, connect, configure, commands and troubleshooting. Internals, wire details and design rationale go in `CONTEXT.md` or an ADR, never the README. `tests/Contract/DocumentationTest.php` caps its length.
+- The README is a short guide: install, connect, configure, commands and troubleshooting. Internals, wire details and design rationale go in `GLOSSARY.md` or an ADR, never the README. `tests/Contract/DocumentationTest.php` caps its length.
 
 ## 16. Capture and ingest
 

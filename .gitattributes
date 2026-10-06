@@ -9,7 +9,7 @@
 /.gitignore export-ignore
 /CLAUDE.md export-ignore
 /CODING_STANDARDS.md export-ignore
-/CONTEXT.md export-ignore
+/GLOSSARY.md export-ignore
 /phpstan.neon.dist export-ignore
 /phpunit.xml.dist export-ignore
 /testbench.yaml export-ignore
