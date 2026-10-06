@@ -417,7 +417,7 @@ describe('with the other shapes', function () {
 
         $detectors = Envelope::assert(Detect::class)['result']['detectors'];
 
-        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'memory'])
-            ->and($detectors[3])->toMatchArray(['verdict' => 'findings', 'total' => 1]);
+        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'memory'])
+            ->and($detectors[4])->toMatchArray(['verdict' => 'findings', 'total' => 1]);
     });
 });
