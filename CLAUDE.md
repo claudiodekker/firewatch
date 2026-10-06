@@ -1,7 +1,7 @@
 ### Working agreements
 
 - TDD for all code (`/mattpocock-skills:tdd`): red, green, refactor. No untested logic.
-- No documentation beyond `README.md`, `CHANGELOG.md`, `CONTEXT.md`, ADRs and `docs/agents/`. The design set lives in the closed decision issues, `CONTEXT.md` and `docs/adr/`. A PR that changes what a user installs, configures or runs updates the README, which stays a short guide, and adds one line to the changelog. Internals belong in `CONTEXT.md` and the ADRs, not the README. No docblocks that restate types.
+- No documentation beyond `README.md`, `CHANGELOG.md`, `GLOSSARY.md`, ADRs and `docs/agents/`. The design set lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`. A PR that changes what a user installs, configures or runs updates the README, which stays a short guide, and adds one line to the changelog. Internals belong in `GLOSSARY.md` and the ADRs, not the README. No docblocks that restate types.
 - Work in the `claudiodekker-skills:claudio-mode` skill.
 - One PR delivers one complete, reviewable feature or fix. Never split a feature into "part 1, 2, 3" PRs; if it is too big to review, split the ticket.
 - Package guardrails, store and test rules: @docs/agents/laravel.md
@@ -32,4 +32,4 @@ Default five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, 
 
 ### Domain docs
 
-Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
