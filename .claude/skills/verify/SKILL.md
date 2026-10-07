@@ -55,6 +55,7 @@ Produce telemetry by exercising the workbench the way a user's application would
 | `GET /invoices/42` | throws a `RuntimeException`, status 500 | a request, an exception and a log, a `failing-routes` finding |
 | `GET /exports` | builds an 80 MB string | a request peaking above 64 MB, a `memory` finding |
 | `GET /quotes` | calls a faked dependency that answers 503 | a request and an outgoing request, a `failing-http` finding |
+| `GET /catalog` | reads the key `catalog` through `Cache::remember()` | a request, a miss and a write, and from the third request a `cache` finding |
 
 ```shell
 .claude/skills/verify/scripts/app.sh get <run> /products

@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
@@ -36,3 +37,5 @@ Route::get('/quotes', function () {
 
     return 'ok';
 });
+
+Route::get('/catalog', fn () => Cache::remember('catalog', 60, fn () => 'spring'));
