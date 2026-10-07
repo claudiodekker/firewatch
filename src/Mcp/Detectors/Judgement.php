@@ -63,6 +63,14 @@ class Judgement
     }
 
     /**
+     * Determine if the detector found no record of its own: it examined none, set none aside, and history did not remove them.
+     */
+    public function matchedNothing(): bool
+    {
+        return $this->examined === 0 && array_sum($this->saw) === 0 && $this->reason !== Reason::OUTSIDE_COVERAGE;
+    }
+
+    /**
      * Get the judgement as the answer carries it.
      *
      * @return array<string, mixed>

@@ -671,6 +671,18 @@ describe('one group', function () {
         expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'saw' => QLT_SAW])
             ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 4]);
     });
+
+    it('does not answer that nothing matches a group whose records it set aside', function (RecordBuilder $record, string $reason) {
+        ingest([$record, ...qltWaited('b', 10, 'SendInvoice')]);
+
+        $envelope = qltAnswer(['group' => md5('ShipOrder')]);
+
+        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => $reason, 'examined' => 0])
+            ->and($envelope['empty'])->toBeNull();
+    })->with([
+        'attempts without a dispatch' => [fn () => qltAttempt('lost', 10), 'prerequisite_missing'],
+        'inline dispatches' => [fn () => qltDispatch('inline', fields: ['connection' => 'sync']), 'no_records'],
+    ]);
 });
 
 describe('the blind spots', function () {
