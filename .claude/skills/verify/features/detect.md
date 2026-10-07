@@ -34,7 +34,7 @@ Preconditions:
 - **Memory.** `app.sh mcp <run> detect '{"shape":"memory"}'` lists `/exports` and no other route.
 - **Clean.** `app.sh mcp <run> detect '{"shape":"database-bound","format":"json"}' | jq '.result | {verdict, examined, total}'` prints `clean`, the number of requests sent, and `0`.
 - **Threshold.** `app.sh mcp <run> detect '{"shape":"n-plus-one","threshold":26,"format":"json"}' | jq '.result.verdict'` prints `clean`, because `/products` runs its query 25 times.
-- **Every shape.** `app.sh mcp <run> detect` answers one line for all seven, such as `Problem shapes: n-plus-one 1 findings; failing-routes 1 findings; failing-jobs 2 findings; queue-latency 3 findings; memory 1 findings; failing-tasks not evaluated (no_records); database-bound clean.`
+- **Every shape.** `app.sh mcp <run> detect` answers one line for all seven, such as `Problem shapes: findings in n-plus-one (1), failing-routes (1), failing-jobs (2), queue-latency (3), memory (1); not evaluated (no_records): failing-tasks; clean: database-bound.`
 - **Overview.** `app.sh mcp <run> overview` names the same counts in its summary, `Findings: n-plus-one (1), failing-routes (1), …`, and lists the shapes with findings first in its `detectors` table.
 
 ## Gotchas

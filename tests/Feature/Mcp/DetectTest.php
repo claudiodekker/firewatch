@@ -299,13 +299,9 @@ describe('the shape', function () {
             ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'memory'])
             ->and($envelope['result']['detectors'][2])->toMatchArray(['verdict' => 'findings', 'total' => 1])
             ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
-                __('firewatch::messages.detect_part_findings', ['detector' => 'failing-routes', 'total' => 1]),
-                __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'n-plus-one', 'reason' => 'no_records']),
-                __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'failing-jobs', 'reason' => 'no_records']),
-                __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'queue-latency', 'reason' => 'no_records']),
-                __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'failing-tasks', 'reason' => 'no_records']),
-                __('firewatch::messages.detect_part_clean', ['detector' => 'database-bound']),
-                __('firewatch::messages.detect_part_clean', ['detector' => 'memory']),
+                __('firewatch::messages.detect_part_findings', ['shapes' => 'failing-routes (1)']),
+                __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks']),
+                __('firewatch::messages.detect_part_clean', ['shapes' => 'database-bound, memory']),
             ])]));
     });
 
@@ -329,10 +325,20 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
-            ...array_map(fn (string $detector) => __('firewatch::messages.detect_part_not_evaluated', ['detector' => $detector, 'reason' => 'no_records']), ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks']),
-            __('firewatch::messages.detect_part_clean', ['detector' => 'memory']),
-        ])]));
+            __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks']),
+            __('firewatch::messages.detect_part_clean', ['shapes' => 'memory']),
+        ])]))->not->toContain('firewatch::');
     });
+
+    it('names every shape of the catalogue in a summary that is not cut', function (int $total) {
+        FakeDetector::ship(...array_map(fn (DetectorName $name) => new FakeDetector($name, total: $total), DetectorName::cases()));
+        ingest([dtcRequest('/orders', 200)]);
+
+        $envelope = dtcAnswer([]);
+
+        expect($envelope['summary'])->toEndWith('.')
+            ->and(array_filter(DetectorName::cases(), fn (DetectorName $name) => ! str_contains($envelope['summary'], $name->value)))->toBe([]);
+    })->with(['not evaluated' => 0, 'with findings' => 100]);
 
     it('refuses a threshold for a shape that takes none, and states none for it', function () {
         FakeDetector::ship(new FakeDetector(DetectorName::FAILING_TASKS, examined: 1));
