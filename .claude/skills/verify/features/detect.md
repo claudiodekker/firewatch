@@ -23,7 +23,7 @@
 
 Preconditions:
 
-- A fresh run. Send `app.sh get <run> /` once. `app.sh mcp <run> overview` then lists `n-plus-one`, `failing-jobs` and `queue-latency` as `not_evaluated` with reason `no_records`, and the other three as `clean` with `examined` 1.
+- A fresh run. Send `app.sh get <run> /` once. `app.sh mcp <run> overview` then lists `n-plus-one`, `failing-jobs`, `queue-latency` and `failing-tasks` as `not_evaluated` with reason `no_records`, and the other three as `clean` with `examined` 1.
 - Then `app.sh get <run>` for `/products`, `/purchases`, `/invoices/42` and `/exports`.
 
 - **Pending jobs.** Before running the queue, `app.sh mcp <run> detect '{"shape":"queue-latency","threshold":1}'` answers `queue-latency: 3 findings over 3 dispatches.` Without `threshold`, the call answers `clean over 3 dispatches` until the jobs have been pending for 5 seconds, and `3 findings` after that, each with `"pending":1` in its evidence.
@@ -34,7 +34,7 @@ Preconditions:
 - **Memory.** `app.sh mcp <run> detect '{"shape":"memory"}'` lists `/exports` and no other route.
 - **Clean.** `app.sh mcp <run> detect '{"shape":"database-bound","format":"json"}' | jq '.result | {verdict, examined, total}'` prints `clean`, the number of requests sent, and `0`.
 - **Threshold.** `app.sh mcp <run> detect '{"shape":"n-plus-one","threshold":26,"format":"json"}' | jq '.result.verdict'` prints `clean`, because `/products` runs its query 25 times.
-- **Every shape.** `app.sh mcp <run> detect` answers one line for all six, such as `Problem shapes: n-plus-one 1 findings; failing-routes 1 findings; failing-jobs 2 findings; queue-latency 3 findings; memory 1 findings; database-bound clean.`
+- **Every shape.** `app.sh mcp <run> detect` answers one line for all seven, such as `Problem shapes: n-plus-one 1 findings; failing-routes 1 findings; failing-jobs 2 findings; queue-latency 3 findings; memory 1 findings; failing-tasks not evaluated (no_records); database-bound clean.`
 - **Overview.** `app.sh mcp <run> overview` names the same counts in its summary, `Findings: n-plus-one (1), failing-routes (1), …`, and lists the shapes with findings first in its `detectors` table.
 
 ## Gotchas
