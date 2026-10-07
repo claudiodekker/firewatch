@@ -38,7 +38,7 @@ return [
         'execution' => 'One execution in full: a request, command, job attempt or scheduled task. Without arguments it returns the latest one that finished (greatest end time); `type` picks the latest of one kind; `execution_id` picks a specific one (a request\'s trace id is also its execution id). Shows outcome, stages, request headers and payload as captured, counted-versus-captured accounting for eight counters, up to five exceptions with application frames and source lines, and the child timeline. Not windowed. For every attempt of a job use `occurrences` with `job_id`. Recorded when finished: running work is absent.',
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
         'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
-        'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: a read query one execution ran 3 or more times, in runs. `database-bound`: request groups typically spending 60 percent or more of their time in queries. `failing-routes`: request groups with a request at status 400 or above. `failing-jobs`: job groups with 1 or more failed or released attempts. `queue-latency`: job groups with a first-attempt wait or pending age of 5000 milliseconds or more. `failing-tasks`: scheduled-task groups with a failed or skipped task (no threshold). `exception-clusters`: exception groups with 1 or more occurrences, escaped first. `memory`: execution groups peaking at 64 megabytes or more. Without `shape` every shape runs; `threshold` and `group` need one shape. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold with unit and range, the exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean means none among what was captured; over few records it is weak. Windowed.',
+        'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: a read query one execution ran 3 or more times, in runs. `database-bound`: request groups typically spending 60 percent or more in queries. `failing-routes`: request groups with a request at 400 or above. `failing-jobs`: job groups with 1 or more failed or released attempts. `queue-latency`: job groups with a first-attempt wait or pending age of 5000 milliseconds or more. `failing-tasks`: scheduled-task groups with a failed or skipped task (no threshold). `exception-clusters`: exception groups with 1 or more occurrences, escaped first. `error-logs`: error-level logs by message shape, 1 or more occurrences (no `group`). `memory`: execution groups peaking at 64 megabytes or more. Without `shape` all run; `threshold` and `group` need one. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold, unit and range, exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean: none among what was captured, weak over few records. Windowed.',
     ],
 
     /*
@@ -295,9 +295,9 @@ return [
 
     'trace_next_occurrences' => 'List the records that carry this id, since the execution they belong to is not in the store.',
 
-    'detect_shape_argument' => 'The shape to run: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters or memory. Absent: every shape that ships.',
+    'detect_shape_argument' => 'The shape to run: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs or memory. Absent: every shape that ships.',
     'detect_threshold_argument' => 'Overrides the shape\'s default, named in the tool description. Whole numbers, except percent and megabytes. An answer states the unit, range and default; out of range is refused. Needs `shape`.',
-    'detect_group_argument' => 'One group id (32 hex) to restrict the shape to; for n-plus-one an execution\'s group, not a query group. A group that holds no records is an empty answer. Needs `shape`.',
+    'detect_group_argument' => 'One group id (32 hex) restricting the shape; for n-plus-one an execution\'s group, not a query group; refused for error-logs. A group holding no records is an empty answer. Needs `shape`.',
     'detect_limit_argument' => 'The most findings to list, 1 to 100. Default 20.',
     'detect_input' => [
         'n-plus-one' => 'executions',
@@ -307,6 +307,7 @@ return [
         'queue-latency' => 'dispatches',
         'failing-tasks' => 'scheduled tasks',
         'exception-clusters' => 'executions',
+        'error-logs' => 'log records',
         'memory' => 'executions',
     ],
     'detect_caveat_reads' => 'Reads are recognised by the first keyword; a WITH statement that writes counts as a read.',
@@ -316,6 +317,7 @@ return [
     'detect_caveat_pending' => 'No attempt is recorded: no worker has run, or one is running; the store cannot tell.',
     'detect_caveat_skipped' => 'Skipped runs are often intended.',
     'detect_caveat_not_fired' => 'A task that did not fire leaves no record.',
+    'detect_caveat_log_capture' => 'Log records exist only while log capture is on.',
     'detect_findings_summary' => ':detector: :total findings over :examined :input.',
     'detect_clean_summary' => ':detector: clean over :examined :input.',
     'detect_not_evaluated_summary' => ':detector: not evaluated (:reason).',
@@ -325,9 +327,12 @@ return [
     'detect_part_not_evaluated' => 'not evaluated (:reason): :shapes',
     'detect_part_clean' => 'clean: :shapes',
     'detect_findings_how' => 'List more of the findings with a larger `limit`, up to 100, or narrow the call with `group`, `since` and `until`.',
+    'detect_findings_how_ungrouped' => 'List more of the findings with a larger `limit`, up to 100, or narrow the call with `since` and `until`.',
     'detect_next_execution' => 'Open the latest execution that failed.',
     'detect_next_occurrences' => 'List the records of the group.',
     'detect_next_rank' => 'See how the group compares with the others, and whether it changed with a deploy.',
+    'detect_next_log_lines' => 'List the lines at this level and worse that hold the fragment of the shape.',
+    'detect_next_log_level' => 'List the lines at this level and worse; the shape has no literal text to match.',
     'detect_next_shape' => 'List the findings of this shape with their evidence.',
 
     'accounting_incomplete' => 'Incomplete: :captured of :counted counted :noun were captured.',

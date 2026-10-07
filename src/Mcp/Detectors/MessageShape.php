@@ -9,8 +9,6 @@ class MessageShape
 {
     /**
      * What each pass replaces, in the order the passes run.
-     *
-     * One alternation would let the hex run take the head of a UUID that follows hex letters.
      */
     protected const REPLACEMENTS = [
         '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i' => '<id>',
@@ -24,7 +22,7 @@ class MessageShape
     protected const PLACEHOLDER = '/<id>|<n>/';
 
     /**
-     * The most characters of a fragment, which is the longest `matching` the occurrences tool takes.
+     * The most characters of a fragment.
      */
     protected const FRAGMENT_CHARACTERS = 200;
 
@@ -51,8 +49,6 @@ class MessageShape
 
     /**
      * Get the longest literal run between the placeholders, the earliest of several, or null for a shape without one.
-     *
-     * Every message of the shape holds the fragment, which has 1 to 200 characters and no whitespace at either end.
      */
     public function fragment(): ?string
     {

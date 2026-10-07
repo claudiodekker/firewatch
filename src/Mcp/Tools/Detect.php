@@ -14,6 +14,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Reason;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Ungrouped;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
@@ -215,8 +216,8 @@ class Detect extends Tool
             result: $judgement->toArray(),
             coverage: $coverage,
             blindSpots: $blindSpots,
-            truncated: $cut ? [$this->truncation($judgement)] : [],
-            next: $judgement->reason === Reason::STORE_UNAVAILABLE ? [] : $this->next($judgement),
+            truncated: $cut ? [$this->truncation($shape, $judgement)] : [],
+            next: $judgement->reason === Reason::STORE_UNAVAILABLE ? [] : $this->next($shape, $judgement),
         );
     }
 
@@ -277,14 +278,14 @@ class Detect extends Tool
      *
      * @return array{section: string, shown: int, matched: int, reason: string, how: string}
      */
-    protected function truncation(Judgement $judgement): array
+    protected function truncation(Detector $shape, Judgement $judgement): array
     {
         return [
             'section' => 'findings',
             'shown' => count($judgement->findings),
             'matched' => $judgement->total,
             'reason' => TruncationReason::LIMIT->value,
-            'how' => __('firewatch::messages.detect_findings_how'),
+            'how' => __($shape instanceof Ungrouped ? 'firewatch::messages.detect_findings_how_ungrouped' : 'firewatch::messages.detect_findings_how'),
         ];
     }
 
@@ -293,7 +294,7 @@ class Detect extends Tool
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(Judgement $judgement): array
+    protected function next(Detector $shape, Judgement $judgement): array
     {
         $calls = [];
 
@@ -319,6 +320,8 @@ class Detect extends Tool
                     'arguments' => ['group' => $finding['group']],
                     'why' => __('firewatch::messages.detect_next_rank'),
                 ];
+            } elseif ($position === 0 && $shape instanceof Ungrouped) {
+                $calls[] = $shape->occurrencesOf($finding);
             }
         }
 
@@ -410,6 +413,10 @@ class Detect extends Tool
 
         if ($shape === null) {
             throw Refusal::conflicting(argument: 'group', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: 'detect(shape: "'.$this->detectors->names()[0].'", group: "<group id>")');
+        }
+
+        if ($shape instanceof Ungrouped) {
+            throw Refusal::conflicting(argument: 'group', with: 'shape: '.$shape->name()->value, accepted: 'a call without `group`', example: "detect(shape: \"{$shape->name()->value}\")");
         }
 
         if (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1) {
