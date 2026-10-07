@@ -18,7 +18,7 @@ class Detectors
      */
     public function __construct(
         protected Container $container,
-        protected array $shipped = [NPlusOne::class, DatabaseBound::class, FailingRoutes::class, FailingJobs::class, Memory::class],
+        protected array $shipped = [NPlusOne::class, DatabaseBound::class, FailingRoutes::class, FailingJobs::class, QueueLatency::class, Memory::class],
     ) {
         //
     }

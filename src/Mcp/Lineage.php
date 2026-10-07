@@ -98,6 +98,16 @@ class Lineage
     }
 
     /**
+     * Get the SQL condition that holds for a dispatch whose connection, as the given column, runs the job inside the dispatching execution.
+     */
+    public static function inlineCondition(string $column): string
+    {
+        $connections = implode(', ', array_map(fn (string $connection) => "'{$connection}'", static::INLINE_CONNECTIONS));
+
+        return "{$column} IN ({$connections})";
+    }
+
+    /**
      * Get what a dispatch shows: the execution that caused it, where it went and how long it took.
      *
      * @param  array<string, mixed>  $dispatch
