@@ -18,7 +18,7 @@ beforeEach(function () {
 });
 
 /**
- * Build one scheduled task that ended with the status. It is its own execution, and it starts a second in.
+ * Build one scheduled task.
  *
  * @param  array<string, mixed>  $fields
  */
@@ -36,7 +36,7 @@ function ftkTask(string $execution, ?string $status, string $name = 'prune-order
 }
 
 /**
- * Build the scheduled tasks of one group that ended with each of the statuses, named after the group and their place in it.
+ * Build the scheduled tasks of one group that ended with each of the statuses, in order.
  *
  * @param  list<string|null>  $statuses
  * @return list<RecordBuilder>

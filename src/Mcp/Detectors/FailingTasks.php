@@ -22,7 +22,7 @@ class FailingTasks implements Detector
     }
 
     /**
-     * Get no threshold: any scheduled task that failed or was skipped makes its group a finding.
+     * Get the threshold the detector takes: none.
      */
     public function threshold(): ?Threshold
     {
@@ -40,7 +40,7 @@ class FailingTasks implements Detector
     }
 
     /**
-     * Judge the scheduled tasks that started in the window: a group is a finding when one of them failed or was skipped.
+     * Judge the scheduled tasks that started in the window.
      */
     public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
