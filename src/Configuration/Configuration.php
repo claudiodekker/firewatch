@@ -37,7 +37,7 @@ readonly class Configuration
     }
 
     /**
-     * Get the same configuration with another busy timeout, for work that waits longer than capture does.
+     * Get the same configuration with another busy timeout.
      */
     public function withBusyTimeout(int $milliseconds): self
     {

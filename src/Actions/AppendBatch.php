@@ -27,7 +27,7 @@ class AppendBatch
         SQL;
 
     /**
-     * The statement that adds a user to the directory, or refreshes one it holds without moving its last sighting back.
+     * The statement that adds a user to the directory, or refreshes one it holds.
      */
     protected const UPSERT_USER = <<<'SQL'
         INSERT INTO users (id, name, username, first_seen, last_seen)
@@ -39,7 +39,7 @@ class AppendBatch
         SQL;
 
     /**
-     * The statement that adds a batch's count of one drift, keeping when it was first seen.
+     * The statement that adds a batch's count of one drift.
      */
     protected const UPSERT_DRIFT = <<<'SQL'
         INSERT INTO drift (kind, type, v, detail, count, first_seen, last_seen)
@@ -50,7 +50,7 @@ class AppendBatch
         SQL;
 
     /**
-     * The most drift rows kept apart; any new one beyond is folded into its kind's overflow row.
+     * The most drift rows kept apart.
      */
     protected const DRIFT_ROWS = 500;
 
@@ -76,7 +76,7 @@ class AppendBatch
     }
 
     /**
-     * Store a batch of wire records in one transaction, in wire order, with the bindings paired to its queries, keeping users in the directory and counting drift.
+     * Store a batch of wire records in one transaction.
      *
      * @param  list<array<mixed>>  $records
      * @param  array<int, list<mixed>|null>  $bindings  the bindings paired to each record, by its position in the batch

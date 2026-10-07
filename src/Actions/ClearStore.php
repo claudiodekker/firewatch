@@ -51,7 +51,7 @@ class ClearStore
     }
 
     /**
-     * Get why the store can't be cleared, or null when it holds a store this release can write; nothing is created or changed.
+     * Get why the store can't be cleared, or null when it holds a store this release can write.
      */
     public function unusable(): ?StoreUnusable
     {
@@ -104,8 +104,9 @@ class ClearStore
     }
 
     /**
-     * Rebuild the store in place as a fresh one, moving a damaged file aside first, vacuum it and empty the failure log; the state is why the store was unusable, or null when it was healthy.
+     * Rebuild the store in place as a fresh one.
      *
+     * @param  StoreState|null  $state  why the store was unusable, or null when it was healthy
      * @return array{damaged: bool, before: int, after: int, truncated: bool}
      */
     public function drop(?StoreState $state): array
@@ -134,7 +135,7 @@ class ClearStore
     }
 
     /**
-     * Write the marker of the clear and read the newest id, in one transaction before any row is deleted.
+     * Write the marker of the clear and read the newest id, in one transaction.
      */
     protected function stamp(?RecordType $type, float $instant): int
     {
@@ -152,7 +153,7 @@ class ClearStore
     }
 
     /**
-     * Delete one chunk of the records up to the newest id the clear saw, of one type or of all, and get how many went.
+     * Delete one chunk of the records up to the newest id the clear saw.
      */
     protected function deleteChunk(?string $type, int $through): int
     {
@@ -170,7 +171,7 @@ class ClearStore
     }
 
     /**
-     * Delete the users last seen up to the instant the clear started, so one that signed in meanwhile stays.
+     * Delete the users last seen up to the instant the clear started.
      */
     protected function deleteUsers(float $instant): int
     {
@@ -193,8 +194,8 @@ class ClearStore
         $writer = $this->writer();
 
         $freePages = Cell::integer($writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count')));
-
         // One step frees a fixed number of pages, so the steps needed are known and the loop always ends.
+
         for ($steps = intdiv($freePages + static::RECLAIM_PAGES - 1, static::RECLAIM_PAGES); $steps > 0; $steps--) {
             $writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.static::RECLAIM_PAGES.')'));
         }
@@ -215,7 +216,7 @@ class ClearStore
     }
 
     /**
-     * Get the writer the clear runs with, which waits for a busy store as long as the clear does.
+     * Get the writer the clear runs with.
      */
     protected function writer(): Writer
     {

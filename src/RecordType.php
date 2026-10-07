@@ -22,7 +22,7 @@ enum RecordType: string
     case USER = 'user';
 
     /**
-     * Get the twelve record types of the events, which leaves out the user directory.
+     * Get the record types of the events.
      *
      * @return list<self>
      */

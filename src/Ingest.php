@@ -29,7 +29,7 @@ class Ingest implements IngestContract
     protected array $buffer = [];
 
     /**
-     * The bindings paired to each buffered record, null for any record without them.
+     * The bindings paired to each buffered record.
      *
      * @var list<list<mixed>|null>
      */
@@ -154,7 +154,7 @@ class Ingest implements IngestContract
     }
 
     /**
-     * Store a batch, dropping and recording it on any failure, which never reaches the host application.
+     * Store a batch, dropping and recording it on any failure.
      *
      * @param  list<array<mixed>>  $records
      * @param  list<list<mixed>|null>  $bindings
@@ -184,7 +184,7 @@ class Ingest implements IngestContract
     }
 
     /**
-     * Run a pruning pass, recording any failure of it, which drops no records.
+     * Run a pruning pass, recording any failure of it.
      *
      * @param  Closure(): void  $pass
      */

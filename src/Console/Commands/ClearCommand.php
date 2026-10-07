@@ -178,7 +178,7 @@ class ClearCommand extends Command
     }
 
     /**
-     * Ask for the confirmation, which is no by default, unless it is forced; without a way to ask, it is not given.
+     * Ask for the confirmation unless it is forced.
      */
     protected function confirmed(?RecordType $type, string $path): bool
     {
@@ -211,7 +211,7 @@ class ClearCommand extends Command
     }
 
     /**
-     * Say why the store can't be cleared, and get the exit code: a store that does not exist has nothing to clear, which is not a failure.
+     * Say why the store can't be cleared, and get the exit code.
      */
     protected function refuse(StoreUnusable $unusable, string $path): int
     {

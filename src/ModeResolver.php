@@ -15,7 +15,7 @@ class ModeResolver
     public const MINIMUM_SQLITE_VERSION = '3.38.0';
 
     /**
-     * Resolve the mode of this process, in the fixed order of the design.
+     * Resolve the mode of this process.
      *
      * @param  list<string>  $argv
      * @param  string|null  $sqliteVersion  null when ext-sqlite3 is missing
@@ -34,7 +34,7 @@ class ModeResolver
     }
 
     /**
-     * Get the command a process runs: its first argument that is not an option.
+     * Get the command a process runs.
      *
      * @param  list<string>  $argv
      */
