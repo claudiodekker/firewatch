@@ -2,7 +2,7 @@
 
 The reviewer reads this file. Apply every rule to each changed hunk in the diff. Skip anything the repo's tooling already enforces (Pint, PHPStan/Larastan, arch tests).
 
-This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`; these rules govern how it is implemented.
+This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process (planned, #80). The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`; these rules govern how it is implemented.
 
 ## 1. Sibling changes
 
@@ -11,7 +11,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 2. Actions
 
-- Actions are the state-changing use cases a command, tool or Firewatch's ingest triggers (append a batch, prune, clear, drop or rebuild the store). Only Actions write to the store: the writers are Firewatch's ingest (a batch, then the prune pass) and `firewatch:clear`. Reading never writes.
+- Actions are the state-changing use cases a command, tool or Firewatch's ingest triggers: `AppendBatch` (append a batch) and `ClearStore` (clear or drop the store). The prune pass is not an Action: Firewatch's ingest runs `Store\Pruner` after a batch. Nothing else writes to the store: the writers are Firewatch's ingest (a batch, then the prune pass) and `firewatch:clear`. Reading never writes.
 - The store is reached only through its own raw `SQLite3` connection, never Laravel's database layer (no `DB`, PDO, Eloquent or migrations), so its queries are never observed by Nightwatch (ADR 0005).
 - Every write runs in an explicit, short `BEGIN IMMEDIATE` transaction on that connection, so `DB::transaction()` is not used. A batch is one transaction; pruning and clearing work in chunks, each with its coverage marker in the same transaction (ADR 0006).
 
@@ -28,7 +28,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 4. Queries
 
-- Queries use bound parameters. Values are never interpolated into SQL text. The one exception is the SQL tool, whose single statement is the assistant's own (section 18).
+- Queries use bound parameters. Values are never interpolated into SQL text. The one exception is the SQL tool (planned, #80), whose single statement is the assistant's own (section 18).
 - Queries behind an entry point are bounded by a row limit (fetch `limit + 1`, so exactly `limit` rows is a complete list) or by design to one execution, one trace or one job lineage. An absent window bound means unbounded, so the limit is what bounds the answer.
 - One tool call reads inside one deferred snapshot, so every query of one answer sees the same data.
 - Instants are bound as floats, never text. Durations are integer microseconds and computed unrounded; rounding happens only when a value is written into an answer.
@@ -44,14 +44,14 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 6. Types and values
 
 - Enum values are spelled exactly as the design spells them (`job-attempt`, `not_evaluated`). Only an enum that renders text has a `label()` method.
-- Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool returns raw values. An instant held as Unix seconds is named for the moment it marks (`$now`, `$since`, `$cutoff`) and needs no suffix.
-- Each step that does real work (reads rows, plans, writes, hashes, calls another class) gets its own statement and a named variable. Don't nest it inside another call's argument, where a reader skims past it. Resolving a dependency isn't real work in this sense: don't split a call's arguments into single-use locals, e.g. `new SignInAttempt(Keystone::guard(), app(AccountLookup::class))` stays inline.
+- Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool (planned, #80) returns raw values. An instant held as Unix seconds is named for the moment it marks (`$now`, `$since`, `$cutoff`) and needs no suffix.
+- Each step that does real work (reads rows, plans, writes, hashes, calls another class) gets its own statement and a named variable. Don't nest it inside another call's argument, where a reader skims past it. Resolving a dependency isn't real work in this sense: don't split a call's arguments into single-use locals, e.g. `new DefaultLogChannel($this->app->make('config'))` stays inline.
 - Record data is JSON-encoded with the seam's flag set, so wire floats keep their fraction.
 - A string is cut only by the design's rules: 65,535 bytes at a UTF-8 boundary with the `... [truncated, N bytes total]` suffix counted in the limit, bindings and answer cells with their own caps, and a record's `data` capped as a whole. The trace and JSON-string fields are exempt. Limits are constants, and no `truncated` flag is stored.
 
 ## 7. Errors and integrations
 
-- Two seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process) and the provider's notices (`Notices`, which the test case fakes for every application it creates). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
+- Two seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process; planned, #80) and the provider's notices (`Notices`, which the test case fakes for every application it creates). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
 - The boundaries that may catch `Throwable` and `report()` it are Firewatch's ingest, provider boot, process entry points and the tool layer.
 - Nothing is thrown into the host application. The tool layer turns an unexpected failure into the `internal` tool error, also when `app.debug` is on, because a rethrow ends the stdio process.
 - Calls that could act on nothing (an empty batch, an empty result set) check for empty input first.
@@ -60,8 +60,8 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 - Queue workers and Octane run Firewatch's ingest, and the MCP server reuses its process too, so call-specific statics and singletons are reset between executions and tool calls.
 - The mode and the configuration are read once per process. A store connection is keyed by `getmypid()`: after a fork the inherited handle is abandoned unused and a new one is opened. Every write batch and reader call checks the file's identity, so a file deleted or replaced under a live connection is reopened; where no identity exists (Windows) the check does nothing and never throws.
-- The MCP server and the SQL child write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
-- Windows is supported: no code assumes POSIX (file modes, `stream_select()` on `proc_open` pipes) without a Windows path that the platform job runs (ADR 0012).
+- The MCP server and the SQL child (planned, #80) write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
+- Windows is supported: no code assumes POSIX (file modes, `stream_select()` on `proc_open` pipes) without a Windows path that the platform job (planned, #88) runs (ADR 0012).
 
 ## 9. Configuration
 
@@ -97,7 +97,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 12. Methods and classes
 
 - Traits live in a `Concerns` subfolder of their area (`Console/Concerns`, `Mcp/Concerns`), never beside the classes they serve.
-- Exceptions the package defines carry state in public properties with fluent setters, and keep a short message.
+- Exceptions the package defines carry state in `public readonly` properties promoted in the constructor, with no setters, and keep a short message. One with several cases is built through named static constructors (`Refusal::missing()`).
 
 ## 13. Code hygiene
 
@@ -110,12 +110,12 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 - Long user-facing text (blind-spot sentences, tool descriptions, instructions, doctor messages) is a key in the package's `messages` language file, read through the package namespace (`__('firewatch::messages.failed')`). The file is loaded only where Firewatch is Active or Off. Tool classes override `description()` to read it, and set explicit tool names rather than relying on the default kebab-cased class name.
 - Notices written while the provider registers (stepped aside, ingest not replaced, provider order, a missing veto event, configuration issues) go to the PHP error log through `Notices`, never through `report()`, so they stay out of the application's own telemetry. They are literals in the provider, because the language file loads only after they fire. Command descriptions stay literals, as in Laravel.
-- Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction. In prose, "the `query` tool" is the SQL tool and "the `query` record type" is the record.
+- Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction (planned, #75 and #77). In prose, "the `query` tool" is the SQL tool (planned, #80) and "the `query` record type" is the record.
 
 ## 15. Packages
 
 - The public surface is the commands, the config keys, the tool names, arguments and answer shape, and the seam.
-- The lowest supported versions are PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2 and SQLite 3.38.0. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
+- The lowest supported versions are PHP 8.3, Laravel 12.41.1, Nightwatch 1.30.2 and SQLite 3.38.0. The Laravel floor lives only in the CI matrix (`.github/workflows/ci.yml`), which runs the suite on 12.41.1; `composer.json` allows `illuminate/support` `^12.0`. Depend on the `illuminate/*` components Firewatch uses, not on `laravel/framework`.
 - Nightwatch's output reaches Firewatch only through Firewatch's own ingest; the public `IngestingEvents` event only vetoes. The one `@internal` Nightwatch surface touched is `Core::$ingest`, swapped for Firewatch's own `Contracts\Ingest` only after reflection confirms the interface's signatures and the property, so a changed Nightwatch leaves its ingest in place behind the dead values instead of crashing the host (ADR 0001). The verified line, the wire fixtures and the contract tests move together in one PR.
 - A user-facing change adds one line to `CHANGELOG.md`, about one feature, not one ticket. The README's config and command tables equal the code.
 - The README is a short guide: install, connect, configure, commands and troubleshooting. Internals, wire details and design rationale go in `GLOSSARY.md` or an ADR, never the README. `tests/Contract/DocumentationTest.php` caps its length.
@@ -135,16 +135,18 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 17. Answers and analysis
 
 - Empty is not clean. Every answer states the store clock, the window, coverage and the blind spots of the record types it examined, also when empty, and no tool can switch a blind spot off.
-- A detector answers only `findings`, `clean` or `not_evaluated`, always with `examined`. Empty input is `not_evaluated`, never `clean`. A budget answers `within`, `exceeded` or `not_evaluated` and is never `within` by absence. Slowness is never a detector (ADR 0009).
+- A detector answers only `findings`, `clean` or `not_evaluated`, always with `examined`. Empty input is `not_evaluated`, never `clean`. A budget (planned, #78 and #79) answers `within`, `exceeded` or `not_evaluated` and is never `within` by absence. Slowness is never a detector (ADR 0009).
 - Values the sensors never populate (four counters, two failure flags) are reported as stored and never presented as healthy; the blind spots say so.
-- An absent window bound means unbounded, never recent, except on compare (coverage start and the store clock) and trend (a derived bound the window names).
-- Coverage is read from the recorded markers. A window before the coverage start is "no data", never zero or clean; ranking, compare and trend clip to it, and detectors exclude the executions whose needed children were removed.
+- An absent window bound means unbounded, never recent, except on compare (coverage start and the store clock) and trend (a derived bound the window names), both planned (#75, #77).
+- Coverage is read from the recorded markers. A window before the coverage start is "no data", never zero or clean; ranking, compare and trend (planned, #75 and #77) clip to it, and detectors exclude the executions whose needed children were removed.
 - A statistic is per occurrence. Percentiles are nearest rank, computed in SQL. A statistic below its sample floor (3 for p50, 20 for p95) is NULL with a `withheld` reason, never replaced by the maximum; the budget verdict on a group is the one stated exception. Order statistics and counts decide, so one outlier never flips a change token.
-- A person is attributed only by the recorded user, a job attempt's dispatch (one hop) or a child that carried the user inside a command or task, never by trace, `caused_by`, IP or timing, and every actor answer counts what it could not attribute (ADR 0007).
-- Detectors run on the server's reader, never through the SQL tool, and their threshold is per call only, stated on the result.
+- A person is attributed only by the recorded user, a job attempt's dispatch (one hop) or a child that carried the user inside a command or task, never by trace, `caused_by`, IP or timing, and every actor answer (planned, #73 and #74) counts what it could not attribute (ADR 0007).
+- Detectors run on the server's reader, never through the SQL tool (planned, #80), and their threshold is per call only, stated on the result.
 - Identifiers print in full and go back into tools unchanged.
 
 ## 18. SQL access
+
+Planned, not built yet: #80, #81 and #82 build what this section describes.
 
 - The assistant's SQL runs only in the short-lived child that boots no framework, opens the store read-only and installs a closed authorizer: read actions on a fixed set of objects and an allow-list of functions, never a deny-list. It runs one statement through `prepare()`, never `query()` or `exec()` (ADR 0008).
 - If the isolation can't be established the tool refuses with `unavailable`; there is no in-process or degraded mode. The tool stays registered.
