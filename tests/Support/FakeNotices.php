@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Tests\Support;
 
 use ClaudioDekker\Firewatch\Notices;
 
-// Keeps the notices a test makes Firewatch write, so they reach neither the error log nor PHPUnit's output.
 class FakeNotices implements Notices
 {
     /**

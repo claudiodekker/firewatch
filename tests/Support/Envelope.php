@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Server\Tool;
 use PHPUnit\Framework\Assert;
 
-// The markdown layout is asserted here once for every tool; the tool's own tests assert its facts.
 class Envelope
 {
     /**

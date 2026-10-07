@@ -19,7 +19,7 @@ beforeEach(function () {
 });
 
 /**
- * Build one attempt of a job. Its execution is named after the job and the number of the attempt, and it starts that many seconds in.
+ * Build one attempt of a job.
  *
  * @param  array<string, mixed>  $fields
  */

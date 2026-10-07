@@ -20,7 +20,7 @@ beforeEach(function () {
 /**
  * Build the records of a request that spent some microseconds in queries.
  *
- * @param  array<string, mixed>  $fields  the fields of the request
+ * @param  array<string, mixed>  $fields
  * @return list<RecordBuilder>
  */
 function dbbRequest(string $id, int $duration, int $queryMicros, string $route = '/orders', array $fields = [], string $sql = 'select * from orders'): array
@@ -53,8 +53,6 @@ function dbbQuery(string $id, int $micros, string $sql = 'select * from orders')
 
 /**
  * Build the records of requests of one group with a share in queries.
- *
- * Each request lasts a hundred milliseconds and spends a thousand microseconds in queries for each percent.
  *
  * @param  list<int>  $percents
  * @return list<RecordBuilder>
