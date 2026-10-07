@@ -71,9 +71,7 @@ class FailingJobs implements Detector
     }
 
     /**
-     * Get what the attempts say of each group: how many failed and were released, how its jobs ended, and when and whom the failed and released ones reached.
-     *
-     * A job is a job id within a group. It ended as its last attempt in the window did, and it recovered when that was processed after a release.
+     * Get what the attempts say of each group.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
@@ -107,9 +105,7 @@ class FailingJobs implements Detector
     }
 
     /**
-     * Get the latest exception of each group, among those recorded in the execution of a failed or released attempt.
-     *
-     * An exception is read by its execution, wherever it falls itself.
+     * Get the latest exception of each group.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
@@ -128,9 +124,7 @@ class FailingJobs implements Detector
     }
 
     /**
-     * Get the SQL of the attempts that started in the window and belong to the group bound as `:group`, as the table `attempts`, each with whether it failed or was released.
-     *
-     * An attempt with no status did neither, and one with no job id belongs to no job.
+     * Get the SQL of the attempts that started in the window.
      */
     protected function attempts(Window $window): string
     {
@@ -147,7 +141,7 @@ class FailingJobs implements Detector
      * Get the finding of a group whose attempts failed or were released.
      *
      * @param  array<string, mixed>  $row
-     * @param  array<string, mixed>|null  $exception  the latest exception of a failed or released attempt
+     * @param  array<string, mixed>|null  $exception
      * @return array<string, mixed>
      */
     protected function finding(array $row, ?array $exception): array
