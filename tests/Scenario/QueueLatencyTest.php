@@ -13,8 +13,6 @@ use Workbench\App\Jobs\ShipOrder;
 
 /**
  * Let a request queue a shipment on the connection, which no worker picks up.
- *
- * The application the request forces is a fresh one, with an empty database.
  */
 function queueLatencyShipment(string $connection = 'database'): void
 {

@@ -91,8 +91,6 @@ class QueueLatency implements Detector
     /**
      * Get what the dispatches say of each group: how many ran inline, are pending or lack their first attempt, and the worst and the median wait at the nearest rank.
      *
-     * A wait and a pending age are whole microseconds, and `worst` is the greater of the worst wait and the oldest pending age. A late dispatch is one whose wait or pending age reaches the threshold.
-     *
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
@@ -127,9 +125,6 @@ class QueueLatency implements Detector
 
     /**
      * Get the SQL of the dispatches that started in the window and belong to the group bound as `:group`, as the table `dispatches`, each in its one state.
-     *
-     * A job's attempts are read whole by its job id, wherever they fall. Its wait runs from the end of its dispatch to the start of its first attempt.
-     * A pending age runs from that end to the clock bound as `:now`. Neither is below zero. A dispatch is stamped when it ends, so one with no duration started at its end.
      */
     protected function dispatches(Window $window): string
     {
@@ -175,7 +170,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Determine if the window holds a dispatch of any group, on any connection, which shows that the dispatcher is instrumented.
+     * Determine if the window holds a dispatch of any group, on any connection.
      */
     protected function hasDispatches(SQLite3 $connection, Window $window): bool
     {

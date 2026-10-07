@@ -39,7 +39,7 @@ function qltDispatch(string $job, string $name = 'ShipOrder', array $fields = []
 }
 
 /**
- * Build one attempt of a job that starts the given milliseconds into the test's hour. Its execution is named after the job and the number of the attempt.
+ * Build one attempt of a job that starts the given milliseconds into the test's hour.
  *
  * @param  array<string, mixed>  $fields
  */
@@ -58,14 +58,14 @@ function qltAttempt(string $job, int|float $afterMs, int $number = 1, string $na
 /**
  * Build a job that waited the given milliseconds for its first attempt.
  *
- * @param  array<string, mixed>  $fields  of the dispatch
+ * @param  array<string, mixed>  $dispatchFields
  * @return list<RecordBuilder>
  */
-function qltWaited(string $job, int|float $waitMs, string $name = 'ShipOrder', array $fields = []): array
+function qltWaited(string $job, int|float $waitMs, string $name = 'ShipOrder', array $dispatchFields = []): array
 {
-    $queuedAfterMs = (($fields['timestamp'] ?? QLT_AT) - QLT_AT) * 1000;
+    $queuedAfterMs = (($dispatchFields['timestamp'] ?? QLT_AT) - QLT_AT) * 1000;
 
-    return [qltDispatch($job, $name, $fields), qltAttempt($job, $queuedAfterMs + $waitMs, name: $name)];
+    return [qltDispatch($job, $name, $dispatchFields), qltAttempt($job, $queuedAfterMs + $waitMs, name: $name)];
 }
 
 /**
@@ -233,10 +233,10 @@ describe('the verdict', function () {
 
     it('judges the dispatches that started in the window, the start included and the end not', function () {
         ingest([
-            ...qltWaited('before', 9000, fields: ['timestamp' => QLT_AT - 1]),
+            ...qltWaited('before', 9000, dispatchFields: ['timestamp' => QLT_AT - 1]),
             ...qltWaited('at-since', 10),
-            ...qltWaited('at-until', 9000, fields: ['timestamp' => QLT_AT + 10]),
-            ...qltWaited('ended-inside', 9000, fields: ['timestamp' => QLT_AT + 1, 'duration' => 2_000_000]),
+            ...qltWaited('at-until', 9000, dispatchFields: ['timestamp' => QLT_AT + 10]),
+            ...qltWaited('ended-inside', 9000, dispatchFields: ['timestamp' => QLT_AT + 1, 'duration' => 2_000_000]),
         ]);
 
         $envelope = qltAnswer(['since' => (string) QLT_AT, 'until' => (string) (QLT_AT + 10)]);
@@ -385,7 +385,7 @@ describe('the pending dispatches', function () {
 describe('what it set aside', function () {
     it('sets an inline dispatch aside whatever attempts its job has, and keeps it out of the jobs of its group', function () {
         ingest([
-            ...qltWaited('inline', 9000, fields: ['connection' => 'sync']),
+            ...qltWaited('inline', 9000, dispatchFields: ['connection' => 'sync']),
             ...qltWaited('queued', 6000),
         ]);
 
@@ -473,11 +473,11 @@ describe('the finding', function () {
 
     it('points at the first attempt of the latest job that waited long', function () {
         ingest([
-            ...qltWaited('a', 9000, fields: ['timestamp' => QLT_AT + 5]),
-            ...qltWaited('b', 9000, fields: ['timestamp' => QLT_AT + 9]),
-            ...qltWaited('c', 9000, fields: ['timestamp' => QLT_AT + 9]),
-            ...qltWaited('d', 9000, fields: ['timestamp' => QLT_AT + 7]),
-            ...qltWaited('e', 100, fields: ['timestamp' => QLT_AT + 30]),
+            ...qltWaited('a', 9000, dispatchFields: ['timestamp' => QLT_AT + 5]),
+            ...qltWaited('b', 9000, dispatchFields: ['timestamp' => QLT_AT + 9]),
+            ...qltWaited('c', 9000, dispatchFields: ['timestamp' => QLT_AT + 9]),
+            ...qltWaited('d', 9000, dispatchFields: ['timestamp' => QLT_AT + 7]),
+            ...qltWaited('e', 100, dispatchFields: ['timestamp' => QLT_AT + 30]),
         ]);
 
         $finding = qltAnswer()['result']['findings'][0];
@@ -519,9 +519,9 @@ describe('the finding', function () {
 
     it('names the group after its latest late dispatch', function () {
         ingest([
-            ...qltWaited('a', 9000, fields: ['name' => 'OldName', 'timestamp' => QLT_AT + 1]),
-            ...qltWaited('b', 9000, fields: ['name' => 'NewName', 'timestamp' => QLT_AT + 2]),
-            ...qltWaited('c', 10, fields: ['name' => 'Zebra', 'timestamp' => QLT_AT + 3]),
+            ...qltWaited('a', 9000, dispatchFields: ['name' => 'OldName', 'timestamp' => QLT_AT + 1]),
+            ...qltWaited('b', 9000, dispatchFields: ['name' => 'NewName', 'timestamp' => QLT_AT + 2]),
+            ...qltWaited('c', 10, dispatchFields: ['name' => 'Zebra', 'timestamp' => QLT_AT + 3]),
         ]);
 
         expect(qltAnswer()['result']['findings'][0])->toMatchArray(['group' => md5('ShipOrder'), 'name' => 'NewName']);
@@ -535,11 +535,11 @@ describe('the finding', function () {
 
     it('counts the distinct users of the late dispatches, and those without one apart', function () {
         ingest([
-            ...qltWaited('a', 9000, fields: ['user' => 'u1']),
+            ...qltWaited('a', 9000, dispatchFields: ['user' => 'u1']),
             qltPending('b', 9000, fields: ['user' => 'u1']),
             qltPending('c', 9000, fields: ['user' => 'u2']),
-            ...qltWaited('d', 9000, fields: ['user' => '']),
-            ...qltWaited('e', 10, fields: ['user' => 'u3']),
+            ...qltWaited('d', 9000, dispatchFields: ['user' => '']),
+            ...qltWaited('e', 10, dispatchFields: ['user' => 'u3']),
             qltPending('f', 10, fields: ['user' => '']),
         ]);
 
