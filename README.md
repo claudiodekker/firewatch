@@ -33,9 +33,9 @@ Six tools exist so far:
 - `occurrences` lists individual records for a group, type, execution, trace, job or user, newest first or by duration, memory or queries, with filters that fit each type and a cursor for the rest.
 - `execution` shows one request, command, job attempt or scheduled task in full: its outcome, stages, exceptions with their frames and a timeline of its children.
 - `trace` follows one trace or queued job: the request, commands and job attempts it touched in start order, and each job's path from dispatch to its attempts, with the wait before each.
-- `detect` runs problem shapes, worst first: `n-plus-one` a query one execution ran 3+ times; `database-bound` routes typically spending 60% or more in queries; `failing-routes` routes answering 400 or above; `failing-jobs` jobs with a failed or released attempt; `queue-latency` jobs pending or waiting 5+ seconds; `failing-tasks` failed or skipped scheduled tasks; `exception-clusters` exception groups, escaped first; `error-logs` error logs by message shape; `failing-http` hosts answering 400 or above; `memory` executions peaking at 64 MB or more. A clean answer counts what it examined.
+- `detect` runs problem shapes, worst first: `n-plus-one` a query one execution ran 3+ times; `database-bound` routes typically spending 60%+ in queries; `failing-routes` routes answering 400+; `failing-jobs` jobs with a failed or released attempt; `queue-latency` jobs pending or waiting 5+ seconds; `failing-tasks` failed or skipped scheduled tasks; `exception-clusters` exception groups, escaped first; `error-logs` error logs by message shape; `failing-http` hosts answering 400+; `cache` keys hit under 50% over 3+ reads, or with a failed write or delete; `memory` executions peaking at 64+ MB.
 
-Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see.
+Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see. A clean `detect` answer counts what it examined.
 
 ## What gets captured
 

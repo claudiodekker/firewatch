@@ -37,5 +37,5 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Capture](./capture.md) covers what a request, a queued job and a command leave in the store, the Off and stepped-aside modes, and header redaction.
 - [MCP server](./mcp-server.md) covers `firewatch:server` over stdio, its tool listing and a refused call.
 - [Explore tools](./explore-tools.md) covers `overview`, `rank`, `occurrences`, `execution` and `trace`, in markdown and JSON.
-- [Detect](./detect.md) covers the ten problem shapes, a clean verdict, a threshold override and the verdicts in `overview`.
+- [Detect](./detect.md) covers the eleven problem shapes, a clean verdict, a threshold override and the verdicts in `overview`.
 - [Clear the store](./clear.md) covers `firewatch:clear` with its confirmation, `--type`, `--force` and `--drop`, and the `firewatch:doctor` stub.

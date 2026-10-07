@@ -16,6 +16,8 @@ class FakeDetector implements Detector
 {
     /**
      * Create a new fake detector instance.
+     *
+     * @param  array<string, int|array<string, mixed>>  $saw
      */
     public function __construct(
         protected DetectorName $name,
@@ -23,6 +25,7 @@ class FakeDetector implements Detector
         protected int $total = 0,
         protected ?Closure $during = null,
         protected ?Threshold $threshold = null,
+        protected array $saw = [],
     ) {
         //
     }
@@ -73,6 +76,6 @@ class FakeDetector implements Detector
             'count' => $this->total,
         ]];
 
-        return Judgement::of($this->name, $this->threshold?->describe($threshold), examined: $this->examined, total: $this->total, findings: $findings);
+        return Judgement::of($this->name, $this->threshold?->describe($threshold), examined: $this->examined, total: $this->total, findings: $findings, saw: $this->saw);
     }
 }

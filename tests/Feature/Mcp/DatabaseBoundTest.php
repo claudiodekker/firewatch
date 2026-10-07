@@ -541,7 +541,7 @@ describe('with the other shapes', function () {
 
         $rows = Envelope::assert(Overview::class)['result']['detectors'];
 
-        expect(array_column($rows, 'detector'))->toBe(['database-bound', 'n-plus-one', 'failing-routes', 'exception-clusters', 'memory', 'failing-jobs', 'queue-latency', 'failing-tasks', 'error-logs', 'failing-http'])
+        expect(array_column($rows, 'detector'))->toBe(['database-bound', 'n-plus-one', 'failing-routes', 'exception-clusters', 'memory', 'failing-jobs', 'queue-latency', 'failing-tasks', 'error-logs', 'failing-http', 'cache'])
             ->and($rows[0])->toBe([
                 'detector' => 'database-bound',
                 'verdict' => 'findings',
@@ -557,7 +557,7 @@ describe('with the other shapes', function () {
 
         $detectors = Envelope::assert(Detect::class)['result']['detectors'];
 
-        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'memory'])
+        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[1])->toMatchArray(['verdict' => 'findings', 'total' => 1]);
     });
 });

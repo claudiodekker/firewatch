@@ -14,7 +14,7 @@ class Judgement
      *
      * @param  array<string, mixed>|null  $threshold
      * @param  list<array<string, mixed>>  $findings  at most the limit, worst first
-     * @param  array<string, int>  $saw
+     * @param  array<string, int|array<string, mixed>>  $saw  counts of input set aside, and any block of context a detector carries beside them
      * @param  list<string>  $caveats
      */
     public function __construct(
@@ -36,7 +36,7 @@ class Judgement
      *
      * @param  array<string, mixed>|null  $threshold
      * @param  list<array<string, mixed>>  $findings
-     * @param  array<string, int>  $saw
+     * @param  array<string, int|array<string, mixed>>  $saw
      * @param  list<string>  $caveats
      */
     public static function of(DetectorName $detector, ?array $threshold, int $examined, int $total, array $findings, array $saw = [], array $caveats = []): self
@@ -54,7 +54,7 @@ class Judgement
      * Get the judgement of a detector that did not judge.
      *
      * @param  array<string, mixed>|null  $threshold
-     * @param  array<string, int>  $saw
+     * @param  array<string, int|array<string, mixed>>  $saw
      * @param  list<string>  $caveats
      */
     public static function notEvaluated(DetectorName $detector, ?array $threshold, Reason $reason, array $saw = [], array $caveats = []): self
@@ -67,7 +67,9 @@ class Judgement
      */
     public function matchedNothing(): bool
     {
-        return $this->examined === 0 && $this->total === 0 && array_sum($this->saw) === 0 && $this->reason !== Reason::OUTSIDE_COVERAGE;
+        $setAside = array_sum(array_filter($this->saw, is_int(...)));
+
+        return $this->examined === 0 && $this->total === 0 && $setAside === 0 && $this->reason !== Reason::OUTSIDE_COVERAGE;
     }
 
     /**

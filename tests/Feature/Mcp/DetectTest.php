@@ -282,13 +282,13 @@ describe('the threshold', function () {
 });
 
 describe('the shape', function () {
-    it('refuses a shape that is none, and one that is not shipped yet, naming those that are', function (string $shape) {
+    it('refuses a shape that is none, naming those that ship', function (string $shape) {
         $refusal = dtcRefusal(['shape' => $shape]);
 
         expect($refusal)->toStartWith('error: invalid_argument')
             ->toContain('argument: shape')
-            ->toContain('n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, failing-http, memory');
-    })->with(['nonsense', 'cache', '']);
+            ->toContain('n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, failing-http, cache, memory');
+    })->with(['nonsense', '']);
 
     it('runs every shape that ships when none is named, one result each', function () {
         ingest([dtcRequest('/orders', 500)]);
@@ -296,11 +296,11 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect(array_keys($envelope['result']))->toBe(['detectors'])
-            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'memory'])
+            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($envelope['result']['detectors'][2])->toMatchArray(['verdict' => 'findings', 'total' => 1])
             ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
                 __('firewatch::messages.detect_part_findings', ['shapes' => 'failing-routes (1)']),
-                __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http']),
+                __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']),
                 __('firewatch::messages.detect_part_clean', ['shapes' => 'database-bound, exception-clusters, memory']),
             ])]));
     });
@@ -314,11 +314,12 @@ describe('the shape', function () {
             syntheticRecord(RecordType::SCHEDULED_TASK)->with(['status' => 'processed']),
             syntheticRecord(RecordType::LOG),
             syntheticRecord(RecordType::OUTGOING_REQUEST),
+            syntheticRecord(RecordType::CACHE_EVENT),
         ]);
 
         $envelope = dtcAnswer([]);
 
-        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 10, ['count' => 10]));
+        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 11, ['count' => 11]));
     });
 
     it('names the shapes that were not evaluated, and why', function () {
@@ -327,7 +328,7 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
-            __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http']),
+            __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']),
             __('firewatch::messages.detect_part_clean', ['shapes' => 'exception-clusters, memory']),
         ])]))->not->toContain('firewatch::');
     });
@@ -605,6 +606,20 @@ describe('one group', function () {
             ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
     });
 
+    it('answers that nothing matches a group by the counts a shape set aside, never by a block it carries beside them', function (array $saw, ?string $kind) {
+        FakeDetector::ship(new FakeDetector(DetectorName::CACHE, saw: $saw));
+        ingest([dtcRequest('/orders', 200)]);
+
+        $envelope = dtcAnswer(['shape' => 'cache', 'group' => dtcGroup('/missing')]);
+
+        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'saw' => $saw])
+            ->and($envelope['empty']['kind'] ?? null)->toBe($kind);
+    })->with([
+        'a block alone' => [['activity' => ['stores' => [], 'total' => ['hits' => 0]]], 'no_match'],
+        'a block beside a count of nothing' => [['activity' => ['stores' => []], 'excluded' => 0], 'no_match'],
+        'a block beside a count set aside' => [['activity' => ['stores' => []], 'excluded' => 2], null],
+    ]);
+
     it('refuses a group that is not a group hash', function (mixed $group) {
         $refusal = dtcRefusal(['shape' => 'failing-routes', 'group' => $group]);
 
@@ -665,7 +680,7 @@ test('the tool is listed with its description, arguments and annotations', funct
 
     expect($tool['description'])->toBe(__('firewatch::messages.tools.detect'))
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['shape', 'threshold', 'group', 'since', 'until', 'limit', 'format'])
-        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'memory'])
+        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
         ->and($tool['annotations'])->toMatchArray(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
 });
 
