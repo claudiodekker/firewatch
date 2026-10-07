@@ -647,12 +647,12 @@ describe('with the other shapes', function () {
         ]);
     });
 
-    it('is run between error-logs and memory when no shape is named', function () {
+    it('is run between error-logs and cache when no shape is named', function () {
         ingest([fhpCall('a', 500)]);
 
         $detectors = Envelope::assert(Detect::class)['result']['detectors'];
 
-        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'memory'])
+        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[8])->toMatchArray(['verdict' => 'findings', 'total' => 1]);
     });
 });
