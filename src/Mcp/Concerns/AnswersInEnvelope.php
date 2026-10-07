@@ -22,7 +22,7 @@ use Throwable;
 trait AnswersInEnvelope
 {
     /**
-     * The arguments the twelve tools of the design take among them, registered or not, to tell an argument of another tool from one no tool takes.
+     * The arguments the twelve tools of the design take among them.
      *
      * @var list<string>
      */
@@ -34,7 +34,7 @@ trait AnswersInEnvelope
     ];
 
     /**
-     * Get the argument every tool takes: the format of its answer.
+     * Get the argument every tool takes.
      *
      * @return array<string, mixed>
      */
@@ -48,7 +48,7 @@ trait AnswersInEnvelope
     }
 
     /**
-     * Get the answer in the format the request asks for, or the refusal of an argument the grammar of the tool does not read.
+     * Get the answer in the format the request asks for.
      *
      * @param  callable(): Answer  $answer
      */
@@ -73,7 +73,7 @@ trait AnswersInEnvelope
     }
 
     /**
-     * Refuse the first argument of the call that the tool does not take, naming what it takes.
+     * Refuse the first argument of the call that the tool does not take.
      */
     protected function refuseUnacceptedArguments(Request $request): void
     {
@@ -91,7 +91,7 @@ trait AnswersInEnvelope
     }
 
     /**
-     * Get a call of the tool as it is written, from its arguments.
+     * Get a call of the tool as it is written.
      *
      * @param  array<string, mixed>  $arguments
      */

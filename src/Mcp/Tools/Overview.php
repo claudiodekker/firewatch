@@ -73,7 +73,7 @@ class Overview extends Tool
     }
 
     /**
-     * Get the arguments of the tool: the window and the format.
+     * Get the arguments of the tool.
      *
      * @return array<string, mixed>
      */
@@ -87,7 +87,7 @@ class Overview extends Tool
     }
 
     /**
-     * Answer with how many records the store holds, and how many of them are requests, read in one snapshot.
+     * Answer with how many records the store holds and what the detectors find in them.
      */
     public function handle(Request $request): Response|ResponseFactory
     {
@@ -164,7 +164,7 @@ class Overview extends Tool
     }
 
     /**
-     * Get the rows of the detector table: the shapes with findings first, then the clean ones, then those not evaluated, in the order of the catalogue within each.
+     * Get the rows of the detector table.
      *
      * @param  list<Judgement>  $judgements
      * @return list<array<string, mixed>>
@@ -180,7 +180,7 @@ class Overview extends Tool
     }
 
     /**
-     * Get the sentence that names the shapes with findings first, then those not evaluated, and says there are no findings only when every shape is clean.
+     * Get the sentence that names the shapes with findings and those not evaluated.
      *
      * @param  list<Judgement>  $judgements
      */

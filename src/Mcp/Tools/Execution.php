@@ -86,7 +86,7 @@ class Execution extends Tool
     }
 
     /**
-     * Get the arguments of the tool: which execution, how many timeline entries and the format.
+     * Get the arguments of the tool.
      *
      * @return array<string, mixed>
      */
@@ -101,7 +101,7 @@ class Execution extends Tool
     }
 
     /**
-     * Answer with one execution in full: its header, accounting, exceptions and timeline.
+     * Answer with one execution in full.
      */
     public function handle(Request $request): Response|ResponseFactory
     {
@@ -161,7 +161,7 @@ class Execution extends Tool
     }
 
     /**
-     * Put one execution in the envelope: the header, the headers and payload of a request, the accounting, the exceptions, the timeline and what it caused.
+     * Put one execution in the envelope.
      *
      * @param  list<array<string, mixed>>  $blindSpots
      * @param  array{row: array<string, mixed>, children: list<array<string, mixed>>}  $found
@@ -234,7 +234,7 @@ class Execution extends Tool
     }
 
     /**
-     * Get the `truncated` entry for exceptions beyond the most shown, naming the call that lists them all, or null when all are.
+     * Get the `truncated` entry for exceptions beyond the most shown, or null when all are.
      *
      * @param  array{rows: list<array<string, mixed>>, matched: int}  $exceptions
      * @return array{section: string, shown: int, matched: int, reason: string, how: string}|null
@@ -255,7 +255,7 @@ class Execution extends Tool
     }
 
     /**
-     * Get the calls that follow from the execution: rank its group, list its queries when it captured some, and follow its trace.
+     * Get the calls that follow from the execution.
      *
      * @param  array<string, mixed>  $row
      * @param  list<array<string, mixed>>  $children
@@ -296,7 +296,7 @@ class Execution extends Tool
     }
 
     /**
-     * Get the refusal of an execution id the store does not hold, with where to read it when it is a trace id.
+     * Get the refusal of an execution id the store does not hold.
      */
     protected function notFound(string $id, bool $traced): Refusal
     {
@@ -325,7 +325,7 @@ class Execution extends Tool
     }
 
     /**
-     * Find the execution: the one with the id, or the one that finished last, of a type or of any.
+     * Find the execution with the id, or the one that finished last.
      *
      * @return array{row: array<string, mixed>, children: list<array<string, mixed>>}|null
      */
@@ -374,7 +374,7 @@ class Execution extends Tool
     }
 
     /**
-     * Read the execution id, which is a non-empty string, or null for none.
+     * Read the execution id, or null for none.
      */
     protected function executionId(Request $request): ?string
     {
@@ -394,7 +394,7 @@ class Execution extends Tool
     }
 
     /**
-     * Read the type of execution to take the latest of, which is one of the four and is not given with an execution id.
+     * Read the type of execution to take the latest of.
      */
     protected function type(Request $request, ?string $id): ?ExecutionType
     {
@@ -421,7 +421,7 @@ class Execution extends Tool
     }
 
     /**
-     * Read the most timeline entries to list, from 1 to 100.
+     * Read the most timeline entries to list.
      */
     protected function limit(Request $request): int
     {

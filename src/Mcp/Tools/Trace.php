@@ -85,7 +85,7 @@ class Trace extends Tool
     }
 
     /**
-     * Get the arguments of the tool: the trace or the job to follow, how many executions to list and the format.
+     * Get the arguments of the tool.
      *
      * @return array<string, mixed>
      */
@@ -153,7 +153,7 @@ class Trace extends Tool
     }
 
     /**
-     * Put the trace in the envelope: its executions, the lineage of the jobs and what is partial about them.
+     * Put the trace in the envelope.
      *
      * @param  list<array<string, mixed>>  $blindSpots
      * @param  string|null  $jobId  the job asked for, or null when the trace was
@@ -202,7 +202,7 @@ class Trace extends Tool
     }
 
     /**
-     * Get what is partial about the answer: a job seen as one side only, and the records that carry the trace when none of its executions is in the store.
+     * Get what is partial about the answer.
      *
      * @param  list<array<string, mixed>>  $jobs
      * @return list<string>
@@ -234,7 +234,7 @@ class Trace extends Tool
     }
 
     /**
-     * Get the calls that follow from the trace: each execution that failed, then the slowest, and the records that carry the id when no execution is held.
+     * Get the calls that follow from the trace.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
@@ -285,7 +285,7 @@ class Trace extends Tool
     }
 
     /**
-     * Get the execution with the longest duration, the first of them on a tie, or null when none of them has a duration.
+     * Get the execution with the longest duration, or null when none of them has one.
      *
      * @param  array<string|int, array{failed: bool, duration: mixed}>  $links
      */
@@ -305,7 +305,7 @@ class Trace extends Tool
     }
 
     /**
-     * Get the call that opens an execution, and why.
+     * Get the call that opens an execution.
      *
      * @return array{tool: string, arguments: array<string, mixed>, why: string}
      */
@@ -319,7 +319,7 @@ class Trace extends Tool
     }
 
     /**
-     * Get what the answer shows of an execution: what it was, when it ran and how it ended.
+     * Get what the answer shows of an execution.
      *
      * @param  array<string, mixed>  $execution
      * @return array<string, mixed>
@@ -371,7 +371,7 @@ class Trace extends Tool
     }
 
     /**
-     * Read an id, which is a non-empty string, or null for none.
+     * Read an id, or null for none.
      */
     protected function id(Request $request, string $argument): ?string
     {
@@ -406,7 +406,7 @@ class Trace extends Tool
     }
 
     /**
-     * Read the most executions to list, from 1 to 100.
+     * Read the most executions to list.
      */
     protected function limit(Request $request): int
     {
