@@ -94,6 +94,7 @@ test('Nightwatch writes a fatal error without a trace or an execution id, and an
     $fatal = sensorRecord(Producer::FATAL_ERROR);
     $thrown = sensorRecord(Producer::EXCEPTION);
     $fixture = app(WireFixture::class)->load(Producer::FATAL_ERROR);
+    $written = app(WireFixture::class)->produce(Producer::FATAL_ERROR);
 
     $frames = json_decode($thrown['trace'], associative: true, flags: JSON_THROW_ON_ERROR);
 
@@ -101,6 +102,7 @@ test('Nightwatch writes a fatal error without a trace or an execution id, and an
 
     expect([$fatal['trace'], $fatal['execution_id'], $fatal['handled']])->toBe(['', '', false], $message)
         ->and([$fixture['trace'], $fixture['execution_id'], $fixture['handled']])->toBe(['', '', false], $message)
+        ->and($written)->toBe($fixture, 'Run `composer fixtures`: the fatal error fixture is not what the sensors write now.')
         ->and($frames)->toBeArray($message)->not->toBeEmpty($message)
         ->and(array_is_list($frames))->toBeTrue($message);
 });
