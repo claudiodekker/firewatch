@@ -255,7 +255,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Get the capture settings to write to Nightwatch: Firewatch's payload list replaces Nightwatch's, and headers are redacted by Firewatch's own callback.
+     * Get the capture settings to write to Nightwatch.
      *
      * @return array<string, mixed>
      */
@@ -357,7 +357,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Wrap the default log channel with Nightwatch's when Active and capturing logs, so every default-channel log is captured.
+     * Wrap the default log channel with Nightwatch's when Active and capturing logs.
      */
     protected function captureLogs(): void
     {
@@ -392,7 +392,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Swap Nightwatch's ingest for Firewatch's, which stores in Active and discards in Off.
+     * Swap Nightwatch's ingest for Firewatch's.
      */
     protected function replaceNightwatchIngest(): void
     {
@@ -460,7 +460,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Write a notice outside the exception handler, and so outside the application's telemetry.
+     * Write a notice.
      */
     protected function notify(string $message): void
     {

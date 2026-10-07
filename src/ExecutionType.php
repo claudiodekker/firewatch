@@ -13,7 +13,7 @@ enum ExecutionType: string
     case SCHEDULED_TASK = 'scheduled-task';
 
     /**
-     * Get the four execution types as record types.
+     * Get the execution types as record types.
      *
      * @return list<RecordType>
      */

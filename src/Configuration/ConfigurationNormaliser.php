@@ -283,7 +283,7 @@ class ConfigurationNormaliser
     }
 
     /**
-     * Read the environments a process captures in, using local and testing when none is valid.
+     * Read the environments a process captures in.
      *
      * @param  array<mixed>  $raw
      * @return list<string>
@@ -477,7 +477,7 @@ class ConfigurationNormaliser
     }
 
     /**
-     * Read the deploy identity, trimmed and cut at 255 bytes, or null when it is unset.
+     * Read the deploy identity, or null when it is unset.
      *
      * @param  array<mixed>  $raw
      */
@@ -684,7 +684,7 @@ class ConfigurationNormaliser
     }
 
     /**
-     * Describe a value for an issue's reason, quoting strings and cutting them to 60 characters.
+     * Describe a value for an issue's reason.
      */
     protected function describe(mixed $value): string
     {

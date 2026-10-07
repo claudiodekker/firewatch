@@ -30,7 +30,7 @@ class IngestReplacer
     ];
 
     /**
-     * Replace the ingest on Nightwatch's core with one of Firewatch's, which transmit nothing.
+     * Replace the ingest on Nightwatch's core with one of Firewatch's.
      *
      * @param  Closure(): Ingest  $ingest
      *
