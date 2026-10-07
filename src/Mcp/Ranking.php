@@ -59,7 +59,7 @@ class Ranking
     public const MEGABYTE = 1048576;
 
     /**
-     * The four execution types, the only ones that carry memory and a query counter.
+     * The four execution types.
      *
      * @var list<RecordType>
      */
@@ -81,8 +81,6 @@ class Ranking
 
     /**
      * Read the groups of the type in the window, worst first by the measure.
-     *
-     * When no group has enough records for the percentile, the order falls back to the maximum of the same quantity, and the answer says which measure ordered the rows.
      *
      * @return array{rows: list<array<string, mixed>>, keys: list<array{value: int|float|null, occurrences: int, hash: string}>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
      */
@@ -278,7 +276,7 @@ class Ranking
     }
 
     /**
-     * Get the value a group is ranked by, or null when the group has none: below the floor of a percentile, or without the field.
+     * Get the value a group is ranked by, or null when the group has none.
      *
      * @param  array<string, mixed>  $group
      */
@@ -298,7 +296,7 @@ class Ranking
     }
 
     /**
-     * Get the sort key of a group, which is also the identity a cursor resumes after.
+     * Get the sort key of a group.
      *
      * @param  array<string, mixed>  $group
      * @return array{value: int|float|null, occurrences: int, hash: string}
@@ -328,7 +326,7 @@ class Ranking
     }
 
     /**
-     * Get the label of a group as it is shown and matched: requests that matched no route have one of their own.
+     * Get the label of a group as it is shown and matched.
      *
      * @param  array<string, mixed>  $group
      */
@@ -404,7 +402,7 @@ class Ranking
     }
 
     /**
-     * Get the row of the breakdown for a deploy: a record without a deploy is the deploy that has no identity.
+     * Get the row of the breakdown for a deploy.
      *
      * @param  array<string, mixed>  $deploy
      * @return array<string, mixed>

@@ -20,14 +20,14 @@ enum Measure: string
     case QUERIES = 'queries';
 
     /**
-     * The four execution types, the only ones that carry memory and a query counter.
+     * The four execution types.
      *
      * @var list<RecordType>
      */
     protected const EXECUTIONS = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
 
     /**
-     * Get the types that have groups to rank: every event type but the log.
+     * Get the types that have groups to rank.
      *
      * @return list<RecordType>
      */
@@ -55,7 +55,7 @@ enum Measure: string
     }
 
     /**
-     * Determine if the measure fits a type: exceptions have no duration, and only executions have memory and a query counter.
+     * Determine if the measure fits a type.
      */
     public function fits(RecordType $type): bool
     {

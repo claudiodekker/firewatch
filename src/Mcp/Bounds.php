@@ -51,8 +51,8 @@ class Bounds
     /**
      * Count the cells cut again for the rows the budget kept, so a row it dropped doesn't count.
      *
-     * @param  array<string, mixed>  $original  the result before any cut
-     * @param  array<string, mixed>  $fitted  the result after the budget
+     * @param  array<string, mixed>  $original
+     * @param  array<string, mixed>  $fitted
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
      */
@@ -100,7 +100,7 @@ class Bounds
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
-     * @param  Closure(array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>): int  $size  the characters of the answer with the given result and truncated entries
+     * @param  Closure(array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>): int  $size
      * @return array{array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
      */
     public static function fitAnswer(array $result, array $truncated, Closure $size): array
@@ -133,7 +133,7 @@ class Bounds
      *
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @param  array<string, mixed>  $result
-     * @param  array<string, int>  $originals  the rows each cut list had
+     * @param  array<string, int>  $originals
      * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
      */
     protected static function withCuts(array $truncated, array $result, array $originals): array

@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\RecordType;
 class ExecutionHeader
 {
     /**
-     * Get the header of an execution: what it was, how it ended and how long each stage took.
+     * Get the header of an execution.
      *
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>
@@ -50,7 +50,7 @@ class ExecutionHeader
     }
 
     /**
-     * Get the display field a group is labelled by: the route of a request, which a request that matched none has a word for, and the name of any other.
+     * Get the display field a group is labelled by.
      *
      * @param  array<string, mixed>  $row
      */
@@ -64,7 +64,7 @@ class ExecutionHeader
     }
 
     /**
-     * Get how the execution ended: the status code of a request, the exit code of a command, the status of a job attempt or a scheduled task.
+     * Get how the execution ended.
      *
      * @param  array<string, mixed>  $row
      */

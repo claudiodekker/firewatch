@@ -27,7 +27,7 @@ class Markdown
     }
 
     /**
-     * Render a value as one table cell or one line: null as n/a, a boolean as yes or no, a list or object as compact JSON, with pipes escaped and line breaks flattened.
+     * Render a value as one table cell or one line.
      */
     public static function cell(mixed $value): string
     {
@@ -54,7 +54,7 @@ class Markdown
     }
 
     /**
-     * Render same-shaped rows as a table, which states each column name once.
+     * Render same-shaped rows as a table.
      *
      * @param  list<array<string, mixed>>  $rows
      */

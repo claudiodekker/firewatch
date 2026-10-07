@@ -20,7 +20,7 @@ class Rows
     }
 
     /**
-     * Get how many rows a reader fetches for a limit: one more, so that exactly the limit is a complete list.
+     * Get how many rows a reader fetches for a limit.
      */
     public static function fetch(int $limit): int
     {

@@ -78,7 +78,7 @@ class Listing
     }
 
     /**
-     * Read the baseline of the selection: how many records have a duration, and the duration at the percentile or null below its floor.
+     * Read the baseline of the selection.
      *
      * @return array{samples: int, needed: int, threshold: int|float|null}
      */
@@ -111,7 +111,7 @@ class Listing
     /**
      * Read the first rows of the selection that the filters keep, one more than the limit, with the key of each in its order.
      *
-     * @param  array{value: int|float, id: int}|null  $after  the key of the last row already shown
+     * @param  array{value: int|float, id: int}|null  $after
      * @return array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}
      */
     public function rows(SQLite3 $connection, int $limit, int|float|null $threshold, ?array $after = null): array
@@ -315,7 +315,7 @@ class Listing
     }
 
     /**
-     * Get the fields that are particular to the type of a record, which a record of an unknown type has none of.
+     * Get the fields that are particular to the type of a record.
      *
      * @param  array<string, mixed>  $record
      * @param  array<string, mixed>  $data

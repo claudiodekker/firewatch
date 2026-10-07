@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\Store\Markers;
 class Accounting
 {
     /**
-     * Compare what an execution counted with the children the store holds for it, counter by counter, and state each difference without explaining it.
+     * Compare what an execution counted with the children the store holds for it.
      *
      * @param  array<string, mixed>  $execution
      * @param  list<array<string, mixed>>  $children
@@ -56,7 +56,7 @@ class Accounting
     }
 
     /**
-     * Get the line for children that are fewer than counted: removed history when their type's coverage starts after the execution did, otherwise incomplete.
+     * Get the line for children that are fewer than counted.
      */
     protected static function missing(Counter $counter, int $captured, int $counted, Markers $meta, mixed $startedAt, string $timezone): string
     {

@@ -50,7 +50,7 @@ class History
     }
 
     /**
-     * Get the instant through which a clear or a prune removed records of the types, or null when none did: records of an execution that started before it may be missing, which the creation of a store never causes.
+     * Get the instant through which a clear or a prune removed records of the types, or null when none did.
      *
      * @param  list<RecordType>  $types
      */
@@ -70,7 +70,7 @@ class History
     }
 
     /**
-     * Get the history of a store that can't be read: it states no start.
+     * Get the history of a store that can't be read.
      */
     public static function unknown(?int $retentionAge, ?int $retentionRecords): self
     {
@@ -84,7 +84,6 @@ class History
      */
     protected static function starts(Markers $meta, RecordType $type): array
     {
-        // A type starts at the latest of these, and a tie goes to the first listed.
         $candidates = [
             [$meta->clearedAt, 'cleared'],
             [$meta->clearedAtOf($type), 'cleared-type'],

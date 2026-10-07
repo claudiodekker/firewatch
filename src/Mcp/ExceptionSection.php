@@ -57,7 +57,7 @@ class ExceptionSection
     }
 
     /**
-     * Get the frames of a trace: each application frame with the lines Nightwatch stored for it, and each run of vendor frames as one entry, with a note on why a frame has no lines.
+     * Get the frames of a trace, with a note on why a frame has no lines.
      *
      * @return array{list<array<string, mixed>>, string|null}
      */
@@ -108,7 +108,7 @@ class ExceptionSection
     }
 
     /**
-     * Determine if a frame's file is the application's: not under vendor, and not one of the placeholders for a frame with no file.
+     * Determine if a frame's file is the application's.
      */
     protected static function isApplication(string $file): bool
     {

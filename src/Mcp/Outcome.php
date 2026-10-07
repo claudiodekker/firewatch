@@ -15,7 +15,7 @@ enum Outcome: string
     case SKIPPED = 'skipped';
 
     /**
-     * Get the outcomes a type has, which is none for a type that has no outcome.
+     * Get the outcomes a type has.
      *
      * @return list<self>
      */

@@ -10,7 +10,7 @@ use RuntimeException;
 class Refusal extends RuntimeException
 {
     /**
-     * Create a new refusal instance from the text of the error the tool answers with.
+     * Create a new refusal instance.
      */
     public function __construct(public readonly ErrorCode $error, string $text)
     {
@@ -30,7 +30,7 @@ class Refusal extends RuntimeException
     }
 
     /**
-     * Get the refusal of an argument whose value is none of the accepted ones: `expected` completes the sentence, `value` is shown as given.
+     * Get the refusal of an argument whose value is none of the accepted ones.
      */
     public static function invalid(string $argument, string $expected, string $value, string $accepted, string $example): self
     {
@@ -44,7 +44,7 @@ class Refusal extends RuntimeException
     }
 
     /**
-     * Get the refusal of an argument that no tool takes, such as a misspelled one.
+     * Get the refusal of an argument that no tool takes.
      *
      * @param  list<string>  $accepted
      */
@@ -108,7 +108,7 @@ class Refusal extends RuntimeException
     }
 
     /**
-     * Get the refusal of an execution id that the store holds only as a trace id, which says where to read it.
+     * Get the refusal of an execution id that the store holds only as a trace id.
      */
     public static function traceIdNotExecution(string $argument, string $id, string $accepted, string $example): self
     {
@@ -129,7 +129,7 @@ class Refusal extends RuntimeException
     }
 
     /**
-     * Get the answer to a failure no one expected: it names nothing of the failure, which is reported instead.
+     * Get the answer to a failure no one expected.
      */
     public static function internal(): self
     {

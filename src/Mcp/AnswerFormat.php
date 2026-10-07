@@ -11,7 +11,7 @@ enum AnswerFormat: string
     case JSON = 'json';
 
     /**
-     * Read a tool's `format` argument, matched exactly; an absent argument is markdown, and anything else that is not a format is null.
+     * Read a tool's `format` argument, or null for a value that is no format.
      */
     public static function fromArgument(mixed $value): ?self
     {
