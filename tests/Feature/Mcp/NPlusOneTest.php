@@ -55,8 +55,8 @@ function npoQuery(string $id, string $sql = NPO_USER_SQL, array $fields = []): R
 /**
  * The records of an execution that ran a query a number of times.
  *
- * @param  array<string, mixed>  $fields  the fields of each query
- * @param  array<string, mixed>  $execution  the fields of the execution
+ * @param  array<string, mixed>  $fields
+ * @param  array<string, mixed>  $execution
  * @return list<RecordBuilder>
  */
 function npoRun(string $id, int $runs, string $label = '/orders', string $sql = NPO_USER_SQL, array $fields = [], array $execution = [], RecordType $type = RecordType::REQUEST): array

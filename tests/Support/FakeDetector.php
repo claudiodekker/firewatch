@@ -12,13 +12,10 @@ use ClaudioDekker\Firewatch\RecordType;
 use Closure;
 use SQLite3;
 
-// A detector that answers what it is told to, so the framework is tested beyond the detectors that ship.
 class FakeDetector implements Detector
 {
     /**
      * Create a new fake detector instance.
-     *
-     * @param  Closure|null  $during  run when the detector judges, to move the clock
      */
     public function __construct(
         protected DetectorName $name,

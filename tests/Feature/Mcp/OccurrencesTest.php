@@ -530,7 +530,6 @@ it('judges a filter by the type the group is held by', function (array $argument
 
 it('keeps the records at or above the median or the 95th percentile of the selection, ties kept', function (string $percentile, int $records, array $kept, ?float $threshold) {
     ingest(array_map(fn (int $milliseconds) => occRecord(RecordType::REQUEST, ['route_path' => "/{$milliseconds}", 'duration' => $milliseconds * 1000, 'timestamp' => OCC_AT + $milliseconds]), range(1, $records)));
-    // A record slower than every other one, outside the selection.
     ingest([occRecord(RecordType::REQUEST, ['route_path' => '/outside', 'duration' => 999000, 'timestamp' => OCC_AT + 500])]);
 
     $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => $percentile, 'until' => OCC_AT + 100, 'limit' => 100]);

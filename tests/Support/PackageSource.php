@@ -10,10 +10,6 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Finder\Finder;
 
-/**
- * Reads the package source for the invariants Pest's arch expectations
- * cannot express: plain scripts, language constructs and name prefixes.
- */
 class PackageSource
 {
     public const SERVER_PATH = 'Mcp';
@@ -143,7 +139,6 @@ class PackageSource
 
     /**
      * Array literals with several elements and a key that are written on one line, or that share a line between two keyed elements.
-     * A rules() method body is exempt: validation rule lists stay on one line.
      *
      * @return list<string>
      */
