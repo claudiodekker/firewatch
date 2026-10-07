@@ -218,7 +218,7 @@ describe('the finding', function () {
                 'failures' => 3,
                 'failure_pct' => 60.0,
                 'status_counts' => [429 => 1, 500 => 2],
-                'top_urls' => [['method' => 'POST', 'url' => 'https://api.example.test/charges', 'failures' => 3]],
+                'top_urls' => [['url' => 'https://api.example.test/charges', 'failures' => 3]],
                 'ran_in' => [['source' => 'request', 'label' => '/checkout', 'calls' => 3]],
             ],
         ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
@@ -294,7 +294,7 @@ describe('the finding', function () {
         expect(array_column($findings, 'group'))->toBe([null, md5('api.example.test')])
             ->and($findings[0])->toMatchArray(['name' => '', 'count' => 2])
             ->and($findings[0]['evidence'])->toMatchArray(['host' => null, 'calls' => 2, 'failures' => 2, 'status_counts' => [404 => 1, 500 => 1]])
-            ->and($findings[0]['evidence']['top_urls'])->toBe([['method' => 'POST', 'url' => 'https://api.example.test/charges', 'failures' => 2]])
+            ->and($findings[0]['evidence']['top_urls'])->toBe([['url' => 'https://api.example.test/charges', 'failures' => 2]])
             ->and($findings[0]['evidence']['ran_in'])->toBe([['source' => 'request', 'label' => null, 'calls' => 2]])
             ->and($findings[1]['evidence'])->toMatchArray(['calls' => 1, 'failures' => 1, 'status_counts' => [500 => 1]]);
     });
@@ -346,10 +346,10 @@ describe('the URLs', function () {
 
         $urls = fhpAnswer()['result']['findings'][0]['evidence']['top_urls'];
 
-        expect($urls)->toBe([['method' => 'POST', 'url' => 'https://api.example.test/charges', 'failures' => 3]]);
+        expect($urls)->toBe([['url' => 'https://api.example.test/charges', 'failures' => 3]]);
     });
 
-    it('tells the methods of one URL apart', function () {
+    it('counts the methods of one URL as one URL', function () {
         ingest([
             fhpCall('a', 500, fields: ['method' => 'GET']),
             fhpCall('b', 500, fields: ['method' => 'POST']),
@@ -358,10 +358,7 @@ describe('the URLs', function () {
 
         $urls = fhpAnswer()['result']['findings'][0]['evidence']['top_urls'];
 
-        expect($urls)->toBe([
-            ['method' => 'POST', 'url' => 'https://api.example.test/charges', 'failures' => 2],
-            ['method' => 'GET', 'url' => 'https://api.example.test/charges', 'failures' => 1],
-        ]);
+        expect($urls)->toBe([['url' => 'https://api.example.test/charges', 'failures' => 3]]);
     });
 
     it('lists the three URLs that failed most, those that tie by their text, and none that only worked', function () {
@@ -376,9 +373,9 @@ describe('the URLs', function () {
         $urls = fhpAnswer()['result']['findings'][0]['evidence']['top_urls'];
 
         expect($urls)->toBe([
-            ['method' => 'POST', 'url' => 'https://api.example.test/thrice', 'failures' => 3],
-            ['method' => 'POST', 'url' => 'https://api.example.test/twice-a', 'failures' => 2],
-            ['method' => 'POST', 'url' => 'https://api.example.test/twice-b', 'failures' => 2],
+            ['url' => 'https://api.example.test/thrice', 'failures' => 3],
+            ['url' => 'https://api.example.test/twice-a', 'failures' => 2],
+            ['url' => 'https://api.example.test/twice-b', 'failures' => 2],
         ]);
     });
 
@@ -392,8 +389,8 @@ describe('the URLs', function () {
         $urls = array_column(array_column(fhpAnswer()['result']['findings'], 'evidence'), 'top_urls', 'host');
 
         expect($urls)->toBe([
-            'cdn.example.test' => [['method' => 'POST', 'url' => 'https://cdn.example.test/charges', 'failures' => 2]],
-            'api.example.test' => [['method' => 'POST', 'url' => 'https://api.example.test/charges', 'failures' => 1]],
+            'cdn.example.test' => [['url' => 'https://cdn.example.test/charges', 'failures' => 2]],
+            'api.example.test' => [['url' => 'https://api.example.test/charges', 'failures' => 1]],
         ]);
     });
 });
