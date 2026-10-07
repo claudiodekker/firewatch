@@ -21,6 +21,7 @@ use Laravel\Nightwatch\Facades\Nightwatch;
 use RuntimeException;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\ErrorHandler\Error\FatalError;
 use Workbench\App\Jobs\ShipOrder;
 use Workbench\App\Notifications\OrderShipped;
 
@@ -32,6 +33,7 @@ enum Producer: string
     case SCHEDULED_TASK = 'scheduled-task';
     case QUERY = 'query';
     case EXCEPTION = 'exception';
+    case FATAL_ERROR = 'exception.fatal';
     case LOG = 'log';
     case CACHE_EVENT = 'cache-event';
     case MAIL = 'mail';
@@ -45,7 +47,10 @@ enum Producer: string
      */
     public function type(): RecordType
     {
-        return RecordType::from($this->value);
+        return match ($this) {
+            self::FATAL_ERROR => RecordType::EXCEPTION,
+            default => RecordType::from($this->value),
+        };
     }
 
     /**
@@ -71,6 +76,7 @@ enum Producer: string
             self::SCHEDULED_TASK => $this->scheduledTask(),
             self::QUERY => DB::select('select 1'),
             self::EXCEPTION => Nightwatch::report(new RuntimeException('The payment failed.')),
+            self::FATAL_ERROR => Nightwatch::report($this->fatalError()),
             self::LOG => Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]),
             self::CACHE_EVENT => Cache::get('orders'),
             self::MAIL => $this->mail(),
@@ -162,6 +168,18 @@ enum Producer: string
         app(Schedule::class)->call(fn () => null)->name('prune-orders')->everyMinute();
 
         $this->artisan(['command' => 'schedule:run']);
+    }
+
+    /**
+     * Get the error PHP raises when a process dies, as the error handler reports it.
+     */
+    protected function fatalError(): FatalError
+    {
+        return new FatalError('Allowed memory size of 134217728 bytes exhausted (tried to allocate 20480 bytes)', 0, [
+            'type' => E_ERROR,
+            'file' => app_path('Jobs/ShipOrder.php'),
+            'line' => 12,
+        ]);
     }
 
     /**

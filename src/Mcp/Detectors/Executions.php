@@ -30,11 +30,33 @@ class Executions
             Stored::number('duration'),
             Stored::number('queries'),
             Stored::number('peak_memory_usage'),
-            $type === RecordType::REQUEST ? 'route_path' : 'name',
+            self::labelField($type),
             $type->view(),
             $selected,
         ), self::TYPES);
 
         return 'WITH executions AS ('.implode(' UNION ALL ', $branches).')';
+    }
+
+    /**
+     * Get the SQL of the label of every execution, whenever it started.
+     */
+    public static function labels(): string
+    {
+        $branches = array_map(fn (RecordType $type) => sprintf(
+            'SELECT id, execution_id, started_at, %s AS label FROM %s',
+            self::labelField($type),
+            $type->view(),
+        ), self::TYPES);
+
+        return 'WITH labels AS ('.implode(' UNION ALL ', $branches).')';
+    }
+
+    /**
+     * Get the column the executions of a type are labelled by.
+     */
+    protected static function labelField(RecordType $type): string
+    {
+        return $type === RecordType::REQUEST ? 'route_path' : 'name';
     }
 }

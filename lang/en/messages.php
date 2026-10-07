@@ -38,7 +38,7 @@ return [
         'execution' => 'One execution in full: a request, command, job attempt or scheduled task. Without arguments it returns the latest one that finished (greatest end time); `type` picks the latest of one kind; `execution_id` picks a specific one (a request\'s trace id is also its execution id). Shows outcome, stages, request headers and payload as captured, counted-versus-captured accounting for eight counters, up to five exceptions with application frames and source lines, and the child timeline. Not windowed. For every attempt of a job use `occurrences` with `job_id`. Recorded when finished: running work is absent.',
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
         'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
-        'detect' => 'Runs named problem shapes and returns evidence, worst first. Each shape names its default `threshold`. `n-plus-one`: a read query one execution ran 3 or more times, in runs. `database-bound`: request groups typically spending 60 percent or more of their time in queries. `failing-routes`: request groups with a request at status 400 or above. `failing-jobs`: job groups with 1 or more failed or released attempts. `queue-latency`: job groups with a first-attempt wait or pending age of 5000 milliseconds or more. `failing-tasks`: scheduled-task groups with a failed or skipped task (no threshold). `memory`: execution groups peaking at 64 megabytes or more. Without `shape` every shape runs; `threshold` and `group` need one shape. Each returns a verdict (findings, clean, not_evaluated) over the records it examined, its threshold with unit and range, the exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean means none among what was captured; over few records it is weak. Windowed.',
+        'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: a read query one execution ran 3 or more times, in runs. `database-bound`: request groups typically spending 60 percent or more of their time in queries. `failing-routes`: request groups with a request at status 400 or above. `failing-jobs`: job groups with 1 or more failed or released attempts. `queue-latency`: job groups with a first-attempt wait or pending age of 5000 milliseconds or more. `failing-tasks`: scheduled-task groups with a failed or skipped task (no threshold). `exception-clusters`: exception groups with 1 or more occurrences, escaped first. `memory`: execution groups peaking at 64 megabytes or more. Without `shape` every shape runs; `threshold` and `group` need one shape. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold with unit and range, the exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean means none among what was captured; over few records it is weak. Windowed.',
     ],
 
     /*
@@ -295,7 +295,7 @@ return [
 
     'trace_next_occurrences' => 'List the records that carry this id, since the execution they belong to is not in the store.',
 
-    'detect_shape_argument' => 'The shape to run: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks or memory. Absent: every shape that ships.',
+    'detect_shape_argument' => 'The shape to run: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters or memory. Absent: every shape that ships.',
     'detect_threshold_argument' => 'Overrides the shape\'s default, named in the tool description. Whole numbers, except percent and megabytes. An answer states the unit, range and default; out of range is refused. Needs `shape`.',
     'detect_group_argument' => 'One group id (32 hex) to restrict the shape to; for n-plus-one an execution\'s group, not a query group. A group that holds no records is an empty answer. Needs `shape`.',
     'detect_limit_argument' => 'The most findings to list, 1 to 100. Default 20.',
@@ -306,6 +306,7 @@ return [
         'failing-jobs' => 'job attempts',
         'queue-latency' => 'dispatches',
         'failing-tasks' => 'scheduled tasks',
+        'exception-clusters' => 'executions',
         'memory' => 'executions',
     ],
     'detect_caveat_reads' => 'Reads are recognised by the first keyword; a WITH statement that writes counts as a read.',
@@ -320,9 +321,9 @@ return [
     'detect_not_evaluated_summary' => ':detector: not evaluated (:reason).',
     'detect_all_summary' => 'Problem shapes: :parts.',
     'detect_all_clean_summary' => 'No findings: the shape is clean over what was captured.|No findings: all :count shapes are clean over what was captured.',
-    'detect_part_findings' => ':detector :total findings',
-    'detect_part_not_evaluated' => ':detector not evaluated (:reason)',
-    'detect_part_clean' => ':detector clean',
+    'detect_part_findings' => 'findings in :shapes',
+    'detect_part_not_evaluated' => 'not evaluated (:reason): :shapes',
+    'detect_part_clean' => 'clean: :shapes',
     'detect_findings_how' => 'List more of the findings with a larger `limit`, up to 100, or narrow the call with `group`, `since` and `until`.',
     'detect_next_execution' => 'Open the latest execution that failed.',
     'detect_next_occurrences' => 'List the records of the group.',

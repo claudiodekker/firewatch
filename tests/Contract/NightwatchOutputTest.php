@@ -76,6 +76,7 @@ test('each type is grouped by the recipe recomputed from its record', function (
     'scheduled task' => [Producer::SCHEDULED_TASK, fn (array $record) => "{$record['name']},{$record['cron']},{$record['timezone']}"],
     'query' => [Producer::QUERY, fn (array $record) => "{$record['connection']},{$record['sql']}"],
     'exception' => [Producer::EXCEPTION, fn (array $record) => "{$record['class']},{$record['code']},{$record['file']},{$record['line']}"],
+    'fatal error' => [Producer::FATAL_ERROR, fn (array $record) => "{$record['class']},{$record['code']},{$record['file']},{$record['line']}"],
     'cache event' => [Producer::CACHE_EVENT, fn (array $record) => "{$record['store']},{$record['key']}"],
     'mail' => [Producer::MAIL, fn (array $record) => $record['class']],
     'notification' => [Producer::NOTIFICATION, fn (array $record) => $record['class']],
@@ -88,3 +89,20 @@ test('Nightwatch writes no group for the types that have none', function (Produc
 
     expect($record)->not->toHaveKey('_group');
 })->with(['a log' => Producer::LOG, 'a user' => Producer::USER]);
+
+test('Nightwatch writes a fatal error without a trace or an execution id, and any other exception with a trace', function () {
+    $fatal = sensorRecord(Producer::FATAL_ERROR);
+    $thrown = sensorRecord(Producer::EXCEPTION);
+    $fixture = app(WireFixture::class)->load(Producer::FATAL_ERROR);
+    $written = app(WireFixture::class)->produce(Producer::FATAL_ERROR);
+
+    $frames = json_decode($thrown['trace'], associative: true, flags: JSON_THROW_ON_ERROR);
+
+    $message = 'The wire no longer tells a fatal error by its missing trace: drop `fatal` from exception-clusters.';
+
+    expect([$fatal['trace'], $fatal['execution_id'], $fatal['handled']])->toBe(['', '', false], $message)
+        ->and([$fixture['trace'], $fixture['execution_id'], $fixture['handled']])->toBe(['', '', false], $message)
+        ->and($written)->toBe($fixture, 'Run `composer fixtures`: the fatal error fixture is not what the sensors write now.')
+        ->and($frames)->toBeArray($message)->not->toBeEmpty($message)
+        ->and(array_is_list($frames))->toBeTrue($message);
+});

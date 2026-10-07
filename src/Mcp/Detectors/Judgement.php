@@ -67,7 +67,7 @@ class Judgement
      */
     public function matchedNothing(): bool
     {
-        return $this->examined === 0 && array_sum($this->saw) === 0 && $this->reason !== Reason::OUTSIDE_COVERAGE;
+        return $this->examined === 0 && $this->total === 0 && array_sum($this->saw) === 0 && $this->reason !== Reason::OUTSIDE_COVERAGE;
     }
 
     /**

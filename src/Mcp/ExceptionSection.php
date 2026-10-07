@@ -108,6 +108,26 @@ class ExceptionSection
     }
 
     /**
+     * Get the first frame of a stored trace whose file is the application's, as Nightwatch wrote it, or null without one.
+     */
+    public static function applicationFrame(mixed $trace): ?string
+    {
+        $frames = Stored::json($trace);
+        if (! is_array($frames)) {
+            return null;
+        }
+
+        foreach ($frames as $frame) {
+            $file = is_array($frame) && is_string($frame['file'] ?? null) ? $frame['file'] : '';
+            if (self::isApplication($file)) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Determine if a frame's file is the application's.
      */
     protected static function isApplication(string $file): bool

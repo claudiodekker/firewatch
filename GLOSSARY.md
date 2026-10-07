@@ -518,6 +518,14 @@ _Avoid_: Flaky job
 An exception that reached the framework's handler, as opposed to one caught and passed to report.
 _Avoid_: Unhandled crash
 
+**Fatal error**:
+An exception record stored without a trace, which is how Nightwatch sends an error that ended the process; never inferred from a class or a code.
+_Avoid_: Crash
+
+**Application frame**:
+The first frame of a stored trace whose file is the application's own, not a vendor's or an internal function, shown as file and line.
+_Avoid_: User frame
+
 **Message shape**:
 A log message with UUIDs, hex runs of eight or more, and digit runs replaced by placeholders, used to group lines.
 _Avoid_: Log pattern, fingerprint

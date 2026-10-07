@@ -1,0 +1,23 @@
+{
+    "v": 3,
+    "t": "exception",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "_group": "{hash}",
+    "trace_id": "{uuid}",
+    "execution_source": "command",
+    "execution_id": "",
+    "execution_preview": "",
+    "execution_stage": "action",
+    "user": "",
+    "class": "Symfony\\Component\\ErrorHandler\\Error\\FatalError",
+    "file": "{path}",
+    "line": "{line}",
+    "message": "Allowed memory size of 134217728 bytes exhausted (tried to allocate 20480 bytes)",
+    "code": "0",
+    "trace": "",
+    "handled": false,
+    "php_version": "{version}",
+    "laravel_version": "{version}"
+}

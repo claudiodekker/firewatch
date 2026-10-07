@@ -249,17 +249,23 @@ class Detect extends Tool
             return trans_choice('firewatch::messages.detect_all_clean_summary', count($judgements), ['count' => count($judgements)]);
         }
 
+        $shapes = [];
+
+        foreach ($judgements as $judgement) {
+            $name = $judgement->detector->value;
+            $shape = $judgement->verdict === Verdict::FINDINGS ? "{$name} ({$judgement->total})" : $name;
+
+            $shapes[$judgement->verdict->value][$judgement->reason->value ?? ''][] = $shape;
+        }
+
         $parts = [];
 
         foreach ([Verdict::FINDINGS, Verdict::NOT_EVALUATED, Verdict::CLEAN] as $verdict) {
-            foreach ($judgements as $judgement) {
-                if ($judgement->verdict === $verdict) {
-                    $parts[] = __('firewatch::messages.detect_part_'.$verdict->value, [
-                        'detector' => $judgement->detector->value,
-                        'total' => $judgement->total,
-                        'reason' => $judgement->reason->value ?? '',
-                    ]);
-                }
+            foreach ($shapes[$verdict->value] ?? [] as $reason => $names) {
+                $parts[] = __('firewatch::messages.detect_part_'.$verdict->value, [
+                    'shapes' => implode(', ', $names),
+                    'reason' => $reason,
+                ]);
             }
         }
 
