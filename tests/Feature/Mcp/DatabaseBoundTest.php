@@ -543,7 +543,7 @@ describe('with the other shapes', function () {
 
         $rows = Envelope::assert(Overview::class)['result']['detectors'];
 
-        expect(array_column($rows, 'detector'))->toBe(['database-bound', 'n-plus-one', 'failing-routes', 'memory'])
+        expect(array_column($rows, 'detector'))->toBe(['database-bound', 'n-plus-one', 'failing-routes', 'memory', 'failing-jobs'])
             ->and($rows[0])->toBe([
                 'detector' => 'database-bound',
                 'verdict' => 'findings',
@@ -559,7 +559,7 @@ describe('with the other shapes', function () {
 
         $detectors = Envelope::assert(Detect::class)['result']['detectors'];
 
-        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'memory'])
+        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'memory'])
             ->and($detectors[1])->toMatchArray(['verdict' => 'findings', 'total' => 1]);
     });
 });

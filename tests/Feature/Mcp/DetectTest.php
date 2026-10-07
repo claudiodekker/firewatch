@@ -287,8 +287,8 @@ describe('the shape', function () {
 
         expect($refusal)->toStartWith('error: invalid_argument')
             ->toContain('argument: shape')
-            ->toContain('n-plus-one, database-bound, failing-routes, memory');
-    })->with(['nonsense', 'failing-jobs', '']);
+            ->toContain('n-plus-one, database-bound, failing-routes, failing-jobs, memory');
+    })->with(['nonsense', 'queue-latency', '']);
 
     it('runs every shape that ships when none is named, one result each', function () {
         ingest([dtcRequest('/orders', 500)]);
@@ -296,22 +296,23 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect(array_keys($envelope['result']))->toBe(['detectors'])
-            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'memory'])
+            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'memory'])
             ->and($envelope['result']['detectors'][2])->toMatchArray(['verdict' => 'findings', 'total' => 1])
             ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
                 __('firewatch::messages.detect_part_findings', ['detector' => 'failing-routes', 'total' => 1]),
                 __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'n-plus-one', 'reason' => 'no_records']),
+                __('firewatch::messages.detect_part_not_evaluated', ['detector' => 'failing-jobs', 'reason' => 'no_records']),
                 __('firewatch::messages.detect_part_clean', ['detector' => 'database-bound']),
                 __('firewatch::messages.detect_part_clean', ['detector' => 'memory']),
             ])]));
     });
 
     it('says all the shapes are clean only when each one is', function () {
-        ingest([dtcRequest('/orders', 200, ['trace_id' => 'one']), syntheticRecord(RecordType::QUERY)->inExecution('one')]);
+        ingest([dtcRequest('/orders', 200, ['trace_id' => 'one']), syntheticRecord(RecordType::QUERY)->inExecution('one'), syntheticRecord(RecordType::JOB_ATTEMPT)]);
 
         $envelope = dtcAnswer([]);
 
-        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 4, ['count' => 4]));
+        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 5, ['count' => 5]));
     });
 
     it('names the shapes that were not evaluated, and why', function () {
@@ -320,7 +321,7 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
-            ...array_map(fn (string $detector) => __('firewatch::messages.detect_part_not_evaluated', ['detector' => $detector, 'reason' => 'no_records']), ['n-plus-one', 'database-bound', 'failing-routes']),
+            ...array_map(fn (string $detector) => __('firewatch::messages.detect_part_not_evaluated', ['detector' => $detector, 'reason' => 'no_records']), ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs']),
             __('firewatch::messages.detect_part_clean', ['detector' => 'memory']),
         ])]));
     });
@@ -648,7 +649,7 @@ test('the tool is listed with its description, arguments and annotations', funct
 
     expect($tool['description'])->toBe(__('firewatch::messages.tools.detect'))
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['shape', 'threshold', 'group', 'since', 'until', 'limit', 'format'])
-        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'memory'])
+        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'memory'])
         ->and($tool['annotations'])->toMatchArray(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
 });
 
