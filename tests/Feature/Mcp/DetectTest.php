@@ -605,6 +605,20 @@ describe('one group', function () {
             ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
     });
 
+    it('answers that nothing matches a group by the counts a shape set aside, never by a block it carries beside them', function (array $saw, ?string $kind) {
+        FakeDetector::ship(new FakeDetector(DetectorName::CACHE, saw: $saw));
+        ingest([dtcRequest('/orders', 200)]);
+
+        $envelope = dtcAnswer(['shape' => 'cache', 'group' => dtcGroup('/missing')]);
+
+        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'saw' => $saw])
+            ->and($envelope['empty']['kind'] ?? null)->toBe($kind);
+    })->with([
+        'a block alone' => [['activity' => ['stores' => [], 'total' => ['hits' => 0]]], 'no_match'],
+        'a block beside a count of nothing' => [['activity' => ['stores' => []], 'excluded' => 0], 'no_match'],
+        'a block beside a count set aside' => [['activity' => ['stores' => []], 'excluded' => 2], null],
+    ]);
+
     it('refuses a group that is not a group hash', function (mixed $group) {
         $refusal = dtcRefusal(['shape' => 'failing-routes', 'group' => $group]);
 
