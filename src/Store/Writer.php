@@ -27,7 +27,7 @@ class Writer
     protected const FILE_MODE = 0600;
 
     /**
-     * The contents of the directory's VCS ignore file, which covers every companion file.
+     * The contents of the directory's VCS ignore file.
      */
     protected const GITIGNORE = "*\n";
 
@@ -37,7 +37,7 @@ class Writer
     protected const PAGE_SIZE = 4096;
 
     /**
-     * The live bytes past which a pruning pass trims the oldest records, a safety net rather than a setting.
+     * The live bytes past which a pruning pass trims the oldest records.
      */
     public const SIZE_BACKSTOP_BYTES = 536870912;
 
@@ -131,14 +131,14 @@ class Writer
     }
 
     /**
-     * Run the callback in one write transaction, creating the store first if there is none, and replacing it once if it turns out to be a damaged Firewatch store.
+     * Run the callback in one write transaction, replacing a damaged Firewatch store once.
      *
      * @template TResult
      *
      * @param  Closure(SQLite3): TResult  $callback
      * @return TResult
      *
-     * @throws StoreFailure when the file is not a Firewatch store, or a later release wrote it
+     * @throws StoreFailure
      */
     public function transaction(Closure $callback): mixed
     {
@@ -175,7 +175,7 @@ class Writer
     }
 
     /**
-     * Run the callback on the store's connection under the same lock as a write, without a transaction, for work that can't run inside one, such as a checkpoint.
+     * Run the callback on the store's connection under the same lock as a write, without a transaction.
      *
      * @template TResult
      *
@@ -188,7 +188,7 @@ class Writer
     }
 
     /**
-     * Run the callback in one write transaction on the store, creating it first if there is none, unless it is not transactional.
+     * Run the callback in one write transaction on the store.
      *
      * @template TResult
      *
@@ -229,7 +229,7 @@ class Writer
     }
 
     /**
-     * Get the open connection, making a new one when there is none, it was inherited across a fork, or the store file was deleted or replaced.
+     * Get the open connection, making a new one when the kept one is stale.
      */
     protected function connection(): SQLite3
     {
@@ -252,7 +252,7 @@ class Writer
     }
 
     /**
-     * Let go of the open connection: a connection inherited across a fork is held unused until the child exits, rather than closed from the child, and any other is closed.
+     * Let go of the open connection.
      */
     protected function release(SQLite3 $connection): void
     {
@@ -280,14 +280,14 @@ class Writer
     }
 
     /**
-     * Run the callback holding the exclusive lock file, polled within the busy timeout, with what is left of it.
+     * Run the callback holding the exclusive lock file, with what is left of the busy timeout.
      *
      * @template TResult
      *
      * @param  Closure(int): TResult  $callback
      * @return TResult
      *
-     * @throws StoreFailure when the lock is not acquired within the busy timeout
+     * @throws StoreFailure
      */
     protected function locked(Closure $callback): mixed
     {
@@ -348,7 +348,7 @@ class Writer
     }
 
     /**
-     * Open the store with the given busy timeout, creating its directory, file and schema when they are missing.
+     * Open the store, creating its directory, file and schema when they are missing.
      */
     protected function open(int $busyTimeoutMilliseconds): SQLite3
     {
@@ -422,7 +422,6 @@ class Writer
         $connection->exec('PRAGMA trusted_schema = 0');
         $connection->exec('PRAGMA journal_size_limit = '.static::JOURNAL_SIZE_LIMIT_BYTES);
 
-        // A burst between two passes lands, up to 125% of the backstop; a flood beyond that fails as `full`.
         $connection->exec('PRAGMA max_page_count = '.(int) floor(static::SIZE_BACKSTOP_BYTES * static::BURST_HEADROOM / static::PAGE_SIZE));
     }
 
@@ -461,7 +460,7 @@ class Writer
     }
 
     /**
-     * Drop everything in the store and build the current schema and its stamps in its place; a store that replaces another says when and why, so answers can state that earlier data is gone.
+     * Drop everything in the store and build the current schema and its stamps in its place.
      */
     protected function build(SQLite3 $connection, ?string $why): void
     {
@@ -485,7 +484,7 @@ class Writer
     }
 
     /**
-     * Rebuild the store in place as a fresh one, without unlinking its file; ids restart and every record, user and drift row goes.
+     * Rebuild the store in place as a fresh one, without unlinking its file.
      */
     public function rebuild(): void
     {
@@ -493,7 +492,7 @@ class Writer
     }
 
     /**
-     * Rebuild a store of another schema version in place, one a later release wrote too, as the developer asked.
+     * Rebuild a store of another schema version in place, one a later release wrote too.
      */
     public function replaceOtherSchema(): void
     {
@@ -515,7 +514,6 @@ class Writer
      */
     protected function dropEverything(SQLite3 $connection): void
     {
-        // Views go first, as they read the tables.
         foreach (['view', 'table'] as $type) {
             /** @var SQLite3Stmt $statement */
             $statement = $connection->prepare(<<<'SQL'
@@ -537,7 +535,7 @@ class Writer
     }
 
     /**
-     * Move the damaged store, its write-ahead log and its shared memory aside, replacing the copy of an earlier recovery, and record it.
+     * Move the damaged store, its write-ahead log and its shared memory aside, and record it.
      */
     protected function moveAside(SQLite3Exception $exception): void
     {
@@ -557,12 +555,11 @@ class Writer
 
         $this->failures->recovered($exception);
 
-        // The new store says why it starts where it does.
         $this->rebuildReason = 'corrupt';
     }
 
     /**
-     * Get the failure for a file that is not a Firewatch store, which is never written to.
+     * Get the failure for a file that is not a Firewatch store.
      */
     protected function foreign(): StoreFailure
     {

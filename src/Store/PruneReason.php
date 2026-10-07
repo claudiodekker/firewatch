@@ -12,7 +12,7 @@ enum PruneReason: string
     case SIZE = 'size';
 
     /**
-     * Determine if the rule trims records of unknown start, which have no age but count towards the cap and the size.
+     * Determine if the rule trims records of unknown start.
      */
     public function countsUnstarted(): bool
     {

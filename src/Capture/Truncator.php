@@ -39,11 +39,11 @@ class Truncator
     }
 
     /**
-     * Serialize a record's data, cutting its strings to the field limit and, over the data limit, its largest strings further and then the code snippets of its trace.
+     * Serialize a record's data, cut to the field limit and the data limit.
      *
      * @param  array<string, mixed>  $data
-     * @param  list<string>  $exempt  the fields Nightwatch sent as JSON strings, which are kept whole
-     * @param  string|null  $trace  the field holding the exception trace, if the record has one
+     * @param  list<string>  $exempt
+     * @param  string|null  $trace  the field holding the exception trace
      */
     public function serialize(array $data, array $exempt, ?string $trace = null): string
     {

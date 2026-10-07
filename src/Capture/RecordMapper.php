@@ -49,10 +49,10 @@ class RecordMapper
     }
 
     /**
-     * Map a wire record to a stored record or a user directory entry, counting how its shape differs from the contract table.
+     * Map a wire record to a stored record or a user directory entry.
      *
      * @param  array<mixed>  $record
-     * @param  list<mixed>|null  $bindings  the bindings paired to a query record
+     * @param  list<mixed>|null  $bindings
      */
     public function map(array $record, Drift $drift, ?array $bindings = null): MappedRecord
     {
@@ -123,7 +123,7 @@ class RecordMapper
     }
 
     /**
-     * Get the user directory entry of a user record, or null for any other record or a user without a usable id.
+     * Get the user directory entry of a user record.
      *
      * @param  array<mixed>  $wire
      * @return array{id: string, name: mixed, username: mixed, seen_at: int|float|null}|null
@@ -243,7 +243,7 @@ class RecordMapper
      *
      * @param  array<mixed>  $record
      *
-     * @throws JsonException when the record can't be encoded
+     * @throws JsonException
      */
     protected function normalise(array $record): mixed
     {
@@ -269,7 +269,7 @@ class RecordMapper
     }
 
     /**
-     * Split the wire fields into the common columns, cut to the field limit, and the fields kept in data, with the names of those Nightwatch sent as JSON strings.
+     * Split the wire fields into the common columns, the fields kept in data, and the names of those Nightwatch sent as JSON strings.
      *
      * @param  array<mixed>  $wire
      * @return array{array<string, mixed>, array<string, mixed>, list<string>}
@@ -318,7 +318,7 @@ class RecordMapper
     }
 
     /**
-     * Get a list or an object as its JSON, so a column can hold it, and any other value as it is.
+     * Get a list or an object as its JSON, so a column can hold it.
      */
     protected function flatten(mixed $value): mixed
     {
@@ -326,7 +326,7 @@ class RecordMapper
     }
 
     /**
-     * Decode a JSON-string field, keeping the string as sent when it is not JSON.
+     * Decode a JSON-string field.
      */
     protected function decode(?RecordType $type, string $field, mixed $value): mixed
     {
@@ -347,7 +347,7 @@ class RecordMapper
     }
 
     /**
-     * Get the instant a record started at, moving the types Nightwatch stamps at their end back by their duration, or null for a timestamp that is not a number.
+     * Get the instant a record started at, moving the types Nightwatch stamps at their end back by their duration.
      */
     protected function startedAt(?RecordType $type, mixed $timestamp, mixed $durationMicroseconds): int|float|null
     {
@@ -361,7 +361,7 @@ class RecordMapper
     }
 
     /**
-     * Get a wire timestamp as an instant, or null for one that is not a number.
+     * Get a wire timestamp as an instant.
      */
     protected function instant(mixed $timestamp): int|float|null
     {
@@ -384,7 +384,7 @@ class RecordMapper
     }
 
     /**
-     * Get the execution of a fatal error, which Nightwatch sends without one: its trace, unless it ended a job.
+     * Get the execution of a fatal error, which Nightwatch sends without one.
      *
      * @param  array<string, mixed>  $columns
      */

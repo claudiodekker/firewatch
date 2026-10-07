@@ -57,7 +57,7 @@ class QueryBindings
     }
 
     /**
-     * Get the bindings of the query a wire record was written for, or null unless the record's SQL and connection are the innermost query's.
+     * Get the bindings of the query a wire record was written for.
      *
      * @param  array<mixed>  $record
      * @return list<mixed>|null
@@ -80,7 +80,7 @@ class QueryBindings
     }
 
     /**
-     * Get the values a query sent to its database, capped, or null when they can't be read.
+     * Get the values a query sent to its database, capped.
      *
      * @return list<mixed>|null
      */

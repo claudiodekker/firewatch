@@ -28,7 +28,7 @@ class DefaultLogChannel
     }
 
     /**
-     * Make the default channel a stack of Nightwatch's channel and the original default, unless it already logs to Nightwatch's or the name is taken.
+     * Make the default channel a stack of Nightwatch's channel and the original default.
      */
     public function wrap(): void
     {
@@ -54,7 +54,7 @@ class DefaultLogChannel
     }
 
     /**
-     * Determine if the application defines a channel of the stack's name itself, one that is not an earlier wrap.
+     * Determine if the application defines a channel of the stack's name itself.
      */
     protected function isTakenByApplication(): bool
     {
@@ -62,7 +62,7 @@ class DefaultLogChannel
     }
 
     /**
-     * Get the channels a stack's configuration lists, as a list or a comma-separated string.
+     * Get the channels a stack's configuration lists.
      *
      * @param  array<mixed>  $config
      * @return list<mixed>
@@ -79,9 +79,9 @@ class DefaultLogChannel
     }
 
     /**
-     * Determine if a channel is Nightwatch's or a stack that includes it, following nested stacks.
+     * Determine if a channel is Nightwatch's or a stack that includes it.
      *
-     * @param  list<string>  $seen  the stacks already followed, so a stack that refers back to itself ends
+     * @param  list<string>  $seen
      */
     protected function logsToNightwatch(string $channel, array $seen = []): bool
     {

@@ -15,7 +15,7 @@ class Drift
     protected array $occurrences = [];
 
     /**
-     * Count one occurrence of a drift, with the type and version as sent and an empty string for their absence.
+     * Count one occurrence of a drift.
      */
     public function record(DriftKind $kind, mixed $type = '', mixed $v = '', string $detail = ''): void
     {
@@ -34,7 +34,7 @@ class Drift
     }
 
     /**
-     * Get the counted drift, one entry per kind, type, version and detail, in the order first counted.
+     * Get the counted drift.
      *
      * @return list<array{kind: string, type: string, v: string, detail: string, count: int}>
      */
@@ -44,7 +44,7 @@ class Drift
     }
 
     /**
-     * Get a wire value as the text a drift is keyed by, or an empty string for one that is absent or not a scalar.
+     * Get a wire value as the text a drift is keyed by.
      */
     protected function asSent(mixed $value): string
     {

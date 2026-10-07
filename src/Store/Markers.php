@@ -89,7 +89,7 @@ class Markers
     }
 
     /**
-     * Read the markers of the store, in the snapshot of the connection.
+     * Read the markers of the store.
      */
     public static function read(SQLite3 $connection): self
     {
@@ -122,7 +122,7 @@ class Markers
     }
 
     /**
-     * Get the instant a type was last cleared, or null when it never was alone.
+     * Get the instant a type was last cleared on its own.
      */
     public function clearedAtOf(RecordType $type): ?float
     {
@@ -147,7 +147,7 @@ class Markers
     }
 
     /**
-     * Record that history was removed through an instant, with the reason of the pass that advanced it, unless it was already removed through a later one.
+     * Record that history was removed through an instant, with the reason of the pass that advanced it.
      */
     public static function advancePrunedThrough(SQLite3 $connection, float $through, PruneReason $reason): void
     {
@@ -159,7 +159,7 @@ class Markers
     }
 
     /**
-     * Record that every type was cleared at an instant, unless it was already cleared later.
+     * Record that every type was cleared at an instant.
      */
     public static function markCleared(SQLite3 $connection, float $at): void
     {
@@ -167,7 +167,7 @@ class Markers
     }
 
     /**
-     * Record that one type was cleared at an instant, unless that type was already cleared later.
+     * Record that one type was cleared at an instant.
      */
     public static function markTypeCleared(SQLite3 $connection, RecordType $type, float $at): void
     {
@@ -180,7 +180,7 @@ class Markers
     }
 
     /**
-     * Claim the prune pass for the minute that begins at the instant, and determine if this process now holds it.
+     * Claim the prune pass for the interval that begins at the instant, and determine if this process now holds it.
      */
     public static function claimPrune(SQLite3 $connection, float $now, int $intervalSeconds): bool
     {
@@ -197,7 +197,7 @@ class Markers
     }
 
     /**
-     * Record how Nightwatch is installed, touching a fact only when it changed.
+     * Record how Nightwatch is installed.
      */
     public static function recordNightwatch(SQLite3 $connection, string $version, bool $verified): void
     {
@@ -218,7 +218,7 @@ class Markers
     }
 
     /**
-     * Read the stored text of a marker, or null when there is none.
+     * Read the stored text of a marker.
      */
     protected static function get(SQLite3 $connection, string $key): ?string
     {
@@ -282,7 +282,7 @@ class Markers
     }
 
     /**
-     * Read a stored marker as an instant, or null for one that is absent or not a number.
+     * Read a stored marker as an instant.
      */
     protected static function instant(?string $value): ?float
     {

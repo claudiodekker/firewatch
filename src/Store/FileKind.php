@@ -28,7 +28,7 @@ enum FileKind
     case FIREWATCH;
 
     /**
-     * Classify a file by the raw bytes of its header, which needs no working SQLite.
+     * Classify a file by the raw bytes of its header.
      */
     public static function of(string $path): self
     {
