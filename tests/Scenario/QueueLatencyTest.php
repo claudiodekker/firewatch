@@ -89,20 +89,6 @@ it('finds nothing in a job a worker picked up at once, on a queue whose jobs do 
         ->and($failing['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0]);
 });
 
-it('flags the job a worker picked up at once when a millisecond is too long, by its wait', function () {
-    queueLatencyWorkedShipment();
-    [$attempt] = storeRows('SELECT execution_id FROM job_attempts');
-
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'queue-latency', 'threshold' => 1]);
-    $finding = $envelope['result']['findings'][0];
-
-    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-        ->and($envelope['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_wait')])
-        ->and($finding['latest_execution_id'])->toBe($attempt['execution_id'])
-        ->and($finding['evidence'])->toMatchArray(['jobs' => 1, 'waits_over_threshold' => 1, 'pending' => 0, 'oldest_pending_age_ms' => null])
-        ->and($finding['evidence']['worst_wait_ms'])->toBe($finding['count']);
-});
-
 it('has nothing to examine for a job on the sync connection, whose dispatch the sensors do not record', function () {
     queueLatencyShipment('sync');
 

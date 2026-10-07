@@ -94,6 +94,8 @@ function qltEvidence(array $arguments = []): array
 }
 
 /**
+ * Get the answer of the shape to the arguments.
+ *
  * @param  array<string, mixed>  $arguments
  * @return array<string, mixed>
  */
@@ -103,6 +105,8 @@ function qltAnswer(array $arguments = []): array
 }
 
 /**
+ * Get the text of the refusal of the arguments.
+ *
  * @param  array<string, mixed>  $arguments
  */
 function qltRefusal(array $arguments): string
@@ -208,7 +212,7 @@ describe('the verdict', function () {
 
         expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
             ->and($envelope['result']['saw'])->toBe(['inline_excluded' => 2, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0]);
-    })->with(['sync', 'deferred', 'background', 'null']);
+    })->with(['sync' => 'sync', 'deferred' => 'deferred', 'background' => 'background', 'null' => 'null']);
 
     it('wants records, not its prerequisite, when only inline dispatches sit next to attempts without one', function () {
         ingest([qltDispatch('a', fields: ['connection' => 'sync']), qltAttempt('b', 100)]);
@@ -232,6 +236,7 @@ describe('the verdict', function () {
             ...qltWaited('before', 9000, fields: ['timestamp' => QLT_AT - 1]),
             ...qltWaited('at-since', 10),
             ...qltWaited('at-until', 9000, fields: ['timestamp' => QLT_AT + 10]),
+            ...qltWaited('ended-inside', 9000, fields: ['timestamp' => QLT_AT + 1, 'duration' => 2_000_000]),
         ]);
 
         $envelope = qltAnswer(['since' => (string) QLT_AT, 'until' => (string) (QLT_AT + 10)]);
@@ -680,9 +685,19 @@ describe('one group', function () {
         expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => $reason, 'examined' => 0])
             ->and($envelope['empty'])->toBeNull();
     })->with([
-        'attempts without a dispatch' => [fn () => qltAttempt('lost', 10), 'prerequisite_missing'],
+        'attempts without a dispatch' => [fn () => qltAttempt('lost', 10), 'no_records'],
         'inline dispatches' => [fn () => qltDispatch('inline', fields: ['connection' => 'sync']), 'no_records'],
     ]);
+
+    it('misses its prerequisite for a group only when no group has a dispatch in the window', function () {
+        ingest([qltAttempt('lost', 10), qltAttempt('other', 10, name: 'SendInvoice')]);
+
+        $envelope = qltAnswer(['group' => md5('ShipOrder')]);
+
+        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'prerequisite_missing', 'examined' => 0])
+            ->and($envelope['result']['saw']['attempts_without_dispatch'])->toBe(1)
+            ->and($envelope['empty'])->toBeNull();
+    });
 });
 
 describe('the blind spots', function () {

@@ -55,16 +55,18 @@ class QueueLatency implements Detector
         $groups = $this->groups($connection, $window, [
             ...$bindings,
             'now' => Instant::now(),
+            'per_second' => Microseconds::PER_SECOND,
             'microseconds' => $milliseconds * Microseconds::PER_MILLISECOND,
         ]);
 
         $examined = array_sum(array_column($groups, 'jobs'));
         $inline = array_sum(array_column($groups, 'inline'));
         $pending = array_sum(array_column($groups, 'pending'));
+        $orphans = $this->attemptsWithoutDispatch($connection, $window, $bindings);
 
         $saw = [
             'inline_excluded' => $inline,
-            'attempts_without_dispatch' => $this->attemptsWithoutDispatch($connection, $window, $bindings),
+            'attempts_without_dispatch' => $orphans,
             'without_first_attempt' => array_sum(array_column($groups, 'without_first_attempt')),
         ];
 
@@ -73,7 +75,7 @@ class QueueLatency implements Detector
             ...($pending > 0 ? [__('firewatch::messages.detect_caveat_pending')] : []),
         ];
 
-        if ($examined + $inline === 0 && $saw['attempts_without_dispatch'] > 0) {
+        if ($examined + $inline === 0 && $orphans > 0 && ! $this->hasDispatches($connection, $window)) {
             return Judgement::notEvaluated($this->name(), $described, Reason::PREREQUISITE_MISSING, saw: $saw, caveats: $caveats);
         }
 
@@ -132,7 +134,6 @@ class QueueLatency implements Detector
     protected function dispatches(Window $window): string
     {
         $inline = Lineage::inlineCondition('queued.connection');
-        $perSecond = (int) Microseconds::PER_SECOND;
 
         return "WITH queued AS (
             SELECT id, execution_id, started_at, coalesce(ended_at, started_at) AS queued_at, group_hash, user_id, name, connection, queue, NULLIF(job_id, '') AS job
@@ -153,8 +154,8 @@ class QueueLatency implements Detector
         ), dispatches AS (
             SELECT id, started_at, group_hash, user_id, name, connection, queue, state, NULLIF(execution_id, '') AS dispatch_execution_id,
                 CASE WHEN state = 'waited' THEN attempt_execution_id END AS attempt_execution_id,
-                CASE WHEN state = 'waited' THEN max(0, CAST(round((first_started_at - queued_at) * {$perSecond}) AS INTEGER)) END AS wait,
-                CASE WHEN state = 'pending' THEN max(0, CAST(round((:now - queued_at) * {$perSecond}) AS INTEGER)) END AS age
+                CASE WHEN state = 'waited' THEN max(0, CAST(round((first_started_at - queued_at) * :per_second) AS INTEGER)) END AS wait,
+                CASE WHEN state = 'pending' THEN max(0, CAST(round((:now - queued_at) * :per_second) AS INTEGER)) END AS age
             FROM placed
         )";
     }
@@ -171,6 +172,16 @@ class QueueLatency implements Detector
             AND NOT EXISTS (SELECT 1 FROM queued_jobs WHERE queued_jobs.job_id = NULLIF(job_attempts.job_id, ''))", $bindings, $window);
 
         return $row['attempts'];
+    }
+
+    /**
+     * Determine if the window holds a dispatch of any group, on any connection, which shows that the dispatcher is instrumented.
+     */
+    protected function hasDispatches(SQLite3 $connection, Window $window): bool
+    {
+        [$row] = Stored::rows($connection, "SELECT EXISTS (SELECT 1 FROM queued_jobs WHERE {$window->condition()}) AS dispatched", [], $window);
+
+        return (bool) $row['dispatched'];
     }
 
     /**
