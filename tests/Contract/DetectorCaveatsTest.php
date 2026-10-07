@@ -11,4 +11,5 @@ test('the detector caveats have their pinned wording', function (string $key, in
     'pending' => ['detect_caveat_pending', 1, 'No attempt is recorded: no worker has run, or one is running; the store cannot tell.'],
     'skipped' => ['detect_caveat_skipped', 1, 'Skipped runs are often intended.'],
     'not fired' => ['detect_caveat_not_fired', 1, 'A task that did not fire leaves no record.'],
+    'log capture' => ['detect_caveat_log_capture', 1, 'Log records exist only while log capture is on.'],
 ]);
