@@ -77,6 +77,11 @@ enum Placeholder: string
      */
     public function accepts(mixed $value): bool
     {
+        // Nightwatch sends a fatal error with no trace and no execution id, and a fixture keeps that.
+        if ($value === '' && in_array($this, [self::UUID, self::TRACE], true)) {
+            return false;
+        }
+
         $kind = WireFixture::kindOf($value);
 
         // A JSON number may be written without a fraction.
