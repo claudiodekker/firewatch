@@ -4,11 +4,9 @@ The reviewer reads this file. Apply every rule to each changed hunk in the diff.
 
 This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`; these rules govern how it is implemented.
 
-The general rules for Laravel apps and packages live in `references/laravel-standards.md` of the `claudiodekker-skills:claudio-mode` skill, from the `claudiodekker-skills@claudiodekker` plugin. Read that file and apply it too. Without the Skill tool, read it at `~/.claude/plugins/marketplaces/claudiodekker/skills/claudio-mode/references/laravel-standards.md`. If that doesn't work, say so in the review rather than reviewing against this file alone. The rules below are Firewatch's own and win where the two differ.
-
 ## 1. Sibling changes
 
-- The sibling-set rule (rulebook §1) covers Firewatch's MCP tools, detectors, doctor checks, commands, listeners of the same kind, and record types with their view and contract-table entry.
+- A change to one member of a sibling set covers the other members in the same diff. Firewatch's sibling sets are its MCP tools, detectors, doctor checks, commands, listeners of the same kind, and record types with their view and contract-table entry.
 - A closed set of the design (detector shapes, blind-spot ids, error codes, doctor check ids, drift kinds, empty kinds, store states, config keys) changes only by changing its contract, and the test that pins it changes in the same diff.
 
 ## 2. Actions
@@ -39,7 +37,7 @@ The general rules for Laravel apps and packages live in `references/laravel-stan
 
 ## 5. Null-safety
 
-- The null guard (rulebook §8) covers optional wire payload keys, nullable store columns and Nightwatch event properties. Check that a key exists before indexing a wire record or tool argument.
+- Every nullable value is guarded before it is dereferenced. In Firewatch that covers optional wire payload keys, nullable store columns and Nightwatch event properties. Check that a key exists before indexing a wire record or tool argument.
 - A new column doesn't duplicate one the store already keeps.
 - A stored value keeps the wire's word: a wire `0` or `''` is stored as sent, and NULL only where the wire omits the field. NULL means unknown, never zero and never clean.
 
