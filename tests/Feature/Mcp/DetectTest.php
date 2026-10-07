@@ -287,8 +287,8 @@ describe('the shape', function () {
 
         expect($refusal)->toStartWith('error: invalid_argument')
             ->toContain('argument: shape')
-            ->toContain('n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, memory');
-    })->with(['nonsense', 'error-logs', '']);
+            ->toContain('n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, memory');
+    })->with(['nonsense', 'failing-http', '']);
 
     it('runs every shape that ships when none is named, one result each', function () {
         ingest([dtcRequest('/orders', 500)]);
@@ -296,11 +296,11 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect(array_keys($envelope['result']))->toBe(['detectors'])
-            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'memory'])
+            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'memory'])
             ->and($envelope['result']['detectors'][2])->toMatchArray(['verdict' => 'findings', 'total' => 1])
             ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
                 __('firewatch::messages.detect_part_findings', ['shapes' => 'failing-routes (1)']),
-                __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks']),
+                __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs']),
                 __('firewatch::messages.detect_part_clean', ['shapes' => 'database-bound, exception-clusters, memory']),
             ])]));
     });
@@ -312,11 +312,12 @@ describe('the shape', function () {
             syntheticRecord(RecordType::QUEUED_JOB)->with(['job_id' => 'shipment', 'timestamp' => DETECT_AT]),
             syntheticRecord(RecordType::JOB_ATTEMPT)->with(['job_id' => 'shipment', 'timestamp' => DETECT_AT]),
             syntheticRecord(RecordType::SCHEDULED_TASK)->with(['status' => 'processed']),
+            syntheticRecord(RecordType::LOG),
         ]);
 
         $envelope = dtcAnswer([]);
 
-        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 8, ['count' => 8]));
+        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 9, ['count' => 9]));
     });
 
     it('names the shapes that were not evaluated, and why', function () {
@@ -325,7 +326,7 @@ describe('the shape', function () {
         $envelope = dtcAnswer([]);
 
         expect($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
-            __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks']),
+            __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, error-logs']),
             __('firewatch::messages.detect_part_clean', ['shapes' => 'exception-clusters, memory']),
         ])]))->not->toContain('firewatch::');
     });
@@ -663,7 +664,7 @@ test('the tool is listed with its description, arguments and annotations', funct
 
     expect($tool['description'])->toBe(__('firewatch::messages.tools.detect'))
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['shape', 'threshold', 'group', 'since', 'until', 'limit', 'format'])
-        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'memory'])
+        ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'memory'])
         ->and($tool['annotations'])->toMatchArray(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
 });
 
