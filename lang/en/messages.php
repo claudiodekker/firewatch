@@ -306,6 +306,7 @@ return [
         'failing-jobs' => 'job attempts',
         'queue-latency' => 'dispatches',
         'failing-tasks' => 'scheduled tasks',
+        'exception-clusters' => 'executions',
         'memory' => 'executions',
     ],
     'detect_caveat_reads' => 'Reads are recognised by the first keyword; a WITH statement that writes counts as a read.',

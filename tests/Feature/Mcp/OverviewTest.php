@@ -420,6 +420,7 @@ describe('the problem shapes', function () {
                 'worst' => ['name' => '/orders', 'group' => md5('/orders')],
             ],
             ['detector' => 'database-bound', 'verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'worst' => null],
+            ['detector' => 'exception-clusters', 'verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'worst' => null],
             ['detector' => 'memory', 'verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'worst' => null],
             ['detector' => 'n-plus-one', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
             ['detector' => 'failing-jobs', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
@@ -441,8 +442,8 @@ describe('the problem shapes', function () {
 
         $envelope = Envelope::assert(Overview::class);
 
-        expect(array_column($envelope['result']['detectors'], 'reason'))->toBe([null, 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records'])
-            ->and($envelope['result']['detectors'][3])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
+        expect(array_column($envelope['result']['detectors'], 'reason'))->toBe([null, null, 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records'])
+            ->and($envelope['result']['detectors'][4])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
             ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks']));
     });
 
