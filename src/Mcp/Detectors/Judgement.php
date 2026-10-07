@@ -54,11 +54,20 @@ class Judgement
      * Get the judgement of a detector that did not judge: it examined nothing and found nothing, for the reason.
      *
      * @param  array<string, mixed>|null  $threshold
+     * @param  array<string, int>  $saw
      * @param  list<string>  $caveats
      */
-    public static function notEvaluated(DetectorName $detector, ?array $threshold, Reason $reason, array $caveats = []): self
+    public static function notEvaluated(DetectorName $detector, ?array $threshold, Reason $reason, array $saw = [], array $caveats = []): self
     {
-        return new self($detector, $threshold, Verdict::NOT_EVALUATED, $reason, examined: 0, total: 0, caveats: $caveats);
+        return new self($detector, $threshold, Verdict::NOT_EVALUATED, $reason, examined: 0, total: 0, saw: $saw, caveats: $caveats);
+    }
+
+    /**
+     * Determine if the detector found no record of its own: it examined none, set none aside, and history did not remove them.
+     */
+    public function matchedNothing(): bool
+    {
+        return $this->examined === 0 && array_sum($this->saw) === 0 && $this->reason !== Reason::OUTSIDE_COVERAGE;
     }
 
     /**

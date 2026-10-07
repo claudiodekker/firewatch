@@ -77,7 +77,7 @@ class NPlusOne implements Detector
         if ($population['examined'] === 0) {
             $reason = $population['eligible'] === 0 && $population['excluded'] > 0 ? Reason::OUTSIDE_COVERAGE : Reason::NO_RECORDS;
 
-            return Judgement::notEvaluated($this->name(), $described, $reason, $caveats);
+            return Judgement::notEvaluated($this->name(), $described, $reason, caveats: $caveats);
         }
 
         $ranked = $this->ranked($executions);
