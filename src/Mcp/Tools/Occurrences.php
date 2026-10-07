@@ -95,7 +95,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Get the arguments of the tool: the selectors, the order, the filters, the window, the deploy, the limit and the format.
+     * Get the arguments of the tool.
      *
      * @return array<string, mixed>
      */
@@ -211,7 +211,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the store inside its snapshot: the counts, the facts, and the rows when the window and the group hold something to list.
+     * Read the store inside its snapshot.
      *
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
@@ -289,7 +289,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Put the rows, newest or worst first, in the envelope: cut at the limit, with the cursor for the rest.
+     * Put the rows, newest or worst first, in the envelope.
      *
      * @param  list<array<string, mixed>>  $blindSpots
      * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read
@@ -336,7 +336,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Get the notes of the answer: that the baseline is withheld, and that a user is matched as recorded.
+     * Get the notes of the answer.
      *
      * @param  array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null  $baseline
      * @return list<string>
@@ -361,7 +361,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Get the `truncated` entries of the answer: the cut list and the call that continues it, or none for a complete list.
+     * Get the `truncated` entries of the answer.
      *
      * @param  list<array{value: int|float, id: int}>  $keys
      * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
@@ -383,7 +383,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Get the call that shows how the group of the first row compares with its peers, or none for a list of one group or of a record without one.
+     * Get the call that shows how the group of the first row compares with its peers.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
@@ -401,7 +401,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Get the window of the call: the one a cursor was issued for, or the one its `since` and `until` give.
+     * Get the window of the call.
      *
      * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
      */
@@ -491,7 +491,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the group, 32 lowercase hexadecimal characters.
+     * Read the group.
      */
     protected function group(Request $request): ?string
     {
@@ -511,7 +511,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the type of the records, one of the twelve.
+     * Read the type of the records.
      */
     protected function type(Request $request): ?RecordType
     {
@@ -534,7 +534,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the identifiers that select records, each text of at least one character.
+     * Read the identifiers that select records.
      *
      * @return array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}
      */
@@ -549,7 +549,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read an identifier, which is text of at least one character.
+     * Read an identifier.
      */
     protected function id(Request $request, string $argument): ?string
     {
@@ -588,7 +588,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the most rows to list, from 1 to 100.
+     * Read the most rows to list.
      */
     protected function limit(Request $request): int
     {
@@ -624,7 +624,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the filters, each checked for its own value.
+     * Read the filters.
      *
      * @return array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}
      */
@@ -661,7 +661,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read a status as the lowest and the highest code it keeps: `500`, `5xx` or `400-499`.
+     * Read a status as the lowest and the highest code it keeps.
      *
      * @return array{int, int}
      */
@@ -762,7 +762,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the milliseconds a record must be slower than, from 0.
+     * Read the milliseconds a record must be slower than.
      */
     protected function slowerThan(Request $request): int|float|null
     {
@@ -782,7 +782,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the text a record must contain, from 1 to 200 characters.
+     * Read the text a record must contain.
      */
     protected function matching(Request $request): ?string
     {
@@ -821,7 +821,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Refuse a filter, or an order, that does not fit the type, naming what it fits.
+     * Refuse a filter, or an order, that does not fit the type.
      *
      * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
      */

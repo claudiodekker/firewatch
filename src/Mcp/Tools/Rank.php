@@ -94,7 +94,7 @@ class Rank extends Tool
     }
 
     /**
-     * Get the arguments of the tool: what to rank, by what, the window, the deploy, the limit and the format.
+     * Get the arguments of the tool.
      *
      * @return array<string, mixed>
      */
@@ -225,7 +225,7 @@ class Rank extends Tool
     }
 
     /**
-     * Get the window of the call: the one a cursor was issued for, or the one its `since` and `until` give.
+     * Get the window of the call.
      *
      * @param  Cursor<array<string, mixed>>|null  $cursor
      */
@@ -239,7 +239,7 @@ class Rank extends Tool
     }
 
     /**
-     * Put the groups, worst first, in the envelope: the page after the cursor, cut at the limit.
+     * Put the groups, worst first, in the envelope.
      *
      * @param  list<array<string, mixed>>  $blindSpots
      * @param  list<string>  $filters
@@ -302,7 +302,7 @@ class Rank extends Tool
     }
 
     /**
-     * Put the deploys one group was recorded under in the envelope, in the order they were first seen.
+     * Put the deploys one group was recorded under in the envelope.
      *
      * @param  list<array<string, mixed>>  $blindSpots
      * @param  list<string>  $filters
@@ -353,7 +353,7 @@ class Rank extends Tool
     }
 
     /**
-     * Get the call that breaks a group down by deploy, in the window of this one.
+     * Get the call that breaks a group down by deploy.
      *
      * @return array{tool: string, arguments: array<string, mixed>, why: string}
      */
@@ -406,7 +406,7 @@ class Rank extends Tool
     }
 
     /**
-     * Read the types that hold a group in the store, in the order of the types.
+     * Read the types that hold a group in the store.
      *
      * @return list<RecordType>
      */
@@ -438,7 +438,7 @@ class Rank extends Tool
     }
 
     /**
-     * Get the notes of the answer: that the order fell back to the maximum, and that records without a duration are left out of the durations.
+     * Get the notes of the answer.
      *
      * @param  array{rows: list<array<string, mixed>>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
      * @return list<string>
@@ -462,7 +462,7 @@ class Rank extends Tool
     }
 
     /**
-     * Read the type to rank, which must be one that has groups.
+     * Read the type to rank.
      */
     protected function type(Request $request, bool $required): ?RecordType
     {
@@ -486,7 +486,7 @@ class Rank extends Tool
     }
 
     /**
-     * Read the measure to rank by, which must fit the type; the default is the 95th percentile of the duration, or how often for an exception.
+     * Read the measure to rank by.
      */
     protected function measure(Request $request, RecordType $type, ?string $group): Measure
     {
@@ -514,7 +514,7 @@ class Rank extends Tool
     }
 
     /**
-     * Read the most rows to list, from 1 to 100.
+     * Read the most rows to list.
      */
     protected function limit(Request $request, ?RecordType $type): int
     {
@@ -550,7 +550,7 @@ class Rank extends Tool
     }
 
     /**
-     * Read the group to break down, which is a 32-character lowercase hex group hash.
+     * Read the group to break down.
      */
     protected function group(Request $request): ?string
     {
@@ -570,7 +570,7 @@ class Rank extends Tool
     }
 
     /**
-     * Read the text a group's label must contain, from 1 to 200 characters.
+     * Read the text a group's label must contain.
      */
     protected function matching(Request $request): ?string
     {
@@ -590,7 +590,7 @@ class Rank extends Tool
     }
 
     /**
-     * Refuse what a breakdown of one group has no use for: a label to match, a deploy to restrict to, and a cursor, as it lists its deploys in one answer.
+     * Refuse what a breakdown of one group has no use for.
      */
     protected function refuseWithGroup(Request $request): void
     {

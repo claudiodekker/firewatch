@@ -87,7 +87,7 @@ class Detect extends Tool
     }
 
     /**
-     * Get the arguments of the tool: the shape and what restricts it, the window, the limit and the format.
+     * Get the arguments of the tool.
      *
      * @return array<string, mixed>
      */
@@ -237,7 +237,7 @@ class Detect extends Tool
     }
 
     /**
-     * Get the summary of every shape's judgement: the shapes with findings first, then those not evaluated, and that there are no findings only when every shape is clean.
+     * Get the summary of every shape's judgement.
      *
      * @param  list<Judgement>  $judgements
      */
@@ -283,7 +283,7 @@ class Detect extends Tool
     }
 
     /**
-     * Get the calls that follow the worst finding of a shape to its worst or latest execution, its records and its group, and the next findings to their latest executions.
+     * Get the calls that follow the findings of a shape.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
@@ -366,7 +366,7 @@ class Detect extends Tool
     }
 
     /**
-     * Read the threshold in force for a shape, or null for its default; it belongs to one shape that has one.
+     * Read the threshold in force for a shape, or null for its default.
      */
     protected function threshold(Request $request, ?Detector $shape): int|float|null
     {
@@ -392,7 +392,7 @@ class Detect extends Tool
     }
 
     /**
-     * Read the group to restrict the shape to, which is a 32-character lowercase hex group hash and belongs to one shape.
+     * Read the group to restrict the shape to.
      */
     protected function group(Request $request, ?Detector $shape): ?string
     {
@@ -416,7 +416,7 @@ class Detect extends Tool
     }
 
     /**
-     * Read the most findings to list, from 1 to 100.
+     * Read the most findings to list.
      */
     protected function limit(Request $request): int
     {
