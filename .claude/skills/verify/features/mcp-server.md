@@ -24,7 +24,7 @@ Preconditions:
 - **One call.** `app.sh mcp <run> overview` prints an answer that starts with `## overview`.
 - **Listing.** `app.sh artisan <run> firewatch:server --list` prints `Firewatch MCP server <version>: 6 tools` and one line per tool. Exit code `0`.
 - **Listing as JSON.** `app.sh artisan <run> firewatch:server --list --json | jq '.tools | length'` prints `6`. Each tool carries its `inputSchema`.
-- **Refusal.** `app.sh mcp <run> detect '{"shape":"bogus"}'` prints `error: invalid_argument` with `accepted: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, memory`, and exits `1`.
+- **Refusal.** `app.sh mcp <run> detect '{"shape":"bogus"}'` prints `error: invalid_argument` with `accepted: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, memory`, and exits `1`.
 - **Clean stdout.** Every line of `.verify/evidence/<run>/mcp/<n>/<tool>.reply.jsonl` parses as JSON (`jq -e . <file>`), and the provider-order notice is in the `.stderr` file beside it.
 
 ## Gotchas
