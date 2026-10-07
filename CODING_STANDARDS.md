@@ -6,7 +6,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 1. Sibling changes
 
-- The sibling-set rule (rulebook §1) covers Firewatch's MCP tools, detectors, doctor checks, commands, listeners of the same kind, and record types with their view and contract-table entry.
+- A change to one member of a sibling set covers the other members in the same diff. Firewatch's sibling sets are its MCP tools, detectors, doctor checks, commands, listeners of the same kind, and record types with their view and contract-table entry.
 - A closed set of the design (detector shapes, blind-spot ids, error codes, doctor check ids, drift kinds, empty kinds, store states, config keys) changes only by changing its contract, and the test that pins it changes in the same diff.
 
 ## 2. Actions
@@ -37,7 +37,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 5. Null-safety
 
-- The null guard (rulebook §8) covers optional wire payload keys, nullable store columns and Nightwatch event properties. Check that a key exists before indexing a wire record or tool argument.
+- Every nullable value is guarded before it is dereferenced. In Firewatch that covers optional wire payload keys, nullable store columns and Nightwatch event properties. Check that a key exists before indexing a wire record or tool argument.
 - A new column doesn't duplicate one the store already keeps.
 - A stored value keeps the wire's word: a wire `0` or `''` is stored as sent, and NULL only where the wire omits the field. NULL means unknown, never zero and never clean.
 
