@@ -21,8 +21,6 @@ class Deadline
 
     /**
      * Create a new deadline instance.
-     *
-     * @param  float  $startedAt  the store clock when the call began
      */
     public function __construct(protected float $startedAt)
     {
@@ -30,7 +28,7 @@ class Deadline
     }
 
     /**
-     * Determine if the bound has passed on the store clock, which a statement in flight is never interrupted for.
+     * Determine if the bound has passed on the store clock.
      */
     public function passed(): bool
     {

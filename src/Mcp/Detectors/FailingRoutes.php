@@ -99,8 +99,8 @@ class FailingRoutes implements Detector
      * Get the finding of a group that failed.
      *
      * @param  array<string, mixed>  $row
-     * @param  array<string, mixed>  $latest  the latest failed request of the group
-     * @param  list<array<string, mixed>>  $statuses  the failed requests of the group by status
+     * @param  array<string, mixed>  $latest
+     * @param  list<array<string, mixed>>  $statuses
      * @return array<string, mixed>
      */
     protected function finding(array $row, array $latest, array $statuses): array

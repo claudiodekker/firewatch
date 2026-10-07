@@ -12,9 +12,9 @@ class Judgement
     /**
      * Create a new judgement instance.
      *
-     * @param  array<string, mixed>|null  $threshold  the threshold as the answer states it
+     * @param  array<string, mixed>|null  $threshold
      * @param  list<array<string, mixed>>  $findings  at most the limit, worst first
-     * @param  array<string, int>  $saw  the input the detector set aside
+     * @param  array<string, int>  $saw
      * @param  list<string>  $caveats
      */
     public function __construct(

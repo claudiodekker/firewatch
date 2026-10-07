@@ -243,7 +243,7 @@ class DatabaseBound implements Detector
      *
      * @param  array<string, mixed>  $group
      * @param  array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}  $typical
-     * @param  list<array<string, mixed>>  $queries  the queries that took longest in the requests of the group
+     * @param  list<array<string, mixed>>  $queries
      * @return array<string, mixed>
      */
     protected function finding(array $group, array $typical, array $queries): array

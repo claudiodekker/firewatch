@@ -100,7 +100,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Refuse the hash of a query group: the group of this shape is the execution's, and a query group is a different question.
+     * Refuse the hash of a query group.
      */
     protected function refuseQueryGroup(SQLite3 $connection, ?string $group): void
     {
@@ -249,7 +249,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get the key of the pair of an execution group and a query group, which keeps a hash that reads as a number apart from another.
+     * Get the key of the pair of an execution group and a query group.
      *
      * @param  array<string, mixed>  $row
      */
