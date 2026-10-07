@@ -54,7 +54,7 @@ enum FailureKind: string
     public const SQLITE_NOTADB = 26;
 
     /**
-     * Classify why a batch could not be stored, by its SQLite primary result code or the kind the store gave it.
+     * Classify why a batch could not be stored.
      */
     public static function of(Throwable $exception): self
     {

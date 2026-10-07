@@ -8,7 +8,7 @@ namespace ClaudioDekker\Firewatch\Store;
 class FileIdentity
 {
     /**
-     * Get the device and inode a path currently names, or null when it names no file.
+     * Get the device and inode a path currently names.
      */
     public function of(string $path): ?string
     {

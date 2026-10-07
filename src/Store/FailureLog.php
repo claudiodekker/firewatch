@@ -20,7 +20,7 @@ class FailureLog
     public const FILE = 'failures.jsonl';
 
     /**
-     * The most lines the file keeps; older ones are rewritten away.
+     * The most lines the file keeps.
      */
     public const LINES = 100;
 
@@ -43,7 +43,7 @@ class FailureLog
     }
 
     /**
-     * Record a dropped batch beside the store and report the first of the process, swallowing any failure of either.
+     * Record a dropped batch beside the store and report the first of the process.
      */
     public function record(Throwable $exception, int $dropped): void
     {
@@ -61,7 +61,7 @@ class FailureLog
     }
 
     /**
-     * Record a damaged store the writer replaced, with nothing dropped, swallowing any failure; its damage may read as a file that is not a database.
+     * Record a damaged store the writer replaced, with nothing dropped; its damage may read as a file that is not a database.
      */
     public function recovered(Throwable $exception): void
     {
@@ -73,7 +73,7 @@ class FailureLog
     }
 
     /**
-     * Read the dropped batches the file still holds, oldest first; a missing or unreadable file, a recovery that dropped nothing and a line that isn't a record hold none.
+     * Read the dropped batches the file still holds, oldest first.
      *
      * @return list<array{at: float, kind: string, dropped: int}>
      */

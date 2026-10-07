@@ -36,7 +36,7 @@ class StoreStamp
     }
 
     /**
-     * Determine if the store was stamped by Firewatch, whatever its schema version.
+     * Determine if the store was stamped by Firewatch.
      */
     public function isFirewatch(): bool
     {
@@ -52,7 +52,7 @@ class StoreStamp
     }
 
     /**
-     * Determine if a later release of Firewatch stamped the store, which this one neither writes nor rebuilds on its own.
+     * Determine if a later release of Firewatch stamped the store.
      */
     public function isNewer(): bool
     {
@@ -60,7 +60,7 @@ class StoreStamp
     }
 
     /**
-     * Determine if nothing was ever written to the store: no stamps and no tables.
+     * Determine if nothing was ever written to the store.
      */
     public function isFresh(): bool
     {

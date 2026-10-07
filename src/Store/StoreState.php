@@ -15,7 +15,7 @@ enum StoreState: string
     case UNAVAILABLE = 'unavailable';
 
     /**
-     * Determine if a drop can rebuild a store in this state: one of another schema version or a damaged one.
+     * Determine if a drop can rebuild a store in this state.
      */
     public function isRebuildable(): bool
     {

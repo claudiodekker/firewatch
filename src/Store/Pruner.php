@@ -31,7 +31,7 @@ class Pruner
     protected const PASS_TRANSACTIONS = 20;
 
     /**
-     * The share of the record cap a trim leaves, so the cap does not creep on every pass.
+     * The share of the record cap or the size backstop a trim leaves, so neither creeps on every pass.
      */
     protected const TRIM_TO = 0.9;
 
@@ -52,9 +52,9 @@ class Pruner
     }
 
     /**
-     * Run a pass after a batch was stored, if no process ran one in the last minute: a busy store ends it silently.
+     * Run a pass after a batch was stored, if no process ran one in the last minute.
      *
-     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
+     * @throws SQLite3Exception|StoreFailure
      */
     public function run(): void
     {
@@ -68,9 +68,9 @@ class Pruner
     }
 
     /**
-     * Run a pass at once for a store that is full, whichever process claimed the minute, as no batch succeeds to start one: a busy store ends it silently.
+     * Run a pass at once for a store that is full, whichever process claimed the minute.
      *
-     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
+     * @throws SQLite3Exception|StoreFailure
      */
     public function runNow(): void
     {
@@ -82,7 +82,7 @@ class Pruner
      *
      * @param  Closure(): void  $steps
      *
-     * @throws SQLite3Exception|StoreFailure for a step that fails for any reason but the store being busy
+     * @throws SQLite3Exception|StoreFailure
      */
     protected function unlessBusy(Closure $steps): void
     {
@@ -144,7 +144,7 @@ class Pruner
     }
 
     /**
-     * Read when the last pass was claimed, in a plain read that takes no write lock, or null when none was or the store can't be read.
+     * Read when the last pass was claimed, in a plain read that takes no write lock.
      */
     protected function lastClaim(): ?float
     {
@@ -234,7 +234,7 @@ class Pruner
     }
 
     /**
-     * Give freed pages back to the file: a short vacuum when the pass deleted or the freelist is long, then, after a deleting pass, a passive checkpoint and an optimize, each best effort.
+     * Give freed pages back to the file.
      */
     protected function reclaim(bool $deleted): void
     {
@@ -290,7 +290,7 @@ class Pruner
     }
 
     /**
-     * Delete the oldest records that match in one transaction, with the records of unknown start below them and the marker that says what was removed, and get how many matched.
+     * Delete the oldest records that match in one transaction, and get how many matched.
      *
      * @param  array<string, float>  $bindings
      */
@@ -309,7 +309,7 @@ class Pruner
     }
 
     /**
-     * Delete the oldest records of known start that match, with the records of unknown start below them and the marker that says what was removed, and get how many matched.
+     * Delete the oldest records of known start that match, and get how many matched.
      *
      * @param  array<string, float>  $bindings
      */
@@ -365,7 +365,7 @@ class Pruner
     }
 
     /**
-     * Delete a chunk of the records without a start that arrived before an id, as they age with their neighbours by arrival.
+     * Delete a chunk of the records without a start that arrived before an id.
      */
     protected function deleteUnstartedBelow(SQLite3 $connection, int $id): void
     {
@@ -377,7 +377,7 @@ class Pruner
     }
 
     /**
-     * Delete the records of unknown start that arrived first, up to a limit, and get how many there were; they lie outside every window with a start, so no marker moves.
+     * Delete the records of unknown start that arrived first, up to a limit, and get how many there were.
      */
     protected function deleteUnstarted(SQLite3 $connection, int $limit): int
     {

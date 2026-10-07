@@ -32,7 +32,7 @@ class Reader
     }
 
     /**
-     * Determine if a store has been written, without creating anything.
+     * Determine if a store has been written.
      */
     public function exists(): bool
     {
@@ -47,7 +47,7 @@ class Reader
      * @param  Closure(SQLite3): TResult  $callback
      * @return TResult
      *
-     * @throws StoreUnusable when the store is not in a state to be read, which the reader never repairs
+     * @throws StoreUnusable
      */
     public function snapshot(Closure $callback): mixed
     {
@@ -91,7 +91,7 @@ class Reader
     }
 
     /**
-     * Refuse a store that Firewatch did not stamp for this schema version, from inside the snapshot.
+     * Refuse a store that Firewatch did not stamp for this schema version.
      */
     protected function checkStamps(SQLite3 $connection): void
     {
@@ -109,7 +109,7 @@ class Reader
     }
 
     /**
-     * Get the state a SQLite failure puts the store in, or null when the failure is not about the store.
+     * Get the state a SQLite failure puts the store in.
      */
     protected function unusable(SQLite3Exception $exception): ?StoreUnusable
     {

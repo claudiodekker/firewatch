@@ -38,7 +38,7 @@ class Schema
     ];
 
     /**
-     * The statements that create the raw table, its indexes, the user directory, the drift counts and the facts about the capture, in order.
+     * The statements that create the tables and their indexes, in order.
      */
     protected const TABLES = [
         <<<'SQL'
@@ -105,7 +105,7 @@ class Schema
     }
 
     /**
-     * Get the statement that creates a type's record view, with the type's own columns named as on the wire.
+     * Get the statement that creates a type's record view.
      */
     protected function view(RecordType $type): string
     {
@@ -120,7 +120,7 @@ class Schema
     }
 
     /**
-     * Get the common columns that apply to a type, in the raw table's order.
+     * Get the common columns that apply to a type.
      *
      * @return list<string>
      */
@@ -147,7 +147,7 @@ class Schema
     }
 
     /**
-     * Get the columns a type reads from its data, one per contract field without a common column and one per field Firewatch adds.
+     * Get the columns a type reads from its data.
      *
      * @return list<string>
      */

@@ -20,7 +20,7 @@ class HeaderRedactor
     /**
      * Create a new header redactor instance.
      *
-     * @param  list<string>  $headers  the names of the headers to redact, in any case
+     * @param  list<string>  $headers  in any case
      */
     public function __construct(protected array $headers)
     {
@@ -28,7 +28,7 @@ class HeaderRedactor
     }
 
     /**
-     * Redact the listed headers of a request record, keeping Authorization's scheme and Cookie's names.
+     * Redact the listed headers of a request record.
      */
     public function __invoke(Request $record): bool
     {
@@ -48,7 +48,7 @@ class HeaderRedactor
     }
 
     /**
-     * Redact one value of a header, shaped by the header's name.
+     * Redact one value of a header.
      */
     protected function redact(string $header, string $value): string
     {
@@ -78,7 +78,7 @@ class HeaderRedactor
     }
 
     /**
-     * Redact a Cookie value, keeping each cookie's name, or all of it when a cookie has no name.
+     * Redact a Cookie value, keeping each cookie's name.
      */
     protected function redactCookie(string $value): string
     {
