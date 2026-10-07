@@ -12,4 +12,5 @@ test('the detector caveats have their pinned wording', function (string $key, in
     'skipped' => ['detect_caveat_skipped', 1, 'Skipped runs are often intended.'],
     'not fired' => ['detect_caveat_not_fired', 1, 'A task that did not fire leaves no record.'],
     'log capture' => ['detect_caveat_log_capture', 1, 'Log records exist only while log capture is on.'],
+    'unanswered' => ['detect_caveat_unanswered', 1, 'Clean means only that no captured call returned an error status; timeouts and connection failures leave no record.'],
 ]);
