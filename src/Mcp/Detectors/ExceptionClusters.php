@@ -179,7 +179,7 @@ class ExceptionClusters implements Detector
     {
         return [
             'source' => $row['source'],
-            'label' => $row['label'] === null ? null : (Stored::blank($row['label']) ?? __('firewatch::messages.rank_no_route')),
+            'label' => Executions::label($row['label']),
             'occurrences' => $row['occurrences'],
         ];
     }
