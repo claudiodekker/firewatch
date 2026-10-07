@@ -39,7 +39,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get the threshold: the runs of one read query shape in one execution at which it is a finding.
+     * Get the threshold the detector takes.
      */
     public function threshold(): Threshold
     {
@@ -47,7 +47,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get the record types the detector examines: the queries and the four kinds of execution that ran them.
+     * Get the record types the detector examines.
      *
      * @return list<RecordType>
      */
@@ -57,7 +57,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Judge the executions that started in the window: a finding is a query shape that one execution of a group ran at least the threshold of times.
+     * Judge the executions that started in the window.
      */
     public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
@@ -118,7 +118,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get what the window holds: the executions, those history left out, and of the rest those that ran a query and those among them that captured fewer queries than they counted.
+     * Get what the window holds.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return array{eligible: int, excluded: int, examined: int, incomplete: int}
@@ -140,7 +140,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get the SQL of the runs that qualify, as the table `ranked`: one row for each execution that ran a read query shape at least the threshold of times, and where it comes first among the runs of its finding as the worst and as the latest.
+     * Get the SQL of the runs that qualify.
      */
     protected function ranked(string $executions): string
     {
@@ -160,7 +160,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get what the findings state about their worst and latest executions, their call sites and the bindings of their worst runs, by the pair of groups.
+     * Get the details of the findings, by the pair of groups.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>}
@@ -259,7 +259,7 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get the caveats of the answer: how reads are told, and, when executions captured fewer queries than they counted, that run counts are lower bounds.
+     * Get the caveats of the answer.
      *
      * @return list<string>
      */

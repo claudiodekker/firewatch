@@ -17,7 +17,7 @@ interface Detector
     public function name(): DetectorName;
 
     /**
-     * Get the threshold the detector takes, or null for one that has none.
+     * Get the threshold the detector takes.
      */
     public function threshold(): ?Threshold;
 

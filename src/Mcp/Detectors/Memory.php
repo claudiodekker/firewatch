@@ -23,7 +23,7 @@ class Memory implements Detector
     }
 
     /**
-     * Get the threshold: the megabytes of peak memory at which a group is a finding.
+     * Get the threshold the detector takes.
      */
     public function threshold(): Threshold
     {
@@ -31,7 +31,7 @@ class Memory implements Detector
     }
 
     /**
-     * Get the record types the detector examines: the four kinds of execution.
+     * Get the record types the detector examines.
      *
      * @return list<RecordType>
      */
@@ -41,7 +41,7 @@ class Memory implements Detector
     }
 
     /**
-     * Judge the executions that started in the window and have a peak: a group is a finding when any of them peaked at or above the threshold.
+     * Judge the executions that started in the window.
      */
     public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
@@ -64,7 +64,7 @@ class Memory implements Detector
     }
 
     /**
-     * Get what the executions that have a peak say of each group: how many there are and how many reached the bytes, the highest and the median peak at the nearest rank, the execution that peaked highest, and the latest that reached the bytes.
+     * Get what the executions that have a peak say of each group.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
@@ -95,7 +95,7 @@ class Memory implements Detector
     }
 
     /**
-     * Get the finding of a group that reached the threshold.
+     * Get the finding of a group.
      *
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>

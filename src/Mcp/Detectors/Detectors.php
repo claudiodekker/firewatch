@@ -24,7 +24,7 @@ class Detectors
     }
 
     /**
-     * Get the detectors that ship, in the order of the catalogue.
+     * Get the detectors that ship.
      *
      * @return list<Detector>
      */
@@ -34,7 +34,7 @@ class Detectors
     }
 
     /**
-     * Get the detector that judges a shape, or null for a shape that does not ship.
+     * Get the detector that judges a shape.
      */
     public function named(string $shape): ?Detector
     {
@@ -58,7 +58,7 @@ class Detectors
     }
 
     /**
-     * Run every detector at its default threshold, one finding deep, in the order of the catalogue, and not start one once the deadline has passed.
+     * Run every detector until the deadline has passed.
      *
      * @return list<Judgement>
      */

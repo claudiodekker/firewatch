@@ -22,7 +22,7 @@ class FailingJobs implements Detector
     }
 
     /**
-     * Get the threshold: the failed and released attempts at which a group is a finding.
+     * Get the threshold the detector takes.
      */
     public function threshold(): Threshold
     {
@@ -40,7 +40,7 @@ class FailingJobs implements Detector
     }
 
     /**
-     * Judge the job attempts that started in the window: a group is a finding when its failed and released attempts number at least the threshold.
+     * Judge the job attempts that started in the window.
      */
     public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
@@ -138,7 +138,7 @@ class FailingJobs implements Detector
     }
 
     /**
-     * Get the finding of a group whose attempts failed or were released.
+     * Get the finding of a group.
      *
      * @param  array<string, mixed>  $row
      * @param  array<string, mixed>|null  $exception

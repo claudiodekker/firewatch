@@ -24,7 +24,7 @@ class Threshold
     }
 
     /**
-     * Read the value a call passes: a number in range, whole when the threshold is, never clamped.
+     * Read the value a call passes.
      */
     public function read(mixed $value, string $example): int|float
     {
@@ -48,7 +48,7 @@ class Threshold
     }
 
     /**
-     * Get the threshold as an answer states it: the value in force, the default, the unit and the range.
+     * Get the threshold as an answer states it.
      *
      * @return array{name: string, value: int|float, default: int|float, unit: string, range: array{min: int|float, max: int|float|null}, is_default: bool}
      */
