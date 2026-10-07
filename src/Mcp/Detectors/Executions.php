@@ -53,6 +53,14 @@ class Executions
     }
 
     /**
+     * Get the label of an execution as a finding shows it, or null when the store holds no execution to label.
+     */
+    public static function label(mixed $label): mixed
+    {
+        return $label === null ? null : (Stored::blank($label) ?? __('firewatch::messages.rank_no_route'));
+    }
+
+    /**
      * Get the column the executions of a type are labelled by.
      */
     protected static function labelField(RecordType $type): string

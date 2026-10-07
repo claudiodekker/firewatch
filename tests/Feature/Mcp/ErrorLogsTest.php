@@ -561,12 +561,12 @@ describe('with the other shapes', function () {
         ]);
     });
 
-    it('is run between exception-clusters and memory when no shape is named', function () {
+    it('is run between exception-clusters and failing-http when no shape is named', function () {
         ingest([elogLine('The payment failed.')]);
 
         $detectors = Envelope::assert(Detect::class)['result']['detectors'];
 
-        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'memory'])
+        expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'memory'])
             ->and($detectors[7])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1]);
     });
 });

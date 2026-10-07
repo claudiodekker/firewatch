@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Workbench\App\Jobs\ChargeCard;
 use Workbench\App\Jobs\ShipOrder;
@@ -27,3 +28,11 @@ Route::get('/purchases', function () {
 Route::get('/invoices/{invoice}', fn (string $invoice) => throw new RuntimeException("Invoice [{$invoice}] could not be rendered."));
 
 Route::get('/exports', fn () => strlen(str_repeat('a', 80 * 1024 * 1024)));
+
+Route::get('/quotes', function () {
+    Http::fake(['https://rates.example.com/*' => Http::response('unavailable', 503)]);
+
+    Http::get('https://rates.example.com/quotes?currency=EUR');
+
+    return 'ok';
+});
