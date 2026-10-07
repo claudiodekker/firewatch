@@ -49,7 +49,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get the threshold: the typical share of a request's time spent in queries at which a group is a finding.
+     * Get the threshold the detector takes.
      */
     public function threshold(): Threshold
     {
@@ -57,7 +57,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get the record types the detector examines: the requests and the queries they ran.
+     * Get the record types the detector examines.
      *
      * @return list<RecordType>
      */
@@ -67,7 +67,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Judge the requests that started in the window: a group is a finding when its typical share of time in queries and its typical duration are high enough.
+     * Judge the requests that started in the window.
      */
     public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
@@ -111,7 +111,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get what the window holds: the requests that history left out, those it examined, and among them those that captured fewer queries than they counted.
+     * Get what the window holds.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return array{examined: int, excluded: int, incomplete: int}
@@ -134,7 +134,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get what the requests that have a duration say of each group: the sums of their durations and of the time they spent in queries, the median of their shares and of their durations at the nearest rank, and the latest of them.
+     * Get what the requests that have a duration say of each group.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
@@ -168,7 +168,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get the groups that are database-bound with their typical figures, worst first.
+     * Get the groups that are database-bound.
      *
      * @param  list<array<string, mixed>>  $groups
      * @return list<array{group: array<string, mixed>, typical: array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}}>
@@ -190,7 +190,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Determine if the typical figures of a group reach the percent of time in queries, and are long enough to be called bound.
+     * Determine if the typical figures of a group are database-bound.
      *
      * @param  array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}  $typical
      */
@@ -204,7 +204,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get the typical share and duration of a group: the medians from three requests, otherwise the aggregate share and the mean duration.
+     * Get the typical share and duration of a group.
      *
      * @param  array<string, mixed>  $group
      * @return array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}
@@ -311,7 +311,7 @@ class DatabaseBound implements Detector
     }
 
     /**
-     * Get the caveats of the answer: that run counts and shares are lower bounds when requests captured fewer queries than they counted.
+     * Get the caveats of the answer.
      *
      * @return list<string>
      */

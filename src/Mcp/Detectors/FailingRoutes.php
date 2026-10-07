@@ -31,7 +31,7 @@ class FailingRoutes implements Detector
     }
 
     /**
-     * Get the threshold: the lowest status that counts as failed.
+     * Get the threshold the detector takes.
      */
     public function threshold(): Threshold
     {
@@ -49,7 +49,7 @@ class FailingRoutes implements Detector
     }
 
     /**
-     * Judge the requests of the window: a group is a finding when any of its requests ended at or above the status.
+     * Judge the requests of the window.
      */
     public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
@@ -96,7 +96,7 @@ class FailingRoutes implements Detector
     }
 
     /**
-     * Get the finding of a group that failed.
+     * Get the finding of a group.
      *
      * @param  array<string, mixed>  $row
      * @param  array<string, mixed>  $latest

@@ -19,7 +19,7 @@ class Executions
     public const TYPES = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
 
     /**
-     * Get the SQL of the executions of the four kinds that started in the window and belong to the group bound as `:group`, as the table `executions`.
+     * Get the SQL of the executions that started in the window.
      */
     public static function table(Window $window): string
     {

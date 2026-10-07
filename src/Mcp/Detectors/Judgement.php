@@ -32,7 +32,7 @@ class Judgement
     }
 
     /**
-     * Get the judgement of what a detector examined: findings when there are any, clean only over records that were examined, otherwise not evaluated for want of records.
+     * Get the judgement of what a detector examined.
      *
      * @param  array<string, mixed>|null  $threshold
      * @param  list<array<string, mixed>>  $findings
@@ -51,7 +51,7 @@ class Judgement
     }
 
     /**
-     * Get the judgement of a detector that did not judge: it examined nothing and found nothing, for the reason.
+     * Get the judgement of a detector that did not judge.
      *
      * @param  array<string, mixed>|null  $threshold
      * @param  array<string, int>  $saw
@@ -63,7 +63,7 @@ class Judgement
     }
 
     /**
-     * Determine if the detector found no record of its own: it examined none, set none aside, and history did not remove them.
+     * Determine if the detector found no record of its own.
      */
     public function matchedNothing(): bool
     {
@@ -91,7 +91,7 @@ class Judgement
     }
 
     /**
-     * Get the row of the overview's count mode: the verdict, what was examined and the worst finding.
+     * Get the row of the overview's count mode.
      *
      * @return array<string, mixed>
      */

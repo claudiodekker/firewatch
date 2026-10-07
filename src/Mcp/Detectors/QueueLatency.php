@@ -26,7 +26,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Get the threshold: the milliseconds of wait, or of pending age, at which a group is a finding.
+     * Get the threshold the detector takes.
      */
     public function threshold(): Threshold
     {
@@ -34,7 +34,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Get the record types the detector examines: the dispatches, and the attempts that end their wait.
+     * Get the record types the detector examines.
      *
      * @return list<RecordType>
      */
@@ -44,7 +44,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Judge the dispatches that started in the window: a group is a finding when a job waited for its first attempt, or a dispatch is pending, for at least the threshold.
+     * Judge the dispatches that started in the window.
      */
     public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
@@ -89,7 +89,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Get what the dispatches say of each group: how many ran inline, are pending or lack their first attempt, and the worst and the median wait at the nearest rank.
+     * Get what the dispatches say of each group.
      *
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
@@ -124,7 +124,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Get the SQL of the dispatches that started in the window and belong to the group bound as `:group`, as the table `dispatches`, each in its one state.
+     * Get the SQL of the dispatches that started in the window.
      */
     protected function dispatches(Window $window): string
     {
@@ -156,7 +156,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Count the attempts that started in the window, in the group bound as `:group`, whose job has no stored dispatch.
+     * Count the attempts that started in the window whose job has no stored dispatch.
      *
      * @param  array<string, int|float|string|null>  $bindings
      */
@@ -180,7 +180,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Get the finding of a group with a job that waited, or a dispatch that is pending, for at least the threshold.
+     * Get the finding of a group.
      *
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>
@@ -212,7 +212,7 @@ class QueueLatency implements Detector
     }
 
     /**
-     * Get the distinct names a group's dispatches carry, in order, from the JSON list the statement made of them.
+     * Get the distinct names a group's dispatches carry.
      *
      * @return list<string>
      */
