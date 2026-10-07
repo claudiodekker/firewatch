@@ -1,15 +1,14 @@
 ### Working agreements
 
-- TDD for all code (`/mattpocock-skills:tdd`): red, green, refactor. No untested logic.
+- Build test-first (`/mattpocock-skills:tdd`): write the failing feature test that drives the real entry point (a request, a command, a job), then the code. Add a unit test only to pin behaviour that must never change, or to cover complex internal code that many public paths share.
 - No documentation beyond `README.md`, `CHANGELOG.md`, `GLOSSARY.md`, ADRs and `docs/agents/`. The design set lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`. A PR that changes what a user installs, configures or runs updates the README, which stays a short guide, and adds one line to the changelog. Internals belong in `GLOSSARY.md` and the ADRs, not the README. No docblocks that restate types.
-- Work in the `claudiodekker-skills:claudio-mode` skill.
 - Package guardrails, store and test rules: @docs/agents/laravel.md
 
 ## Opening PRs
 
 - Re-run checks until green before opening a PR.
 - Answer review comments on the PR itself; fix feedback in the PR it was left on.
-- After `CODING_STANDARDS.md` or the claudio-mode rulebook changes, re-review every open PR against it.
+- After `CODING_STANDARDS.md` changes, re-review every open PR against it.
 
 ## Agent skills
 
