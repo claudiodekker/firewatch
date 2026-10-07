@@ -136,7 +136,7 @@ it('lists the tools as JSON with the server name and version', function () {
                     'name' => 'detect',
                     'description' => __('firewatch::messages.tools.detect'),
                     'inputSchema' => ['properties' => [
-                        'shape' => ['description' => __('firewatch::messages.detect_shape_argument'), 'enum' => ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'memory'], 'type' => 'string'],
+                        'shape' => ['description' => __('firewatch::messages.detect_shape_argument'), 'enum' => ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'memory'], 'type' => 'string'],
                         'threshold' => ['description' => __('firewatch::messages.detect_threshold_argument'), 'type' => 'number'],
                         'group' => ['description' => __('firewatch::messages.detect_group_argument'), 'type' => 'string'],
                         'since' => ['description' => __('firewatch::messages.since_argument'), 'type' => 'string'],
