@@ -9,4 +9,6 @@ test('the detector caveats have their pinned wording', function (string $key, in
     'memory' => ['detect_caveat_memory', 1, 'A long-lived process inherits memory it already held; a peak is not attributable to code.'],
     'wait' => ['detect_caveat_wait', 1, 'The wire carries no availability time: a delayed or backed-off job counts as waiting; round-number waits are usually delays.'],
     'pending' => ['detect_caveat_pending', 1, 'No attempt is recorded: no worker has run, or one is running; the store cannot tell.'],
+    'skipped' => ['detect_caveat_skipped', 1, 'Skipped runs are often intended.'],
+    'not fired' => ['detect_caveat_not_fired', 1, 'A task that did not fire leaves no record.'],
 ]);
