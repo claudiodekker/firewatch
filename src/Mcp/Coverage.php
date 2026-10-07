@@ -15,7 +15,7 @@ class Coverage
     /**
      * Create a new coverage instance.
      *
-     * @param  list<RecordType>  $typesRead  the record types the call examined
+     * @param  list<RecordType>  $typesRead
      */
     public function __construct(
         public readonly CoverageState $state,
@@ -30,7 +30,7 @@ class Coverage
     }
 
     /**
-     * Get the coverage of a store that can't be read: absent, or unusable with the reason it is.
+     * Get the coverage of a store that can't be read.
      *
      * @param  list<RecordType>  $typesRead
      */

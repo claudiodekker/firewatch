@@ -22,7 +22,7 @@ class Lineage
     ];
 
     /**
-     * Get the lineage of each queued job: its dispatch, its attempts in order with the wait before each, and how it ended, in the order the lineages began.
+     * Get the lineage of each queued job, in the order the lineages began.
      *
      * @return list<array<string, mixed>>
      */
@@ -73,7 +73,7 @@ class Lineage
     }
 
     /**
-     * Get how the job ended: by its last attempt, as pending while a dispatch has none, and as none for a dispatch that runs inline and so never has one.
+     * Get how the job ended, or null for a dispatch that runs inline.
      *
      * @param  array<string, mixed>|null  $dispatch
      * @param  list<array<string, mixed>>  $attempts
@@ -108,7 +108,7 @@ class Lineage
     }
 
     /**
-     * Get what a dispatch shows: the execution that caused it, where it went and how long it took.
+     * Get what a dispatch shows.
      *
      * @param  array<string, mixed>  $dispatch
      * @return array<string, mixed>
@@ -125,7 +125,7 @@ class Lineage
     }
 
     /**
-     * Get the attempts in order, each with the wait before it: from the end of the dispatch for the first and from the end of the attempt before for the others.
+     * Get the attempts in order, each with the wait before it.
      *
      * @param  array<string, mixed>|null  $dispatch
      * @param  list<array<string, mixed>>  $attempts

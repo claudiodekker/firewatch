@@ -45,7 +45,7 @@ class BlindSpots
     ];
 
     /**
-     * Get the closed catalogue: every structural blind spot's id and its sentence, in catalogue order.
+     * Get the sentence of every structural blind spot by its id, in catalogue order.
      *
      * @return array<string, string>
      */
@@ -73,7 +73,7 @@ class BlindSpots
     }
 
     /**
-     * Get the blind spots of the record types a call examined, found or not, so an empty answer carries them.
+     * Get the blind spots of the record types a call examined.
      *
      * @param  list<RecordType>  $types
      * @param  bool  $actor  attach what depends on reading by actor

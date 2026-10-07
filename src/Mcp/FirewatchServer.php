@@ -19,7 +19,7 @@ use Laravel\Mcp\Server\Attributes\Name;
 class FirewatchServer extends Server
 {
     /**
-     * The capabilities the server advertises: tools only.
+     * The capabilities the server advertises.
      *
      * @var array<string, array<string, bool>>
      */

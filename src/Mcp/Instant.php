@@ -28,7 +28,7 @@ class Instant
     }
 
     /**
-     * Format Unix seconds as local time in the timezone, in full, so that it can be read back and passed as a boundary.
+     * Format Unix seconds as local time in the timezone.
      */
     public static function format(float $epoch, string $timezone): string
     {
@@ -36,7 +36,7 @@ class Instant
     }
 
     /**
-     * Format Unix seconds with their microseconds, so that the number passes back into a tool as it was read.
+     * Format Unix seconds with their microseconds.
      */
     public static function epoch(float $epoch): string
     {

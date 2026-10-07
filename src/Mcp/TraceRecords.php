@@ -35,7 +35,7 @@ readonly class TraceRecords
     }
 
     /**
-     * Read what the store holds for a trace: its executions and the lineage of every job it dispatched or ran.
+     * Read what the store holds for a trace.
      */
     public static function ofTrace(SQLite3 $connection, string $trace): static
     {
@@ -45,7 +45,7 @@ readonly class TraceRecords
     }
 
     /**
-     * Read what the store holds for a job: the lineage of the job alone, and the executions of the trace it was dispatched in.
+     * Read what the store holds for a job.
      */
     public static function ofJob(SQLite3 $connection, string $job): static
     {
@@ -74,7 +74,7 @@ readonly class TraceRecords
     }
 
     /**
-     * Get the trace a job started in and whether the store holds the job: the trace of its earliest dispatch, else of its earliest attempt.
+     * Get the trace a job started in and whether the store holds the job.
      *
      * @return array{string|null, bool}
      */
@@ -95,7 +95,7 @@ readonly class TraceRecords
     }
 
     /**
-     * Read the executions of the trace, in the order they started, with what their label and outcome are read from and no more.
+     * Read the executions of the trace, in the order they started.
      *
      * @return list<array<string, mixed>>
      */

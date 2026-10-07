@@ -21,7 +21,7 @@ class Children
     }
 
     /**
-     * Read every child of an execution, whole and with no window, by when it started and then by its store order, each marked with its type.
+     * Read every child of an execution, by when it started and then by its store order.
      *
      * @return list<array<string, mixed>>
      */

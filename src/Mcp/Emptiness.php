@@ -34,7 +34,7 @@ class Emptiness
     }
 
     /**
-     * Get an empty answer for a store that can't be read: no store when it is absent, otherwise an unusable store with the line that says why.
+     * Get an empty answer for a store that can't be read.
      */
     public static function of(StoreUnusable $unusable, string $path): self
     {
@@ -93,7 +93,7 @@ class Emptiness
     }
 
     /**
-     * Get the fixed summary line for this kind, which never says there are no problems.
+     * Get the fixed summary line for this kind.
      */
     public function summary(): string
     {

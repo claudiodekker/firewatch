@@ -13,7 +13,7 @@ enum Order: string
     case QUERIES = 'queries';
 
     /**
-     * Get the sort key of the order, which a record without the measure sorts last by.
+     * Get the sort key of the order.
      */
     public function sortKey(): string
     {

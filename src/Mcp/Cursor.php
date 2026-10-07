@@ -13,7 +13,7 @@ use JsonException;
 class Cursor
 {
     /**
-     * The arguments a cursor does not pin: the page can ask for another size or another format, and the cursor is the argument that carries it.
+     * The arguments a cursor does not pin.
      *
      * @var list<string>
      */
@@ -22,7 +22,7 @@ class Cursor
     /**
      * Create a new cursor instance.
      *
-     * @param  TLast  $last  the sort key and identity of the last row shown
+     * @param  TLast  $last
      */
     protected function __construct(
         public readonly array $last,
@@ -34,7 +34,7 @@ class Cursor
     }
 
     /**
-     * Get the opaque cursor that continues a listing after its last row: the tool, a hash of the other arguments, the store's creation, the key of the last row and the window as first resolved.
+     * Get the opaque cursor that continues a listing after its last row.
      *
      * @param  array<string, mixed>  $arguments
      * @param  array<string, mixed>  $last

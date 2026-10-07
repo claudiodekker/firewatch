@@ -15,9 +15,7 @@ class Failure
     protected const FIRST_FAILED_STATUS_CODE = 400;
 
     /**
-     * Determine if a record failed, by how its type says it ended: a status code of 400 or more, an exit code that is not zero, a failed or released attempt or a failed task.
-     *
-     * A type with no such rule never fails.
+     * Determine if a record failed, by how its type says it ended.
      */
     public static function of(RecordType $type, mixed $outcome): bool
     {

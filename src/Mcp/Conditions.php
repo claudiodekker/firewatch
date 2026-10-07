@@ -23,7 +23,7 @@ class Conditions
     }
 
     /**
-     * Get the condition blind spots measured for a call: what is true of this store now that overlaps its types and window.
+     * Get the condition blind spots measured for a call.
      *
      * @param  list<RecordType>  $types
      * @return list<array<string, mixed>>
@@ -33,7 +33,6 @@ class Conditions
         $timezone = $window->timezone();
         $conditions = [];
 
-        // Each is one sentence with its facts inline and the same facts as fields; a store that can't be read has no facts, so only the conditions that don't need it are measured.
         if ($facts !== null) {
             array_push($conditions, ...$this->history($facts, $types, $window, $timezone));
             array_push($conditions, ...$this->rebuilt($facts, $window, $timezone));
@@ -100,7 +99,7 @@ class Conditions
     }
 
     /**
-     * Get `records-dropped` for batches the store failed to keep inside the window: a lower bound, as the file keeps only its latest lines.
+     * Get `records-dropped` for batches the store failed to keep inside the window.
      *
      * @return list<array<string, mixed>>
      */
@@ -196,7 +195,7 @@ class Conditions
     }
 
     /**
-     * Get `redaction-active` when requests are read and the developer redacts headers or payload fields; Firewatch's default redacts nothing.
+     * Get `redaction-active` when requests are read and the developer redacts headers or payload fields.
      *
      * @param  list<RecordType>  $types
      * @return list<array<string, mixed>>
@@ -217,7 +216,7 @@ class Conditions
     }
 
     /**
-     * Determine if a window reaches back before an instant: it has no start, or starts earlier.
+     * Determine if a window reaches back before an instant.
      */
     protected function startsBefore(Window $window, float $instant): bool
     {

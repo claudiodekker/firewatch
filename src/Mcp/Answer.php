@@ -29,7 +29,7 @@ class Answer
     public readonly string $summary;
 
     /**
-     * The result and the truncated entries once the cells and the budget are bound, found when first asked for.
+     * The result and the truncated entries once the cells and the budget are bound.
      *
      * @var array{array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}|null
      */
@@ -77,7 +77,7 @@ class Answer
     }
 
     /**
-     * Get the answer in the requested format: one text block of markdown, or the envelope as structured content beside the same JSON as one text block.
+     * Get the answer in the requested format.
      */
     public function response(AnswerFormat $format): Response|ResponseFactory
     {
@@ -88,7 +88,7 @@ class Answer
     }
 
     /**
-     * Get the envelope, every key in its fixed order.
+     * Get the envelope.
      *
      * @return array<string, mixed>
      */
@@ -132,7 +132,7 @@ class Answer
     }
 
     /**
-     * Get the envelope for a result and truncated entries, every key in its fixed order.
+     * Get the envelope for a result and truncated entries.
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
@@ -160,7 +160,7 @@ class Answer
     }
 
     /**
-     * Get the envelope as markdown, in the fixed layout: each line only when it applies.
+     * Get the envelope as markdown.
      */
     public function toMarkdown(): string
     {
@@ -220,7 +220,7 @@ class Answer
     }
 
     /**
-     * Get the result sections: a table for a list of same-shaped rows, a labelled line for anything else.
+     * Get the result sections.
      *
      * @param  array<string, mixed>  $result
      * @return list<string>
@@ -281,7 +281,7 @@ class Answer
     }
 
     /**
-     * Cut a summary to the most characters it has, at a word boundary, never mid-word.
+     * Cut a summary to the most characters it has, at a word boundary.
      */
     protected function fit(string $summary): string
     {

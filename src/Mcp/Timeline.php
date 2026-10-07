@@ -44,7 +44,7 @@ class Timeline
     }
 
     /**
-     * Get the key repeated queries share: the same SQL, connection and location, whatever the bindings, or null for a child that is never collapsed.
+     * Get the key repeated queries share, or null for a child that is never collapsed.
      *
      * @param  array<string, mixed>  $child
      */
@@ -101,7 +101,7 @@ class Timeline
     }
 
     /**
-     * Get a row as it is listed: a single child has no count or total, and a repeated query no bindings, which may differ between its runs.
+     * Get a row as it is listed.
      *
      * @param  array<string, mixed>  $entry
      * @return array<string, mixed>
@@ -124,7 +124,7 @@ class Timeline
     }
 
     /**
-     * Get what names a child: the SQL, the class, the level, the key, the URL or the job.
+     * Get what names a child.
      *
      * @param  array<string, mixed>  $child
      */
