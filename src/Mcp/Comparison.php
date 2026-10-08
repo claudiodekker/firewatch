@@ -199,14 +199,13 @@ class Comparison
     protected function sideResult(array $side): array
     {
         $span = self::span($side);
-        $milliseconds = Microseconds::PER_SECOND / Microseconds::PER_MILLISECOND;
 
         return [
             'since_at' => $side['since'],
             'until_at' => $side['until'],
             'clipped' => $side['clipped'],
             'records' => $side['records'],
-            'observed_span_ms' => $span === null ? null : round($span * $milliseconds, Ranking::MILLISECOND_DECIMALS),
+            'observed_span_ms' => Stored::milliseconds($span),
         ];
     }
 
@@ -349,17 +348,18 @@ class Comparison
     }
 
     /**
-     * Get the observed span of a side in seconds, from the first to the last start among its records, or null below two records.
+     * Get the observed span of a side in whole microseconds, from the first to the last start among its records, or null below two records.
      *
      * @param  Side  $side
      */
-    protected static function span(array $side): ?float
+    protected static function span(array $side): ?int
     {
         if ($side['records'] < 2 || $side['first'] === null || $side['last'] === null) {
             return null;
         }
 
-        return $side['last'] - $side['first'];
+        // A difference of two float instants carries their rounding error, which tips a ratio of exactly 2.
+        return (int) round($side['last'] * Microseconds::PER_SECOND) - (int) round($side['first'] * Microseconds::PER_SECOND);
     }
 
     /**

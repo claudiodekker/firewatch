@@ -797,3 +797,25 @@ it('answers that nothing matches one group with no record in the window, while i
     expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'group: '.compareHash('a')])])
         ->and($envelope['result'])->toBe([]);
 });
+
+it('judges a volume measure at a span ratio of exactly 2 whatever the fractions of a second, and not a microsecond past it', function (float $beforeSpan, float $afterSpan, ?string $reason) {
+    compareIngest([
+        compareRecord(RecordType::REQUEST, 'a', COMPARE_SPLIT - 600, 10000),
+        compareRecord(RecordType::REQUEST, 'a', COMPARE_SPLIT - 600 + $beforeSpan, 10000),
+        compareRecord(RecordType::REQUEST, 'a', COMPARE_SPLIT + 600, 10000),
+        compareRecord(RecordType::REQUEST, 'a', COMPARE_SPLIT + 600 + $afterSpan, 10000),
+    ]);
+
+    $result = compareAnswer(['by' => 'occurrences'])['result'];
+
+    expect($result['before']['observed_span_ms'])->toEqual(round($beforeSpan * 1000, 2))
+        ->and($result['after']['observed_span_ms'])->toEqual(round($afterSpan * 1000, 2))
+        ->and($result['groups'][0])->toMatchArray(['change' => $reason === null ? 'steady' : 'not_evaluated', 'reason' => $reason]);
+})->with([
+    '0.1 s against 0.2 s' => [0.1, 0.2, null],
+    '0.1 s against a microsecond past 0.2 s' => [0.1, 0.200001, 'unequal_spans'],
+    '1.1 s against 2.2 s' => [1.1, 2.2, null],
+    '2.2 s against 1.1 s' => [2.2, 1.1, null],
+    '1.1 s against a microsecond past 2.2 s' => [1.1, 2.200001, 'unequal_spans'],
+    '0.3 s against 0.6 s' => [0.3, 0.6, null],
+]);
