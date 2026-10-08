@@ -171,7 +171,7 @@ The query parameter values captured from the framework's query events and paired
 _Avoid_: Parameters, params
 
 **User directory**:
-The small table of user id, name, username, first-seen and last-seen instants, never an event and never counted, aged out with the records.
+The small table of user id, name, username, first-seen and last-seen instants, never an event and never counted as a record, aged out with the records.
 _Avoid_: Actors table, users event
 
 **Actor**:
@@ -435,6 +435,10 @@ _Avoid_: Menu, workflow
 **Overview**:
 The entry-point tool that checks every problem shape and states the store's coverage at once.
 _Avoid_: Dashboard, summary tool
+
+**Fixed sections**:
+The parts of the overview that are read before any detector runs and that no deadline skips: the error rate, the slowest groups by total time, the record counts, the user directory and the actors.
+_Avoid_: Header, statistics
 
 **Selector**:
 An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id.
