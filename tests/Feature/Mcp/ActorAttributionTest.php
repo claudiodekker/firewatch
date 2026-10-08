@@ -1,5 +1,6 @@
 <?php
 
+use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
@@ -158,3 +159,251 @@ it('attributes the requests of the window to the person and counts all the other
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 4, 'types_read' => array_column(RecordType::events(), 'value')])
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
 });
+
+it('attributes a job attempt by its own user before its dispatch, and by the one dispatch the job has', function (array $records, ?string $link, array $counts) {
+    ingest([attributedUser(), ...$records]);
+
+    $envelope = attributedAnswer();
+
+    expect($envelope['result']['attribution']['job_attempts'])->toBe(['total' => 1, ...$counts])
+        ->and(attributedLinks($envelope))->toBe($link === null ? [] : ['attempt' => $link]);
+})->with([
+    'its own user' => [fn () => [attributedAttempt('attempt', 'job', user: '7')], 'direct', ['this_actor' => 1, 'other_actors' => 0, 'no_actor' => 0]],
+    'its own user over a dispatch of someone else' => [fn () => [attributedDispatch('job', user: '8'), attributedAttempt('attempt', 'job', user: '7')], 'direct', ['this_actor' => 1, 'other_actors' => 0, 'no_actor' => 0]],
+    'the own user of someone else over the person\'s dispatch' => [fn () => [attributedDispatch('job', user: '7'), attributedAttempt('attempt', 'job', user: '8')], null, ['this_actor' => 0, 'other_actors' => 1, 'no_actor' => 0]],
+    'no user of its own and the person\'s dispatch' => [fn () => [attributedDispatch('job', user: '7'), attributedAttempt('attempt', 'job')], 'dispatch', ['this_actor' => 1, 'other_actors' => 0, 'no_actor' => 0]],
+    'no user of its own and a dispatch of someone else' => [fn () => [attributedDispatch('job', user: '8'), attributedAttempt('attempt', 'job')], null, ['this_actor' => 0, 'other_actors' => 1, 'no_actor' => 0]],
+    'no user of its own and a dispatch without a user' => [fn () => [attributedDispatch('job'), attributedAttempt('attempt', 'job')], null, ['this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1]],
+    'no user of its own and no dispatch' => [fn () => [attributedAttempt('attempt', 'job')], null, ['this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1]],
+    'no user of its own and the person\'s dispatch of another job' => [fn () => [attributedDispatch('other-job', user: '7'), attributedAttempt('attempt', 'job')], null, ['this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1]],
+    'the later of two dispatches, the person\'s' => [fn () => [attributedDispatch('job', user: '8'), attributedDispatch('job', user: '7'), attributedAttempt('attempt', 'job')], 'dispatch', ['this_actor' => 1, 'other_actors' => 0, 'no_actor' => 0]],
+    'the later of two dispatches, someone else\'s' => [fn () => [attributedDispatch('job', user: '7'), attributedDispatch('job', user: '8'), attributedAttempt('attempt', 'job')], null, ['this_actor' => 0, 'other_actors' => 1, 'no_actor' => 0]],
+    'the later of two dispatches, without a user' => [fn () => [attributedDispatch('job', user: '7'), attributedDispatch('job'), attributedAttempt('attempt', 'job')], null, ['this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1]],
+]);
+
+it('follows one dispatch hop only, never the attempt that dispatched it', function () {
+    ingest([
+        attributedUser(),
+        attributedDispatch('first-job', user: '7'),
+        attributedAttempt('first', 'first-job', offset: 1),
+        syntheticRecord(RecordType::QUEUED_JOB)->with(['job_id' => 'second-job', 'user' => '', 'execution_id' => 'first', 'execution_source' => 'job', 'timestamp' => ATTRIBUTED_AT + 2]),
+        attributedAttempt('second', 'second-job', offset: 3),
+    ]);
+
+    $envelope = attributedAnswer();
+
+    expect(attributedLinks($envelope))->toBe(['first' => 'dispatch'])
+        ->and($envelope['result']['attribution']['job_attempts'])->toBe(['total' => 2, 'this_actor' => 1, 'other_actors' => 0, 'no_actor' => 1]);
+});
+
+it('never attributes by a shared trace', function () {
+    ingest([
+        attributedUser(),
+        attributedExecution(RecordType::REQUEST, 'trace', user: '7'),
+        attributedDispatch('job')->with(['trace_id' => 'trace', 'execution_id' => 'trace']),
+        attributedAttempt('attempt', 'job', offset: 1)->with(['trace_id' => 'trace']),
+    ]);
+
+    $envelope = attributedAnswer();
+
+    expect(attributedLinks($envelope))->toBe(['trace' => 'direct'])
+        ->and($envelope['result']['attribution']['job_attempts'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1]);
+});
+
+it('attributes an attempt of the window by a dispatch from before the window', function () {
+    ingest([attributedUser(), attributedDispatch('job', user: '7'), attributedAttempt('attempt', 'job', offset: 100)]);
+
+    $envelope = attributedAnswer(arguments: ['since' => ATTRIBUTED_AT + 50]);
+
+    expect(attributedLinks($envelope))->toBe(['attempt' => 'dispatch'])
+        ->and($envelope['result']['attribution']['job_attempts'])->toBe(['total' => 1, 'this_actor' => 1, 'other_actors' => 0, 'no_actor' => 0])
+        ->and($envelope['result']['attribution']['records'])->toBe(['in_window' => 1, 'this_actor' => 1, 'without_actor' => 0])
+        ->and($envelope['result']['activity'])->toBe(attributedActivity(['job-attempt' => [0, 1]]));
+});
+
+it('attributes nothing by a dispatch that retention pruned, and counts the attempt as having no actor', function () {
+    config()->set('firewatch.retention.age', '7d');
+    registerFirewatch();
+    ingest([attributedUser(), attributedDispatch('job', user: '7', offset: -8 * 86400)]);
+    ingest([attributedAttempt('attempt', 'job', offset: 100)]);
+
+    $envelope = attributedAnswer();
+
+    expect(storeRows("SELECT count(*) AS dispatches FROM records WHERE type = 'queued-job'"))->toBe([['dispatches' => 0]])
+        ->and(attributedLinks($envelope))->toBe([])
+        ->and($envelope['result']['attribution']['job_attempts'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1])
+        ->and($envelope['empty']['kind'])->toBe('no_match');
+});
+
+it('attributes nothing by a dispatch that was cleared', function () {
+    ingest([attributedUser(), attributedDispatch('job', user: '7'), attributedAttempt('attempt', 'job', offset: 1)]);
+    $this->artisan('firewatch:clear', ['--type' => 'queued-job', '--force' => true])->assertSuccessful();
+
+    $envelope = attributedAnswer();
+
+    expect($envelope['result']['attribution']['job_attempts'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1]);
+});
+
+it('attributes a command or a scheduled task the person acted inside of, by any child carrying them', function (RecordType $type, string $source, string $key, RecordType $child) {
+    ingest([
+        attributedUser(),
+        attributedExecution($type, 'inside', offset: 10),
+        attributedChild($child, 'inside', $source, user: '7', offset: 11),
+        attributedExecution($type, 'others', offset: 20),
+        attributedChild($child, 'others', $source, user: '8', offset: 21),
+        attributedChild($child, 'others', $source, offset: 22),
+        attributedExecution($type, 'alone', offset: 30),
+    ]);
+
+    $envelope = attributedAnswer();
+
+    expect(attributedLinks($envelope))->toBe(['inside' => 'inside'])
+        ->and($envelope['result']['attribution'][$key])->toBe(['total' => 3, 'this_actor' => 1, 'unattributable' => 2])
+        ->and($envelope['result']['attribution']['records'])->toBe(['in_window' => 6, 'this_actor' => 1, 'without_actor' => 4])
+        ->and($envelope['result']['activity'])->toBe(attributedActivity([$child->value => [1, 0]]));
+})->with([
+    'a command and a query' => [RecordType::COMMAND, 'command', 'commands', RecordType::QUERY],
+    'a scheduled task and a log' => [RecordType::SCHEDULED_TASK, 'schedule', 'scheduled_tasks', RecordType::LOG],
+]);
+
+it('attributes a command of the window by a child that started after the window', function () {
+    ingest([attributedUser(), attributedExecution(RecordType::COMMAND, 'command', offset: 10), attributedChild(RecordType::QUERY, 'command', 'command', user: '7', offset: 30)]);
+
+    $envelope = attributedAnswer(arguments: ['since' => ATTRIBUTED_AT, 'until' => ATTRIBUTED_AT + 20]);
+
+    expect(attributedLinks($envelope))->toBe(['command' => 'inside'])
+        ->and($envelope['result']['attribution']['records'])->toBe(['in_window' => 1, 'this_actor' => 0, 'without_actor' => 1]);
+});
+
+it('never puts a command inside a person by a child of another source that shares its id', function () {
+    ingest([attributedUser(), attributedExecution(RecordType::COMMAND, 'shared', offset: 10), attributedChild(RecordType::QUERY, 'shared', 'request', user: '7', offset: 11)]);
+
+    $envelope = attributedAnswer();
+
+    expect(attributedLinks($envelope))->toBe([])
+        ->and($envelope['result']['attribution']['commands'])->toBe(['total' => 1, 'this_actor' => 0, 'unattributable' => 1]);
+});
+
+it('reads an empty user and an absent one alike as no recorded user', function (RecordBuilder $request) {
+    ingest([attributedUser(), $request]);
+
+    $envelope = attributedAnswer();
+
+    expect($envelope['result']['attribution']['requests'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 0, 'guest' => 1])
+        ->and($envelope['result']['attribution']['records'])->toBe(['in_window' => 1, 'this_actor' => 0, 'without_actor' => 1]);
+})->with([
+    'empty on the wire' => [fn () => attributedExecution(RecordType::REQUEST, 'request', user: '')],
+    'absent from the wire' => [fn () => attributedExecution(RecordType::REQUEST, 'request')->without('user')],
+]);
+
+it('counts the records of the window as the person\'s, someone else\'s or no one\'s, and the counts add up', function () {
+    ingest([
+        attributedUser(),
+        attributedExecution(RecordType::REQUEST, 'early', offset: -10, user: '7'),
+        attributedChild(RecordType::QUERY, 'early', 'request', offset: 5),
+        attributedExecution(RecordType::REQUEST, 'mine', offset: 10, user: '7', fields: ['route_path' => '/orders']),
+        attributedChild(RecordType::QUERY, 'mine', 'request', offset: 11),
+        attributedChild(RecordType::QUERY, 'mine', 'request', user: '8', offset: 12),
+        attributedExecution(RecordType::REQUEST, 'theirs', offset: 20, user: '8'),
+        attributedChild(RecordType::QUERY, 'theirs', 'request', offset: 21),
+        attributedExecution(RecordType::REQUEST, 'guest', offset: 30, user: ''),
+        attributedChild(RecordType::QUERY, 'guest', 'request', offset: 31),
+        attributedDispatch('job', user: '7', offset: 40),
+        attributedAttempt('attempt', 'job', offset: 41),
+        attributedChild(RecordType::LOG, 'attempt', 'job', offset: 42),
+        attributedExecution(RecordType::COMMAND, 'command', offset: 50, fields: ['name' => 'orders:sync']),
+        attributedChild(RecordType::QUERY, 'command', 'command', user: '7', offset: 51),
+        attributedChild(RecordType::QUERY, 'command', 'command', offset: 52),
+        attributedChild(RecordType::QUERY, 'nowhere', 'request', offset: 60),
+    ]);
+
+    $envelope = attributedAnswer(arguments: ['since' => ATTRIBUTED_AT]);
+    $attribution = $envelope['result']['attribution'];
+
+    expect($attribution)->toBe(attributionCounts([
+        'requests' => ['total' => 3, 'this_actor' => 1, 'other_actors' => 1, 'guest' => 1],
+        'job_attempts' => ['total' => 1, 'this_actor' => 1],
+        'commands' => ['total' => 1, 'this_actor' => 1],
+        'records' => ['in_window' => 15, 'this_actor' => 7, 'without_actor' => 5],
+    ]))
+        ->and($attribution['records']['in_window'] - $attribution['records']['this_actor'] - $attribution['records']['without_actor'])->toBe(3)
+        ->and($envelope['result']['activity'])->toBe(attributedActivity(['request' => [1, 0], 'job-attempt' => [0, 1], 'query' => [3, 0], 'log' => [0, 1], 'queued-job' => [1, 0]]))
+        ->and($envelope['result']['executions'])->toBe([
+            ['started_at' => ATTRIBUTED_AT + 50, 'type' => 'command', 'execution_id' => 'command', 'group_hash' => ATTRIBUTED_GROUP, 'label' => 'orders:sync', 'link' => 'inside'],
+            ['started_at' => ATTRIBUTED_AT + 41, 'type' => 'job-attempt', 'execution_id' => 'attempt', 'group_hash' => ATTRIBUTED_GROUP, 'label' => 'Workbench\\App\\Jobs\\ShipOrder', 'link' => 'dispatch'],
+            ['started_at' => ATTRIBUTED_AT + 10, 'type' => 'request', 'execution_id' => 'mine', 'group_hash' => ATTRIBUTED_GROUP, 'label' => '/orders', 'link' => 'direct'],
+        ])
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor', 'attributed' => 3, 'total' => 5, 'direct' => 1, 'dispatch' => 1, 'inside' => 1, 'unattributed' => 1]))
+        ->and($envelope['notes'])->toBe([
+            __('firewatch::messages.actor_commands_note', ['commands' => 1, 'tasks' => 0, 'inside' => 1]),
+            trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
+            __('firewatch::messages.actor_caveats_note'),
+        ]);
+});
+
+it('gives a record with no user of its own the class of the latest execution of its id and source', function () {
+    ingest([
+        attributedUser(),
+        attributedExecution(RecordType::REQUEST, 'twice', offset: 1, user: '8'),
+        attributedExecution(RecordType::REQUEST, 'twice', offset: 2, user: '7'),
+        attributedChild(RecordType::QUERY, 'twice', 'request', offset: 3),
+        attributedExecution(RecordType::COMMAND, 'shared', offset: 4),
+        attributedExecution(RecordType::REQUEST, 'shared', offset: 5, user: '7'),
+        attributedChild(RecordType::LOG, 'shared', 'command', offset: 6),
+    ]);
+
+    $envelope = attributedAnswer();
+
+    expect($envelope['result']['activity'])->toBe(attributedActivity(['request' => [2, 0], 'query' => [1, 0]]))
+        ->and($envelope['result']['attribution']['records'])->toBe(['in_window' => 6, 'this_actor' => 3, 'without_actor' => 2]);
+});
+
+it('lists the attributed executions newest first, the later stored first at one instant', function () {
+    ingest([
+        attributedUser(),
+        attributedExecution(RecordType::REQUEST, 'first', offset: 5, user: '7'),
+        attributedExecution(RecordType::REQUEST, 'second', offset: 5, user: '7'),
+        attributedExecution(RecordType::REQUEST, 'oldest', offset: 1, user: '7'),
+        attributedExecution(RecordType::REQUEST, 'newest', offset: 9, user: '7'),
+    ]);
+
+    $envelope = attributedAnswer();
+
+    expect(array_column($envelope['result']['executions'], 'execution_id'))->toBe(['newest', 'second', 'first', 'oldest']);
+});
+
+it('lists at most the limit of executions, and says how to see the rest when there are more', function (?int $limit, int $executions, int $listed) {
+    ingest([attributedUser(), ...array_map(fn (int $number) => attributedExecution(RecordType::REQUEST, "request-{$number}", offset: $number, user: '7'), range(1, $executions))]);
+
+    $envelope = attributedAnswer(arguments: $limit === null ? [] : ['limit' => $limit]);
+
+    expect(array_column($envelope['result']['executions'], 'execution_id'))->toBe(array_map(fn (int $number) => "request-{$number}", range($executions, $executions - $listed + 1)))
+        ->and($envelope['result']['attribution']['requests']['this_actor'])->toBe($executions)
+        ->and($envelope['truncated'])->toBe($executions > $listed ? [[
+            'section' => 'executions',
+            'shown' => $listed,
+            'matched' => null,
+            'reason' => 'limit',
+            'how' => __('firewatch::messages.actor_executions_how', ['listed' => $listed]),
+        ]] : []);
+})->with([
+    'one of one' => [1, 1, 1],
+    'one of two' => [1, 2, 1],
+    'twenty of twenty by default' => [null, 20, 20],
+    'twenty of twenty-one by default' => [null, 21, 20],
+    'a hundred of a hundred' => [100, 100, 100],
+    'a hundred of a hundred and one' => [100, 101, 100],
+]);
+
+it('refuses a limit that is not a whole number from 1 to 100', function (mixed $limit, string $shown) {
+    $response = FirewatchServer::tool(Actor::class, ['who' => '7', 'limit' => $limit]);
+    $text = (fn () => $this->content())->call($response)[0];
+
+    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'limit', 'expected' => '1 to 100', 'value' => $shown, 'accepted' => 'a whole number from 1 to 100', 'example' => 'actor(who: "taylor", limit: 20)']));
+})->with([
+    'zero' => [0, '0'],
+    'a hundred and one' => [101, '101'],
+    'text' => ['5', '"5"'],
+    'a fraction' => [1.5, '1.5'],
+    'a boolean' => [true, 'true'],
+]);
