@@ -88,9 +88,9 @@ function actorWindow(): array
 /**
  * Get the summary of a person identified in a window with the given executions.
  */
-function actorSummary(string $person, int $attributed = 0, int $total = 0, int $direct = 0, int $unattributed = 0): string
+function actorSummary(string $person, int $attributed = 0, int $total = 0, int $direct = 0, int $unattributable = 0): string
 {
-    return __('firewatch::messages.actor_summary', ['person' => $person, 'attributed' => $attributed, 'total' => $total, 'direct' => $direct, 'dispatch' => 0, 'inside' => 0, 'unattributed' => $unattributed]);
+    return __('firewatch::messages.actor_summary', ['person' => $person, 'attributed' => $attributed, 'total' => $total, 'direct' => $direct, 'dispatch' => 0, 'inside' => 0, 'unattributable' => $unattributable]);
 }
 
 /**

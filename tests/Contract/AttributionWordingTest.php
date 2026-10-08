@@ -7,7 +7,7 @@ test('each fixed sentence of an attribution has its pinned wording', function (s
 })->with([
     'the summary' => [
         'actor_summary',
-        ['person' => 'Taylor', 'attributed' => 3, 'total' => 5, 'direct' => 1, 'dispatch' => 1, 'inside' => 1, 'unattributed' => 1],
+        ['person' => 'Taylor', 'attributed' => 3, 'total' => 5, 'direct' => 1, 'dispatch' => 1, 'inside' => 1, 'unattributable' => 1],
         'Taylor: 3 of 5 executions in the window attributed (1 direct, 1 dispatch, 1 inside); 1 cannot be attributed.',
         0,
     ],

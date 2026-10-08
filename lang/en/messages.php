@@ -310,9 +310,9 @@ return [
 
     'actor_limit_argument' => 'The most executions to list, 1 to 100. Default 20.',
 
-    'actor_summary' => ':person: :attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributed cannot be attributed.',
+    'actor_summary' => ':person: :attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributable cannot be attributed.',
 
-    'actor_summary_without_person' => ':attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributed cannot be attributed.',
+    'actor_summary_without_person' => ':attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributable cannot be attributed.',
 
     'actor_nothing_attributed_summary' => 'Nothing in this window is attributed to :person.',
 

@@ -132,7 +132,7 @@ it('attributes the requests of the window to the person and counts all the other
         'tool' => 'actor',
         'now' => ATTRIBUTED_AT + 3600,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => null, 'until' => null, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
-        'summary' => __('firewatch::messages.actor_summary', ['person' => 'Taylor', 'attributed' => 1, 'total' => 3, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributed' => 1]),
+        'summary' => __('firewatch::messages.actor_summary', ['person' => 'Taylor', 'attributed' => 1, 'total' => 3, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributable' => 1]),
         'empty' => null,
         'result' => [
             'identity' => ['id' => '7', 'name' => 'Taylor', 'username' => null, 'first_seen_at' => ATTRIBUTED_AT, 'last_seen_at' => ATTRIBUTED_AT, 'matched_by' => 'name'],
@@ -336,7 +336,7 @@ it('counts the records of the window as the person\'s, someone else\'s or no one
             ['started_at' => ATTRIBUTED_AT + 41, 'type' => 'job-attempt', 'execution_id' => 'attempt', 'group_hash' => ATTRIBUTED_GROUP, 'label' => 'Workbench\\App\\Jobs\\ShipOrder', 'link' => 'dispatch'],
             ['started_at' => ATTRIBUTED_AT + 10, 'type' => 'request', 'execution_id' => 'mine', 'group_hash' => ATTRIBUTED_GROUP, 'label' => '/orders', 'link' => 'direct'],
         ])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor', 'attributed' => 3, 'total' => 5, 'direct' => 1, 'dispatch' => 1, 'inside' => 1, 'unattributed' => 1]))
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor', 'attributed' => 3, 'total' => 5, 'direct' => 1, 'dispatch' => 1, 'inside' => 1, 'unattributable' => 1]))
         ->and($envelope['notes'])->toBe([
             __('firewatch::messages.actor_commands_note', ['commands' => 1, 'tasks' => 0, 'inside' => 1]),
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
@@ -476,7 +476,7 @@ it('states the commands and tasks of the window, the attempts with no actor and 
     ],
 ]);
 
-it('carries all five notes for a person identified from records in a window with every kind of unattributed work', function () {
+it('carries all five notes for a person identified from records in a window with every kind of unattributable work', function () {
     ingest([
         attributedExecution(RecordType::REQUEST, 'mine', user: '99'),
         attributedExecution(RecordType::REQUEST, 'guest', offset: 1, user: ''),
@@ -493,17 +493,17 @@ it('carries all five notes for a person identified from records in a window with
         trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
         __('firewatch::messages.actor_caveats_note'),
     ])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => '99', 'attributed' => 1, 'total' => 4, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributed' => 3]));
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => '99', 'attributed' => 1, 'total' => 4, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributable' => 3]));
 });
 
 it('names the person in the summary by name, else by id, else not at all, so that the sentence is never cut', function (int $nameOver, int $idOver, string $named) {
-    $room = Answer::SUMMARY_CHARACTERS - mb_strlen(__('firewatch::messages.actor_summary', ['person' => '', 'attributed' => 1, 'total' => 1, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributed' => 0]));
+    $room = Answer::SUMMARY_CHARACTERS - mb_strlen(__('firewatch::messages.actor_summary', ['person' => '', 'attributed' => 1, 'total' => 1, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributable' => 0]));
     $name = 'x'.str_repeat('n', $room + $nameOver - 1);
     $id = 'i'.str_repeat('d', $room + $idOver - 1);
     ingest([attributedUser($id, $name), attributedExecution(RecordType::REQUEST, 'mine', user: $id)]);
 
     $envelope = attributedAnswer('x');
-    $counts = ['attributed' => 1, 'total' => 1, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributed' => 0];
+    $counts = ['attributed' => 1, 'total' => 1, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributable' => 0];
 
     expect($envelope['summary'])->toBe(match ($named) {
         'name' => __('firewatch::messages.actor_summary', ['person' => $name, ...$counts]),

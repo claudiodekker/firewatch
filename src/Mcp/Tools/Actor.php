@@ -266,7 +266,7 @@ class Actor extends Tool
             'attributed' => $attribution->attributed(),
             'total' => $attribution->total(),
             ...$attribution->links,
-            'unattributed' => $attribution->unattributed(),
+            'unattributable' => $attribution->unattributable(),
         ];
 
         return $this->naming('actor_summary', $named, $id, $counts);
@@ -308,9 +308,10 @@ class Actor extends Tool
      */
     protected function notes(MatchedBy $decidedBy, Attribution $attribution): array
     {
-        $counts = $attribution->counts;
-        $commands = $counts['commands']['total'];
-        $tasks = $counts['scheduled_tasks']['total'];
+        $commands = $attribution->commands();
+        $tasks = $attribution->scheduledTasks();
+        $attempts = $attribution->attemptsWithoutActor();
+        $requests = $attribution->requestsWithoutUser();
         $notes = [];
 
         if ($decidedBy === MatchedBy::RECORDS) {
@@ -322,15 +323,15 @@ class Actor extends Tool
             : __('firewatch::messages.actor_commands_note', [
                 'commands' => $commands,
                 'tasks' => $tasks,
-                'inside' => $attribution->links['inside'],
+                'inside' => $attribution->inside(),
             ]);
 
-        if ($counts['job_attempts']['no_actor'] > 0) {
-            $notes[] = trans_choice('firewatch::messages.actor_no_actor_note', $counts['job_attempts']['no_actor'], ['count' => $counts['job_attempts']['no_actor']]);
+        if ($attempts > 0) {
+            $notes[] = trans_choice('firewatch::messages.actor_no_actor_note', $attempts, ['count' => $attempts]);
         }
 
-        if ($counts['requests']['guest'] > 0) {
-            $notes[] = trans_choice('firewatch::messages.actor_guest_note', $counts['requests']['guest'], ['count' => $counts['requests']['guest']]);
+        if ($requests > 0) {
+            $notes[] = trans_choice('firewatch::messages.actor_guest_note', $requests, ['count' => $requests]);
         }
 
         $notes[] = __('firewatch::messages.actor_caveats_note');

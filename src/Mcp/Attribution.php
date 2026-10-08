@@ -41,13 +41,13 @@ class Attribution
     public static function of(SQLite3 $connection, Window $window, string $id, int $limit): self
     {
         $bindings = self::bindings($id);
-        $executions = self::executionsByClass($connection, $window, $bindings);
-        $records = self::recordsByLink($connection, $window, $bindings);
+        $executionCounts = self::executionsByLink($connection, $window, $bindings);
+        $recordCounts = self::recordsByLink($connection, $window, $bindings);
         $listed = self::listed($connection, $window, $bindings, $limit);
 
-        $classes = fn (RecordType $type) => $executions[$type->value] ?? [];
-        $requests = $classes(RecordType::REQUEST);
-        $attempts = $classes(RecordType::JOB_ATTEMPT);
+        $linksOf = fn (RecordType $type) => $executionCounts[$type->value] ?? [];
+        $requests = $linksOf(RecordType::REQUEST);
+        $attempts = $linksOf(RecordType::JOB_ATTEMPT);
 
         $counts = [
             'requests' => [
@@ -62,15 +62,15 @@ class Attribution
                 'other_actors' => $attempts[AttributionLink::OTHER_ACTOR->value] ?? 0,
                 'no_actor' => $attempts[AttributionLink::UNATTRIBUTABLE->value] ?? 0,
             ],
-            'commands' => self::countsWithoutUser($classes(RecordType::COMMAND)),
-            'scheduled_tasks' => self::countsWithoutUser($classes(RecordType::SCHEDULED_TASK)),
-            'records' => self::records($records),
+            'commands' => self::insideCounts($linksOf(RecordType::COMMAND)),
+            'scheduled_tasks' => self::insideCounts($linksOf(RecordType::SCHEDULED_TASK)),
+            'records' => self::recordTotals($recordCounts),
         ];
 
         $activity = array_map(fn (RecordType $type) => [
             'type' => $type->value,
-            'direct' => self::sum($records, $type, AttributionLink::DIRECT),
-            'dispatch' => self::sum($records, $type, AttributionLink::DISPATCH),
+            'direct' => self::recordsOf($recordCounts, $type, AttributionLink::DIRECT),
+            'dispatch' => self::recordsOf($recordCounts, $type, AttributionLink::DISPATCH),
             'can_carry_actor' => ! in_array($type, self::WITHOUT_USER, true),
         ], RecordType::events());
 
@@ -80,7 +80,7 @@ class Attribution
             'inside' => $counts['commands']['this_actor'] + $counts['scheduled_tasks']['this_actor'],
         ];
 
-        $recorded = array_filter($records, fn (array $row) => $row['own'] === 1) !== [];
+        $recorded = array_filter($recordCounts, fn (array $row) => $row['own'] === 1) !== [];
 
         return new self($counts, $activity, Rows::bound($listed, $limit), $links, $recorded);
     }
@@ -116,11 +116,51 @@ class Attribution
     }
 
     /**
-     * Get how many executions of the window no link ties to anyone asked about: the guests, the attempts with no actor and the commands and tasks with no child of the person.
+     * Get how many executions of the window are unattributable: the requests with no recorded user, the attempts with no actor and the commands and tasks with no child of the person.
      */
-    public function unattributed(): int
+    public function unattributable(): int
     {
-        return $this->counts['requests']['guest'] + $this->counts['job_attempts']['no_actor'] + $this->counts['commands']['unattributable'] + $this->counts['scheduled_tasks']['unattributable'];
+        return $this->requestsWithoutUser() + $this->attemptsWithoutActor() + $this->counts['commands']['unattributable'] + $this->counts['scheduled_tasks']['unattributable'];
+    }
+
+    /**
+     * Get how many requests of the window carry no recorded user.
+     */
+    public function requestsWithoutUser(): int
+    {
+        return $this->counts['requests']['guest'];
+    }
+
+    /**
+     * Get how many job attempts of the window have no recorded user and no traceable dispatch.
+     */
+    public function attemptsWithoutActor(): int
+    {
+        return $this->counts['job_attempts']['no_actor'];
+    }
+
+    /**
+     * Get how many commands ran in the window.
+     */
+    public function commands(): int
+    {
+        return $this->counts['commands']['total'];
+    }
+
+    /**
+     * Get how many scheduled tasks ran in the window.
+     */
+    public function scheduledTasks(): int
+    {
+        return $this->counts['scheduled_tasks']['total'];
+    }
+
+    /**
+     * Get how many commands and tasks of the window the person is inside of.
+     */
+    public function inside(): int
+    {
+        return $this->links['inside'];
     }
 
     /**
@@ -128,7 +168,7 @@ class Attribution
      *
      * This is the one place that decides a link. Direct and other actor are read from the record's own user on the types that carry one; dispatch from the user of the job's dispatch, the highest store id when there are several, as the specification fixes it, and only for an attempt with no user of its own; inside from a child of a command or task that carries the person. The links are looked up over the whole store, whatever the window.
      */
-    protected static function classOf(string $execution): string
+    protected static function linkOf(string $execution): string
     {
         $withUser = self::parameters(array_filter(Executions::TYPES, fn (RecordType $type) => ! in_array($type, self::WITHOUT_USER, true)));
         $withoutUser = self::parameters(self::WITHOUT_USER);
@@ -149,32 +189,32 @@ class Attribution
     }
 
     /**
-     * Get the SQL of the executions of the window with their link, as the table `classified`.
+     * Get the SQL of the executions of the window with their link, as the table `linked`.
      */
-    protected static function classified(Window $window): string
+    protected static function linked(Window $window): string
     {
-        $class = self::classOf('e');
+        $link = self::linkOf('e');
         $executions = self::parameters(Executions::TYPES);
 
-        return "WITH classified AS (
-            SELECT e.id, e.type, e.execution_id, e.started_at, e.group_hash, {$class} AS class
+        return "WITH linked AS (
+            SELECT e.id, e.type, e.execution_id, e.started_at, e.group_hash, {$link} AS link
             FROM records e WHERE e.type IN ({$executions}) AND {$window->condition()}
         )";
     }
 
     /**
-     * Count the executions of the window by type and class.
+     * Count the executions of the window by type and link.
      *
      * @param  array<string, string>  $bindings
      * @return array<string, array<string, int>>
      */
-    protected static function executionsByClass(SQLite3 $connection, Window $window, array $bindings): array
+    protected static function executionsByLink(SQLite3 $connection, Window $window, array $bindings): array
     {
-        $rows = Stored::rows($connection, self::classified($window).' SELECT type, class, count(*) AS executions FROM classified GROUP BY type, class', $bindings, $window);
+        $rows = Stored::rows($connection, self::linked($window).' SELECT type, link, count(*) AS executions FROM linked GROUP BY type, link', $bindings, $window);
         $counts = [];
 
         foreach ($rows as $row) {
-            $counts[$row['type']][$row['class']] = $row['executions'];
+            $counts[$row['type']][$row['link']] = $row['executions'];
         }
 
         return $counts;
@@ -194,8 +234,8 @@ class Attribution
         $executions = self::parameters(Executions::TYPES);
         $children = self::parameters(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, Executions::TYPES, true)));
         $inheriting = "type IN ({$children}) AND NULLIF(user_id, '') IS NULL AND execution_id IS NOT NULL";
-        $ownLink = self::classOf('r');
-        $executionLink = self::classOf('x');
+        $ownLink = self::linkOf('r');
+        $executionLink = self::linkOf('x');
 
         /** @var list<array{type: string, link: string, own: int, records: int}> */
         return Stored::rows($connection, "WITH inheriting AS (
@@ -234,14 +274,14 @@ class Attribution
     protected static function listed(SQLite3 $connection, Window $window, array $bindings, int $limit): array
     {
         $labels = implode(' ', array_map(
-            fn (RecordType $type) => 'WHEN :'.self::parameter($type).' THEN (SELECT '.Ranking::labelField($type)." FROM {$type->view()} v WHERE v.id = classified.id)",
+            fn (RecordType $type) => 'WHEN :'.self::parameter($type).' THEN (SELECT '.Ranking::labelField($type)." FROM {$type->view()} v WHERE v.id = linked.id)",
             Executions::TYPES,
         ));
 
         $links = implode(', ', array_map(fn (AttributionLink $link) => ":{$link->value}", AttributionLink::links()));
 
-        $rows = Stored::rows($connection, self::classified($window)." SELECT started_at, type, execution_id, group_hash, class, CASE type {$labels} END AS label
-            FROM classified WHERE class IN ({$links}) ORDER BY started_at DESC, id DESC LIMIT :limit", [
+        $rows = Stored::rows($connection, self::linked($window)." SELECT started_at, type, execution_id, group_hash, link, CASE type {$labels} END AS label
+            FROM linked WHERE link IN ({$links}) ORDER BY started_at DESC, id DESC LIMIT :limit", [
             ...$bindings,
             'limit' => Rows::fetch($limit),
         ], $window);
@@ -252,20 +292,20 @@ class Attribution
             'execution_id' => $row['execution_id'],
             'group_hash' => $row['group_hash'],
             'label' => Ranking::shownLabel(RecordType::from($row['type']), $row['label']),
-            'link' => AttributionLink::from($row['class'])->value,
+            'link' => AttributionLink::from($row['link'])->value,
         ], $rows);
     }
 
     /**
-     * Get the counts of the commands or tasks of the window: those the person is inside of, and the rest.
+     * Get the counts of the commands or of the tasks of the window: those the person is inside of, and the rest.
      *
-     * @param  array<string, int>  $classes
+     * @param  array<string, int>  $executions  by link
      * @return array{total: int, this_actor: int, unattributable: int}
      */
-    protected static function countsWithoutUser(array $classes): array
+    protected static function insideCounts(array $executions): array
     {
-        $total = array_sum($classes);
-        $inside = $classes[AttributionLink::INSIDE->value] ?? 0;
+        $total = array_sum($executions);
+        $inside = $executions[AttributionLink::INSIDE->value] ?? 0;
 
         return [
             'total' => $total,
@@ -277,15 +317,15 @@ class Attribution
     /**
      * Get the counts of the records of the window: the person's, and those with no user of their own whose execution is not the person's.
      *
-     * @param  list<array{type: string, link: string, own: int, records: int}>  $records
+     * @param  list<array{type: string, link: string, own: int, records: int}>  $recordCounts
      * @return array{in_window: int, this_actor: int, without_actor: int}
      */
-    protected static function records(array $records): array
+    protected static function recordTotals(array $recordCounts): array
     {
-        $count = fn (AttributionLink ...$classes) => array_sum(array_column(array_filter($records, fn (array $row) => in_array(AttributionLink::from($row['link']), $classes, true)), 'records'));
+        $count = fn (AttributionLink ...$links) => array_sum(array_column(array_filter($recordCounts, fn (array $row) => in_array(AttributionLink::from($row['link']), $links, true)), 'records'));
 
         return [
-            'in_window' => array_sum(array_column($records, 'records')),
+            'in_window' => array_sum(array_column($recordCounts, 'records')),
             'this_actor' => $count(AttributionLink::DIRECT, AttributionLink::DISPATCH),
             'without_actor' => $count(AttributionLink::UNATTRIBUTABLE),
         ];
@@ -294,11 +334,11 @@ class Attribution
     /**
      * Get how many records of the window of a type are the person's by a link.
      *
-     * @param  list<array{type: string, link: string, own: int, records: int}>  $records
+     * @param  list<array{type: string, link: string, own: int, records: int}>  $recordCounts
      */
-    protected static function sum(array $records, RecordType $type, AttributionLink $link): int
+    protected static function recordsOf(array $recordCounts, RecordType $type, AttributionLink $link): int
     {
-        $kept = array_filter($records, fn (array $row) => $row['type'] === $type->value && $row['link'] === $link->value);
+        $kept = array_filter($recordCounts, fn (array $row) => $row['type'] === $type->value && $row['link'] === $link->value);
 
         return array_sum(array_column($kept, 'records'));
     }
