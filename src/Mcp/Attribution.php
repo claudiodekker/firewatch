@@ -144,7 +144,7 @@ class Attribution
             ), :none)
             WHEN {$execution}.type IN (:command, :scheduled_task) AND EXISTS (
                 SELECT 1 FROM records c
-                WHERE c.execution_id = {$execution}.execution_id AND c.source = {$execution}.source AND c.id <> {$execution}.id AND NULLIF(c.user_id, '') = :actor
+                WHERE c.execution_id = {$execution}.execution_id AND c.source = {$execution}.source AND NULLIF(c.user_id, '') = :actor
             ) THEN :inside
             ELSE :none
         END";
