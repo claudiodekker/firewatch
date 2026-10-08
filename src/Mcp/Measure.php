@@ -15,6 +15,7 @@ enum Measure: string
     case TOTAL_DURATION = 'total_duration';
     case OCCURRENCES = 'occurrences';
     case P95_MEMORY = 'p95_memory';
+    case P50_MEMORY = 'p50_memory';
     case MAX_MEMORY = 'max_memory';
     case LAST_SEEN = 'last_seen';
     case QUERIES = 'queries';
@@ -37,13 +38,13 @@ enum Measure: string
     }
 
     /**
-     * Get the measures that fit a type, in the order they are listed.
+     * Get the measures a type is ranked by, in the order they are listed.
      *
      * @return list<self>
      */
     public static function for(RecordType $type): array
     {
-        return array_values(array_filter(self::cases(), fn (self $measure) => $measure->fits($type)));
+        return array_values(array_filter(self::cases(), fn (self $measure) => $measure !== self::P50_MEMORY && $measure->fits($type)));
     }
 
     /**
@@ -61,7 +62,7 @@ enum Measure: string
     {
         return match ($this) {
             self::OCCURRENCES, self::LAST_SEEN => true,
-            self::P95_MEMORY, self::MAX_MEMORY, self::QUERIES => in_array($type, self::EXECUTIONS, true),
+            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY, self::QUERIES => in_array($type, self::EXECUTIONS, true),
             default => $type !== RecordType::EXCEPTION,
         };
     }
@@ -73,7 +74,7 @@ enum Measure: string
     {
         return match ($this) {
             self::P95_DURATION, self::P50_DURATION => self::MAX_DURATION,
-            self::P95_MEMORY => self::MAX_MEMORY,
+            self::P95_MEMORY, self::P50_MEMORY => self::MAX_MEMORY,
             default => null,
         };
     }
@@ -89,6 +90,7 @@ enum Measure: string
             self::P95_DURATION => ['p95', Ranking::P95_FLOOR],
             self::P50_DURATION => ['p50', Ranking::P50_FLOOR],
             self::P95_MEMORY => ['p95 memory', Ranking::P95_FLOOR],
+            self::P50_MEMORY => ['p50 memory', Ranking::P50_FLOOR],
             default => null,
         };
     }

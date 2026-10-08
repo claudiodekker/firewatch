@@ -146,6 +146,39 @@ class Ranking
     }
 
     /**
+     * Read the unrounded statistics of every group of the type in the window, keyed by group hash.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function statistics(SQLite3 $connection): array
+    {
+        return array_column($this->groups($connection), null, 'hash');
+    }
+
+    /**
+     * Read the types that hold a group in the store, in the order of the types with groups.
+     *
+     * @return list<RecordType>
+     */
+    public static function holders(SQLite3 $connection, string $group): array
+    {
+        $rows = Stored::rows($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group', ['group' => $group]);
+        $held = array_map(fn (array $row) => is_string($row['type']) ? RecordType::tryFrom($row['type']) : null, $rows);
+
+        return array_values(array_filter(Measure::types(), fn (RecordType $type) => in_array($type, $held, true)));
+    }
+
+    /**
+     * Pick the type of a group that no type was asked for: a job group is held by job attempts and dispatches, and the attempts carry the execution measures.
+     *
+     * @param  list<RecordType>  $held
+     */
+    public static function preferred(array $held): ?RecordType
+    {
+        return in_array(RecordType::JOB_ATTEMPT, $held, true) ? RecordType::JOB_ATTEMPT : ($held[0] ?? null);
+    }
+
+    /**
      * Read what the records of every group of the window add up to.
      *
      * @return list<array<string, mixed>>
@@ -170,6 +203,7 @@ class Ranking
                 'p95' => null,
                 'raw' => null,
                 'mem_p95' => null,
+                'mem_p50' => null,
                 'mem_timed' => 0,
                 'first' => null,
                 'slowest' => null,
@@ -192,6 +226,7 @@ class Ranking
                 $groups[$hash] = [
                     ...$groups[$hash],
                     'mem_p95' => $percentiles['p95'],
+                    'mem_p50' => $percentiles['p50'],
                     'mem_timed' => $percentiles['n'],
                 ];
             }
@@ -289,6 +324,7 @@ class Ranking
             Measure::TOTAL_DURATION => $group['total'],
             Measure::OCCURRENCES => $group['occurrences'],
             Measure::P95_MEMORY => $group['mem_timed'] >= self::P95_FLOOR ? $group['mem_p95'] : null,
+            Measure::P50_MEMORY => $group['mem_timed'] >= self::P50_FLOOR ? $group['mem_p50'] : null,
             Measure::MAX_MEMORY => $group['mem_max'] ?? null,
             Measure::LAST_SEEN => $group['last'],
             Measure::QUERIES => $group['queries'] ?? null,
