@@ -16,6 +16,11 @@ use Laravel\Mcp\Server\Transport\FakeTransporter;
 
 const ACTOR_AT = 1790776000.5;
 
+const ACTOR_BLIND_SPOTS = [
+    'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification', 'sync-jobs-unrecorded', 'vendor-defaults-unrecorded',
+    'exceptions-unreported', 'named-log-channels', 'memory-is-process-peak', 'query-bindings-unpaired', 'uninstrumented-dispatcher', 'actor-partial', 'octane-bootstrap',
+];
+
 beforeEach(function () {
     $this->travelTo(Date::createFromTimestamp(ACTOR_AT + 3600));
 });
@@ -200,7 +205,7 @@ it('identifies a person, with when they were first and last seen and the stage t
         'next' => [],
     ])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('identifies by each stage', function (string $who, string $stage) {
@@ -336,7 +341,7 @@ it('lists everyone the deciding stage found when it found several, and guesses n
         'next' => [],
     ])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('finds several people at the username stage when their usernames differ only in case', function () {
@@ -413,7 +418,7 @@ it('identifies an id that no directory row holds from a record that carries it',
         'truncated' => [],
         'next' => [],
     ])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('identifies from a record of any type that carries the id', function (RecordType $type) {
@@ -497,7 +502,7 @@ it('answers that nobody was identified, with the people the directory holds, new
         'next' => [],
     ])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('names the longest who there is in the summary when nobody was identified', function () {
@@ -551,7 +556,7 @@ it('answers that no store exists', function () {
         ->and($envelope['notes'])->toBe([])
         ->and($envelope['next'])->toBe([])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'absent', 'types_read' => array_column(RecordType::events(), 'value')])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('answers that the store is empty when it holds no record and no one', function () {
@@ -564,7 +569,7 @@ it('answers that the store is empty when it holds no record and no one', functio
         ->and($envelope['result'])->toBe([])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
         ->and($envelope['next'])->toBe([])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('answers that the store is unusable', function () {
@@ -578,7 +583,7 @@ it('answers that the store is unusable', function () {
         ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'foreign_file'])
         ->and($envelope['result'])->toBe([])
         ->and($envelope['next'])->toBe([])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('lists the people of a directory whose records are all gone, and states that no record is left', function () {
