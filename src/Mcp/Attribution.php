@@ -62,8 +62,8 @@ class Attribution
                 'other_actors' => $attempts[AttributionLink::OTHER_ACTOR->value] ?? 0,
                 'no_actor' => $attempts[AttributionLink::UNATTRIBUTABLE->value] ?? 0,
             ],
-            'commands' => self::inside($classes(RecordType::COMMAND)),
-            'scheduled_tasks' => self::inside($classes(RecordType::SCHEDULED_TASK)),
+            'commands' => self::countsWithoutUser($classes(RecordType::COMMAND)),
+            'scheduled_tasks' => self::countsWithoutUser($classes(RecordType::SCHEDULED_TASK)),
             'records' => self::records($records),
         ];
 
@@ -132,6 +132,7 @@ class Attribution
     {
         $withUser = self::parameters(array_filter(Executions::TYPES, fn (RecordType $type) => ! in_array($type, self::WITHOUT_USER, true)));
         $withoutUser = self::parameters(self::WITHOUT_USER);
+        $sources = implode(', ', array_map(fn (RecordType $type) => ':'.self::parameter($type).'_source', self::WITHOUT_USER));
 
         return "CASE
             WHEN {$execution}.type IN ({$withUser}) AND NULLIF({$execution}.user_id, '') = :actor THEN :direct
@@ -140,9 +141,8 @@ class Attribution
                 SELECT CASE WHEN NULLIF(d.user_id, '') = :actor THEN :dispatch WHEN NULLIF(d.user_id, '') IS NOT NULL THEN :other_actor END
                 FROM records d WHERE d.job_id = {$execution}.job_id AND d.type = :queued_job ORDER BY d.id DESC LIMIT 1
             ), :unattributable)
-            WHEN {$execution}.type IN ({$withoutUser}) AND EXISTS (
-                SELECT 1 FROM records c
-                WHERE c.execution_id = {$execution}.execution_id AND c.source = {$execution}.source AND NULLIF(c.user_id, '') = :actor
+            WHEN {$execution}.type IN ({$withoutUser}) AND ({$execution}.execution_id, {$execution}.source) IN (
+                SELECT execution_id, source FROM records WHERE user_id = NULLIF(:actor, '') AND source IN ({$sources})
             ) THEN :inside
             ELSE :unattributable
         END";
@@ -183,7 +183,7 @@ class Attribution
     /**
      * Count the records of the window of the twelve types by type, by the class of the record and by whether the person is its own user.
      *
-     * A record with no user of its own takes the class of its execution: itself for an execution record, else the latest execution record of its id and source, wherever it started. A command or task the person is inside of does not make its records the person's.
+     * A record with no user of its own takes the class of its execution: itself for an execution record, else the latest execution record of its id and source, wherever it started. Such children are counted by type and execution first, so that their execution is classified once per type of child, never once per child. A command or task the person is inside of does not make its records the person's.
      *
      * @param  array<string, string>  $bindings
      * @return list<array{type: string, class: string, own: int, records: int}>
@@ -192,21 +192,33 @@ class Attribution
     {
         $types = self::parameters(RecordType::events());
         $executions = self::parameters(Executions::TYPES);
+        $children = self::parameters(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, Executions::TYPES, true)));
+        $inheriting = "type IN ({$children}) AND NULLIF(user_id, '') IS NULL AND execution_id IS NOT NULL";
         $ownClass = self::classOf('r');
         $executionClass = self::classOf('x');
 
         /** @var list<array{type: string, class: string, own: int, records: int}> */
-        return Stored::rows($connection, "SELECT r.type, CASE
+        return Stored::rows($connection, "WITH inheriting AS (
+                SELECT type, execution_id, source, count(*) AS records FROM records
+                WHERE {$inheriting} AND {$window->condition()}
+                GROUP BY type, execution_id, source
+            )
+            SELECT type, COALESCE((
+                SELECT {$executionClass} FROM records x WHERE x.id = (
+                    SELECT y.id FROM records y
+                    WHERE y.execution_id = inheriting.execution_id AND y.source = inheriting.source AND y.type IN ({$executions})
+                    ORDER BY y.id DESC LIMIT 1
+                )
+            ), :unattributable) AS class, 0 AS own, sum(records) AS records
+            FROM inheriting GROUP BY 1, 2
+            UNION ALL
+            SELECT r.type, CASE
                 WHEN NULLIF(r.user_id, '') = :actor THEN :direct
                 WHEN NULLIF(r.user_id, '') IS NOT NULL THEN :other_actor
                 WHEN r.type IN ({$executions}) THEN {$ownClass}
-                ELSE COALESCE((
-                    SELECT {$executionClass} FROM records x
-                    WHERE x.execution_id = r.execution_id AND x.source = r.source AND x.type IN ({$executions})
-                    ORDER BY x.id DESC LIMIT 1
-                ), :unattributable)
+                ELSE :unattributable
             END AS class, COALESCE(NULLIF(r.user_id, '') = :actor, 0) AS own, count(*) AS records
-            FROM records r WHERE r.type IN ({$types}) AND {$window->condition()}
+            FROM records r WHERE r.type IN ({$types}) AND {$window->condition()} AND NOT ({$inheriting})
             GROUP BY 1, 2, 3", $bindings, $window);
     }
 
@@ -247,7 +259,7 @@ class Attribution
      * @param  array<string, int>  $classes
      * @return array{total: int, this_actor: int, unattributable: int}
      */
-    protected static function inside(array $classes): array
+    protected static function countsWithoutUser(array $classes): array
     {
         $total = array_sum($classes);
         $inside = $classes[AttributionLink::INSIDE->value] ?? 0;
@@ -299,6 +311,10 @@ class Attribution
 
         foreach (RecordType::events() as $type) {
             $values[self::parameter($type)] = $type->value;
+        }
+
+        foreach (self::WITHOUT_USER as $type) {
+            $values[self::parameter($type).'_source'] = (string) $type->source();
         }
 
         foreach (AttributionLink::cases() as $link) {
