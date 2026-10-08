@@ -229,8 +229,24 @@ it('identifies a person, with when they were first and last seen and the stage t
         'empty' => null,
         'result' => [
             'identity' => ['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@example.com', 'first_seen_at' => ACTOR_AT + 10, 'last_seen_at' => ACTOR_AT + 40, 'matched_by' => 'username'],
-            'attribution' => $envelope['result']['attribution'],
-            'activity' => $envelope['result']['activity'],
+            'attribution' => attributionCounts([
+                'requests' => ['total' => 1, 'this_actor' => 1],
+                'records' => ['in_window' => 1, 'this_actor' => 1],
+            ]),
+            'activity' => [
+                ['type' => 'request', 'direct' => 1, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'command', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => false],
+                ['type' => 'job-attempt', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'scheduled-task', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => false],
+                ['type' => 'query', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'exception', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'log', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'cache-event', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'mail', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'notification', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'outgoing-request', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+                ['type' => 'queued-job', 'direct' => 0, 'dispatch' => 0, 'can_carry_actor' => true],
+            ],
             'executions' => [
                 ['started_at' => ACTOR_AT, 'type' => 'request', 'execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f', 'group_hash' => str_repeat('a', 32), 'label' => '/', 'link' => 'direct'],
             ],
@@ -245,7 +261,6 @@ it('identifies a person, with when they were first and last seen and the stage t
             ['tool' => 'occurrences', 'arguments' => ['user_id' => '7'], 'why' => __('firewatch::messages.actor_next_user')],
         ],
     ])
-        ->and($envelope['result']['attribution']['requests'])->toBe(['total' => 1, 'this_actor' => 1, 'other_actors' => 0, 'guest' => 0])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
         ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
@@ -456,18 +471,26 @@ it('identifies an id that no directory row holds from a record that carries it',
         'empty' => null,
         'result' => [
             'identity' => ['id' => '99', 'name' => null, 'username' => null, 'first_seen_at' => null, 'last_seen_at' => null, 'matched_by' => 'records'],
-            'attribution' => $envelope['result']['attribution'],
-            'activity' => $envelope['result']['activity'],
-            'executions' => $envelope['result']['executions'],
+            'attribution' => attributionCounts([
+                'requests' => ['total' => 1, 'this_actor' => 1],
+                'records' => ['in_window' => 1, 'this_actor' => 1],
+            ]),
+            'activity' => attributedActivity(['request' => [1, 0]]),
+            'executions' => [
+                ['started_at' => ACTOR_AT, 'type' => 'request', 'execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f', 'group_hash' => str_repeat('a', 32), 'label' => '/', 'link' => 'direct'],
+            ],
         ],
         'coverage' => $envelope['coverage'],
         'blind_spots' => $envelope['blind_spots'],
         'notes' => [__('firewatch::messages.actor_from_records_note'), __('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_caveats_note')],
         'truncated' => [],
-        'next' => $envelope['next'],
+        'next' => [
+            ['tool' => 'execution', 'arguments' => ['execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f'], 'why' => __('firewatch::messages.actor_next_execution')],
+            ['tool' => 'occurrences', 'arguments' => ['group' => str_repeat('a', 32)], 'why' => __('firewatch::messages.actor_next_group')],
+            ['tool' => 'occurrences', 'arguments' => ['user_id' => '99'], 'why' => __('firewatch::messages.actor_next_user')],
+        ],
     ])
-        ->and(array_column($envelope['result']['executions'], 'link'))->toBe(['direct'])
-        ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'occurrences'])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1])
         ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 

@@ -160,3 +160,36 @@ function storeRows(string $sql): array
         return $rows;
     });
 }
+
+/**
+ * Get the counts of the attribution block of an actor answer, zero where none is given.
+ *
+ * @param  array<string, array<string, int>>  $counts
+ * @return array<string, array<string, int>>
+ */
+function attributionCounts(array $counts = []): array
+{
+    return array_replace_recursive([
+        'requests' => ['total' => 0, 'this_actor' => 0, 'other_actors' => 0, 'guest' => 0],
+        'job_attempts' => ['total' => 0, 'this_actor' => 0, 'other_actors' => 0, 'no_actor' => 0],
+        'commands' => ['total' => 0, 'this_actor' => 0, 'unattributable' => 0],
+        'scheduled_tasks' => ['total' => 0, 'this_actor' => 0, 'unattributable' => 0],
+        'records' => ['in_window' => 0, 'this_actor' => 0, 'without_actor' => 0],
+    ], $counts);
+}
+
+/**
+ * Get the activity of an actor answer, a row for each of the twelve types, from the counts of the types that have any.
+ *
+ * @param  array<string, array{int, int}>  $counts
+ * @return list<array{type: string, direct: int, dispatch: int, can_carry_actor: bool}>
+ */
+function attributedActivity(array $counts = []): array
+{
+    return array_map(fn (RecordType $type) => [
+        'type' => $type->value,
+        'direct' => $counts[$type->value][0] ?? 0,
+        'dispatch' => $counts[$type->value][1] ?? 0,
+        'can_carry_actor' => ! in_array($type, [RecordType::COMMAND, RecordType::SCHEDULED_TASK], true),
+    ], RecordType::events());
+}
