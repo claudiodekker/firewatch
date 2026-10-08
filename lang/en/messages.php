@@ -312,6 +312,10 @@ return [
 
     'actor_identified_summary' => 'Identified :person at the :stage stage.',
 
+    'actor_from_records_summary' => 'Identified the id :id from the records that carry it.',
+
+    'actor_from_records_note' => 'No directory row exists for this id (users are kept while recently seen).',
+
     'actor_ambiguous_summary' => '`:who` matches :count people at the :stage stage; repeat with an id.',
 
     'actor_ambiguous_summary_without_who' => ':count people were found at the :stage stage; repeat with an id.',

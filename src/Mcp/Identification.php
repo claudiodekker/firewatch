@@ -58,6 +58,10 @@ class Identification
             }
         }
 
+        if (self::recorded($connection, $who)) {
+            return self::decidedBy(MatchedBy::RECORDS, [self::withoutDirectoryRow($who)], 1);
+        }
+
         [$known, $count] = self::people($connection);
 
         return new self(null, Rows::bound([], self::LISTED), 0, Rows::bound($known, self::LISTED), $count);
@@ -115,6 +119,30 @@ class Identification
             MatchedBy::ID, MatchedBy::USERNAME, MatchedBy::NAME => $who,
             MatchedBy::CONTAINS => '%'.addcslashes($who, self::PATTERN_CHARACTERS).'%',
         };
+    }
+
+    /**
+     * Determine if any record carries the text as its user id.
+     */
+    protected static function recorded(SQLite3 $connection, string $who): bool
+    {
+        return Stored::rows($connection, 'SELECT 1 AS held FROM records WHERE user_id = :who LIMIT 1', ['who' => $who]) !== [];
+    }
+
+    /**
+     * Get the person of an id that the user directory does not hold, of whom only the id is known.
+     *
+     * @return array{id: string, name: null, username: null, first_seen: null, last_seen: null}
+     */
+    protected static function withoutDirectoryRow(string $id): array
+    {
+        return [
+            'id' => $id,
+            'name' => null,
+            'username' => null,
+            'first_seen' => null,
+            'last_seen' => null,
+        ];
     }
 
     /**

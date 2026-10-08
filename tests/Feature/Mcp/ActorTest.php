@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
+use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Exceptions;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
@@ -391,6 +392,79 @@ it('leaves who out of the summary of several people when the sentence with it wo
     'a sentence of exactly the most characters' => [0, true],
     'one character more' => [1, false],
 ]);
+
+it('identifies an id that no directory row holds from a record that carries it', function () {
+    ingest([actorUser('7', 'Taylor'), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '99'])]);
+
+    $envelope = actorAnswer('99');
+
+    expect($envelope)->toBe([
+        'tool' => 'actor',
+        'now' => ACTOR_AT + 3600,
+        'window' => ['windowed' => false, 'reason' => __('firewatch::messages.actor_window_reason')],
+        'summary' => __('firewatch::messages.actor_from_records_summary', ['id' => '99']),
+        'empty' => null,
+        'result' => [
+            'identity' => ['id' => '99', 'name' => null, 'username' => null, 'first_seen_at' => null, 'last_seen_at' => null, 'matched_by' => 'records'],
+        ],
+        'coverage' => $envelope['coverage'],
+        'blind_spots' => $envelope['blind_spots'],
+        'notes' => [__('firewatch::messages.actor_from_records_note')],
+        'truncated' => [],
+        'next' => [],
+    ])
+        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+});
+
+it('identifies from a record of any type that carries the id', function (RecordType $type) {
+    ingest([syntheticRecord($type)->with(['timestamp' => ACTOR_AT, 'user' => '99'])]);
+
+    $envelope = actorAnswer('99');
+
+    expect($envelope['result']['identity'])->toMatchArray(['id' => '99', 'matched_by' => 'records']);
+})->with([
+    'a request' => [RecordType::REQUEST],
+    'a job attempt' => [RecordType::JOB_ATTEMPT],
+    'a query' => [RecordType::QUERY],
+]);
+
+it('identifies from records only by the whole id as recorded', function (string $who) {
+    ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => 'ABC-99'])]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['empty'])->toBe(['kind' => 'no_match', 'population' => 0, 'message' => __('firewatch::messages.actor_unknown', ['who' => $who, 'population' => 0])])
+        ->and($envelope['result'])->toBe(['known_actors' => [], 'known_actor_count' => 0]);
+})->with([
+    'another case' => ['abc-99'],
+    'a part of it' => ['ABC'],
+    'a wildcard' => ['ABC-%'],
+]);
+
+it('lets a directory stage decide before the records are read', function () {
+    ingest([actorUser('5', 'Sam', '99'), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '99'])]);
+
+    $envelope = actorAnswer('99');
+
+    expect($envelope['result']['identity'])->toMatchArray(['id' => '5', 'matched_by' => 'username'])
+        ->and($envelope['notes'])->toBe([]);
+});
+
+it('identifies the signed-in user of a real request by name', function () {
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+    $this->actingAs(new GenericUser(['id' => 7, 'name' => 'Taylor Otwell', 'email' => 'taylor@example.com']));
+
+    $this->get('/');
+
+    $envelope = actorAnswer('taylor otwell');
+
+    expect($envelope['empty'])->toBeNull()
+        ->and($envelope['result']['identity'])->toMatchArray(['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@example.com', 'matched_by' => 'name'])
+        ->and($envelope['result']['identity']['first_seen_at'])->toBeFloat()
+        ->and($envelope['result']['identity']['last_seen_at'])->toBe($envelope['result']['identity']['first_seen_at'])
+        ->and($envelope['coverage']['records'])->toBeGreaterThanOrEqual(1);
+});
 
 it('answers that nobody was identified, with the people the directory holds, newest sighting first', function () {
     ingest([

@@ -203,12 +203,17 @@ class Actor extends Tool
     {
         $person = $identification->found->rows[0];
         $name = Stored::blank($person['name']);
+        $fromRecords = $decidedBy === MatchedBy::RECORDS;
 
-        return [
-            'summary' => __('firewatch::messages.actor_identified_summary', [
+        $summary = $fromRecords
+            ? __('firewatch::messages.actor_from_records_summary', ['id' => $person['id']])
+            : __('firewatch::messages.actor_identified_summary', [
                 'person' => is_string($name) ? $name : $person['id'],
                 'stage' => $decidedBy->value,
-            ]),
+            ]);
+
+        return [
+            'summary' => $summary,
             'empty' => null,
             'result' => [
                 'identity' => [
@@ -220,7 +225,7 @@ class Actor extends Tool
                     'matched_by' => $decidedBy->value,
                 ],
             ],
-            'notes' => [],
+            'notes' => $fromRecords ? [__('firewatch::messages.actor_from_records_note')] : [],
             'truncated' => [],
         ];
     }
