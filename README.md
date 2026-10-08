@@ -26,7 +26,7 @@ claude mcp add firewatch -- php artisan firewatch:server
 
 The server speaks MCP over stdio. Use only this command to start it, never `mcp:start` or `mcp:inspector`. To see the tools an assistant would get, run `php artisan firewatch:server --list`.
 
-Six tools exist so far:
+Seven tools exist so far:
 
 - `overview` answers what is wrong now, in a fixed order: the error rate of the requests, the slowest groups by total time, the records of each type, the user directory, the signed-in actors, and for each problem shape whether it found something, was clean or could not be evaluated.
 - `rank` lists the worst groups of one record type by a measure such as `p95_duration`, over a time window, optionally matched by label, split by deploy and paged with a cursor.
@@ -34,6 +34,7 @@ Six tools exist so far:
 - `execution` shows one request, command, job attempt or scheduled task in full: its outcome, stages, exceptions with their frames and a timeline of its children.
 - `trace` follows one trace or queued job: the request, commands and job attempts it touched in start order, and each job's path from dispatch to its attempts, with the wait before each.
 - `detect` runs problem shapes, worst first: `n-plus-one` a query one execution ran 3+ times; `database-bound` routes typically spending 60%+ in queries; `failing-routes` routes answering 400+; `failing-jobs` jobs with a failed or released attempt; `queue-latency` jobs pending or waiting 5+ seconds; `failing-tasks` failed or skipped scheduled tasks; `exception-clusters` exception groups, escaped first; `error-logs` error logs by message shape; `failing-http` hosts answering 400+; `cache` keys hit under 50% over 3+ reads, or with a failed write or delete; `memory` executions peaking at 64+ MB.
+- `actor` identifies one signed-in person from a user id, a username, a name or a part of either. Several people who fit are listed and never guessed between, and nobody lists the people seen most recently.
 
 Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see. A clean `detect` answer counts what it examined.
 
