@@ -332,7 +332,17 @@ class Ranking
      */
     protected function label(array $group): string
     {
-        return $group['label'] === '' && $this->type === RecordType::REQUEST ? __('firewatch::messages.rank_no_route') : $group['label'];
+        return self::shownLabel($this->type, $group['label']);
+    }
+
+    /**
+     * Get a stored label as an answer shows it: a request that no route matched has an empty one or none.
+     */
+    public static function shownLabel(RecordType $type, mixed $label): string
+    {
+        $label = is_string($label) ? $label : '';
+
+        return $label === '' && $type === RecordType::REQUEST ? __('firewatch::messages.rank_no_route') : $label;
     }
 
     /**
@@ -491,11 +501,11 @@ class Ranking
     }
 
     /**
-     * Get the field a group is labelled by.
+     * Get the field a group of the type is labelled by.
      */
-    protected function labelField(): string
+    public static function labelField(RecordType $type): string
     {
-        return match ($this->type) {
+        return match ($type) {
             RecordType::REQUEST => 'route_path',
             RecordType::QUERY => 'sql',
             RecordType::OUTGOING_REQUEST => 'host',
@@ -513,12 +523,10 @@ class Ranking
     protected function query(SQLite3 $connection, string $sql, bool $filtered = true): array
     {
         if ($filtered) {
-            $number = Stored::number('duration');
             $deploy = "NULLIF(deploy, '')";
-
-            // A skipped scheduled task has no duration of its own: it never ran.
-            $duration = $this->type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".Outcome::SKIPPED->value."' THEN NULL ELSE {$number} END" : ($this->hasDuration() ? $number : 'NULL');
-            $columns = [$this->group === null ? 'group_hash' : "COALESCE({$deploy}, char(1)) AS group_hash", 'id', 'started_at', "{$deploy} AS deploy", 'execution_id', "{$duration} AS d", "{$this->labelField()} AS label"];
+            $duration = $this->hasDuration() ? Stored::duration($this->type) : 'NULL';
+            $label = self::labelField($this->type);
+            $columns = [$this->group === null ? 'group_hash' : "COALESCE({$deploy}, char(1)) AS group_hash", 'id', 'started_at', "{$deploy} AS deploy", 'execution_id', "{$duration} AS d", "{$label} AS label"];
 
             if ($this->hasMethod()) {
                 $columns[] = 'method';
