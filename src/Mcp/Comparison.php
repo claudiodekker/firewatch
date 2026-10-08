@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Reason;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
@@ -11,7 +10,7 @@ use SQLite3;
  * @internal
  *
  * @phpstan-type Side array{since: float|null, until: float|null, clipped: bool, outside: bool, records: int, first: float|null, last: float|null}
- * @phpstan-type Row array{hash: string, label: mixed, method: mixed, beforeRecords: int, afterRecords: int, before: int|float|null, after: int|float|null, change: Change, steppedDown: bool, reason: Reason|null, have: int|null, needed: int|null}
+ * @phpstan-type Row array{hash: string, label: mixed, method: mixed, beforeRecords: int, afterRecords: int, before: int|float|null, after: int|float|null, change: Change, steppedDown: bool, reason: ComparisonReason|null, have: int|null, needed: int|null}
  */
 class Comparison
 {
@@ -95,16 +94,16 @@ class Comparison
     /**
      * Get why the comparison could not run at all, and the side it could not run on, or null when it ran.
      *
-     * @return array{Reason, string}|null
+     * @return array{ComparisonReason, string}|null
      */
     public function unevaluated(): ?array
     {
         return match (true) {
-            $this->before['outside'] => [Reason::OUTSIDE_COVERAGE, 'before'],
-            $this->after['outside'] => [Reason::OUTSIDE_COVERAGE, 'after'],
+            $this->before['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'before'],
+            $this->after['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'after'],
             $this->isEmpty() => null,
-            $this->before['records'] === 0 => [Reason::EMPTY_SIDE, 'before'],
-            $this->after['records'] === 0 => [Reason::EMPTY_SIDE, 'after'],
+            $this->before['records'] === 0 => [ComparisonReason::EMPTY_SIDE, 'before'],
+            $this->after['records'] === 0 => [ComparisonReason::EMPTY_SIDE, 'after'],
             default => null,
         };
     }
@@ -408,21 +407,19 @@ class Comparison
             return [...$row, ...self::oneSided($by, $present, $before === null ? 'after' : 'before')];
         }
 
-        $have = min(self::figure($before, $by)[1], self::figure($after, $by)[1]);
+        $have = min(self::have($before, $by), self::have($after, $by));
         $measure = self::measured($by, $have);
-        $needed = self::needed($measure);
+        $beforeValue = Ranking::value($before, $measure);
+        $afterValue = Ranking::value($after, $measure);
 
-        if ($have < $needed) {
+        if ($beforeValue === null || $afterValue === null) {
             return [
                 ...$row,
-                'reason' => Reason::SAMPLE_TOO_SMALL,
+                'reason' => ComparisonReason::SAMPLE_TOO_SMALL,
                 'have' => $have,
-                'needed' => $needed,
+                'needed' => self::needed($measure),
             ];
         }
-
-        [$beforeValue] = self::figure($before, $measure);
-        [$afterValue] = self::figure($after, $measure);
 
         $row = [
             ...$row,
@@ -431,8 +428,13 @@ class Comparison
             'steppedDown' => $measure !== $by,
         ];
 
-        $row['reason'] = $by->isVolume() && ! $likeSpans ? Reason::UNEQUAL_SPANS : null;
-        $row['change'] = $row['reason'] === null ? Change::of($measure, $beforeValue ?? 0, $afterValue ?? 0) : Change::NOT_EVALUATED;
+        if ($by->isVolume() && ! $likeSpans) {
+            $row['reason'] = ComparisonReason::UNEQUAL_SPANS;
+
+            return $row;
+        }
+
+        $row['change'] = Change::of($measure, $beforeValue, $afterValue);
 
         return $row;
     }
@@ -445,9 +447,8 @@ class Comparison
      */
     protected static function oneSided(Measure $by, array $present, string $side): array
     {
-        $have = self::figure($present, $by)[1];
-        $measure = self::measured($by, $have);
-        $value = $have >= self::needed($measure) ? self::figure($present, $measure)[0] : null;
+        $measure = self::measured($by, self::have($present, $by));
+        $value = Ranking::value($present, $measure);
 
         return [
             'before' => $side === 'before' ? $value : null,
@@ -476,23 +477,17 @@ class Comparison
     }
 
     /**
-     * Get the unrounded value of a measure for a group, and the records that have the quantity it is computed from.
+     * Get how many records of a group have the quantity a measure is computed from.
      *
      * @param  array<string, mixed>  $group
-     * @return array{int|float|null, int}
      */
-    protected static function figure(array $group, Measure $measure): array
+    protected static function have(array $group, Measure $measure): int
     {
         return match ($measure) {
-            Measure::P95_DURATION => [$group['p95'], $group['timed']],
-            Measure::P50_DURATION => [$group['p50'], $group['timed']],
-            Measure::MAX_DURATION => [$group['max'], $group['timed']],
-            Measure::TOTAL_DURATION => [$group['total'], $group['timed']],
-            Measure::OCCURRENCES, Measure::LAST_SEEN => [$group['occurrences'], $group['occurrences']],
-            Measure::P95_MEMORY => [$group['mem_p95'], $group['mem_timed']],
-            Measure::P50_MEMORY => [$group['mem_p50'], $group['mem_timed']],
-            Measure::MAX_MEMORY => [$group['mem_max'] ?? null, $group['mem_timed']],
-            Measure::QUERIES => [$group['queries'] ?? null, ($group['queries'] ?? null) === null ? 0 : $group['occurrences']],
+            Measure::P95_DURATION, Measure::P50_DURATION, Measure::MAX_DURATION, Measure::TOTAL_DURATION => $group['timed'],
+            Measure::P95_MEMORY, Measure::P50_MEMORY, Measure::MAX_MEMORY => $group['mem_timed'],
+            Measure::QUERIES => ($group['queries'] ?? null) === null ? 0 : $group['occurrences'],
+            default => $group['occurrences'],
         };
     }
 

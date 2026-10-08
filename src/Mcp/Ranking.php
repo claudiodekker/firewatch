@@ -96,7 +96,7 @@ class Ranking
 
         $orderedBy = $this->by;
 
-        if (($fallback = $this->by->fallback()) !== null && $groups !== [] && array_filter($groups, fn (array $group) => $this->value($group, $this->by) !== null) === []) {
+        if (($fallback = $this->by->fallback()) !== null && $groups !== [] && array_filter($groups, fn (array $group) => self::value($group, $this->by) !== null) === []) {
             $orderedBy = $fallback;
         }
 
@@ -311,11 +311,11 @@ class Ranking
     }
 
     /**
-     * Get the value a group is ranked by, or null when the group has none.
+     * Get the unrounded value of a measure for a group, or null when too few of its records have the quantity.
      *
      * @param  array<string, mixed>  $group
      */
-    protected function value(array $group, Measure $measure): int|float|null
+    public static function value(array $group, Measure $measure): int|float|null
     {
         return match ($measure) {
             Measure::P95_DURATION => $group['timed'] >= self::P95_FLOOR ? $group['p95'] : null,
@@ -340,7 +340,7 @@ class Ranking
     protected function key(array $group, Measure $measure): array
     {
         return [
-            'value' => $this->value($group, $measure),
+            'value' => self::value($group, $measure),
             'occurrences' => $group['occurrences'],
             'hash' => $group['hash'],
         ];
