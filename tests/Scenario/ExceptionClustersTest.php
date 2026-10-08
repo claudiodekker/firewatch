@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -114,6 +115,26 @@ it('finds nothing in requests that threw nothing, and says it examined them', fu
     $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
 
     expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []]);
+});
+
+it('finds the exception a scheduled task throws, and has no record of one a task reports without throwing', function () {
+    test()->refreshApplication();
+
+    $schedule = app(Schedule::class);
+    $schedule->call(fn () => throw new RuntimeException('The carts table is locked.'))->name('prune-carts')->everyMinute();
+    $schedule->call(function () {
+        report(new LogicException('The digest had no readers.'));
+    })->name('send-digest')->everyMinute();
+
+    runArtisan(['command' => 'schedule:run']);
+
+    $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
+
+    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+        ->and(array_column(array_column($envelope['result']['findings'], 'evidence'), 'units', 'message'))->toBe([
+            'The carts table is locked.' => [['source' => 'schedule', 'label' => 'prune-carts', 'occurrences' => 1]],
+        ])
+        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('exceptions-unreported');
 });
 
 it('is clean over a request that failed without an exception record, and says that it cannot see one', function () {

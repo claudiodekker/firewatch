@@ -142,7 +142,7 @@ return [
         'mail-by-notification' => 'Mail sent by a notification is recorded as a notification, not as mail.',
         'sync-jobs-unrecorded' => 'Jobs on the sync connection run inside the dispatching execution and have no attempt record.',
         'vendor-defaults-unrecorded' => 'Vendor commands and framework cache keys on Nightwatch\'s default exclusion lists are not recorded.',
-        'exceptions-unreported' => 'Exceptions the application does not report, and exceptions inside scheduled tasks, are not recorded.',
+        'exceptions-unreported' => 'Exceptions the application does not report are not recorded, nor are exceptions that a scheduled task running in the scheduler\'s own process reports without throwing.',
         'named-log-channels' => 'Logs written directly to a named channel are not captured; only the default channel is.',
         'memory-is-process-peak' => 'Memory is the whole process\'s peak since the sensor last reset it: requests, scheduled tasks and job attempts reset it, a command reports its whole process; it is not attributable to code.',
         'query-bindings-unpaired' => 'A query\'s bindings are null when they could not be paired with certainty; null means unknown, not none.',
