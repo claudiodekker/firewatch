@@ -18,7 +18,7 @@ function sizeHow(): string
     return __('firewatch::messages.size_how', ['characters' => '24,000']);
 }
 
-function boundedAnswer(array $result, array $truncated = []): Answer
+function boundedAnswer(array $result, array $truncated = [], ?array $cuttable = null): Answer
 {
     return new Answer(
         'overview',
@@ -33,6 +33,7 @@ function boundedAnswer(array $result, array $truncated = []): Answer
         ['A note.'],
         $truncated,
         [['tool' => 'describe', 'arguments' => [], 'why' => 'the store']],
+        $cuttable,
     );
 }
 
@@ -173,6 +174,28 @@ describe('the answer budget', function () {
         expect(count($envelope['result']['first']))->toBeLessThan(30)->toBeGreaterThan(0)
             ->and($envelope['result']['first'][0])->toBe(bulkyRows(1)[0])
             ->and(jsonCharacters($answer))->toBeLessThanOrEqual(24000);
+    });
+
+    it('drops rows only from the lists it is told it may cut, in the order they are named', function () {
+        $answer = boundedAnswer(['first' => bulkyRows(8), 'second' => bulkyRows(8), 'third' => bulkyRows(8), 'fourth' => bulkyRows(2)], cuttable: ['second', 'first']);
+        $envelope = $answer->toArray();
+
+        expect($envelope['result']['second'])->toBe([])
+            ->and(count($envelope['result']['first']))->toBeLessThan(8)->toBeGreaterThan(0)
+            ->and($envelope['result']['third'])->toHaveCount(8)
+            ->and($envelope['result']['fourth'])->toHaveCount(2)
+            ->and(jsonCharacters($answer))->toBeLessThanOrEqual(24000)
+            ->and(array_column($envelope['truncated'], 'section'))->toBe(['second', 'first']);
+    });
+
+    it('keeps the first row of the last list it may cut, and every list it may not, when the answer stays over its budget', function () {
+        $answer = boundedAnswer(['first' => bulkyRows(5), 'second' => bulkyRows(14)], cuttable: ['first']);
+        $envelope = $answer->toArray();
+
+        expect($envelope['result']['first'])->toBe(bulkyRows(1))
+            ->and($envelope['result']['second'])->toHaveCount(14)
+            ->and(jsonCharacters($answer))->toBeGreaterThan(24000)
+            ->and($envelope['truncated'])->toBe([['section' => 'first', 'shown' => 1, 'matched' => 5, 'reason' => 'size', 'how' => sizeHow()]]);
     });
 
     it('never drops the summary, the blind spots, the notes or the next calls', function () {

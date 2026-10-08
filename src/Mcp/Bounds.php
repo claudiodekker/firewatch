@@ -96,22 +96,25 @@ class Bounds
     }
 
     /**
-     * Drop whole rows from the tail of the lowest-priority list until the answer fits its budget, and state each list it cut.
+     * Drop whole rows from the tail of the lists in cut order until the answer fits its budget, and state each list it cut.
+     *
+     * The last list of the cut order keeps its first row, so one row over the budget is returned whole.
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @param  Closure(array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>): int  $size
+     * @param  list<string>|null  $cuttable  the lists that may lose rows, the first named first; null for every list, the last first
      * @return array{array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
      */
-    public static function fitAnswer(array $result, array $truncated, Closure $size): array
+    public static function fitAnswer(array $result, array $truncated, Closure $size, ?array $cuttable = null): array
     {
         $isList = fn (mixed $value) => is_array($value) && array_is_list($value) && $value !== [] && is_array($value[0]);
         $lists = array_keys(array_filter($result, $isList));
+        $order = $cuttable === null ? array_reverse($lists) : array_values(array_intersect($cuttable, $lists));
         $matched = [];
 
-        foreach (array_reverse($lists, preserve_keys: true) as $position => $section) {
-            // The first row of the first list is never dropped: one row over the budget is returned whole.
-            $floor = $position === 0 ? 1 : 0;
+        foreach ($order as $position => $section) {
+            $floor = $position === array_key_last($order) ? 1 : 0;
 
             while (count($result[$section]) > $floor) {
                 $cuts = self::withCuts($truncated, $result, $matched);
