@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, occurrences, execution, trace, detect) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
+description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, occurrences, execution, trace, detect, actor) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
 ---
 
 # Verify Firewatch in the workbench
@@ -8,7 +8,7 @@ description: Serve the Firewatch testbench workbench on its own port, store, dat
 Firewatch is a Laravel package, so there is no app of its own. The repo's `workbench/` is the app. `vendor/bin/testbench serve` boots a Laravel skeleton with Firewatch installed and the routes in `workbench/routes/web.php`. A user touches three things, and none of them is a page:
 
 - **Capture.** Firewatch records what the application does (requests, commands, queued jobs) into a SQLite store.
-- **The MCP server.** An assistant starts `firewatch:server` and calls its six tools over stdio.
+- **The MCP server.** An assistant starts `firewatch:server` and calls its seven tools over stdio.
 - **The commands.** `firewatch:server --list`, `firewatch:clear` and `firewatch:doctor`.
 
 Every helper is a subcommand of `.claude/skills/verify/scripts/app.sh` and runs from anywhere in the checkout. Feature recipes live in [`features/README.md`](features/README.md). Read the index, then the feature file you are verifying.
@@ -36,7 +36,7 @@ Run it first whenever anything looks off. It records nothing:
 .claude/skills/verify/scripts/app.sh doctor <run>
 # ok   server process 3470 is running
 # ok   port 8300 is served by our php -S (3519)
-# ok   firewatch:server dev-master lists: overview rank occurrences execution trace detect
+# ok   firewatch:server dev-master lists: overview rank occurrences execution trace detect actor
 # ok   the skeleton holds testbench.yaml, so the workbench routes are loaded
 # ok   the store at /…/.verify/runs/<run>/store/firewatch.sqlite holds 71 records
 ```
@@ -56,6 +56,7 @@ Produce telemetry by exercising the workbench the way a user's application would
 | `GET /exports` | builds an 80 MB string | a request peaking above 64 MB, a `memory` finding |
 | `GET /quotes` | calls a faked dependency that answers 503 | a request and an outgoing request, a `failing-http` finding |
 | `GET /catalog` | reads the key `catalog` through `Cache::remember()` | a request, a miss and a write, and from the third request a `cache` finding |
+| `GET /members/7` | signs in Taylor Otwell for the request; `8` is Taylor Swift and `9` is Nuno Maduro | a request that carries the user, and that user in the user directory |
 
 ```shell
 .claude/skills/verify/scripts/app.sh get <run> /products

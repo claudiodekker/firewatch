@@ -16,7 +16,7 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did while it was developed: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and Firewatch itself sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs). Every answer ends with `next`: calls you can run as written.
+        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person). Every answer ends with `next`: calls you can run as written.
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used.
         TEXT,
@@ -39,6 +39,7 @@ return [
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
         'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
         'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: read query one execution ran 3+ times, in runs. `database-bound`: request groups typically spending 60+ percent in queries. `failing-routes`: request groups answering 400+. `failing-jobs`: job groups with 1+ failed or released attempts. `queue-latency`: job groups with first-attempt wait or pending age of 5000+ milliseconds. `failing-tasks`: scheduled-task groups with failed or skipped tasks (no threshold). `exception-clusters`: exception groups with 1+ occurrences, escaped first. `error-logs`: error-level logs by message shape, 1+ occurrences (no `group`). `failing-http`: outgoing-request hosts answering 400+. `cache`: cache keys with a hit rate below 50 percent over 3+ reads, or a failed write or delete. `memory`: execution groups peaking at 64+ megabytes. Without `shape` all run; `threshold` and `group` need one. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold, unit and range, exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean: none among what was captured, weak over few records. Windowed.',
+        'actor' => 'Identifies one signed-in person. `who` is a user id, a username or a name, tried as stages in that order and then as a part of a name or username: the first stage that finds anyone decides, and no later stage is tried. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the application\'s username is the email. One person: who they are and when they were first and last seen. Several: all are listed as candidates and none is guessed, so repeat with an id. Nobody: the people seen most recently are listed. An actor exists only once recorded acting, and commands, scheduled tasks and guests have none. Not windowed.',
     ],
 
     /*
@@ -304,6 +305,30 @@ return [
     'trace_next_slowest' => 'The slowest execution of the trace: open it to see what took the time.',
 
     'trace_next_occurrences' => 'List the records that carry this id, since the execution they belong to is not in the store.',
+
+    'actor_who_argument' => 'A user id, a username or a name, 1 to 255 characters once trimmed. Tried in that order, then as a part of a name or username.',
+
+    'actor_window_reason' => 'a person is identified over the whole store',
+
+    'actor_identified_summary' => 'Identified :person at the :stage stage.',
+
+    'actor_from_records_summary' => 'Identified the id :id from the records that carry it.',
+
+    'actor_from_records_note' => 'No directory row exists for this id (users are kept while recently seen).',
+
+    'actor_ambiguous_summary' => '`:who` matches :count people at the :stage stage; repeat with an id.',
+
+    'actor_ambiguous_summary_without_who' => ':count people were found at the :stage stage; repeat with an id.',
+
+    'actor_ambiguous_note' => 'Several people match; repeat with an id.',
+
+    'actor_candidates_how' => 'The :listed candidates seen most recently are listed; repeat with an id, or with more of the name or username.',
+
+    'actor_unknown' => 'Nobody was identified by `:who`, among the :population people in the user directory.',
+
+    'actor_unknown_summary' => 'Nobody was identified by `:who`.',
+
+    'actor_unknown_note' => 'An actor exists only once recorded acting; the directory holds users seen within retention.',
 
     'detect_shape_argument' => 'The shape to run: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, failing-http, cache or memory. Absent: every shape that ships.',
     'detect_threshold_argument' => 'Overrides the shape\'s default, named in the tool description. Whole numbers, except percent and megabytes. An answer states the unit, range and default; out of range is refused. Needs `shape`.',

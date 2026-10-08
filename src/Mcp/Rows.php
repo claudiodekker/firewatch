@@ -4,13 +4,15 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 /**
  * @internal
+ *
+ * @template TRow = mixed
  */
 class Rows
 {
     /**
      * Create a new rows instance.
      *
-     * @param  list<mixed>  $rows  at most the limit
+     * @param  list<TRow>  $rows  at most the limit
      */
     protected function __construct(
         public readonly array $rows,
@@ -30,7 +32,10 @@ class Rows
     /**
      * Cut what a reader fetched to the limit, and note whether the row beyond it was there.
      *
-     * @param  list<mixed>  $fetched
+     * @template TFetched
+     *
+     * @param  list<TFetched>  $fetched
+     * @return self<TFetched>
      */
     public static function bound(array $fetched, int $limit): self
     {

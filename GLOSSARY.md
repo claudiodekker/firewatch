@@ -323,7 +323,7 @@ _Avoid_: Exception, failure answer
 ### Actors and attribution
 
 **Identification**:
-Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing.
+Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing. When no stage finds anyone, an id that no directory row holds is identified from a record that carries it.
 _Avoid_: Lookup, search, matching
 
 **Attribution**:

@@ -51,3 +51,10 @@ test('every argument description is at most 30 words', function () {
 
     expect(array_filter($words, fn (int $count) => $count > 30))->toBe([]);
 });
+
+test('the instructions describe every listed tool once, in the order an assistant drills down', function () {
+    preg_match_all('/`([a-z]+)` \(/', __('firewatch::messages.instructions'), $matches);
+
+    expect($matches[1])->toBe(['overview', 'detect', 'rank', 'occurrences', 'execution', 'trace', 'actor'])
+        ->and(array_diff(array_column(toolListing()['tools'], 'name'), $matches[1]))->toBe([]);
+});
