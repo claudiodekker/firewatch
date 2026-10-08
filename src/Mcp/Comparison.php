@@ -60,7 +60,7 @@ class Comparison
         public readonly array $after,
         public readonly Rows $groups,
         public readonly array $changes,
-        public readonly int $straddling,
+        public readonly ?int $straddling,
         public readonly ?array $deploys,
     ) {
         //
@@ -568,13 +568,17 @@ class Comparison
     }
 
     /**
-     * Count the records of the type that started in the hour before the split, on the before side, and ended after it.
+     * Count the executions of the type that started in the hour before the split, on the before side, and ended after it, or get null for a type that is no execution.
      *
      * @param  Side  $before
      */
-    protected static function straddling(SQLite3 $connection, RecordType $type, array $before, float $split, ?string $group): int
+    protected static function straddling(SQLite3 $connection, RecordType $type, array $before, float $split, ?string $group): ?int
     {
-        if ($before['outside'] || $type === RecordType::EXCEPTION) {
+        if (! Ranking::isExecution($type)) {
+            return null;
+        }
+
+        if ($before['outside']) {
             return 0;
         }
 

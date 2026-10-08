@@ -819,3 +819,30 @@ it('judges a volume measure at a span ratio of exactly 2 whatever the fractions 
     '1.1 s against a microsecond past 2.2 s' => [1.1, 2.200001, 'unequal_spans'],
     '0.3 s against 0.6 s' => [0.3, 0.6, null],
 ]);
+
+it('counts the straddling work of an execution type only, and states none for a type that is no execution', function (string $type, ?int $straddling) {
+    compareIngest([
+        compareRecord(RecordType::from($type), 'a', COMPARE_SPLIT - 10, 11000000),
+        compareRecord(RecordType::from($type), 'a', COMPARE_SPLIT - 5, 1000),
+        ...compareCopies(RecordType::from($type), 'a', 600, 3),
+    ]);
+
+    $arguments = ['type' => $type, 'split_at' => COMPARE_SPLIT, 'by' => 'occurrences'];
+    $envelope = Envelope::assert(Compare::class, $arguments);
+    $markdown = (fn () => $this->content())->call(FirewatchServer::tool(Compare::class, $arguments))[0];
+    $storeLine = collect(explode("\n", $markdown))->first(fn (string $line) => str_starts_with($line, 'Store: '));
+    $stated = $straddling === null ? [] : [__('firewatch::messages.store_straddling', ['count' => $straddling])];
+
+    expect($envelope['result']['before']['records'])->toBe(2)
+        ->and($envelope['coverage']['straddling'])->toBe($straddling)
+        ->and(array_values(preg_grep('/straddling/', explode(', ', explode('; ', $storeLine)[0]))))->toBe($stated);
+})->with([
+    'request' => ['request', 1],
+    'command' => ['command', 1],
+    'job-attempt' => ['job-attempt', 1],
+    'scheduled-task' => ['scheduled-task', 1],
+    'query' => ['query', null],
+    'outgoing-request' => ['outgoing-request', null],
+    'queued-job' => ['queued-job', null],
+    'exception' => ['exception', null],
+]);

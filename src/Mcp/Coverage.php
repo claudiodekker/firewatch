@@ -16,7 +16,7 @@ class Coverage
      * Create a new coverage instance.
      *
      * @param  list<RecordType>  $typesRead
-     * @param  int|null  $straddling  the executions of a compared type that started in the hour before the split and finished after it; null outside a time split
+     * @param  int|null  $straddling  the executions of a compared type that started in the hour before the split and finished after it; null outside a time split and for a compared type that is no execution
      */
     public function __construct(
         public readonly CoverageState $state,

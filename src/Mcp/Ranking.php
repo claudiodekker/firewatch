@@ -203,7 +203,7 @@ class Ranking
      */
     public function statistics(SQLite3 $connection): array
     {
-        $executions = $this->isExecution();
+        $executions = self::isExecution($this->type);
         $failure = Failure::expression($this->type) !== null;
 
         $aggregates = $this->query($connection, 'SELECT group_hash, count(*) AS occurrences, count(d) AS timed, min(d) AS min, avg(d) AS avg, max(d) AS max, sum(d) AS total, max(started_at) AS last, min(started_at) AS wfirst, count(DISTINCT deploy) AS deploys'
@@ -418,7 +418,7 @@ class Ranking
             ];
         }
 
-        if ($this->isExecution()) {
+        if (self::isExecution($this->type)) {
             $mb = fn (int|float|null $value) => $value === null ? null : round($value / self::MEGABYTE, 1);
             $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
 
@@ -531,11 +531,11 @@ class Ranking
     }
 
     /**
-     * Determine if the type is one of the four executions.
+     * Determine if a type is one of the four executions.
      */
-    protected function isExecution(): bool
+    public static function isExecution(RecordType $type): bool
     {
-        return in_array($this->type, self::EXECUTIONS, true);
+        return in_array($type, self::EXECUTIONS, true);
     }
 
     /**
@@ -570,7 +570,7 @@ class Ranking
                 $columns[] = 'method';
             }
 
-            if ($this->isExecution()) {
+            if (self::isExecution($this->type)) {
                 array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q');
             }
 
