@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Microseconds;
 
 /**
  * @internal
@@ -28,6 +29,11 @@ enum Measure: string
     protected const EXECUTIONS = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
 
     /**
+     * The noise floor of a memory measure in bytes, because the runtime reports peak memory in steps of 2 MiB.
+     */
+    protected const MEMORY_NOISE_FLOOR = 2 * Ranking::MEGABYTE;
+
+    /**
      * Get the types that have groups to rank.
      *
      * @return list<RecordType>
@@ -45,6 +51,16 @@ enum Measure: string
     public static function for(RecordType $type): array
     {
         return array_values(array_filter(self::cases(), fn (self $measure) => $measure !== self::P50_MEMORY && $measure->fits($type)));
+    }
+
+    /**
+     * Get the measures a type is compared by, in the order they are listed.
+     *
+     * @return list<self>
+     */
+    public static function compared(RecordType $type): array
+    {
+        return array_values(array_filter(self::cases(), fn (self $measure) => $measure->movement() !== null && $measure->fits($type)));
     }
 
     /**
@@ -75,6 +91,53 @@ enum Measure: string
         return match ($this) {
             self::P95_DURATION, self::P50_DURATION => self::MAX_DURATION,
             self::P95_MEMORY, self::P50_MEMORY => self::MAX_MEMORY,
+            default => null,
+        };
+    }
+
+    /**
+     * Get what the change rule needs of the measure, or null for one that is never compared.
+     *
+     * @return array{int, Change, Change}|null the noise floor in the unit the store holds, then the changes of a rise and of a fall
+     */
+    public function movement(): ?array
+    {
+        return match ($this) {
+            self::P95_DURATION, self::P50_DURATION, self::MAX_DURATION, self::TOTAL_DURATION => [Microseconds::PER_MILLISECOND, Change::SLOWER, Change::FASTER],
+            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY => [self::MEMORY_NOISE_FLOOR, Change::HEAVIER, Change::LIGHTER],
+            self::OCCURRENCES, self::QUERIES => [1, Change::MORE_CALLS, Change::FEWER_CALLS],
+            self::LAST_SEEN => null,
+        };
+    }
+
+    /**
+     * Determine if the measure grows with how long a side observed, so that it is judged only between sides of like spans.
+     */
+    public function isVolume(): bool
+    {
+        return in_array($this, [self::OCCURRENCES, self::TOTAL_DURATION, self::QUERIES], true);
+    }
+
+    /**
+     * Get the percentile the measure is, or null for one that is none.
+     */
+    public function percentile(): ?Percentile
+    {
+        return match ($this) {
+            self::P95_DURATION, self::P95_MEMORY => Percentile::P95,
+            self::P50_DURATION, self::P50_MEMORY => Percentile::MEDIAN,
+            default => null,
+        };
+    }
+
+    /**
+     * Get the median a 95th percentile steps down to when a side has too few records for it, or null for a measure that does not step down.
+     */
+    public function stepDown(): ?self
+    {
+        return match ($this) {
+            self::P95_DURATION => self::P50_DURATION,
+            self::P95_MEMORY => self::P50_MEMORY,
             default => null,
         };
     }

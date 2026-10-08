@@ -16,6 +16,7 @@ class Coverage
      * Create a new coverage instance.
      *
      * @param  list<RecordType>  $typesRead
+     * @param  int|null  $straddling  the executions of a compared type that started in the hour before the split and finished after it; null outside a time split
      */
     public function __construct(
         public readonly CoverageState $state,
@@ -25,6 +26,7 @@ class Coverage
         public readonly ?float $oldest = null,
         public readonly ?float $newest = null,
         public readonly ?int $records = null,
+        public readonly ?int $straddling = null,
     ) {
         //
     }
@@ -69,7 +71,7 @@ class Coverage
             'records' => $this->records,
             'types_read' => array_map(fn (RecordType $type) => $type->value, $this->typesRead),
             'history' => $this->history->toArray(),
-            'straddling' => null,
+            'straddling' => $this->straddling,
         ];
     }
 
@@ -86,6 +88,10 @@ class Coverage
 
         if ($this->records !== null) {
             $parts[] = __('firewatch::messages.store_records', ['count' => number_format($this->records)]);
+        }
+
+        if ($this->straddling !== null) {
+            $parts[] = __('firewatch::messages.store_straddling', ['count' => number_format($this->straddling)]);
         }
 
         $line = __('firewatch::messages.store_line', ['store' => implode(', ', $parts)]);

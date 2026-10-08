@@ -669,11 +669,12 @@ it('lists the people of a directory whose records are all gone, and states that 
         ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0, 'oldest_at' => null, 'newest_at' => null]);
 });
 
-test('the tool is listed last, with its description, arguments and annotations', function () {
+test('the tool is listed seventh, after detect, with its description, arguments and annotations', function () {
     $listing = app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
     $tool = $listing['tools'][6];
 
-    expect(count($listing['tools']))->toBe(7)
+    expect(count($listing['tools']))->toBe(8)
+        ->and($listing['tools'][5]['name'])->toBe('detect')
         ->and($tool['name'])->toBe('actor')
         ->and($tool['description'])->toBe(__('firewatch::messages.tools.actor'))
         ->and($tool['inputSchema'])->toBe([
