@@ -263,6 +263,10 @@ return [
 
     'compare_limit_argument' => 'The most groups to list, 1 to 100. Default 20.',
 
+    'compare_since_argument' => 'Start of the before side, included, in the forms every tool takes. Absent: the start of what the store covers for the type.',
+
+    'compare_until_argument' => 'End of the after side, excluded, in the same forms. Absent: the store clock, now.',
+
     'compare_summary' => 'Compared :groups :type group by :by before and after the split: :changes.|Compared :groups :type groups by :by before and after the split: :changes.',
 
     'compare_empty_side_summary' => 'Not evaluated (empty_side): the :side side holds no :type records, which is not "no regression".',

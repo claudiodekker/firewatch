@@ -101,8 +101,8 @@ class Compare extends Tool
             'group' => $schema->string()->description(__('firewatch::messages.compare_group_argument')),
             'split_at' => $schema->string()->description(__('firewatch::messages.compare_split_at_argument'))->required(),
             'by' => $schema->string()->description(__('firewatch::messages.compare_by_argument')),
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
+            'since' => $schema->string()->description(__('firewatch::messages.compare_since_argument')),
+            'until' => $schema->string()->description(__('firewatch::messages.compare_until_argument')),
             'limit' => $schema->integer()->description(__('firewatch::messages.compare_limit_argument')),
             ...$this->formatSchema($schema),
         ];
