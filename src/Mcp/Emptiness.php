@@ -93,6 +93,17 @@ class Emptiness
     }
 
     /**
+     * Get an empty answer for text that identified none of the people in the user directory.
+     */
+    public static function unknownActor(string $who, int $people): self
+    {
+        return new self(EmptyKind::NO_MATCH, $people, __('firewatch::messages.actor_unknown', [
+            'who' => $who,
+            'population' => $people,
+        ]));
+    }
+
+    /**
      * Get the fixed summary line for this kind.
      */
     public function summary(): string

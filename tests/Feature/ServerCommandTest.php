@@ -16,13 +16,14 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 6]),
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 7]),
             '  overview     Entry point.',
             '  rank         Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
             '  occurrences  Lists individual records, newest first by default, for the selectors you give (at least o…',
             '  execution    One execution in full: a request, command, job attempt or scheduled task.',
             '  trace        Follows one trace: its executions in start order and the lineage of every queued job.',
             '  detect       Runs named problem shapes and returns evidence, worst first.',
+            '  actor        Identifies one signed-in person.',
             '',
         ]));
 });
@@ -144,6 +145,15 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.detect_limit_argument'), 'type' => 'integer'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
+                    'name' => 'actor',
+                    'description' => __('firewatch::messages.tools.actor'),
+                    'inputSchema' => ['properties' => [
+                        'who' => ['description' => __('firewatch::messages.actor_who_argument'), 'type' => 'string'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object', 'required' => ['who']],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
             ],
