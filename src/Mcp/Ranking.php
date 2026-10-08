@@ -146,16 +146,6 @@ class Ranking
     }
 
     /**
-     * Read the unrounded statistics of every group of the type in the window, keyed by group hash.
-     *
-     * @return array<string, array<string, mixed>>
-     */
-    public function statistics(SQLite3 $connection): array
-    {
-        return array_column($this->groups($connection), null, 'hash');
-    }
-
-    /**
      * Read the types that hold a group in the store, in the order of the types with groups.
      *
      * @return list<RecordType>
@@ -179,11 +169,39 @@ class Ranking
     }
 
     /**
-     * Read what the records of every group of the window add up to.
+     * Read what the records of every group of the window add up to, with when each was first seen in the store and its slowest execution.
      *
      * @return list<array<string, mixed>>
      */
     protected function groups(SQLite3 $connection): array
+    {
+        $groups = $this->statistics($connection);
+
+        $firsts = $this->group !== null ? [] : $this->query($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash', filtered: false);
+
+        foreach ($firsts as $row) {
+            if (isset($groups[$row['group_hash']])) {
+                $groups[$row['group_hash']]['first'] = $row['first'];
+            }
+        }
+
+        if ($this->hasDuration() && $this->group === null) {
+            $slowest = $this->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1');
+
+            foreach ($slowest as $row) {
+                $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
+            }
+        }
+
+        return array_values($groups);
+    }
+
+    /**
+     * Read the unrounded statistics of every group of the type in the window, keyed by group hash.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function statistics(SQLite3 $connection): array
     {
         $executions = $this->isExecution();
         $failure = Failure::expression($this->type) !== null;
@@ -232,22 +250,6 @@ class Ranking
             }
         }
 
-        $firsts = $this->group !== null ? [] : $this->query($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash', filtered: false);
-
-        foreach ($firsts as $row) {
-            if (isset($groups[$row['group_hash']])) {
-                $groups[$row['group_hash']]['first'] = $row['first'];
-            }
-        }
-
-        if ($this->hasDuration() && $this->group === null) {
-            $slowest = $this->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1');
-
-            foreach ($slowest as $row) {
-                $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
-            }
-        }
-
         $method = $this->hasMethod() ? ', method' : '';
 
         $latest = $this->query($connection, "SELECT group_hash, label{$method} FROM (SELECT group_hash, label{$method}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
@@ -257,7 +259,7 @@ class Ranking
             $groups[$row['group_hash']]['method'] = $row['method'] ?? null;
         }
 
-        return array_values($groups);
+        return $groups;
     }
 
     /**
