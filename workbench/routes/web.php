@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -9,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Workbench\App\Jobs\ChargeCard;
 use Workbench\App\Jobs\ShipOrder;
 use Workbench\App\Jobs\SyncInventory;
+use Workbench\App\Members;
 
 Route::get('/', fn () => 'ok');
 
@@ -43,15 +43,18 @@ Route::get('/quotes', function () {
 Route::get('/catalog', fn () => Cache::remember('catalog', 60, fn () => 'spring'));
 
 Route::get('/members/{member}', function (string $member) {
-    $members = [
-        '7' => ['name' => 'Taylor Otwell', 'email' => 'taylor@example.com'],
-        '8' => ['name' => 'Taylor Swift', 'email' => 'swift@example.com'],
-        '9' => ['name' => 'Nuno Maduro', 'email' => 'nuno@example.com'],
-    ];
+    Auth::setUser(Members::find($member) ?? abort(404));
 
-    abort_unless(isset($members[$member]), 404);
+    return 'ok';
+});
 
-    Auth::setUser(new GenericUser(['id' => $member, ...$members[$member]]));
+Route::get('/members/{member}/orders', function (string $member) {
+    $signedIn = Members::find($member) ?? abort(404);
+
+    // Dispatched before the member signs in, so the job's Context carries no user and its attempt reaches the member only through the dispatch.
+    ShipOrder::dispatch();
+
+    Auth::setUser($signedIn);
 
     return 'ok';
 });
