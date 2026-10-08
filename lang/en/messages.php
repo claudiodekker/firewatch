@@ -308,11 +308,33 @@ return [
 
     'actor_who_argument' => 'A user id, a username or a name, 1 to 255 characters once trimmed. Tried in that order, then as a part of a name or username.',
 
-    'actor_window_reason' => 'a person is identified over the whole store',
+    'actor_limit_argument' => 'The most executions to list, 1 to 100. Default 20.',
 
-    'actor_identified_summary' => 'Identified :person at the :stage stage.',
+    'actor_summary' => ':person: :attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributed cannot be attributed.',
 
-    'actor_from_records_summary' => 'Identified the id :id from the records that carry it.',
+    'actor_summary_without_person' => ':attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributed cannot be attributed.',
+
+    'actor_nothing_attributed' => 'Nothing in this window is attributed to :person, among the :population executions that started in it.',
+
+    'actor_no_executions' => 'No request, command, job attempt or scheduled task started in this window, so nothing can be attributed; the store holds :population records: widen the window or move it.',
+
+    'actor_executions_how' => 'The :listed newest attributed executions are listed; narrow `since` and `until` to see the others.',
+
+    'actor_commands_note' => ':commands commands and :tasks scheduled tasks ran in this window and carry no actor; :inside of them are shown as inside work; what this person set off through the others is not shown.',
+
+    'actor_no_commands_note' => 'No commands or scheduled tasks ran in this window, so nothing was lost to them.',
+
+    'actor_no_actor_note' => ':count job attempt had no recorded user and no traceable dispatch; it may belong to this person.|:count job attempts had no recorded user and no traceable dispatch; some may belong to this person.',
+
+    'actor_guest_note' => ':count request carries no recorded user (a guest, a user of a non-default guard, or one Nightwatch could not resolve) and cannot be attributed.|:count requests carry no recorded user (a guest, a user of a non-default guard, or one Nightwatch could not resolve) and cannot be attributed.',
+
+    'actor_caveats_note' => 'User ids are keys recorded as sent, not qualified by guard or model; a reseeded database can give an id to another person. Only the latest name and username are searchable. `first_seen_at` is when the directory row was created, not when the person first acted. History before the coverage start is gone.',
+
+    'actor_next_execution' => 'Open the newest execution attributed to this person, in full.',
+
+    'actor_next_group' => 'List the records of the group of that execution.',
+
+    'actor_next_user' => 'List the records that carry this user id; dispatch and inside links are not followed there.',
 
     'actor_from_records_note' => 'No directory row exists for this id (users are kept while recently seen).',
 

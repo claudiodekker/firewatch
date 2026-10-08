@@ -152,6 +152,9 @@ it('lists the tools as JSON with the server name and version', function () {
                     'description' => __('firewatch::messages.tools.actor'),
                     'inputSchema' => ['properties' => [
                         'who' => ['description' => __('firewatch::messages.actor_who_argument'), 'type' => 'string'],
+                        'since' => ['description' => __('firewatch::messages.since_argument'), 'type' => 'string'],
+                        'until' => ['description' => __('firewatch::messages.until_argument'), 'type' => 'string'],
+                        'limit' => ['description' => __('firewatch::messages.actor_limit_argument'), 'type' => 'integer'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object', 'required' => ['who']],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
