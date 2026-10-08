@@ -57,7 +57,7 @@ class Comparison
      * @param  Rows<Row>  $groups  in the order of the answer
      * @param  array<string, int>  $changes  every group's change counted, by its value, over the groups shown and cut
      * @param  array{records: int, more: bool}  $earlier  the records of the type that started before the coverage start the before side begins at, counted up to a cap, and whether there are more
-     * @param  list<array{deploy: string, records: int, first_at: float}>|null  $deploys  the deploys of the window, listed only when a side is empty
+     * @param  Rows<array{deploy: string, records: int, first_at: float}>|null  $deploys  the deploys of the window, listed only when a side is empty
      */
     protected function __construct(
         public readonly RecordType $type,
@@ -68,7 +68,7 @@ class Comparison
         public readonly array $changes,
         public readonly ?int $straddling,
         public readonly array $earlier,
-        public readonly ?array $deploys,
+        public readonly ?Rows $deploys,
     ) {
         //
     }
@@ -180,7 +180,7 @@ class Comparison
             'after' => $this->sideResult($this->after),
             'rollup' => $reason === null ? $this->rollup() : null,
             'groups' => array_map($this->rowResult(...), $this->groups->rows),
-            'deploys' => $this->deploys,
+            'deploys' => $this->deploys?->rows,
         ];
     }
 
@@ -645,15 +645,15 @@ class Comparison
     }
 
     /**
-     * Read the deploys the records of the type carry in the window, with their records, in the order they were first seen.
+     * Read the deploys the records of the type carry in the window, with their records, in the order they were first seen, up to the most an answer lists.
      *
-     * @return list<array{deploy: string, records: int, first_at: float}>
+     * @return Rows<array{deploy: string, records: int, first_at: float}>
      */
-    protected static function deploys(SQLite3 $connection, RecordType $type, Window $window, ?string $group): array
+    protected static function deploys(SQLite3 $connection, RecordType $type, Window $window, ?string $group): Rows
     {
-        $rows = Stored::rows($connection, 'SELECT deploy, count(*) AS records, min(started_at) AS first_at FROM '.$type->view().' WHERE '.$window->condition()." AND deploy IS NOT NULL AND deploy <> '' AND (:group IS NULL OR group_hash = :group) GROUP BY deploy ORDER BY first_at, deploy LIMIT ".self::DEPLOYS_LISTED, ['group' => $group], $window);
+        $rows = Stored::rows($connection, 'SELECT deploy, count(*) AS records, min(started_at) AS first_at FROM '.$type->view().' WHERE '.$window->condition()." AND deploy IS NOT NULL AND deploy <> '' AND (:group IS NULL OR group_hash = :group) GROUP BY deploy ORDER BY first_at, deploy LIMIT ".Rows::fetch(self::DEPLOYS_LISTED), ['group' => $group], $window);
 
-        /** @var list<array{deploy: string, records: int, first_at: float}> */
-        return $rows;
+        /** @var list<array{deploy: string, records: int, first_at: float}> $rows */
+        return Rows::bound($rows, self::DEPLOYS_LISTED);
     }
 }

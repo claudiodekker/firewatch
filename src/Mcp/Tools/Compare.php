@@ -304,15 +304,16 @@ class Compare extends Tool
     }
 
     /**
-     * Get the entry of the groups the limit cut, if it cut any.
+     * Get the entries of the groups the limit cut and of the deploys left unlisted, if any.
      *
      * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
      */
     protected function truncated(Comparison $comparison): array
     {
-        $entry = $comparison->groups->truncation(section: 'groups', how: __('firewatch::messages.compare_truncated_how'), matched: $comparison->matched());
+        $groups = $comparison->groups->truncation(section: 'groups', how: __('firewatch::messages.compare_truncated_how'), matched: $comparison->matched());
+        $deploys = $comparison->deploys?->truncation(section: 'deploys', how: __('firewatch::messages.compare_deploys_truncated_how'));
 
-        return $entry === null ? [] : [$entry];
+        return array_values(array_filter([$groups, $deploys]));
     }
 
     /**

@@ -283,6 +283,8 @@ return [
 
     'compare_truncated_how' => 'Pass a larger `limit`, up to 100, one `group`, or a narrower window.',
 
+    'compare_deploys_truncated_how' => 'These are the deploys first seen: narrow the window with `since` or `until`.',
+
     'compare_next_occurrences' => 'List the records of the first group listed.',
 
     'compare_next_rank' => 'Break the first group listed down by deploy.',

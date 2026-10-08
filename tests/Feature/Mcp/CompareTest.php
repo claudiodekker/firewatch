@@ -917,3 +917,18 @@ it('counts the groups the size budget dropped as cut in the rollup, which agrees
         ->and($envelope['result']['rollup'])->toBe(compareRollup(100, ['steady' => 100], cut: 100 - $shown))
         ->and(mb_strlen(json_encode($envelope, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION)))->toBeLessThanOrEqual(24000);
 });
+
+it('lists at most ten deploys beside an empty side, and says so when the window holds more', function (int $deploys, array $truncated) {
+    $records = array_map(fn (int $index) => compareRecord(RecordType::REQUEST, 'a', COMPARE_SPLIT - 600 + $index, 10000, ['deploy' => sprintf('v%02d', $index)]), range(1, $deploys));
+
+    compareIngest($records);
+
+    $envelope = compareAnswer();
+
+    expect($envelope['result']['reason'])->toBe('empty_side')
+        ->and(array_column($envelope['result']['deploys'], 'deploy'))->toBe(['v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09', 'v10'])
+        ->and($envelope['truncated'])->toBe($truncated);
+})->with([
+    'ten deploys' => [10, []],
+    'eleven deploys' => fn () => [11, [['section' => 'deploys', 'shown' => 10, 'matched' => null, 'reason' => 'limit', 'how' => __('firewatch::messages.compare_deploys_truncated_how')]]],
+]);
