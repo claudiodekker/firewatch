@@ -507,10 +507,10 @@ it('cuts the rows at the limit, says how many groups were cut and how to narrow,
         ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 25, ['groups' => 25, 'type' => 'request', 'by' => 'p50_duration', 'changes' => '25 slower']));
 });
 
-it('lists every group when they are no more than the limit, from a limit of 1 to one of 100', function (int $limit, int $groups, int $shown, int $cut) {
+it('lists every group when they are no more than the limit, from a limit of 1 to one of 100, and 20 when none is given', function (?int $limit, int $groups, int $shown, int $cut) {
     compareIngest(array_merge(...array_map(fn (int $index) => compareGroup(chr(ord('a') + $index), 100, 100), range(0, $groups - 1))));
 
-    $envelope = compareAnswer(['by' => 'p50_duration', 'limit' => $limit]);
+    $envelope = compareAnswer(['by' => 'p50_duration', ...($limit === null ? [] : ['limit' => $limit])]);
 
     expect($envelope['result']['groups'])->toHaveCount($shown)
         ->and($envelope['result']['rollup']['cut'])->toBe($cut)
@@ -519,8 +519,9 @@ it('lists every group when they are no more than the limit, from a limit of 1 to
     'a limit of 1 over one group' => [1, 1, 1, 0],
     'a limit of 1 over two groups' => [1, 2, 1, 1],
     'a limit of 100 over three groups' => [100, 3, 3, 0],
-    'the default limit over 20 groups' => [20, 20, 20, 0],
-    'the default limit over 21 groups' => [20, 21, 20, 1],
+    'a limit of 20 over 21 groups' => [20, 21, 20, 1],
+    'the default limit over 20 groups' => [null, 20, 20, 0],
+    'the default limit over 21 groups' => [null, 21, 20, 1],
 ]);
 
 it('compares one group alone, by its type, when it is given without one', function () {
