@@ -407,8 +407,16 @@ A change for a group present on both sides whose before value is 0 and after val
 _Avoid_: New, infinite change
 
 **Side**:
-One of the two parts a split point divides a compared window into, before or after, each clipped to the type's coverage start and stating its records and observed span.
+One of the two parts a split point divides a compared window into, before or after, each clipped to the type's coverage start and stating its records and observed span; a before side that begins at the coverage start also counts the records that started before it, which are on neither side.
 _Avoid_: Half, bucket, period
+
+**Empty side**:
+A side that holds no record of the compared type at all, so that nothing is evaluated and no absence of change is claimed; a single group missing from a side that holds its type is new or gone instead.
+_Avoid_: No data, missing side
+
+**Rollup**:
+The count of every change over all compared groups, shown or cut, with the groups present on one side only and the groups the answer does not show.
+_Avoid_: Summary row, totals
 
 **Noise floor**:
 The absolute change a measure must exceed to count as moved under the change rule: 1 ms for durations, 2 MiB for memory, 1 for counts.
@@ -425,6 +433,10 @@ _Avoid_: Window length, duration of the side
 **Volume measure**:
 A measure that grows with how long a side observed (occurrences, total duration, the queries counter), judged only when the two spans are within a factor of two.
 _Avoid_: Count measure
+
+**Unequal spans**:
+The reason a volume measure is not evaluated for a group: the longer observed span is more than twice the shorter, or one of the two is unknown.
+_Avoid_: Uneven windows, skew
 
 **Direction**:
 The statement of a trend as rose, fell or held, from the medians of its first and last halves under the change rule.
