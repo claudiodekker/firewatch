@@ -361,6 +361,19 @@ it('gives a record with no user of its own the class of the latest execution of 
         ->and($envelope['result']['attribution']['records'])->toBe(['in_window' => 6, 'this_actor' => 3, 'without_actor' => 2]);
 });
 
+it('gives a record with no user of its own the class of the execution of its id that started last, not the one stored last', function () {
+    ingest([
+        attributedUser(),
+        attributedExecution(RecordType::REQUEST, 'twice', offset: 2, user: '7'),
+        attributedExecution(RecordType::REQUEST, 'twice', offset: 1, user: '8'),
+        attributedChild(RecordType::QUERY, 'twice', 'request', offset: 3),
+    ]);
+
+    $envelope = attributedAnswer();
+
+    expect($envelope['result']['activity'])->toBe(attributedActivity(['request' => [1, 0], 'query' => [1, 0]]));
+});
+
 it('lists the attributed executions newest first, the later stored first at one instant', function () {
     ingest([
         attributedUser(),

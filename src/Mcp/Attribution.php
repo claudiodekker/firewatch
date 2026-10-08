@@ -126,7 +126,7 @@ class Attribution
     /**
      * Get the SQL of the attribution link of an execution record to the person, or why it has none.
      *
-     * This is the one place that decides a link. Direct and other actor are read from the record's own user on the types that carry one; dispatch from the user of the job's dispatch, the latest when there are several, and only for an attempt with no user of its own; inside from a child of a command or task that carries the person. The links are looked up over the whole store, whatever the window.
+     * This is the one place that decides a link. Direct and other actor are read from the record's own user on the types that carry one; dispatch from the user of the job's dispatch, the highest store id when there are several, as the specification fixes it, and only for an attempt with no user of its own; inside from a child of a command or task that carries the person. The links are looked up over the whole store, whatever the window.
      */
     protected static function classOf(string $execution): string
     {
@@ -183,7 +183,7 @@ class Attribution
     /**
      * Count the records of the window of the twelve types by type, by the class of the record and by whether the person is its own user.
      *
-     * A record with no user of its own takes the class of its execution: itself for an execution record, else the latest execution record of its id and source, wherever it started. Such children are counted by type and execution first, so that their execution is classified once per type of child, never once per child. A command or task the person is inside of does not make its records the person's.
+     * A record with no user of its own takes the class of its execution: itself for an execution record, else the execution record of its id and source that started last, the highest store id among those that started together, wherever it started. Such children are counted by type and execution first, so that their execution is classified once per type of child, never once per child. A command or task the person is inside of does not make its records the person's.
      *
      * @param  array<string, string>  $bindings
      * @return list<array{type: string, class: string, own: int, records: int}>
@@ -207,7 +207,7 @@ class Attribution
                 SELECT {$executionClass} FROM records x WHERE x.id = (
                     SELECT y.id FROM records y
                     WHERE y.execution_id = inheriting.execution_id AND y.source = inheriting.source AND y.type IN ({$executions})
-                    ORDER BY y.id DESC LIMIT 1
+                    ORDER BY y.started_at DESC, y.id DESC LIMIT 1
                 )
             ), :unattributable) AS class, 0 AS own, sum(records) AS records
             FROM inheriting GROUP BY 1, 2
