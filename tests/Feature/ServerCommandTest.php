@@ -23,7 +23,7 @@ it('lists the tools under a header, one line each', function () {
             '  execution    One execution in full: a request, command, job attempt or scheduled task.',
             '  trace        Follows one trace: its executions in start order and the lineage of every queued job.',
             '  detect       Runs named problem shapes and returns evidence, worst first.',
-            '  actor        Identifies one signed-in person.',
+            '  actor        Identifies one signed-in person and the work of the window tied to them.',
             '',
         ]));
 });
@@ -152,6 +152,9 @@ it('lists the tools as JSON with the server name and version', function () {
                     'description' => __('firewatch::messages.tools.actor'),
                     'inputSchema' => ['properties' => [
                         'who' => ['description' => __('firewatch::messages.actor_who_argument'), 'type' => 'string'],
+                        'since' => ['description' => __('firewatch::messages.since_argument'), 'type' => 'string'],
+                        'until' => ['description' => __('firewatch::messages.until_argument'), 'type' => 'string'],
+                        'limit' => ['description' => __('firewatch::messages.actor_limit_argument'), 'type' => 'integer'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object', 'required' => ['who']],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],

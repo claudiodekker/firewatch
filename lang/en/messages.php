@@ -39,7 +39,7 @@ return [
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
         'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
         'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: read query one execution ran 3+ times, in runs. `database-bound`: request groups typically spending 60+ percent in queries. `failing-routes`: request groups answering 400+. `failing-jobs`: job groups with 1+ failed or released attempts. `queue-latency`: job groups with first-attempt wait or pending age of 5000+ milliseconds. `failing-tasks`: scheduled-task groups with failed or skipped tasks (no threshold). `exception-clusters`: exception groups with 1+ occurrences, escaped first. `error-logs`: error-level logs by message shape, 1+ occurrences (no `group`). `failing-http`: outgoing-request hosts answering 400+. `cache`: cache keys with a hit rate below 50 percent over 3+ reads, or a failed write or delete. `memory`: execution groups peaking at 64+ megabytes. Without `shape` all run; `threshold` and `group` need one. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold, unit and range, exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean: none among what was captured, weak over few records. Windowed.',
-        'actor' => 'Identifies one signed-in person. `who` is a user id, a username or a name, tried as stages in that order and then as a part of a name or username: the first stage that finds anyone decides, and no later stage is tried. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the application\'s username is the email. One person: who they are and when they were first and last seen. Several: all are listed as candidates and none is guessed, so repeat with an id. Nobody: the people seen most recently are listed. An actor exists only once recorded acting, and commands, scheduled tasks and guests have none. Not windowed.',
+        'actor' => 'Identifies one signed-in person and the work of the window tied to them. `who` is a user id, a username or a name, tried in that order, then as a part of a name or username: the first stage that finds anyone decides. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the username is the email. Several matches are listed as candidates, never guessed: repeat with an id. An actor exists only once recorded acting. An execution is theirs by its own user, its job\'s dispatch, or a child inside a command or task. Attribution is partial: what no link reaches is counted, never guessed. Windowed by since/until; identity is read over the whole store.',
     ],
 
     /*
@@ -308,11 +308,43 @@ return [
 
     'actor_who_argument' => 'A user id, a username or a name, 1 to 255 characters once trimmed. Tried in that order, then as a part of a name or username.',
 
-    'actor_window_reason' => 'a person is identified over the whole store',
+    'actor_limit_argument' => 'The most executions to list, 1 to 100. Default 20.',
 
-    'actor_identified_summary' => 'Identified :person at the :stage stage.',
+    'actor_summary' => ':person: :attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributable cannot be attributed.',
 
-    'actor_from_records_summary' => 'Identified the id :id from the records that carry it.',
+    'actor_summary_without_person' => ':attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributable cannot be attributed.',
+
+    'actor_nothing_attributed_summary' => 'Nothing in this window is attributed to :person.',
+
+    'actor_nothing_attributed_summary_without_person' => 'Nothing in this window is attributed to the person identified.',
+
+    'actor_nothing_attributed' => 'Nothing in this window is attributed to :person, among the :population executions that started in it.',
+
+    'actor_no_executions' => 'No request, command, job attempt or scheduled task started in this window, so nothing can be attributed; the store holds :population records: widen the window or move it.',
+
+    'actor_executions_how' => 'The newest attributed execution is listed; narrow `since` and `until` to see the others.|The :listed newest attributed executions are listed; narrow `since` and `until` to see the others.',
+
+    'actor_commands_note' => ':commands and :tasks ran in this window and carry no actor; :inside shown as inside work; what this person set off through the others is not shown.',
+
+    'actor_commands_count' => ':count command|:count commands',
+
+    'actor_tasks_count' => ':count scheduled task|:count scheduled tasks',
+
+    'actor_inside_count' => ':count of them is|:count of them are',
+
+    'actor_no_commands_note' => 'No commands or scheduled tasks ran in this window, so nothing was lost to them.',
+
+    'actor_no_actor_note' => ':count job attempt had no recorded user and no traceable dispatch; it may belong to this person.|:count job attempts had no recorded user and no traceable dispatch; some may belong to this person.',
+
+    'actor_guest_note' => ':count request carries no recorded user (a guest, a user of a non-default guard, or one Nightwatch could not resolve) and cannot be attributed.|:count requests carry no recorded user (a guest, a user of a non-default guard, or one Nightwatch could not resolve) and cannot be attributed.',
+
+    'actor_identity_note' => 'User ids are keys recorded as sent, not qualified by guard or model; a reseeded database can give an id to another person. Only the latest name and username are searchable. `first_seen_at` is when the directory row was created, not when the person first acted. History before the coverage start is gone.',
+
+    'actor_next_execution' => 'Open the newest execution attributed to this person, in full.',
+
+    'actor_next_group' => 'List the records of the group of that execution.',
+
+    'actor_next_user' => 'List the records that carry this user id; dispatch and inside links are not followed there.',
 
     'actor_from_records_note' => 'No directory row exists for this id (users are kept while recently seen).',
 
@@ -428,7 +460,7 @@ return [
 
     'occurrences_baseline_withheld' => 'The :percentile baseline has :have records and needs :needed; no record was left out for being below it.',
 
-    'occurrences_user_only' => 'Filtered by the user recorded on each record only: a job attempt this user dispatched is left out unless it carries the user itself.',
+    'occurrences_user_only' => 'Filtered by recorded user only; use `actor` for dispatch and inside links.',
 
     'occurrences_next_group' => 'The group of the first row: how it compares with its peers.',
 

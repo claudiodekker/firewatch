@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Attribution;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -65,6 +66,16 @@ class Actor extends Tool
     protected const CONTROL_CHARACTERS = '/[\p{Cc}\p{Zl}\p{Zp}]/u';
 
     /**
+     * The executions an answer lists when no limit is asked for.
+     */
+    protected const DEFAULT_LIMIT = 20;
+
+    /**
+     * The most executions an answer lists.
+     */
+    protected const MAXIMUM_LIMIT = 100;
+
+    /**
      * The values `who` takes, as a refusal names them.
      */
     protected const ACCEPTED = 'a user id, a username or a name, of 1 to '.self::MAXIMUM_WHO.' characters';
@@ -102,12 +113,15 @@ class Actor extends Tool
     {
         return [
             'who' => $schema->string()->description(__('firewatch::messages.actor_who_argument'))->required(),
+            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
+            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
+            'limit' => $schema->integer()->description(__('firewatch::messages.actor_limit_argument')),
             ...$this->formatSchema($schema),
         ];
     }
 
     /**
-     * Answer with the person who is meant, the people who could be, or the people who are known.
+     * Answer with the person who is meant and the work of the window attributed to them, the people who could be meant, or the people who are known.
      */
     public function handle(Request $request): Response|ResponseFactory
     {
@@ -115,20 +129,21 @@ class Actor extends Tool
     }
 
     /**
-     * Read the argument, then the store, and put the identification, or why there is none, in the envelope.
+     * Read the arguments, then the store, and put the identification and the attribution, or why there is none, in the envelope.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
         $who = $this->who($request);
+        $timezone = config()->string('app.timezone');
+        $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
+        $limit = $this->limit($request);
 
         $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::none(reason: __('firewatch::messages.actor_window_reason'), timezone: $timezone);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
         $types = RecordType::events();
 
         try {
-            [$total, $oldest, $newest, $facts, $identification] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $who));
+            [$total, $oldest, $newest, $facts, $identification, $attribution] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $who, $window, $limit));
         } catch (StoreUnusable $unusable) {
             $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for(null, $types, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
@@ -150,8 +165,14 @@ class Actor extends Tool
             return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
+        if ($attribution?->total() === 0) {
+            $empty = Emptiness::noExecutions($total);
+
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        }
+
         return new Answer(
-            ...$this->stated($who, $identification),
+            ...$this->stated($who, $identification, $attribution, $window),
             tool: $this->name(),
             now: $epoch,
             timezone: $timezone,
@@ -162,26 +183,30 @@ class Actor extends Tool
     }
 
     /**
-     * Read the store's span and facts, and resolve who is meant, in one snapshot.
+     * Read the store's span and facts, resolve who is meant and, for one person, attribute the window's work to them, in one snapshot.
      *
-     * @return array{int, float|null, float|null, StoreFacts, Identification}
+     * @return array{int, float|null, float|null, StoreFacts, Identification, Attribution|null}
      */
-    protected function load(SQLite3 $connection, string $who): array
+    protected function load(SQLite3 $connection, string $who, Window $window, int $limit): array
     {
         $span = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
         $total = is_int($span['total']) ? $span['total'] : 0;
         $facts = StoreFacts::read($connection);
         $identification = Identification::of($connection, $who);
 
-        return [$total, $span['oldest'], $span['newest'], $facts, $identification];
+        $attribution = $identification->matchedBy === null || $identification->isAmbiguous()
+            ? null
+            : Attribution::of($connection, $window, $identification->found->rows[0]['id'], $limit);
+
+        return [$total, $span['oldest'], $span['newest'], $facts, $identification, $attribution];
     }
 
     /**
      * Get what an answer states for the state of the identification.
      *
-     * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
+     * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: list<array{tool: string, arguments: array<string, mixed>, why: string}>, cuttable: list<string>|null}
      */
-    protected function stated(string $who, Identification $identification): array
+    protected function stated(string $who, Identification $identification, ?Attribution $attribution, Window $window): array
     {
         $decidedBy = $identification->matchedBy;
 
@@ -189,32 +214,31 @@ class Actor extends Tool
             return $this->unknown($who, $identification);
         }
 
-        return $identification->isAmbiguous()
+        return $attribution === null
             ? $this->ambiguous($who, $decidedBy, $identification)
-            : $this->identified($decidedBy, $identification);
+            : $this->identified($decidedBy, $identification, $attribution, $window);
     }
 
     /**
-     * Get what an answer states for the one person found.
+     * Get what an answer states for the one person found: who they are and the work of the window attributed to them.
      *
-     * @return array{summary: string, empty: null, result: array<string, mixed>, notes: list<string>, truncated: array{}}
+     * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: list<array{tool: string, arguments: array<string, mixed>, why: string}>, cuttable: list<string>}
      */
-    protected function identified(MatchedBy $decidedBy, Identification $identification): array
+    protected function identified(MatchedBy $decidedBy, Identification $identification, Attribution $attribution, Window $window): array
     {
         $person = $identification->found->rows[0];
         $name = Stored::blank($person['name']);
-        $fromRecords = $decidedBy === MatchedBy::RECORDS;
+        $named = is_string($name) ? $name : $person['id'];
 
-        $summary = $fromRecords
-            ? __('firewatch::messages.actor_from_records_summary', ['id' => $person['id']])
-            : __('firewatch::messages.actor_identified_summary', [
-                'person' => is_string($name) ? $name : $person['id'],
-                'stage' => $decidedBy->value,
-            ]);
+        $empty = $attribution->attributed() === 0 ? Emptiness::nothingAttributed($named, $attribution->total()) : null;
+
+        $listed = count($attribution->executions->rows);
+        $how = trans_choice('firewatch::messages.actor_executions_how', $listed, ['listed' => $listed]);
+        $cut = $attribution->executions->truncation(section: 'executions', how: $how);
 
         return [
-            'summary' => $summary,
-            'empty' => null,
+            'summary' => $empty === null ? $this->summary($named, $person['id'], $attribution) : $this->nothingAttributed($named, $person['id']),
+            'empty' => $empty,
             'result' => [
                 'identity' => [
                     'id' => $person['id'],
@@ -224,16 +248,144 @@ class Actor extends Tool
                     'last_seen_at' => $person['last_seen'],
                     'matched_by' => $decidedBy->value,
                 ],
+                ...$attribution->result(),
             ],
-            'notes' => $fromRecords ? [__('firewatch::messages.actor_from_records_note')] : [],
-            'truncated' => [],
+            'notes' => $this->notes($decidedBy, $attribution),
+            'truncated' => $cut === null ? [] : [$cut],
+            'next' => $this->next($person['id'], $attribution, $window),
+            'cuttable' => ['executions'],
         ];
+    }
+
+    /**
+     * Get the summary of the attribution, which names the person, else gives their id, else leaves them out, so that the sentence is never cut.
+     */
+    protected function summary(string $named, string $id, Attribution $attribution): string
+    {
+        $counts = [
+            'attributed' => $attribution->attributed(),
+            'total' => $attribution->total(),
+            ...$attribution->links,
+            'unattributable' => $attribution->unattributable(),
+        ];
+
+        return $this->naming('actor_summary', $named, $id, $counts);
+    }
+
+    /**
+     * Get the summary of a person to whom nothing in the window is attributed, named as the attribution summary names them.
+     */
+    protected function nothingAttributed(string $named, string $id): string
+    {
+        return $this->naming('actor_nothing_attributed_summary', $named, $id);
+    }
+
+    /**
+     * Get the sentence of a key that names the person by name, else by id, else leaves them out through the key's sentence without a person, whichever first fits a summary whole.
+     *
+     * @param  array<string, int>  $replace
+     */
+    protected function naming(string $key, string $named, string $id, array $replace = []): string
+    {
+        foreach (array_unique([$named, $id]) as $person) {
+            $summary = __("firewatch::messages.{$key}", [
+                'person' => $person,
+                ...$replace,
+            ]);
+
+            if (mb_strlen($summary) <= Answer::SUMMARY_CHARACTERS) {
+                return $summary;
+            }
+        }
+
+        return __("firewatch::messages.{$key}_without_person", $replace);
+    }
+
+    /**
+     * Get the notes of an attribution, in the fixed order.
+     *
+     * @return list<string>
+     */
+    protected function notes(MatchedBy $decidedBy, Attribution $attribution): array
+    {
+        $commands = $attribution->commands();
+        $tasks = $attribution->scheduledTasks();
+        $attempts = $attribution->attemptsWithoutActor();
+        $requests = $attribution->requestsWithoutUser();
+        $notes = [];
+
+        if ($decidedBy === MatchedBy::RECORDS) {
+            $notes[] = __('firewatch::messages.actor_from_records_note');
+        }
+
+        $notes[] = $commands + $tasks === 0
+            ? __('firewatch::messages.actor_no_commands_note')
+            : __('firewatch::messages.actor_commands_note', [
+                'commands' => trans_choice('firewatch::messages.actor_commands_count', $commands, ['count' => $commands]),
+                'tasks' => trans_choice('firewatch::messages.actor_tasks_count', $tasks, ['count' => $tasks]),
+                'inside' => trans_choice('firewatch::messages.actor_inside_count', $attribution->inside(), ['count' => $attribution->inside()]),
+            ]);
+
+        if ($attempts > 0) {
+            $notes[] = trans_choice('firewatch::messages.actor_no_actor_note', $attempts, ['count' => $attempts]);
+        }
+
+        if ($requests > 0) {
+            $notes[] = trans_choice('firewatch::messages.actor_guest_note', $requests, ['count' => $requests]);
+        }
+
+        $notes[] = __('firewatch::messages.actor_identity_note');
+
+        return $notes;
+    }
+
+    /**
+     * Get the calls that open the newest listed execution and its group, and list the records that carry the person's id, over the same window.
+     *
+     * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
+     */
+    protected function next(string $id, Attribution $attribution, Window $window): array
+    {
+        $newest = $attribution->executions->rows[0] ?? null;
+        $calls = [];
+
+        if ($newest !== null) {
+            $calls[] = [
+                'tool' => 'execution',
+                'arguments' => ['execution_id' => $newest['execution_id']],
+                'why' => __('firewatch::messages.actor_next_execution'),
+            ];
+        }
+
+        if ($newest !== null && $newest['group_hash'] !== null) {
+            $calls[] = [
+                'tool' => 'occurrences',
+                'arguments' => [
+                    'group' => $newest['group_hash'],
+                    ...$window->arguments(),
+                ],
+                'why' => __('firewatch::messages.actor_next_group'),
+            ];
+        }
+
+        if ($attribution->recorded) {
+            $calls[] = [
+                'tool' => 'occurrences',
+                'arguments' => [
+                    'user_id' => $id,
+                    ...$window->arguments(),
+                ],
+                'why' => __('firewatch::messages.actor_next_user'),
+            ];
+        }
+
+        return $calls;
     }
 
     /**
      * Get what an answer states for the several people the deciding stage found, none of whom is chosen.
      *
-     * @return array{summary: string, empty: null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
+     * @return array{summary: string, empty: null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: array{}, cuttable: null}
      */
     protected function ambiguous(string $who, MatchedBy $decidedBy, Identification $identification): array
     {
@@ -251,6 +403,8 @@ class Actor extends Tool
             ],
             'notes' => [__('firewatch::messages.actor_ambiguous_note')],
             'truncated' => $cut === null ? [] : [$cut],
+            'next' => [],
+            'cuttable' => null,
         ];
     }
 
@@ -275,7 +429,7 @@ class Actor extends Tool
     /**
      * Get what an answer states when nothing found anyone: the people the user directory holds.
      *
-     * @return array{summary: string, empty: Emptiness, result: array<string, mixed>, notes: list<string>, truncated: array{}}
+     * @return array{summary: string, empty: Emptiness, result: array<string, mixed>, notes: list<string>, truncated: array{}, next: array{}, cuttable: null}
      */
     protected function unknown(string $who, Identification $identification): array
     {
@@ -288,6 +442,8 @@ class Actor extends Tool
             ],
             'notes' => [__('firewatch::messages.actor_unknown_note')],
             'truncated' => [],
+            'next' => [],
+            'cuttable' => null,
         ];
     }
 
@@ -334,6 +490,26 @@ class Actor extends Tool
         }
 
         return $who;
+    }
+
+    /**
+     * Read the most executions to list.
+     */
+    protected function limit(Request $request): int
+    {
+        $value = $request->get('limit');
+
+        if ($value === null) {
+            return self::DEFAULT_LIMIT;
+        }
+
+        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
+            return $value;
+        }
+
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'actor(who: "taylor", limit: '.self::DEFAULT_LIMIT.')');
     }
 
     /**

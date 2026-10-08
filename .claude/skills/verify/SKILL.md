@@ -57,6 +57,7 @@ Produce telemetry by exercising the workbench the way a user's application would
 | `GET /quotes` | calls a faked dependency that answers 503 | a request and an outgoing request, a `failing-http` finding |
 | `GET /catalog` | reads the key `catalog` through `Cache::remember()` | a request, a miss and a write, and from the third request a `cache` finding |
 | `GET /members/7` | signs in Taylor Otwell for the request; `8` is Taylor Swift and `9` is Nuno Maduro | a request that carries the user, and that user in the user directory |
+| `GET /members/7/orders` | dispatches `ShipOrder`, then signs in the member | a request and a `queued-job` record that carry the user; after `queue:work`, an attempt with no user of its own, which `actor` ties to the member by the dispatch |
 
 ```shell
 .claude/skills/verify/scripts/app.sh get <run> /products
@@ -70,6 +71,7 @@ Run the queued jobs and any other command through the run:
 ```shell
 .claude/skills/verify/scripts/app.sh artisan <run> queue:work --stop-when-empty --no-interaction
 .claude/skills/verify/scripts/app.sh artisan <run> about --only=environment     # a command Firewatch records
+.claude/skills/verify/scripts/app.sh artisan <run> members:audit 7              # a command whose query carries member 7
 .claude/skills/verify/scripts/app.sh artisan <run> firewatch:clear --type=query --force
 ```
 

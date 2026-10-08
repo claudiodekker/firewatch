@@ -104,6 +104,25 @@ class Emptiness
     }
 
     /**
+     * Get an empty answer for a person to whom none of the executions of the window is attributed.
+     */
+    public static function nothingAttributed(string $person, int $executions): self
+    {
+        return new self(EmptyKind::NO_MATCH, $executions, __('firewatch::messages.actor_nothing_attributed', [
+            'person' => $person,
+            'population' => $executions,
+        ]));
+    }
+
+    /**
+     * Get an empty answer for a window in which no execution started, so that nothing can be attributed to anyone.
+     */
+    public static function noExecutions(int $records): self
+    {
+        return new self(EmptyKind::WINDOW_EMPTY, $records, __('firewatch::messages.actor_no_executions', ['population' => $records]));
+    }
+
+    /**
      * Get the fixed summary line for this kind.
      */
     public function summary(): string

@@ -331,7 +331,7 @@ Assigning an execution or record to an actor by a recorded user or one of the at
 _Avoid_: Ownership, blame, tracking
 
 **Attribution link**:
-The reason an execution is attributed to an actor: direct (its own recorded user), dispatch (its dispatch names the actor) or inside (a command or scheduled task that had a child carrying the actor).
+The reason an execution is attributed to an actor: direct (its own recorded user), dispatch (its dispatch names the actor) or inside (a command or scheduled task that had a child carrying the actor). An execution with no link to the actor asked about is another actor's when its own recorded user or its dispatch names someone else, and unattributable otherwise.
 _Avoid_: Provenance, relationship, caused by
 
 **No recorded user**:
