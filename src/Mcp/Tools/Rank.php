@@ -275,7 +275,7 @@ class Rank extends Tool
             'by' => $by->value,
         ]);
         $notes = $this->notes($by, $ranked);
-        $next = $rows->rows === [] ? [] : [$this->breakdownCall($request, $rows->rows[0]['group'], $type)];
+        $next = $rows->rows === [] ? [] : [$this->breakdownCall($window, $rows->rows[0]['group'], $type)];
 
         return new Answer(
             tool: $this->name(),
@@ -357,7 +357,7 @@ class Rank extends Tool
      *
      * @return array{tool: string, arguments: array<string, mixed>, why: string}
      */
-    protected function breakdownCall(Request $request, string $group, RecordType $type): array
+    protected function breakdownCall(Window $window, string $group, RecordType $type): array
     {
         $arguments = ['group' => $group];
 
@@ -365,17 +365,9 @@ class Rank extends Tool
             $arguments['type'] = $type->value;
         }
 
-        foreach (['since', 'until'] as $name) {
-            $value = $request->get($name);
-
-            if ($value !== null) {
-                $arguments[$name] = $value;
-            }
-        }
-
         return [
             'tool' => $this->name(),
-            'arguments' => $arguments,
+            'arguments' => [...$arguments, ...$window->arguments()],
             'why' => __('firewatch::messages.rank_next_group'),
         ];
     }

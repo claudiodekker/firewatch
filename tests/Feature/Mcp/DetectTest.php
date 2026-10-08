@@ -672,6 +672,30 @@ describe('what to look at next', function () {
         expect($envelope['next'][0])->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes'], 'why' => __('firewatch::messages.detect_next_shape')])
             ->and(dtcRun($envelope['next'][0])['result']['verdict'])->toBe('findings');
     });
+
+    it('offers its calls over the instants its window resolved to, so they read the same window when they run later', function () {
+        ingest([
+            dtcRequest('/orders', 500),
+            syntheticRecord(RecordType::LOG)->with(['level' => 'error', 'message' => 'The card was declined.', 'timestamp' => DETECT_AT]),
+        ]);
+
+        $routes = dtcAnswer(['shape' => 'failing-routes', 'since' => '-2h']);
+        $logs = dtcAnswer(['shape' => 'error-logs', 'since' => '-2h']);
+        $shapes = dtcAnswer(['since' => '-2h']);
+        $this->travel(3)->hours();
+        $answers = array_map(dtcRun(...), [...$routes['next'], ...$logs['next'], ...$shapes['next']]);
+
+        expect(array_column($routes['next'], 'arguments', 'tool'))->toEqual([
+            'execution' => ['execution_id' => $routes['result']['findings'][0]['latest_execution_id']],
+            'occurrences' => ['group' => dtcGroup('/orders'), 'since' => DETECT_AT - 3600],
+            'rank' => ['group' => dtcGroup('/orders'), 'since' => DETECT_AT - 3600],
+        ])
+            ->and(array_column($logs['next'], 'arguments', 'tool')['occurrences'])->toMatchArray(['type' => 'log', 'since' => DETECT_AT - 3600])
+            ->and(array_column($shapes['next'], 'tool'))->toContain('detect')
+            ->and(array_column($shapes['next'], 'arguments'))->each->toMatchArray(['since' => DETECT_AT - 3600])
+            ->and($answers)->toHaveCount(count($routes['next']) + count($logs['next']) + count($shapes['next']))
+            ->and(array_column($answers, 'empty'))->each->toBeNull();
+    });
 });
 
 test('the tool is listed with its description, arguments and annotations', function () {
