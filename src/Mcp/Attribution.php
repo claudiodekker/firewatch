@@ -42,7 +42,7 @@ class Attribution
     {
         $bindings = self::bindings($id);
         $executions = self::executionsByClass($connection, $window, $bindings);
-        $records = self::recordsByClass($connection, $window, $bindings);
+        $records = self::recordsByLink($connection, $window, $bindings);
         $listed = self::listed($connection, $window, $bindings, $limit);
 
         $classes = fn (RecordType $type) => $executions[$type->value] ?? [];
@@ -181,44 +181,47 @@ class Attribution
     }
 
     /**
-     * Count the records of the window of the twelve types by type, by the class of the record and by whether the person is its own user.
+     * Count the records of the window of the twelve types by type, by what ties the record to the person and by whether the person is its own user.
      *
-     * A record with no user of its own takes the class of its execution: itself for an execution record, else the execution record of its id and source that started last, the highest store id among those that started together, wherever it started. Such children are counted by type and execution first, so that their execution is classified once per type of child, never once per child. A command or task the person is inside of does not make its records the person's.
+     * A record is direct by its own user, else someone else's by its own user, else it takes the direct or dispatch link of its execution, else it is unattributable. Its execution is itself for an execution record, else the execution record of its id and source that started last, the highest store id among those that started together, wherever it started. Such children are counted by type and execution first, so that their execution is classified once per type of child, never once per child. A command or task the person is inside of does not make its records the person's.
      *
      * @param  array<string, string>  $bindings
-     * @return list<array{type: string, class: string, own: int, records: int}>
+     * @return list<array{type: string, link: string, own: int, records: int}>
      */
-    protected static function recordsByClass(SQLite3 $connection, Window $window, array $bindings): array
+    protected static function recordsByLink(SQLite3 $connection, Window $window, array $bindings): array
     {
         $types = self::parameters(RecordType::events());
         $executions = self::parameters(Executions::TYPES);
         $children = self::parameters(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, Executions::TYPES, true)));
         $inheriting = "type IN ({$children}) AND NULLIF(user_id, '') IS NULL AND execution_id IS NOT NULL";
-        $ownClass = self::classOf('r');
-        $executionClass = self::classOf('x');
+        $ownLink = self::classOf('r');
+        $executionLink = self::classOf('x');
 
-        /** @var list<array{type: string, class: string, own: int, records: int}> */
+        /** @var list<array{type: string, link: string, own: int, records: int}> */
         return Stored::rows($connection, "WITH inheriting AS (
                 SELECT type, execution_id, source, count(*) AS records FROM records
                 WHERE {$inheriting} AND {$window->condition()}
                 GROUP BY type, execution_id, source
             )
-            SELECT type, COALESCE((
-                SELECT {$executionClass} FROM records x WHERE x.id = (
-                    SELECT y.id FROM records y
-                    WHERE y.execution_id = inheriting.execution_id AND y.source = inheriting.source AND y.type IN ({$executions})
-                    ORDER BY y.started_at DESC, y.id DESC LIMIT 1
-                )
-            ), :unattributable) AS class, 0 AS own, sum(records) AS records
-            FROM inheriting GROUP BY 1, 2
-            UNION ALL
-            SELECT r.type, CASE
-                WHEN NULLIF(r.user_id, '') = :actor THEN :direct
-                WHEN NULLIF(r.user_id, '') IS NOT NULL THEN :other_actor
-                WHEN r.type IN ({$executions}) THEN {$ownClass}
+            SELECT type, CASE
+                WHEN own_user = :actor THEN :direct
+                WHEN own_user IS NOT NULL THEN :other_actor
+                WHEN execution_link IN (:direct, :dispatch) THEN execution_link
                 ELSE :unattributable
-            END AS class, COALESCE(NULLIF(r.user_id, '') = :actor, 0) AS own, count(*) AS records
-            FROM records r WHERE r.type IN ({$types}) AND {$window->condition()} AND NOT ({$inheriting})
+            END AS link, COALESCE(own_user = :actor, 0) AS own, sum(records) AS records
+            FROM (
+                SELECT type, NULL AS own_user, (
+                    SELECT {$executionLink} FROM records x WHERE x.id = (
+                        SELECT y.id FROM records y
+                        WHERE y.execution_id = inheriting.execution_id AND y.source = inheriting.source AND y.type IN ({$executions})
+                        ORDER BY y.started_at DESC, y.id DESC LIMIT 1
+                    )
+                ) AS execution_link, records
+                FROM inheriting
+                UNION ALL
+                SELECT r.type, NULLIF(r.user_id, ''), CASE WHEN r.type IN ({$executions}) THEN {$ownLink} END, 1
+                FROM records r WHERE r.type IN ({$types}) AND {$window->condition()} AND NOT ({$inheriting})
+            )
             GROUP BY 1, 2, 3", $bindings, $window);
     }
 
@@ -272,30 +275,30 @@ class Attribution
     }
 
     /**
-     * Get the counts of the records of the window: the person's, and those with no actor at all.
+     * Get the counts of the records of the window: the person's, and those with no user of their own whose execution is not the person's.
      *
-     * @param  list<array{type: string, class: string, own: int, records: int}>  $records
+     * @param  list<array{type: string, link: string, own: int, records: int}>  $records
      * @return array{in_window: int, this_actor: int, without_actor: int}
      */
     protected static function records(array $records): array
     {
-        $count = fn (AttributionLink ...$classes) => array_sum(array_column(array_filter($records, fn (array $row) => in_array(AttributionLink::from($row['class']), $classes, true)), 'records'));
+        $count = fn (AttributionLink ...$classes) => array_sum(array_column(array_filter($records, fn (array $row) => in_array(AttributionLink::from($row['link']), $classes, true)), 'records'));
 
         return [
             'in_window' => array_sum(array_column($records, 'records')),
             'this_actor' => $count(AttributionLink::DIRECT, AttributionLink::DISPATCH),
-            'without_actor' => $count(AttributionLink::UNATTRIBUTABLE, AttributionLink::INSIDE),
+            'without_actor' => $count(AttributionLink::UNATTRIBUTABLE),
         ];
     }
 
     /**
      * Get how many records of the window of a type are the person's by a link.
      *
-     * @param  list<array{type: string, class: string, own: int, records: int}>  $records
+     * @param  list<array{type: string, link: string, own: int, records: int}>  $records
      */
     protected static function sum(array $records, RecordType $type, AttributionLink $link): int
     {
-        $kept = array_filter($records, fn (array $row) => $row['type'] === $type->value && $row['class'] === $link->value);
+        $kept = array_filter($records, fn (array $row) => $row['type'] === $type->value && $row['link'] === $link->value);
 
         return array_sum(array_column($kept, 'records'));
     }

@@ -327,9 +327,9 @@ it('counts the records of the window as the person\'s, someone else\'s or no one
         'requests' => ['total' => 3, 'this_actor' => 1, 'other_actors' => 1, 'guest' => 1],
         'job_attempts' => ['total' => 1, 'this_actor' => 1],
         'commands' => ['total' => 1, 'this_actor' => 1],
-        'records' => ['in_window' => 15, 'this_actor' => 7, 'without_actor' => 5],
+        'records' => ['in_window' => 15, 'this_actor' => 7, 'without_actor' => 6],
     ]))
-        ->and($attribution['records']['in_window'] - $attribution['records']['this_actor'] - $attribution['records']['without_actor'])->toBe(3)
+        ->and($attribution['records']['in_window'] - $attribution['records']['this_actor'] - $attribution['records']['without_actor'])->toBe(2)
         ->and($envelope['result']['activity'])->toBe(attributedActivity(['request' => [1, 0], 'job-attempt' => [0, 1], 'query' => [3, 0], 'log' => [0, 1], 'queued-job' => [1, 0]]))
         ->and($envelope['result']['executions'])->toBe([
             ['started_at' => ATTRIBUTED_AT + 50, 'type' => 'command', 'execution_id' => 'command', 'group_hash' => ATTRIBUTED_GROUP, 'label' => 'orders:sync', 'link' => 'inside'],
@@ -342,6 +342,23 @@ it('counts the records of the window as the person\'s, someone else\'s or no one
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
             __('firewatch::messages.actor_caveats_note'),
         ]);
+});
+
+it('counts a record with no user of its own as without an actor unless its execution is the person\'s, and a record of someone else in neither counter', function () {
+    ingest([
+        attributedUser(),
+        attributedExecution(RecordType::REQUEST, 'theirs', offset: 1, user: '8'),
+        attributedChild(RecordType::QUERY, 'theirs', 'request', offset: 2),
+        attributedChild(RecordType::QUERY, 'theirs', 'request', user: '8', offset: 3),
+        attributedDispatch('job', user: '8', offset: 4),
+        attributedAttempt('attempt', 'job', offset: 5),
+        attributedChild(RecordType::LOG, 'attempt', 'job', offset: 6),
+        attributedChild(RecordType::LOG, 'nowhere', 'request', offset: 7),
+    ]);
+
+    $envelope = attributedAnswer();
+
+    expect($envelope['result']['attribution']['records'])->toBe(['in_window' => 7, 'this_actor' => 0, 'without_actor' => 4]);
 });
 
 it('gives a record with no user of its own the class of the latest execution of its id and source', function () {
