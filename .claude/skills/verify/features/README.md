@@ -39,4 +39,5 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Explore tools](./explore-tools.md) covers `overview`, `rank`, `occurrences`, `execution` and `trace`, in markdown and JSON.
 - [Detect](./detect.md) covers the eleven problem shapes, a clean verdict, a threshold override and the verdicts in `overview`.
 - [Actor](./actor.md) covers `actor`: one person identified by id, username, name or a part of either, the candidates when several fit, and the known actors when nobody does.
+- [Compare](./compare.md) covers `compare`: the groups of one type before and after a `split_at`, an empty side, and its refusals.
 - [Clear the store](./clear.md) covers `firewatch:clear` with its confirmation, `--type`, `--force` and `--drop`, and the `firewatch:doctor` stub.

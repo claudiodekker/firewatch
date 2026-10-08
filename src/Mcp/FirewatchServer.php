@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
+use ClaudioDekker\Firewatch\Mcp\Tools\Compare;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
@@ -43,6 +44,7 @@ class FirewatchServer extends Server
         Trace::class,
         Detect::class,
         Actor::class,
+        Compare::class,
     ];
 
     /**

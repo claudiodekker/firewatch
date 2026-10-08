@@ -16,7 +16,7 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 7]),
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 8]),
             '  overview     Entry point.',
             '  rank         Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
             '  occurrences  Lists individual records, newest first by default, for the selectors you give (at least o…',
@@ -24,6 +24,7 @@ it('lists the tools under a header, one line each', function () {
             '  trace        Follows one trace: its executions in start order and the lineage of every queued job.',
             '  detect       Runs named problem shapes and returns evidence, worst first.',
             '  actor        Identifies one signed-in person and the work of the window tied to them.',
+            '  compare      Compares each group before and after a split: "did my change help?".',
             '',
         ]));
 });
@@ -157,6 +158,21 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.actor_limit_argument'), 'type' => 'integer'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object', 'required' => ['who']],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
+                    'name' => 'compare',
+                    'description' => __('firewatch::messages.tools.compare'),
+                    'inputSchema' => ['properties' => [
+                        'type' => ['description' => __('firewatch::messages.compare_type_argument'), 'type' => 'string'],
+                        'group' => ['description' => __('firewatch::messages.compare_group_argument'), 'type' => 'string'],
+                        'split_at' => ['description' => __('firewatch::messages.compare_split_at_argument'), 'type' => 'string'],
+                        'by' => ['description' => __('firewatch::messages.compare_by_argument'), 'type' => 'string'],
+                        'since' => ['description' => __('firewatch::messages.compare_since_argument'), 'type' => 'string'],
+                        'until' => ['description' => __('firewatch::messages.compare_until_argument'), 'type' => 'string'],
+                        'limit' => ['description' => __('firewatch::messages.compare_limit_argument'), 'type' => 'integer'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object', 'required' => ['split_at']],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
             ],

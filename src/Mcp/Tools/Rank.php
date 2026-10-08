@@ -37,8 +37,6 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @api
@@ -152,7 +150,7 @@ class Rank extends Tool
         try {
             [$total, $inWindow, $oldest, $newest, $facts, $type, $held, $by, $ranking, $breakdown] = $this->reader->snapshot(function (SQLite3 $connection) use ($request, $window, $group, $explicit, $matching, $deploy, $limit) {
                 [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
-                $held = $group === null ? [] : $this->holders($connection, $group);
+                $held = $group === null ? [] : Ranking::holders($connection, $group);
 
                 if ($group !== null && $explicit !== null && $held !== [] && ! in_array($explicit, $held, true)) {
                     $holding = implode(', ', array_map(fn (RecordType $type) => $type->value, $held));
@@ -160,7 +158,7 @@ class Rank extends Tool
                     throw Refusal::conflicting(argument: 'type', with: 'group', accepted: "a type that holds the group: {$holding}", example: "rank(group: \"{$group}\")");
                 }
 
-                $type = $explicit ?? ($group === null ? null : $this->preferred($held));
+                $type = $explicit ?? ($group === null ? null : Ranking::preferred($held));
 
                 if ($type === null || ($group !== null && $held === [])) {
                     return [$total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $held, null, null, null];
@@ -395,38 +393,6 @@ class Rank extends Tool
             'occurrences' => $last['occurrences'],
             'hash' => $last['hash'],
         ];
-    }
-
-    /**
-     * Read the types that hold a group in the store.
-     *
-     * @return list<RecordType>
-     */
-    protected function holders(SQLite3 $connection, string $group): array
-    {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare('SELECT DISTINCT type FROM records WHERE group_hash = :group');
-        $statement->bindValue(':group', $group);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-        $held = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $held[] = is_string($row[0]) ? RecordType::tryFrom($row[0]) : null;
-        }
-
-        return array_values(array_filter(Measure::types(), fn (RecordType $type) => in_array($type, $held, true)));
-    }
-
-    /**
-     * Pick the type of a group that no type was asked for: a job group is held by job attempts and dispatches, and the attempts carry the execution measures.
-     *
-     * @param  list<RecordType>  $held
-     */
-    protected function preferred(array $held): ?RecordType
-    {
-        return in_array(RecordType::JOB_ATTEMPT, $held, true) ? RecordType::JOB_ATTEMPT : ($held[0] ?? null);
     }
 
     /**

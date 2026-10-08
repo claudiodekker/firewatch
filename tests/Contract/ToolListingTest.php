@@ -21,7 +21,7 @@ test('every tool the assistant-facing text names in backticks is registered, or 
     $tools = array_column($listed, 'name');
     $arguments = array_merge(...array_map(fn (array $tool) => array_keys($tool['inputSchema']['properties']), $listed));
     $answerFields = ['next', 'withheld', 'detail', 'first_seen_at'];
-    $otherWords = ['database', 'split_at'];
+    $otherWords = ['database'];
     $shapes = array_column(DetectorName::cases(), 'value');
     $text = implode("\n", Arr::flatten(trans('firewatch::messages')));
 
@@ -34,10 +34,10 @@ test('every tool the assistant-facing text names in backticks is registered, or 
         ->and(array_values(array_unique(array_diff($words, $tools, $arguments, $answerFields, $otherWords, $shapes))))->toBe([]);
 });
 
-test('the tool listing is under 5,000 tokens at three characters a token', function () {
+test('the tool listing is under 6,000 tokens at three characters a token', function () {
     $characters = strlen(json_encode(toolListing()['tools'], JSON_THROW_ON_ERROR));
 
-    expect(intdiv($characters, 3))->toBeLessThan(5000);
+    expect(intdiv($characters, 3))->toBeLessThan(6000);
 });
 
 test('every argument description is at most 30 words', function () {
@@ -55,6 +55,6 @@ test('every argument description is at most 30 words', function () {
 test('the instructions describe every listed tool once, in the order an assistant drills down', function () {
     preg_match_all('/`([a-z]+)` \(/', __('firewatch::messages.instructions'), $matches);
 
-    expect($matches[1])->toBe(['overview', 'detect', 'rank', 'occurrences', 'execution', 'trace', 'actor'])
+    expect($matches[1])->toBe(['overview', 'detect', 'rank', 'occurrences', 'execution', 'trace', 'actor', 'compare'])
         ->and(array_diff(array_column(toolListing()['tools'], 'name'), $matches[1]))->toBe([]);
 });

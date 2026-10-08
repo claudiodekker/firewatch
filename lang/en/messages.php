@@ -16,7 +16,7 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did while it was developed: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and Firewatch itself sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person). Every answer ends with `next`: calls you can run as written.
+        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after). Every answer ends with `next`: calls you can run as written.
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used.
         TEXT,
@@ -39,6 +39,7 @@ return [
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
         'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
         'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: read query one execution ran 3+ times, in runs. `database-bound`: request groups typically spending 60+ percent in queries. `failing-routes`: request groups answering 400+. `failing-jobs`: job groups with 1+ failed or released attempts. `queue-latency`: job groups with first-attempt wait or pending age of 5000+ milliseconds. `failing-tasks`: scheduled-task groups with failed or skipped tasks (no threshold). `exception-clusters`: exception groups with 1+ occurrences, escaped first. `error-logs`: error-level logs by message shape, 1+ occurrences (no `group`). `failing-http`: outgoing-request hosts answering 400+. `cache`: cache keys with a hit rate below 50 percent over 3+ reads, or a failed write or delete. `memory`: execution groups peaking at 64+ megabytes. Without `shape` all run; `threshold` and `group` need one. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold, unit and range, exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean: none among what was captured, weak over few records. Windowed.',
+        'compare' => 'Compares each group before and after a split: "did my change help?". split_at is a time, such as the now of an earlier answer; before is since to split_at, after is split_at to until. Without since: the type\'s coverage start; without until: now. Pass `type`, or `group` for one group. Rows are ordered by absolute change, so the largest change in either direction survives the limit; a rollup counts every group, cut or not. Too few records is not evaluated, never guessed; an empty side is never "no regression". Work spanning `split_at` counts as before.',
         'actor' => 'Identifies one signed-in person and the work of the window tied to them. `who` is a user id, a username or a name, tried in that order, then as a part of a name or username: the first stage that finds anyone decides. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the username is the email. Several matches are listed as candidates, never guessed: repeat with an id. An actor exists only once recorded acting. An execution is theirs by its own user, its job\'s dispatch, or a child inside a command or task. Attribution is partial: what no link reaches is counted, never guessed. Windowed by since/until; identity is read over the whole store.',
     ],
 
@@ -121,6 +122,8 @@ return [
     'store_to' => 'to',
 
     'store_records' => ':count records',
+
+    'store_straddling' => ':count straddling the split',
 
     'truncated' => 'Truncated: :section shows :shown of :matched (:reason). :how',
 
@@ -249,6 +252,42 @@ return [
     'rank_truncated_how' => 'Pass a larger `limit`, up to 100, or narrow the window.',
 
     'rank_no_route' => '(no route matched)',
+
+    'compare_type_argument' => 'A type with groups, as rank takes it. Required unless group.',
+
+    'compare_group_argument' => 'One group id (32 hex). Excludes limit.',
+
+    'compare_split_at_argument' => 'Where after begins, in the forms of since; a record at it is after. Strictly inside the window.',
+
+    'compare_by_argument' => 'p95_duration (default; occurrences for exceptions), p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory or queries.',
+
+    'compare_limit_argument' => 'The most groups to list, 1 to 100. Default 20.',
+
+    'compare_since_argument' => 'Start of the before side, included, in the forms every tool takes. Absent: the start of what the store covers for the type.',
+
+    'compare_until_argument' => 'End of the after side, excluded, in the same forms. Absent: the store clock, now.',
+
+    'compare_summary' => 'Compared :groups :type group by :by before and after the split: :changes.|Compared :groups :type groups by :by before and after the split: :changes.',
+
+    'compare_empty_side_summary' => 'Not evaluated (empty_side): the :side side holds no :type records, which is not "no regression".',
+
+    'compare_outside_coverage_summary' => 'Not evaluated (outside_coverage): the :side side lies before the history the store holds for :type.',
+
+    'compare_not_evaluated_note' => 'Nothing was compared, which says nothing about whether anything changed: exercise the application again, or move split_at or since.',
+
+    'compare_earlier_note' => ':count :type record started before what the store covers for :type, so it is on neither side.|:count :type records started before what the store covers for :type, so they are on neither side.',
+
+    'compare_earlier_more_note' => ':count or more :type records started before what the store covers for :type, so they are on neither side.',
+
+    'compare_move_since_note' => 'The before side reaches back more than an hour before the split, so it may hold earlier changes too: on a later round, pass the previous split as `since`.',
+
+    'compare_truncated_how' => 'Pass a larger `limit`, up to 100, one `group`, or a narrower window.',
+
+    'compare_deploys_truncated_how' => 'These are the deploys first seen: narrow the window with `since` or `until`.',
+
+    'compare_next_occurrences' => 'List the records of the first group listed.',
+
+    'compare_next_rank' => 'Break the first group listed down by deploy.',
 
     'execution_id_argument' => 'The execution id to open (a request\'s trace id is its execution id). Omit for the latest finished execution. Excludes type.',
 
