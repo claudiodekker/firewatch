@@ -1,5 +1,6 @@
 <?php
 
+use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
@@ -895,6 +896,67 @@ describe('the summary', function () {
         'the most characters' => [0, true],
         'one character more' => [1, false],
     ]);
+});
+
+describe('the fixed order', function () {
+    it('answers the sections in the fixed order, before the detector table', function () {
+        ingest([syntheticRecord(RecordType::LOG)]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect(array_keys($envelope['result']))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'detectors']);
+    });
+
+    it('answers every section when the deadline passed before the first shape started', function () {
+        ingest([syntheticRecord(RecordType::USER), ovwTimed(RecordType::REQUEST, '/orders', 2500, ['status_code' => 500, 'user' => '7'])]);
+        app()->instance(Reader::class, new class(app(Configuration::class)) extends Reader
+        {
+            public function snapshot(Closure $callback): mixed
+            {
+                Date::setTestNow(Date::now()->addSeconds(5));
+
+                return parent::snapshot($callback);
+            }
+        });
+
+        $envelope = ovwJson();
+
+        expect(array_unique(array_column($envelope['result']['detectors'], 'reason')))->toBe(['deadline'])
+            ->and($envelope['result']['detectors'])->toHaveCount(11)
+            ->and($envelope['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 1, 'server_errors' => 1, 'server_error_pct' => 100, 'client_errors' => 0, 'client_error_pct' => 0])
+            ->and($envelope['result']['slowest_by_total_time'])->toBe([['type' => 'request', 'group' => md5('/orders'), 'label' => '/orders', 'occurrences' => 1, 'total_ms' => 2.5]])
+            ->and($envelope['result']['records'])->toBe(1)
+            ->and(array_column($envelope['result']['records_by_type'], 'records'))->toBe([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+            ->and($envelope['result']['user_directory'])->toBe(1)
+            ->and($envelope['result']['actors'])->toBe(['executions' => 1, 'signed_in_actors' => 1, 'without_actor' => 0])
+            ->and(array_column($envelope['next'], 'tool'))->toBe(['rank', 'execution']);
+    });
+});
+
+describe('the answer budget', function () {
+    it('shortens the slowest list and nothing else, and says so', function () {
+        $types = [RecordType::REQUEST, RecordType::QUERY, RecordType::COMMAND, RecordType::QUEUED_JOB];
+        $records = [];
+
+        foreach ($types as $position => $type) {
+            foreach (range(1, 3) as $group) {
+                $records[] = ovwTimed($type, str_pad("{$type->value}-{$group} ", 1900, 'x'), ($position + 1) * 10_000 + $group);
+            }
+        }
+
+        ingest($records);
+
+        $envelope = Envelope::assert(Overview::class);
+        $slowest = $envelope['result']['slowest_by_total_time'];
+
+        expect(count($slowest))->toBeLessThan(10)->toBeGreaterThan(0)
+            ->and($slowest[0])->toMatchArray(['type' => 'queued-job', 'occurrences' => 1])
+            ->and($envelope['result']['detectors'])->toHaveCount(11)
+            ->and($envelope['result']['records_by_type'])->toHaveCount(12)
+            ->and(array_keys($envelope['result']))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'detectors'])
+            ->and($envelope['truncated'])->toBe([['section' => 'slowest_by_total_time', 'shown' => count($slowest), 'matched' => 10, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]])
+            ->and(mb_strlen(json_encode($envelope, RecordMapper::JSON_FLAGS)))->toBeLessThanOrEqual(24000);
+    });
 });
 
 describe('the problem shapes', function () {

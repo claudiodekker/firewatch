@@ -157,6 +157,7 @@ class Overview extends Tool
             blindSpots: $blindSpots,
             notes: $this->notes($sections, $window),
             next: $this->next($window, $sections, $judgements),
+            cuttable: ['slowest_by_total_time'],
         );
     }
 
