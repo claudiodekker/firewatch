@@ -140,7 +140,7 @@ class Comparison
     }
 
     /**
-     * Get the group of the first row, which changed most when any group moved, or null when there is none.
+     * Get the group of the first row, or null when there is none.
      */
     public function first(): ?string
     {

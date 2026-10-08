@@ -283,9 +283,9 @@ return [
 
     'compare_truncated_how' => 'Pass a larger `limit`, up to 100, one `group`, or a narrower window.',
 
-    'compare_next_occurrences' => 'List the records of the group that changed most.',
+    'compare_next_occurrences' => 'List the records of the first group listed.',
 
-    'compare_next_rank' => 'Break the group that changed most down by deploy.',
+    'compare_next_rank' => 'Break the first group listed down by deploy.',
 
     'execution_id_argument' => 'The execution id to open (a request\'s trace id is its execution id). Omit for the latest finished execution. Excludes type.',
 

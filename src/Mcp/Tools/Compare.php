@@ -316,7 +316,7 @@ class Compare extends Tool
     }
 
     /**
-     * Get the calls that list the records of the group that changed most and break it down by deploy, over the same window.
+     * Get the calls that list the records of the first group listed and break it down by deploy, over the same window.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */

@@ -6,7 +6,7 @@
 
 - `compare-split` compares every group of the type before and after the split, with `measured_on: p50` where a side has fewer than 20 records.
 - `compare-empty-side` answers `not_evaluated` / `empty_side` with no rows when a side holds no records of the type, says which side and lists the window's deploys.
-- `compare-next` offers `occurrences` and `rank` for the group that changed most, over the same window.
+- `compare-next` offers `occurrences` and `rank` for the first group listed, over the same window.
 - `compare-refusal` refuses a missing `split_at`, a split outside the window, `limit` with `group` and the deploy pair (`deploy_before`, `deploy_after`), which ticket #76 adds.
 
 ## How to get to it (user POV)
