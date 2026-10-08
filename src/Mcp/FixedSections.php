@@ -139,23 +139,13 @@ class FixedSections
     }
 
     /**
-     * Get the types whose records have a duration, in catalogue order.
-     *
-     * @return list<RecordType>
-     */
-    protected static function timedTypes(): array
-    {
-        return array_values(array_filter(Measure::types(), Measure::TOTAL_DURATION->fits(...)));
-    }
-
-    /**
      * Read the groups of the window with the largest total duration: at most three of one type and ten in all, worst first.
      *
      * @return list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float}>
      */
     protected static function leaders(SQLite3 $connection, Window $window): array
     {
-        $types = self::timedTypes();
+        $types = array_values(array_filter(Measure::types(), Measure::TOTAL_DURATION->fits(...)));
         $bindings = ['per_type' => self::SLOWEST_PER_TYPE];
         $branches = [];
 

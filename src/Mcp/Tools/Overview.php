@@ -19,6 +19,7 @@ use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -36,8 +37,6 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @api
@@ -109,8 +108,8 @@ class Overview extends Tool
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
-            [[$total, $records, $oldest, $newest], $sections, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
-                $this->countRecords($connection, $window),
+            [[$total, $oldest, $newest], $sections, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
+                $this->countRecords($connection),
                 FixedSections::read($connection, $window),
                 StoreFacts::read($connection),
                 $this->detectors->count($connection, $window, new Deadline($epoch)),
@@ -136,7 +135,7 @@ class Overview extends Tool
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
 
-        if ($records === 0) {
+        if ($sections->records === 0) {
             $empty = Emptiness::windowEmpty($total);
 
             return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
@@ -304,23 +303,15 @@ class Overview extends Tool
     }
 
     /**
-     * Count all records and those of the window, and find the span the records cover.
+     * Count all records and find the span they cover.
      *
-     * @return array{int, int, float|null, float|null}
+     * @return array{int, float|null, float|null}
      */
-    protected function countRecords(SQLite3 $connection, Window $window): array
+    protected function countRecords(SQLite3 $connection): array
     {
-        $condition = $window->condition();
+        $rows = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records');
 
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), min(started_at), max(started_at) FROM records");
-
-        $window->bind($statement);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-
-        /** @var array{int, int, float|null, float|null} */
-        return $result->fetchArray(SQLITE3_NUM);
+        /** @var array{int, float|null, float|null} */
+        return array_values($rows[0]);
     }
 }
