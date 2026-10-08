@@ -106,7 +106,7 @@ it('compares one group before and after the split by its 95th percentile and say
             'change' => null,
             'reason' => null,
             'side' => null,
-            'before' => ['since_at' => COMPARE_CREATED, 'until_at' => COMPARE_SPLIT, 'clipped' => false, 'records' => 20, 'observed_span_ms' => 19000.0],
+            'before' => ['since_at' => COMPARE_CREATED, 'until_at' => COMPARE_SPLIT, 'clipped' => false, 'records' => 20, 'observed_span_ms' => 19000.0, 'earlier_records' => 0, 'earlier_more' => false],
             'after' => ['since_at' => COMPARE_SPLIT, 'until_at' => COMPARE_NOW, 'clipped' => false, 'records' => 20, 'observed_span_ms' => 19000.0],
             'rollup' => compareRollup(1, ['slower' => 1]),
             'groups' => [
@@ -319,7 +319,7 @@ it('evaluates nothing when the after side is empty, says it is no "no regression
             'change' => 'not_evaluated',
             'reason' => 'empty_side',
             'side' => 'after',
-            'before' => ['since_at' => COMPARE_CREATED, 'until_at' => COMPARE_SPLIT, 'clipped' => false, 'records' => 6, 'observed_span_ms' => 400000.0],
+            'before' => ['since_at' => COMPARE_CREATED, 'until_at' => COMPARE_SPLIT, 'clipped' => false, 'records' => 6, 'observed_span_ms' => 400000.0, 'earlier_records' => 0, 'earlier_more' => false],
             'after' => ['since_at' => COMPARE_SPLIT, 'until_at' => COMPARE_NOW, 'clipped' => false, 'records' => 0, 'observed_span_ms' => null],
             'rollup' => null,
             'groups' => [],
@@ -437,7 +437,7 @@ it('clips a side that begins before the coverage start of the type, and says so'
     $envelope = compareAnswer(['by' => 'p50_duration', 'since' => COMPARE_CREATED]);
 
     expect($envelope['window']['since'])->toEqual(COMPARE_CREATED)
-        ->and($envelope['result']['before'])->toEqual(['since_at' => COMPARE_SPLIT - 1000, 'until_at' => COMPARE_SPLIT, 'clipped' => true, 'records' => 3, 'observed_span_ms' => 2000.0])
+        ->and($envelope['result']['before'])->toEqual(['since_at' => COMPARE_SPLIT - 1000, 'until_at' => COMPARE_SPLIT, 'clipped' => true, 'records' => 3, 'observed_span_ms' => 2000.0, 'earlier_records' => 0, 'earlier_more' => false])
         ->and($envelope['result']['after']['clipped'])->toBeFalse()
         ->and($envelope['result']['groups'][0]['change'])->toBe('steady');
 });
@@ -845,4 +845,58 @@ it('counts the straddling work of an execution type only, and states none for a 
     'outgoing-request' => ['outgoing-request', null],
     'queued-job' => ['queued-job', null],
     'exception' => ['exception', null],
+]);
+
+it('says how many records of the type started before what the store covers, which are on neither side', function (float $offset, array $arguments, int $records, int $earlier) {
+    compareIngest([
+        compareRecord(RecordType::REQUEST, 'a', COMPARE_CREATED + $offset, 10000),
+        compareRecord(RecordType::COMMAND, 'c', COMPARE_CREATED - 5, 10000),
+        ...compareCopies(RecordType::REQUEST, 'a', 600, 3),
+    ]);
+
+    $envelope = compareAnswer($arguments);
+    $said = $earlier === 0 ? [] : [trans_choice('firewatch::messages.compare_earlier_note', $earlier, ['count' => $earlier, 'type' => 'request'])];
+
+    expect($envelope['result']['before'])->toMatchArray(['since_at' => COMPARE_CREATED, 'records' => $records, 'earlier_records' => $earlier, 'earlier_more' => false])
+        ->and($envelope['result']['after'])->not->toHaveKeys(['earlier_records', 'earlier_more'])
+        ->and($envelope['result']['reason'])->toBe($records === 0 ? 'empty_side' : null)
+        ->and($envelope['notes'])->toBe([
+            ...($records === 0 ? [__('firewatch::messages.compare_not_evaluated_note')] : []),
+            ...$said,
+            ...($arguments === [] ? [__('firewatch::messages.compare_move_since_note')] : []),
+        ]);
+})->with([
+    'a record a microsecond before the coverage start' => [-0.000001, [], 0, 1],
+    'a record exactly at the coverage start' => [0, [], 1, 0],
+    'a record before the coverage start, and a since before it' => [-5, ['since' => COMPARE_CREATED - 60], 0, 1],
+]);
+
+it('says nothing of the records before what the store covers when since leaves them out anyway', function () {
+    compareIngest([
+        compareRecord(RecordType::REQUEST, 'a', COMPARE_CREATED - 5, 10000),
+        ...compareGroup('a', 100, 100),
+    ]);
+
+    $envelope = compareAnswer(['by' => 'p50_duration', 'since' => COMPARE_SPLIT - 1000]);
+
+    expect($envelope['result']['before'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'clipped' => false, 'records' => 3, 'earlier_records' => 0, 'earlier_more' => false])
+        ->and($envelope['notes'])->toBe([]);
+});
+
+it('counts at most 100 records before what the store covers, and says when there are more', function (int $stored, int $earlier, bool $more, string $key) {
+    compareIngest([
+        ...compareCopies(RecordType::REQUEST, 'a', COMPARE_CREATED - COMPARE_SPLIT - 600, $stored),
+        ...compareGroup('a', 100, 100),
+    ]);
+
+    $envelope = compareAnswer(['by' => 'p50_duration']);
+
+    expect($envelope['result']['before'])->toMatchArray(['records' => 3, 'earlier_records' => $earlier, 'earlier_more' => $more])
+        ->and($envelope['notes'])->toBe([
+            trans_choice("firewatch::messages.{$key}", $earlier, ['count' => $earlier, 'type' => 'request']),
+            __('firewatch::messages.compare_move_since_note'),
+        ]);
+})->with([
+    '100 records' => [100, 100, false, 'compare_earlier_note'],
+    '101 records' => [101, 100, true, 'compare_earlier_more_note'],
 ]);

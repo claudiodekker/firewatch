@@ -75,7 +75,7 @@ it('compares the routes before and after the change at the now of an earlier ans
     $rows = collect($result['groups'])->keyBy('label');
 
     expect($result)->toMatchArray(['type' => 'request', 'by' => 'p95_duration', 'change' => null, 'reason' => null, 'side' => null, 'deploys' => null])
-        ->and($result['before'])->toMatchArray(['until_at' => $split, 'clipped' => false, 'records' => 5])
+        ->and($result['before'])->toMatchArray(['until_at' => $split, 'clipped' => false, 'records' => 5, 'earlier_records' => 1, 'earlier_more' => false])
         ->and($result['after'])->toMatchArray(['since_at' => $split, 'until_at' => $envelope['now'], 'clipped' => false, 'records' => 5])
         ->and($result['rollup'])->toMatchArray(['groups' => 3, 'new' => 1, 'gone' => 1, 'one_side_only' => 2, 'cut' => 0])
         ->and(array_keys($rows->all()))->toEqualCanonicalizing(['/orders', '/orders/export', '/legacy'])
@@ -87,7 +87,7 @@ it('compares the routes before and after the change at the now of an earlier ans
         ->and($envelope['summary'])->toStartWith(explode(':changes', trans_choice('firewatch::messages.compare_summary', 3, ['groups' => 3, 'type' => 'request', 'by' => 'p95_duration']))[0])
         ->and($envelope['coverage']['straddling'])->toBe(0)
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion', 'console-requests')
-        ->and($envelope['notes'])->toBe([])
+        ->and($envelope['notes'])->toBe([trans_choice('firewatch::messages.compare_earlier_note', 1, ['count' => 1, 'type' => 'request'])])
         ->and(array_column($envelope['next'], 'tool'))->toBe(['occurrences', 'rank']);
 
     $first = collect($result['groups'])->firstWhere('group', $envelope['next'][0]['arguments']['group']);
@@ -116,7 +116,7 @@ it('evaluates nothing at the latest clock, where the after side is empty, and ne
         ->and($envelope['result']['before']['records'])->toBe(10)
         ->and($envelope['result']['after']['records'])->toBe(0)
         ->and($envelope['summary'])->toBe(__('firewatch::messages.compare_empty_side_summary', ['side' => 'after', 'type' => 'request']))
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.compare_not_evaluated_note')])
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.compare_not_evaluated_note'), trans_choice('firewatch::messages.compare_earlier_note', 1, ['count' => 1, 'type' => 'request'])])
         ->and($envelope['next'])->toBe([]);
 });
 
@@ -131,4 +131,17 @@ it('answers that no job ran on either side, with the blind spots that say why an
         ->and($envelope['result'])->toBe([])
         ->and($envelope['next'])->toBe([])
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded', 'visible-at-completion');
+});
+
+it('says the request that created the store started before what the store covers, when it is the only one before the change', function () {
+    didMyChangeHelpServe(changed: false, uris: ['/up']);
+    $split = Envelope::assert(Overview::class)['now'];
+    didMyChangeHelpAfter();
+
+    $envelope = Envelope::assert(Compare::class, ['type' => 'request', 'split_at' => $split]);
+
+    expect($envelope['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'empty_side', 'side' => 'before', 'groups' => []])
+        ->and($envelope['result']['before'])->toMatchArray(['clipped' => false, 'records' => 0, 'earlier_records' => 1, 'earlier_more' => false])
+        ->and($envelope['result']['after']['records'])->toBe(5)
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.compare_not_evaluated_note'), trans_choice('firewatch::messages.compare_earlier_note', 1, ['count' => 1, 'type' => 'request'])]);
 });

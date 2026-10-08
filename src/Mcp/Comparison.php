@@ -25,6 +25,11 @@ class Comparison
     protected const DEPLOYS_LISTED = 10;
 
     /**
+     * The most records that started before the coverage start an answer counts.
+     */
+    protected const EARLIER_COUNTED = 100;
+
+    /**
      * The most times longer one side's observed span may be than the other's for a volume measure to be judged.
      */
     protected const SPAN_RATIO = 2;
@@ -51,6 +56,7 @@ class Comparison
      * @param  Side  $after
      * @param  Rows<Row>  $groups  in the order of the answer
      * @param  array<string, int>  $changes  every group's change counted, by its value, over the groups shown and cut
+     * @param  array{records: int, more: bool}  $earlier  the records of the type that started before the coverage start the before side begins at, counted up to a cap, and whether there are more
      * @param  list<array{deploy: string, records: int, first_at: float}>|null  $deploys  the deploys of the window, listed only when a side is empty
      */
     protected function __construct(
@@ -61,6 +67,7 @@ class Comparison
         public readonly Rows $groups,
         public readonly array $changes,
         public readonly ?int $straddling,
+        public readonly array $earlier,
         public readonly ?array $deploys,
     ) {
         //
@@ -90,7 +97,9 @@ class Comparison
         $oneSideEmpty = ! $before['outside'] && ! $after['outside'] && $before['empty'] !== $after['empty'];
         $deploys = $oneSideEmpty ? self::deploys($connection, $type, Window::between($before['since'], $after['until'], $window->timezone()), $group) : null;
 
-        return new self($type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $deploys);
+        $earlier = self::earlier($connection, $type, $before, $coverageStart);
+
+        return new self($type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $earlier, $deploys);
     }
 
     /**
@@ -163,7 +172,11 @@ class Comparison
             'change' => $reason === null ? null : Change::NOT_EVALUATED->value,
             'reason' => $reason?->value,
             'side' => $side,
-            'before' => $this->sideResult($this->before),
+            'before' => [
+                ...$this->sideResult($this->before),
+                'earlier_records' => $this->earlier['records'],
+                'earlier_more' => $this->earlier['more'],
+            ],
             'after' => $this->sideResult($this->after),
             'rollup' => $reason === null ? $this->rollup() : null,
             'groups' => array_map($this->rowResult(...), $this->groups->rows),
@@ -590,6 +603,30 @@ class Comparison
         ]);
 
         return is_int($rows[0]['straddling']) ? $rows[0]['straddling'] : 0;
+    }
+
+    /**
+     * Count the records of the type that started before the coverage start, which a before side that begins there leaves out, up to a cap.
+     *
+     * @param  Side  $before
+     * @return array{records: int, more: bool}
+     */
+    protected static function earlier(SQLite3 $connection, RecordType $type, array $before, ?float $coverageStart): array
+    {
+        if ($coverageStart === null || $before['since'] !== $coverageStart) {
+            return [
+                'records' => 0,
+                'more' => false,
+            ];
+        }
+
+        $rows = Stored::rows($connection, 'SELECT count(*) AS earlier FROM (SELECT 1 FROM '.$type->view().' WHERE started_at < :start LIMIT '.Rows::fetch(self::EARLIER_COUNTED).')', ['start' => $coverageStart]);
+        $counted = is_int($rows[0]['earlier']) ? $rows[0]['earlier'] : 0;
+
+        return [
+            'records' => min($counted, self::EARLIER_COUNTED),
+            'more' => $counted > self::EARLIER_COUNTED,
+        ];
     }
 
     /**

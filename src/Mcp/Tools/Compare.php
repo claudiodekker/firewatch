@@ -288,6 +288,13 @@ class Compare extends Tool
             $notes[] = __('firewatch::messages.compare_not_evaluated_note');
         }
 
+        if ($comparison->earlier['records'] > 0) {
+            $notes[] = trans_choice('firewatch::messages.'.($comparison->earlier['more'] ? 'compare_earlier_more_note' : 'compare_earlier_note'), $comparison->earlier['records'], [
+                'count' => $comparison->earlier['records'],
+                'type' => $comparison->type->value,
+            ]);
+        }
+
         if ($request->get('since') === null && $oldest !== null && $oldest < $split - Comparison::STRADDLING_SECONDS) {
             $notes[] = __('firewatch::messages.compare_move_since_note');
         }

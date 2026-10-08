@@ -275,6 +275,10 @@ return [
 
     'compare_not_evaluated_note' => 'Nothing was compared, which says nothing about whether anything changed: exercise the application again, or move split_at or since.',
 
+    'compare_earlier_note' => ':count :type record started before what the store covers for :type, so it is on neither side.|:count :type records started before what the store covers for :type, so they are on neither side.',
+
+    'compare_earlier_more_note' => ':count or more :type records started before what the store covers for :type, so they are on neither side.',
+
     'compare_move_since_note' => 'The before side reaches back more than an hour before the split, so it may hold earlier changes too: on a later round, pass the previous split as `since`.',
 
     'compare_truncated_how' => 'Pass a larger `limit`, up to 100, one `group`, or a narrower window.',
