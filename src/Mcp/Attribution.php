@@ -12,14 +12,9 @@ use SQLite3;
 class Attribution
 {
     /**
-     * The class of work whose recorded user, or whose dispatch, names someone else.
+     * The executions that carry no user of their own, so that only a child can tie them to the person.
      */
-    protected const OTHER_ACTOR = 'other';
-
-    /**
-     * The class of work no link ties to anyone asked about: no recorded user, no traceable dispatch, or no child of the person.
-     */
-    protected const NO_ACTOR = 'none';
+    protected const WITHOUT_USER = [RecordType::COMMAND, RecordType::SCHEDULED_TASK];
 
     /**
      * Create a new attribution instance.
@@ -57,15 +52,15 @@ class Attribution
         $counts = [
             'requests' => [
                 'total' => array_sum($requests),
-                'this_actor' => $requests[Link::DIRECT->value] ?? 0,
-                'other_actors' => $requests[self::OTHER_ACTOR] ?? 0,
-                'guest' => $requests[self::NO_ACTOR] ?? 0,
+                'this_actor' => $requests[AttributionLink::DIRECT->value] ?? 0,
+                'other_actors' => $requests[AttributionLink::OTHER_ACTOR->value] ?? 0,
+                'guest' => $requests[AttributionLink::UNATTRIBUTABLE->value] ?? 0,
             ],
             'job_attempts' => [
                 'total' => array_sum($attempts),
-                'this_actor' => ($attempts[Link::DIRECT->value] ?? 0) + ($attempts[Link::DISPATCH->value] ?? 0),
-                'other_actors' => $attempts[self::OTHER_ACTOR] ?? 0,
-                'no_actor' => $attempts[self::NO_ACTOR] ?? 0,
+                'this_actor' => ($attempts[AttributionLink::DIRECT->value] ?? 0) + ($attempts[AttributionLink::DISPATCH->value] ?? 0),
+                'other_actors' => $attempts[AttributionLink::OTHER_ACTOR->value] ?? 0,
+                'no_actor' => $attempts[AttributionLink::UNATTRIBUTABLE->value] ?? 0,
             ],
             'commands' => self::inside($classes(RecordType::COMMAND)),
             'scheduled_tasks' => self::inside($classes(RecordType::SCHEDULED_TASK)),
@@ -74,14 +69,14 @@ class Attribution
 
         $activity = array_map(fn (RecordType $type) => [
             'type' => $type->value,
-            'direct' => self::sum($records, $type, Link::DIRECT),
-            'dispatch' => self::sum($records, $type, Link::DISPATCH),
-            'can_carry_actor' => ! in_array($type, [RecordType::COMMAND, RecordType::SCHEDULED_TASK], true),
+            'direct' => self::sum($records, $type, AttributionLink::DIRECT),
+            'dispatch' => self::sum($records, $type, AttributionLink::DISPATCH),
+            'can_carry_actor' => ! in_array($type, self::WITHOUT_USER, true),
         ], RecordType::events());
 
         $links = [
-            'direct' => $counts['requests']['this_actor'] + ($attempts[Link::DIRECT->value] ?? 0),
-            'dispatch' => $attempts[Link::DISPATCH->value] ?? 0,
+            'direct' => $counts['requests']['this_actor'] + ($attempts[AttributionLink::DIRECT->value] ?? 0),
+            'dispatch' => $attempts[AttributionLink::DISPATCH->value] ?? 0,
             'inside' => $counts['commands']['this_actor'] + $counts['scheduled_tasks']['this_actor'],
         ];
 
@@ -129,37 +124,41 @@ class Attribution
     }
 
     /**
-     * Get the SQL of the class of an execution record: its link to the person, or whether it belongs to someone else or to no one.
+     * Get the SQL of the attribution link of an execution record to the person, or why it has none.
      *
-     * This is the one place that decides a link. Direct and other are read from the record's own user on the two types that carry one; dispatch from the user of the job's dispatch, the latest when there are several, and only for an attempt with no user of its own; inside from a child of a command or task that carries the person. The links are looked up over the whole store, whatever the window.
+     * This is the one place that decides a link. Direct and other actor are read from the record's own user on the types that carry one; dispatch from the user of the job's dispatch, the latest when there are several, and only for an attempt with no user of its own; inside from a child of a command or task that carries the person. The links are looked up over the whole store, whatever the window.
      */
     protected static function classOf(string $execution): string
     {
+        $withUser = self::parameters(array_filter(Executions::TYPES, fn (RecordType $type) => ! in_array($type, self::WITHOUT_USER, true)));
+        $withoutUser = self::parameters(self::WITHOUT_USER);
+
         return "CASE
-            WHEN {$execution}.type IN (:request, :job_attempt) AND NULLIF({$execution}.user_id, '') = :actor THEN :direct
-            WHEN {$execution}.type IN (:request, :job_attempt) AND NULLIF({$execution}.user_id, '') IS NOT NULL THEN :other
+            WHEN {$execution}.type IN ({$withUser}) AND NULLIF({$execution}.user_id, '') = :actor THEN :direct
+            WHEN {$execution}.type IN ({$withUser}) AND NULLIF({$execution}.user_id, '') IS NOT NULL THEN :other_actor
             WHEN {$execution}.type = :job_attempt THEN COALESCE((
-                SELECT CASE WHEN NULLIF(d.user_id, '') = :actor THEN :dispatch WHEN NULLIF(d.user_id, '') IS NOT NULL THEN :other END
+                SELECT CASE WHEN NULLIF(d.user_id, '') = :actor THEN :dispatch WHEN NULLIF(d.user_id, '') IS NOT NULL THEN :other_actor END
                 FROM records d WHERE d.job_id = {$execution}.job_id AND d.type = :queued_job ORDER BY d.id DESC LIMIT 1
-            ), :none)
-            WHEN {$execution}.type IN (:command, :scheduled_task) AND EXISTS (
+            ), :unattributable)
+            WHEN {$execution}.type IN ({$withoutUser}) AND EXISTS (
                 SELECT 1 FROM records c
                 WHERE c.execution_id = {$execution}.execution_id AND c.source = {$execution}.source AND NULLIF(c.user_id, '') = :actor
             ) THEN :inside
-            ELSE :none
+            ELSE :unattributable
         END";
     }
 
     /**
-     * Get the SQL of the executions of the window with their class, as the table `classified`.
+     * Get the SQL of the executions of the window with their link, as the table `classified`.
      */
     protected static function classified(Window $window): string
     {
         $class = self::classOf('e');
+        $executions = self::parameters(Executions::TYPES);
 
         return "WITH classified AS (
             SELECT e.id, e.type, e.execution_id, e.started_at, e.group_hash, {$class} AS class
-            FROM records e WHERE e.type IN (:request, :command, :job_attempt, :scheduled_task) AND {$window->condition()}
+            FROM records e WHERE e.type IN ({$executions}) AND {$window->condition()}
         )";
     }
 
@@ -191,20 +190,21 @@ class Attribution
      */
     protected static function recordsByClass(SQLite3 $connection, Window $window, array $bindings): array
     {
-        $types = implode(', ', array_map(fn (RecordType $type) => ':'.self::parameter($type), RecordType::events()));
+        $types = self::parameters(RecordType::events());
+        $executions = self::parameters(Executions::TYPES);
         $ownClass = self::classOf('r');
         $executionClass = self::classOf('x');
 
         /** @var list<array{type: string, class: string, own: int, records: int}> */
         return Stored::rows($connection, "SELECT r.type, CASE
                 WHEN NULLIF(r.user_id, '') = :actor THEN :direct
-                WHEN NULLIF(r.user_id, '') IS NOT NULL THEN :other
-                WHEN r.type IN (:request, :command, :job_attempt, :scheduled_task) THEN {$ownClass}
+                WHEN NULLIF(r.user_id, '') IS NOT NULL THEN :other_actor
+                WHEN r.type IN ({$executions}) THEN {$ownClass}
                 ELSE COALESCE((
                     SELECT {$executionClass} FROM records x
-                    WHERE x.execution_id = r.execution_id AND x.source = r.source AND x.type IN (:request, :command, :job_attempt, :scheduled_task)
+                    WHERE x.execution_id = r.execution_id AND x.source = r.source AND x.type IN ({$executions})
                     ORDER BY x.id DESC LIMIT 1
-                ), :none)
+                ), :unattributable)
             END AS class, COALESCE(NULLIF(r.user_id, '') = :actor, 0) AS own, count(*) AS records
             FROM records r WHERE r.type IN ({$types}) AND {$window->condition()}
             GROUP BY 1, 2, 3", $bindings, $window);
@@ -223,8 +223,10 @@ class Attribution
             Executions::TYPES,
         ));
 
+        $links = implode(', ', array_map(fn (AttributionLink $link) => ":{$link->value}", AttributionLink::links()));
+
         $rows = Stored::rows($connection, self::classified($window)." SELECT started_at, type, execution_id, group_hash, class, CASE type {$labels} END AS label
-            FROM classified WHERE class IN (:direct, :dispatch, :inside) ORDER BY started_at DESC, id DESC LIMIT :limit", [
+            FROM classified WHERE class IN ({$links}) ORDER BY started_at DESC, id DESC LIMIT :limit", [
             ...$bindings,
             'limit' => Rows::fetch($limit),
         ], $window);
@@ -235,7 +237,7 @@ class Attribution
             'execution_id' => $row['execution_id'],
             'group_hash' => $row['group_hash'],
             'label' => Ranking::shownLabel(RecordType::from($row['type']), $row['label']),
-            'link' => $row['class'],
+            'link' => AttributionLink::from($row['class'])->value,
         ], $rows);
     }
 
@@ -248,7 +250,7 @@ class Attribution
     protected static function inside(array $classes): array
     {
         $total = array_sum($classes);
-        $inside = $classes[Link::INSIDE->value] ?? 0;
+        $inside = $classes[AttributionLink::INSIDE->value] ?? 0;
 
         return [
             'total' => $total,
@@ -265,12 +267,12 @@ class Attribution
      */
     protected static function records(array $records): array
     {
-        $count = fn (string ...$classes) => array_sum(array_column(array_filter($records, fn (array $row) => in_array($row['class'], $classes, true)), 'records'));
+        $count = fn (AttributionLink ...$classes) => array_sum(array_column(array_filter($records, fn (array $row) => in_array(AttributionLink::from($row['class']), $classes, true)), 'records'));
 
         return [
             'in_window' => array_sum(array_column($records, 'records')),
-            'this_actor' => $count(Link::DIRECT->value, Link::DISPATCH->value),
-            'without_actor' => $count(self::NO_ACTOR, Link::INSIDE->value),
+            'this_actor' => $count(AttributionLink::DIRECT, AttributionLink::DISPATCH),
+            'without_actor' => $count(AttributionLink::UNATTRIBUTABLE, AttributionLink::INSIDE),
         ];
     }
 
@@ -279,7 +281,7 @@ class Attribution
      *
      * @param  list<array{type: string, class: string, own: int, records: int}>  $records
      */
-    protected static function sum(array $records, RecordType $type, Link $link): int
+    protected static function sum(array $records, RecordType $type, AttributionLink $link): int
     {
         $kept = array_filter($records, fn (array $row) => $row['type'] === $type->value && $row['class'] === $link->value);
 
@@ -287,27 +289,33 @@ class Attribution
     }
 
     /**
-     * Get the values every query of the attribution binds: the person, the twelve types and the classes.
+     * Get the values every query of the attribution binds: the person, the twelve types and the links.
      *
      * @return array<string, string>
      */
     protected static function bindings(string $id): array
     {
-        $types = [];
+        $values = ['actor' => $id];
 
         foreach (RecordType::events() as $type) {
-            $types[self::parameter($type)] = $type->value;
+            $values[self::parameter($type)] = $type->value;
         }
 
-        return [
-            ...$types,
-            'actor' => $id,
-            'direct' => Link::DIRECT->value,
-            'dispatch' => Link::DISPATCH->value,
-            'inside' => Link::INSIDE->value,
-            'other' => self::OTHER_ACTOR,
-            'none' => self::NO_ACTOR,
-        ];
+        foreach (AttributionLink::cases() as $link) {
+            $values[$link->value] = $link->value;
+        }
+
+        return $values;
+    }
+
+    /**
+     * Get the parameters the types are bound as, for a list in SQL.
+     *
+     * @param  array<RecordType>  $types
+     */
+    protected static function parameters(array $types): string
+    {
+        return implode(', ', array_map(fn (RecordType $type) => ':'.self::parameter($type), $types));
     }
 
     /**
