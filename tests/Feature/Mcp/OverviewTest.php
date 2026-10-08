@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeDetector;
+use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Exceptions;
@@ -441,6 +442,156 @@ describe('the error rate', function () {
         $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
 
         expect($envelope['result']['error_rate'])->toMatchArray(['requests' => 1, 'server_errors' => 0, 'client_errors' => 1]);
+    });
+});
+
+describe('the slowest groups by total time', function () {
+    /**
+     * Get a record of a group named after its label, with the duration it took.
+     *
+     * @param  array<string, mixed>  $fields
+     */
+    function ovwTimed(RecordType $type, string $name, mixed $microseconds, array $fields = []): RecordBuilder
+    {
+        $label = match ($type) {
+            RecordType::REQUEST => 'route_path',
+            RecordType::QUERY => 'sql',
+            default => 'name',
+        };
+
+        return syntheticRecord($type)->with(['_group' => md5($name), $label => $name, 'duration' => $microseconds, ...$fields]);
+    }
+
+    /**
+     * Call the overview and get the rows of its slowest list.
+     *
+     * @return list<array<string, mixed>>
+     */
+    function ovwSlowest(array $arguments = []): array
+    {
+        return Envelope::assert(Overview::class, $arguments)['result']['slowest_by_total_time'];
+    }
+
+    it('lists the groups by the time they took in total, worst first, with their records and their total in milliseconds', function () {
+        ingest([
+            ovwTimed(RecordType::REQUEST, '/orders', 1_234_567),
+            ovwTimed(RecordType::QUERY, 'select 1', 2_000_000),
+            ovwTimed(RecordType::QUERY, 'select 1', 3_000_011),
+            ovwTimed(RecordType::REQUEST, '/orders', 1),
+        ]);
+
+        expect(ovwSlowest())->toBe([
+            ['type' => 'query', 'group' => md5('select 1'), 'label' => 'select 1', 'occurrences' => 2, 'total_ms' => 5000.01],
+            ['type' => 'request', 'group' => md5('/orders'), 'label' => '/orders', 'occurrences' => 2, 'total_ms' => 1234.57],
+        ]);
+    });
+
+    it('lists at most three groups of one type', function (int $groups, array $listed) {
+        ingest(array_map(fn (int $group) => ovwTimed(RecordType::REQUEST, "/route-{$group}", $group * 1000), range(1, $groups)));
+
+        expect(array_column(ovwSlowest(), 'label'))->toBe($listed);
+    })->with([
+        'three groups' => [3, ['/route-3', '/route-2', '/route-1']],
+        'four groups' => [4, ['/route-4', '/route-3', '/route-2']],
+    ]);
+
+    it('lists at most ten groups across the types', function (int $queuedJobs, int $listed) {
+        $types = [RecordType::REQUEST, RecordType::COMMAND, RecordType::QUERY];
+        $records = [];
+
+        foreach ($types as $position => $type) {
+            foreach (range(1, 3) as $group) {
+                $records[] = ovwTimed($type, "{$type->value}-{$group}", ($position + 2) * 10_000 + $group);
+            }
+        }
+
+        foreach (range(1, $queuedJobs) as $group) {
+            $records[] = ovwTimed(RecordType::QUEUED_JOB, "queued-job-{$group}", $group);
+        }
+
+        ingest($records);
+        $rows = ovwSlowest();
+
+        expect($rows)->toHaveCount($listed)
+            ->and(array_column($rows, 'label')[9])->toBe("queued-job-{$queuedJobs}")
+            ->and(array_count_values(array_column($rows, 'type')))->toBe(['query' => 3, 'command' => 3, 'request' => 3, 'queued-job' => 1]);
+    })->with([
+        'ten groups' => [1, 10],
+        'eleven groups' => [2, 10],
+    ]);
+
+    it('orders equal totals by the records, then the lower group hash, then the type', function () {
+        ingest([
+            ovwTimed(RecordType::QUEUED_JOB, 'ShipOrder', 500),
+            ovwTimed(RecordType::JOB_ATTEMPT, 'ShipOrder', 500),
+            ovwTimed(RecordType::QUERY, 'select 2', 500),
+            ovwTimed(RecordType::QUERY, 'select 3', 250),
+            ovwTimed(RecordType::QUERY, 'select 3', 250),
+            ovwTimed(RecordType::QUERY, 'select 4', 500),
+        ]);
+        $single = collect(['select 2', 'select 4', 'ShipOrder'])->sortBy(fn (string $name) => md5($name))->values();
+
+        $rows = ovwSlowest();
+
+        expect(array_unique(array_column($rows, 'total_ms')))->toBe([0.5])
+            ->and(array_map(fn (array $row) => "{$row['type']} {$row['label']}", $rows))->toBe([
+                'query select 3',
+                ...$single->flatMap(fn (string $name) => $name === 'ShipOrder' ? ['job-attempt ShipOrder', 'queued-job ShipOrder'] : ["query {$name}"])->all(),
+            ]);
+    });
+
+    it('takes a skipped task as untimed, and leaves out a group with no timed record', function () {
+        ingest([
+            ovwTimed(RecordType::SCHEDULED_TASK, 'reports:send', 100_000, ['status' => 'processed']),
+            ovwTimed(RecordType::SCHEDULED_TASK, 'reports:send', 900_000, ['status' => 'skipped']),
+            ovwTimed(RecordType::SCHEDULED_TASK, 'cache:prune', 900_000, ['status' => 'skipped']),
+            ovwTimed(RecordType::REQUEST, '/untimed', 'soon'),
+            ovwTimed(RecordType::REQUEST, '/instant', 0),
+        ]);
+
+        expect(ovwSlowest())->toEqual([
+            ['type' => 'scheduled-task', 'group' => md5('reports:send'), 'label' => 'reports:send', 'occurrences' => 2, 'total_ms' => 100.0],
+            ['type' => 'request', 'group' => md5('/instant'), 'label' => '/instant', 'occurrences' => 1, 'total_ms' => 0.0],
+        ]);
+    });
+
+    it('labels a group by its latest record in the window, and a request no route matched as such', function () {
+        ingest([
+            ovwTimed(RecordType::REQUEST, '/orders', 2000, ['route_path' => '/orders/old', 'timestamp' => 1790773200.0]),
+            ovwTimed(RecordType::REQUEST, '/orders', 2000, ['route_path' => '/orders/new', 'timestamp' => 1790773300.0]),
+            ovwTimed(RecordType::REQUEST, '/orders', 2000, ['route_path' => '/orders/later', 'timestamp' => 1790773500.0]),
+            ovwTimed(RecordType::REQUEST, 'unmatched', 1000, ['route_path' => '', 'timestamp' => 1790773300.0]),
+        ]);
+
+        $rows = ovwSlowest(['until' => 1790773400]);
+
+        expect(array_column($rows, 'label'))->toBe(['/orders/new', __('firewatch::messages.rank_no_route')])
+            ->and(array_column($rows, 'occurrences'))->toBe([2, 1])
+            ->and(array_column($rows, 'total_ms'))->toEqual([4.0, 1.0]);
+    });
+
+    it('labels a request whose latest record has no route path as no route matched', function () {
+        ingest([ovwTimed(RecordType::REQUEST, 'unrouted', 1000)->without('route_path')]);
+
+        expect(ovwSlowest())->toEqual([['type' => 'request', 'group' => md5('unrouted'), 'label' => __('firewatch::messages.rank_no_route'), 'occurrences' => 1, 'total_ms' => 1.0]]);
+    });
+
+    it('keeps two types that share a group hash apart, each with its own label and total', function () {
+        ingest([
+            ovwTimed(RecordType::JOB_ATTEMPT, 'ShipOrder', 9000),
+            ovwTimed(RecordType::QUEUED_JOB, 'ShipOrder', 1000, ['name' => 'ShipOrder (dispatch)']),
+        ]);
+
+        expect(ovwSlowest())->toEqual([
+            ['type' => 'job-attempt', 'group' => md5('ShipOrder'), 'label' => 'ShipOrder', 'occurrences' => 1, 'total_ms' => 9.0],
+            ['type' => 'queued-job', 'group' => md5('ShipOrder'), 'label' => 'ShipOrder (dispatch)', 'occurrences' => 1, 'total_ms' => 1.0],
+        ]);
+    });
+
+    it('lists no exception and no log, and still prints the empty list', function () {
+        ingest([syntheticRecord(RecordType::EXCEPTION)->with(['duration' => 5000]), syntheticRecord(RecordType::LOG)->with(['duration' => 5000, '_group' => md5('log')])]);
+
+        expect(ovwSlowest())->toBe([]);
     });
 });
 
