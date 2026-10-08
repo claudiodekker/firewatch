@@ -900,3 +900,20 @@ it('counts at most 100 records before what the store covers, and says when there
     '100 records' => [100, 100, false, 'compare_earlier_note'],
     '101 records' => [101, 100, true, 'compare_earlier_more_note'],
 ]);
+
+it('counts the groups the size budget dropped as cut in the rollup, which agrees with the truncated entry', function () {
+    $records = array_map(fn (int $index) => [
+        ...compareCopies(RecordType::QUERY, 'a', -600, 3, ['_group' => md5((string) $index), 'sql' => 'select '.str_repeat("column_{$index}, ", 100).'1']),
+        ...compareCopies(RecordType::QUERY, 'a', 600, 3, ['_group' => md5((string) $index), 'sql' => 'select '.str_repeat("column_{$index}, ", 100).'1']),
+    ], range(0, 99));
+
+    compareIngest(array_merge(...$records));
+
+    $envelope = compareAnswer(['type' => 'query', 'by' => 'p50_duration', 'limit' => 100]);
+    $shown = count($envelope['result']['groups']);
+
+    expect($shown)->toBeGreaterThan(0)->toBeLessThan(100)
+        ->and($envelope['truncated'])->toBe([['section' => 'groups', 'shown' => $shown, 'matched' => 100, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]])
+        ->and($envelope['result']['rollup'])->toBe(compareRollup(100, ['steady' => 100], cut: 100 - $shown))
+        ->and(mb_strlen(json_encode($envelope, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION)))->toBeLessThanOrEqual(24000);
+});

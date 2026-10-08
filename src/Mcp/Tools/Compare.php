@@ -196,6 +196,7 @@ class Compare extends Tool
             truncated: $this->truncated($comparison),
             next: $this->next($comparison, $window),
             cuttable: ['groups'],
+            recount: $comparison->recounted(...),
         );
     }
 

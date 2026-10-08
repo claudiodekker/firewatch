@@ -185,6 +185,21 @@ class Comparison
     }
 
     /**
+     * Get a result with its rollup counting as cut every group its rows no longer show, for a result the size budget shortened.
+     *
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    public function recounted(array $result): array
+    {
+        if (is_array($result['rollup']) && is_array($result['groups'])) {
+            $result['rollup']['cut'] = $this->matched() - count($result['groups']);
+        }
+
+        return $result;
+    }
+
+    /**
      * Get the rollup: every change counted over the groups shown and cut, then the groups on one side only and the groups cut.
      *
      * @return array<string, int>

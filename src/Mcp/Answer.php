@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
+use Closure;
 use InvalidArgumentException;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -45,6 +46,7 @@ class Answer
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @param  list<array{tool: string, arguments: array<string, mixed>, why: string}>  $next
      * @param  list<string>|null  $cuttable  the result lists the budget may shorten, the first named first; null for every list, the last first
+     * @param  (Closure(array<string, mixed>): array<string, mixed>)|null  $recount  restates what a result says of its own lists once the budget has shortened them
      */
     public function __construct(
         public readonly string $tool,
@@ -60,6 +62,7 @@ class Answer
         public readonly array $truncated = [],
         public readonly array $next = [],
         public readonly ?array $cuttable = null,
+        protected ?Closure $recount = null,
     ) {
         if (count($notes) > self::LISTED || count($next) > self::LISTED) {
             throw new InvalidArgumentException('An answer carries at most '.self::LISTED.' notes and '.self::LISTED.' next calls.');
@@ -114,21 +117,32 @@ class Answer
             [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $this->size(...), cuttable: $this->cuttable);
             $recounted = Bounds::recountCaps(original: $this->result, fitted: $fitted, truncated: $truncated);
 
-            $this->bounded = [$fitted, $recounted];
+            $this->bounded = [$this->recounted($fitted), $recounted];
         }
 
         return $this->bounded;
     }
 
     /**
-     * Get the length in characters of the envelope for a result and truncated entries.
+     * Get a result that states of its own lists what they hold now.
+     *
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    protected function recounted(array $result): array
+    {
+        return $this->recount === null ? $result : ($this->recount)($result);
+    }
+
+    /**
+     * Get the length in characters of the envelope for a result, recounted, and truncated entries.
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      */
     protected function size(array $result, array $truncated): int
     {
-        $envelope = $this->envelope($result, $truncated);
+        $envelope = $this->envelope($this->recounted($result), $truncated);
 
         return mb_strlen(json_encode($envelope, RecordMapper::JSON_FLAGS));
     }
