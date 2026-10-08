@@ -751,3 +751,49 @@ it('says a group is new or gone with the value of the side it is on, and no chan
     expect($rows[0])->toMatchArray(['group' => compareHash('b'), 'before_records' => 0, 'after_records' => 3, 'before_ms' => null, 'after_ms' => 50.0, 'difference_ms' => null, 'change_pct' => null, 'change' => 'new'])
         ->and($rows[1])->toMatchArray(['group' => compareHash('a'), 'before_records' => 3, 'after_records' => 0, 'before_ms' => 20.0, 'after_ms' => null, 'difference_ms' => null, 'change_pct' => null, 'change' => 'gone']);
 });
+
+it('gives one group that is on one side only its one row, new or gone, while other groups of the type are on both sides', function (string $letter, array $row, int $before, int $after) {
+    compareIngest([
+        ...compareGroup('a', null, 150),
+        ...compareGroup('b', 100, 100),
+        ...compareGroup('c', 70, null),
+    ]);
+
+    $envelope = Envelope::assert(Compare::class, ['group' => compareHash($letter), 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
+    $result = $envelope['result'];
+
+    expect($result)->toMatchArray(['type' => 'request', 'change' => null, 'reason' => null, 'side' => null, 'rollup' => compareRollup(1, [$row['change'] => 1]), 'deploys' => null])
+        ->and($result['groups'])->toHaveCount(1)
+        ->and($result['groups'][0])->toMatchArray(['group' => compareHash($letter), 'change_pct' => null, ...$row])
+        ->and($result['before'])->toMatchArray(['records' => $before, 'observed_span_ms' => $before === 0 ? null : 2000.0])
+        ->and($result['after'])->toMatchArray(['records' => $after, 'observed_span_ms' => $after === 0 ? null : 2000.0])
+        ->and($envelope['notes'])->toBe([])
+        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 1, ['groups' => 1, 'type' => 'request', 'by' => 'p50_duration', 'changes' => "1 {$row['change']}"]));
+})->with([
+    'a group after the split only' => ['a', ['before_records' => 0, 'after_records' => 3, 'before_ms' => null, 'after_ms' => 150.0, 'change' => 'new'], 0, 3],
+    'a group before the split only' => ['c', ['before_records' => 3, 'after_records' => 0, 'before_ms' => 70.0, 'after_ms' => null, 'change' => 'gone'], 3, 0],
+]);
+
+it('evaluates nothing for one group when a side holds no record of its type at all', function () {
+    compareIngest([
+        ...compareGroup('a', null, 150),
+        ...compareGroup('b', null, 100),
+    ]);
+
+    $envelope = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT]);
+
+    expect($envelope['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'empty_side', 'side' => 'before', 'rollup' => null, 'groups' => []])
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.compare_empty_side_summary', ['side' => 'before', 'type' => 'request']));
+});
+
+it('answers that nothing matches one group with no record in the window, while its type has records on both sides', function () {
+    compareIngest([
+        ...compareCopies(RecordType::REQUEST, 'a', -6000, 3),
+        ...compareGroup('b', 100, 150),
+    ]);
+
+    $envelope = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'since' => COMPARE_SPLIT - 1000]);
+
+    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'group: '.compareHash('a')])])
+        ->and($envelope['result'])->toBe([]);
+});

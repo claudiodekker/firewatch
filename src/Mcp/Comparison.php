@@ -9,7 +9,7 @@ use SQLite3;
 /**
  * @internal
  *
- * @phpstan-type Side array{since: float|null, until: float|null, clipped: bool, outside: bool, records: int, first: float|null, last: float|null}
+ * @phpstan-type Side array{since: float|null, until: float|null, clipped: bool, outside: bool, empty: bool, records: int, first: float|null, last: float|null}
  * @phpstan-type Row array{hash: string, label: mixed, method: mixed, beforeRecords: int, afterRecords: int, before: int|float|null, after: int|float|null, change: Change, steppedDown: bool, reason: ComparisonReason|null, have: int|null, needed: int|null}
  */
 class Comparison
@@ -74,18 +74,20 @@ class Comparison
         $before = self::side(since: $window->since(), until: $split, coverageStart: $coverageStart);
         $after = self::side(since: $split, until: $window->until(), coverageStart: $coverageStart);
 
-        $beforeGroups = self::statistics($connection, $type, $by, $before, $window->timezone(), $group);
-        $afterGroups = self::statistics($connection, $type, $by, $after, $window->timezone(), $group);
+        $beforeOfType = self::statistics($connection, $type, $by, $before, $window->timezone());
+        $afterOfType = self::statistics($connection, $type, $by, $after, $window->timezone());
+        $beforeGroups = self::selected($beforeOfType, $group);
+        $afterGroups = self::selected($afterOfType, $group);
 
-        $before = self::counted($before, $beforeGroups);
-        $after = self::counted($after, $afterGroups);
+        $before = self::counted($before, $beforeOfType, $beforeGroups);
+        $after = self::counted($after, $afterOfType, $afterGroups);
 
-        $evaluated = $before['records'] > 0 && $after['records'] > 0 && ! $before['outside'] && ! $after['outside'];
+        $evaluated = ! $before['empty'] && ! $after['empty'] && ! $before['outside'] && ! $after['outside'];
         $rows = $evaluated ? self::rows($by, $beforeGroups, $afterGroups, self::likeSpans($before, $after)) : [];
         $changes = array_count_values(array_map(fn (array $row) => $row['change']->value, $rows));
 
         $straddling = self::straddling($connection, $type, $before, $split, $group);
-        $oneSideEmpty = ! $before['outside'] && ! $after['outside'] && ($before['records'] === 0) !== ($after['records'] === 0);
+        $oneSideEmpty = ! $before['outside'] && ! $after['outside'] && $before['empty'] !== $after['empty'];
         $deploys = $oneSideEmpty ? self::deploys($connection, $type, Window::between($before['since'], $after['until'], $window->timezone()), $group) : null;
 
         return new self($type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $deploys);
@@ -102,18 +104,22 @@ class Comparison
             $this->before['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'before'],
             $this->after['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'after'],
             $this->isEmpty() => null,
-            $this->before['records'] === 0 => [ComparisonReason::EMPTY_SIDE, 'before'],
-            $this->after['records'] === 0 => [ComparisonReason::EMPTY_SIDE, 'after'],
+            $this->before['empty'] => [ComparisonReason::EMPTY_SIDE, 'before'],
+            $this->after['empty'] => [ComparisonReason::EMPTY_SIDE, 'after'],
             default => null,
         };
     }
 
     /**
-     * Determine if neither side holds a record of the type.
+     * Determine if nothing matched: neither side holds a record of the type, or the one group asked for has none in a window whose sides both do.
      */
     public function isEmpty(): bool
     {
-        return $this->before['records'] === 0 && $this->after['records'] === 0 && ! $this->before['outside'] && ! $this->after['outside'];
+        if ($this->before['outside'] || $this->after['outside']) {
+            return false;
+        }
+
+        return $this->before['empty'] === $this->after['empty'] && $this->changes === [];
     }
 
     /**
@@ -280,6 +286,7 @@ class Comparison
             'until' => $until,
             'clipped' => $clipped,
             'outside' => $start !== null && $until !== null && $until <= $start,
+            'empty' => true,
             'records' => 0,
             'first' => null,
             'last' => null,
@@ -287,32 +294,45 @@ class Comparison
     }
 
     /**
-     * Read the statistics of every group of the type on one side, or of the one group asked for.
+     * Read the statistics of every group of the type on one side.
      *
      * @param  Side  $side
      * @return array<string, array<string, mixed>>
      */
-    protected static function statistics(SQLite3 $connection, RecordType $type, Measure $by, array $side, string $timezone, ?string $group): array
+    protected static function statistics(SQLite3 $connection, RecordType $type, Measure $by, array $side, string $timezone): array
     {
         if ($side['outside']) {
             return [];
         }
 
         $ranking = new Ranking($type, $by, Window::between($side['since'], $side['until'], $timezone), deploy: null);
-        $statistics = $ranking->statistics($connection);
 
-        return $group === null ? $statistics : array_intersect_key($statistics, [$group => true]);
+        return $ranking->statistics($connection);
     }
 
     /**
-     * Get a side with the records its groups hold and when the first and the last of them started.
+     * Get the groups a comparison selects: every group of the type, or the one asked for.
+     *
+     * @param  array<string, array<string, mixed>>  $ofType
+     * @return array<string, array<string, mixed>>
+     */
+    protected static function selected(array $ofType, ?string $group): array
+    {
+        return $group === null ? $ofType : array_intersect_key($ofType, [$group => true]);
+    }
+
+    /**
+     * Get a side with whether it holds no record of the type at all, the records its selected groups hold and when the first and the last of them started.
      *
      * @param  Side  $side
+     * @param  array<string, array<string, mixed>>  $ofType
      * @param  array<string, array<string, mixed>>  $groups
      * @return Side
      */
-    protected static function counted(array $side, array $groups): array
+    protected static function counted(array $side, array $ofType, array $groups): array
     {
+        $side['empty'] = $ofType === [];
+
         $firsts = array_column($groups, 'wfirst');
         $lasts = array_column($groups, 'last');
 
