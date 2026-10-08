@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
@@ -16,6 +15,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
+use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
@@ -108,8 +108,9 @@ class Overview extends Tool
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
-            [[$total, $records, $requests, $oldest, $newest], $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
+            [[$total, $records, $oldest, $newest], $sections, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
                 $this->countRecords($connection, $window),
+                FixedSections::read($connection, $window),
                 StoreFacts::read($connection),
                 $this->detectors->count($connection, $window, new Deadline($epoch)),
             ]);
@@ -142,7 +143,7 @@ class Overview extends Tool
 
         $summary = __('firewatch::messages.overview_summary', [
             'records' => $records,
-            'requests' => $requests,
+            'requests' => $sections->errorRate['requests'],
         ]).' '.$this->detectorSummary($judgements);
 
         return new Answer(
@@ -153,8 +154,8 @@ class Overview extends Tool
             summary: $summary,
             empty: null,
             result: [
+                ...$sections->result(),
                 'records' => $records,
-                'requests' => $requests,
                 'detectors' => $this->detectorRows($judgements),
             ],
             coverage: $coverage,
@@ -230,24 +231,23 @@ class Overview extends Tool
     }
 
     /**
-     * Count all records, those of the window and the requests among them, and find the span the records cover.
+     * Count all records and those of the window, and find the span the records cover.
      *
-     * @return array{int, int, int, float|null, float|null}
+     * @return array{int, int, float|null, float|null}
      */
     protected function countRecords(SQLite3 $connection, Window $window): array
     {
         $condition = $window->condition();
 
         /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), count(*) FILTER (WHERE {$condition} AND type = :type), min(started_at), max(started_at) FROM records");
+        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), min(started_at), max(started_at) FROM records");
 
         $window->bind($statement);
-        $statement->bindValue(':type', ExecutionType::REQUEST->value);
 
         /** @var SQLite3Result $result */
         $result = $statement->execute();
 
-        /** @var array{int, int, int, float|null, float|null} */
+        /** @var array{int, int, float|null, float|null} */
         return $result->fetchArray(SQLITE3_NUM);
     }
 }

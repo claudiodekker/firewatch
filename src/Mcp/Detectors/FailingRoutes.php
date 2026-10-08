@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -12,11 +13,6 @@ use SQLite3;
  */
 class FailingRoutes implements Detector
 {
-    /**
-     * The first status of a server error.
-     */
-    protected const FIRST_SERVER_ERROR = 500;
-
     /**
      * The decimals of a share in an answer.
      */
@@ -60,11 +56,11 @@ class FailingRoutes implements Detector
         ];
         $where = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
         $failed = "{$where} AND status_code >= :status";
-        $serverError = self::FIRST_SERVER_ERROR;
+        $serverError = Failure::serverError('status_code');
 
         $groups = Stored::rows($connection, "SELECT group_hash, count(*) AS requests, count(status_code) AS with_status,
             count(*) FILTER (WHERE status_code >= :status) AS failed,
-            count(*) FILTER (WHERE status_code >= :status AND status_code >= {$serverError}) AS server_errors,
+            count(*) FILTER (WHERE status_code >= :status AND {$serverError}) AS server_errors,
             count(*) FILTER (WHERE status_code >= :status AND EXISTS (SELECT 1 FROM exceptions WHERE exceptions.execution_id = requests.execution_id)) AS with_exception,
             min(started_at) FILTER (WHERE status_code >= :status) AS first_seen,
             max(started_at) FILTER (WHERE status_code >= :status) AS last_seen,

@@ -64,7 +64,7 @@ it('counts the records the store holds, and the requests among them', function (
     $envelope = Envelope::assert(Overview::class);
 
     expect($envelope['empty'])->toBeNull()
-        ->and($envelope['result']['requests'])->toBe(1)
+        ->and($envelope['result']['error_rate']['requests'])->toBe(1)
         ->and($envelope['result']['records'])->toBeGreaterThanOrEqual(1)
         ->and($envelope['summary'])->toBeIn(array_map(fn (string $findings) => __('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'requests' => 1]).$findings.' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']), ['', ' '.__('firewatch::messages.overview_detectors_findings', ['shapes' => 'memory (1)'])]))
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $envelope['result']['records']])
@@ -244,7 +244,7 @@ describe('windows', function () {
         $envelope = Envelope::assert(Overview::class, ['since' => '-2h']);
 
         expect($envelope['result']['records'])->toBe(1)
-            ->and($envelope['result']['requests'])->toBe(1)
+            ->and($envelope['result']['error_rate']['requests'])->toBe(1)
             ->and($envelope['window'])->toMatchArray(['windowed' => true, 'basis' => 'started_at', 'since' => 1790769600.0, 'until' => null, 'timezone' => 'Europe/Amsterdam'])
             ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'oldest_at' => 1790690400.0, 'newest_at' => 1790773200.0, 'records' => 3]);
     });
@@ -254,7 +254,7 @@ describe('windows', function () {
 
         $envelope = Envelope::assert(Overview::class, ['since' => 1790766000, 'until' => 1790773200]);
 
-        expect($envelope['result']['requests'])->toBe(2)
+        expect($envelope['result']['error_rate']['requests'])->toBe(2)
             ->and($envelope['window'])->toMatchArray(['since' => 1790766000.0, 'until' => 1790773200.0]);
     });
 
@@ -263,7 +263,7 @@ describe('windows', function () {
 
         $envelope = Envelope::assert(Overview::class, ['since' => '2026-09-30', 'until' => '2026-09-30 02:00']);
 
-        expect($envelope['result']['requests'])->toBe(1)
+        expect($envelope['result']['error_rate']['requests'])->toBe(1)
             ->and($envelope['window'])->toMatchArray(['since' => 1790719200.0, 'until' => 1790726400.0]);
     });
 
@@ -310,7 +310,7 @@ describe('windows', function () {
 
         $envelope = Envelope::assert(Overview::class, ['since' => '2026-09-30 15:00:00', 'until' => '2026-09-30 15:00:00.000001']);
 
-        expect($envelope['result']['requests'])->toBe(1);
+        expect($envelope['result']['error_rate']['requests'])->toBe(1);
     });
 });
 
@@ -387,6 +387,61 @@ describe('coverage and blind spots', function () {
             return [];
         }],
     ]);
+});
+
+describe('the error rate', function () {
+    function ovwStatuses(mixed ...$statuses): void
+    {
+        ingest(array_map(fn (mixed $status) => $status === null ? syntheticRecord(RecordType::REQUEST)->without('status_code') : syntheticRecord(RecordType::REQUEST)->with(['status_code' => $status]), $statuses));
+    }
+
+    it('counts server errors from 500 and client errors from 400 to 499', function (int $status, int $server, int $client) {
+        ovwStatuses($status);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 1, 'server_errors' => $server, 'server_error_pct' => $server * 100, 'client_errors' => $client, 'client_error_pct' => $client * 100]);
+    })->with([
+        'just below a client error' => [399, 0, 0],
+        'the first client error' => [400, 0, 1],
+        'the last client error' => [499, 0, 1],
+        'the first server error' => [500, 1, 0],
+    ]);
+
+    it('shares the errors among the requests with a status, to one decimal', function () {
+        ovwStatuses(200, 404, 503, null, 'gone');
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['error_rate'])->toBe(['requests' => 5, 'with_status' => 3, 'server_errors' => 1, 'server_error_pct' => 33.3, 'client_errors' => 1, 'client_error_pct' => 33.3]);
+    });
+
+    it('states no share when no request has a status, and counts of zero', function () {
+        ovwStatuses(null);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 0, 'server_errors' => 0, 'server_error_pct' => null, 'client_errors' => 0, 'client_error_pct' => null]);
+    });
+
+    it('states no share when the window holds no request', function () {
+        ingest([syntheticRecord(RecordType::COMMAND)]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['error_rate'])->toBe(['requests' => 0, 'with_status' => 0, 'server_errors' => 0, 'server_error_pct' => null, 'client_errors' => 0, 'client_error_pct' => null]);
+    });
+
+    it('counts only the requests that started in the window', function () {
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['status_code' => 500, 'timestamp' => 1790690400.0]),
+            syntheticRecord(RecordType::REQUEST)->with(['status_code' => 404, 'timestamp' => 1790773200.0]),
+        ]);
+
+        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+
+        expect($envelope['result']['error_rate'])->toMatchArray(['requests' => 1, 'server_errors' => 0, 'client_errors' => 1]);
+    });
 });
 
 describe('the problem shapes', function () {
