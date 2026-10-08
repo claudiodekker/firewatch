@@ -444,6 +444,84 @@ describe('the error rate', function () {
     });
 });
 
+describe('the record counts and the user directory', function () {
+    it('counts all twelve types in catalogue order, zeros included', function () {
+        ingest([syntheticRecord(RecordType::QUERY), syntheticRecord(RecordType::QUERY), syntheticRecord(RecordType::LOG), syntheticRecord(RecordType::QUEUED_JOB)]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['records'])->toBe(4)
+            ->and($envelope['result']['records_by_type'])->toBe([
+                ['type' => 'request', 'records' => 0],
+                ['type' => 'command', 'records' => 0],
+                ['type' => 'job-attempt', 'records' => 0],
+                ['type' => 'scheduled-task', 'records' => 0],
+                ['type' => 'query', 'records' => 2],
+                ['type' => 'exception', 'records' => 0],
+                ['type' => 'log', 'records' => 1],
+                ['type' => 'cache-event', 'records' => 0],
+                ['type' => 'mail', 'records' => 0],
+                ['type' => 'notification', 'records' => 0],
+                ['type' => 'outgoing-request', 'records' => 0],
+                ['type' => 'queued-job', 'records' => 1],
+            ])
+            ->and($envelope['notes'])->toBe([]);
+    });
+
+    it('counts a record of no known type among the records and in no row, and says how many', function () {
+        ingest([syntheticRecord(RecordType::QUERY), syntheticRecord(RecordType::CACHE_EVENT)->with(['t' => 'future-type']), syntheticRecord(RecordType::CACHE_EVENT)->with(['t' => 'other-type'])]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['records'])->toBe(3)
+            ->and(array_sum(array_column($envelope['result']['records_by_type'], 'records')))->toBe(1)
+            ->and($envelope['result']['records_by_type'])->toHaveCount(12)
+            ->and($envelope['notes'])->toBe([trans_choice('firewatch::messages.overview_unknown_types', 2, ['count' => 2])]);
+    });
+
+    it('counts only the records that started in the window, by type', function () {
+        ingest([syntheticRecord(RecordType::QUERY)->with(['timestamp' => 1790690400.0]), syntheticRecord(RecordType::QUERY)->with(['timestamp' => 1790773200.0])]);
+
+        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+
+        expect($envelope['result']['records'])->toBe(1)
+            ->and($envelope['result']['records_by_type'][4])->toBe(['type' => 'query', 'records' => 1]);
+    });
+
+    it('counts the user directory apart from the records', function () {
+        ingest([syntheticRecord(RecordType::USER), syntheticRecord(RecordType::USER)->with(['id' => '8']), syntheticRecord(RecordType::REQUEST)]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['user_directory'])->toBe(2)
+            ->and($envelope['result']['records'])->toBe(1)
+            ->and(array_sum(array_column($envelope['result']['records_by_type'], 'records')))->toBe(1)
+            ->and($envelope['notes'])->toBe([]);
+    });
+
+    it('counts the user directory over the whole store whatever the window, and says so', function (array $arguments) {
+        ingest([
+            syntheticRecord(RecordType::USER)->with(['timestamp' => 1790690400.0]),
+            syntheticRecord(RecordType::USER)->with(['id' => '8', 'timestamp' => 1790773200.0]),
+            syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790773200.0]),
+        ]);
+
+        $envelope = Envelope::assert(Overview::class, $arguments);
+
+        expect($envelope['result']['user_directory'])->toBe(2)
+            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_directory_unwindowed')]);
+    })->with([
+        'a start' => [['since' => 1790773000]],
+        'an end' => [['until' => 1790773300]],
+    ]);
+
+    it('counts an empty user directory as zero', function () {
+        ingest([syntheticRecord(RecordType::REQUEST)]);
+
+        expect(Envelope::assert(Overview::class)['result']['user_directory'])->toBe(0);
+    });
+});
+
 describe('the problem shapes', function () {
     /**
      * @return array<string, mixed>

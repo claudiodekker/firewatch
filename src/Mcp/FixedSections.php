@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\RecordType;
 use SQLite3;
 
 /**
@@ -18,9 +19,15 @@ class FixedSections
      * Create a new fixed sections instance.
      *
      * @param  array{requests: int, with_status: int, server_errors: int, server_error_pct: float|null, client_errors: int, client_error_pct: float|null}  $errorRate
+     * @param  int  $records  the records of the window, those of no known type included
+     * @param  list<array{type: string, records: int}>  $byType  the twelve types in catalogue order
+     * @param  int  $userDirectory  the rows of the user directory, whatever the window
      */
     protected function __construct(
         public readonly array $errorRate,
+        public readonly int $records,
+        public readonly array $byType,
+        public readonly int $userDirectory,
     ) {
         //
     }
@@ -31,8 +38,20 @@ class FixedSections
     public static function read(SQLite3 $connection, Window $window): self
     {
         $errorRate = self::errorRate($connection, $window);
+        $counts = self::countByType($connection, $window);
+        $userDirectory = self::countUsers($connection);
 
-        return new self(errorRate: $errorRate);
+        $byType = array_map(fn (RecordType $type) => [
+            'type' => $type->value,
+            'records' => $counts[$type->value] ?? 0,
+        ], RecordType::events());
+
+        return new self(
+            errorRate: $errorRate,
+            records: array_sum($counts),
+            byType: $byType,
+            userDirectory: $userDirectory,
+        );
     }
 
     /**
@@ -44,7 +63,18 @@ class FixedSections
     {
         return [
             'error_rate' => $this->errorRate,
+            'records' => $this->records,
+            'records_by_type' => $this->byType,
+            'user_directory' => $this->userDirectory,
         ];
+    }
+
+    /**
+     * Get how many records of the window are of none of the twelve types.
+     */
+    public function unknownTypes(): int
+    {
+        return $this->records - array_sum(array_column($this->byType, 'records'));
     }
 
     /**
@@ -72,6 +102,26 @@ class FixedSections
             'client_errors' => $counts['client_errors'],
             'client_error_pct' => self::share($counts['client_errors'], $counts['with_status']),
         ];
+    }
+
+    /**
+     * Count the records of the window by the type they were stored with, a type that is none of the twelve included.
+     *
+     * @return array<string, int>
+     */
+    protected static function countByType(SQLite3 $connection, Window $window): array
+    {
+        $rows = Stored::rows($connection, "SELECT COALESCE(type, '') AS type, count(*) AS records FROM records WHERE {$window->condition()} GROUP BY 1", window: $window);
+
+        return array_column($rows, 'records', 'type');
+    }
+
+    /**
+     * Count the rows of the user directory, which has no start to window by.
+     */
+    protected static function countUsers(SQLite3 $connection): int
+    {
+        return Stored::rows($connection, 'SELECT count(*) AS users FROM users')[0]['users'];
     }
 
     /**

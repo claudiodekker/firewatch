@@ -73,6 +73,10 @@ return [
 
     'overview_summary' => 'The store holds :records records, :requests of them requests.',
 
+    'overview_unknown_types' => ':count record in the window is of no known type: it counts in records and in no row of records_by_type.|:count records in the window are of no known type: they count in records and in no row of records_by_type.',
+
+    'overview_directory_unwindowed' => 'user_directory counts the whole store: a user has no start to window by.',
+
     'overview_detectors_findings' => 'Findings: :shapes.',
 
     'overview_detectors_not_evaluated' => 'Not evaluated: :shapes.',

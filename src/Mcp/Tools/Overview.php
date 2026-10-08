@@ -155,11 +155,11 @@ class Overview extends Tool
             empty: null,
             result: [
                 ...$sections->result(),
-                'records' => $records,
                 'detectors' => $this->detectorRows($judgements),
             ],
             coverage: $coverage,
             blindSpots: $blindSpots,
+            notes: $this->notes($sections, $window),
             next: $this->next($judgements),
         );
     }
@@ -205,6 +205,26 @@ class Overview extends Tool
         }
 
         return implode(' ', $sentences);
+    }
+
+    /**
+     * Get what the counts leave out or count differently from the window.
+     *
+     * @return list<string>
+     */
+    protected function notes(FixedSections $sections, Window $window): array
+    {
+        $notes = [];
+
+        if ($sections->unknownTypes() > 0) {
+            $notes[] = trans_choice('firewatch::messages.overview_unknown_types', $sections->unknownTypes(), ['count' => $sections->unknownTypes()]);
+        }
+
+        if ($window->since() !== null || $window->until() !== null) {
+            $notes[] = __('firewatch::messages.overview_directory_unwindowed');
+        }
+
+        return $notes;
     }
 
     /**
