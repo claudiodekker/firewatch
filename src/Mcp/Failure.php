@@ -15,6 +15,11 @@ class Failure
     protected const FIRST_FAILED_STATUS_CODE = 400;
 
     /**
+     * The first HTTP status code of a server error.
+     */
+    protected const FIRST_SERVER_ERROR = 500;
+
+    /**
      * Determine if a record failed, by how its type says it ended.
      */
     public static function of(RecordType $type, mixed $outcome): bool
@@ -38,6 +43,22 @@ class Failure
             RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK => "CASE WHEN status IS NULL THEN NULL WHEN status IN ('".implode("', '", static::statuses($type))."') THEN 1 ELSE 0 END",
             default => null,
         };
+    }
+
+    /**
+     * Get the SQL condition that holds for a status that is a server error.
+     */
+    public static function serverError(string $status): string
+    {
+        return "{$status} >= ".static::FIRST_SERVER_ERROR;
+    }
+
+    /**
+     * Get the SQL condition that holds for a status that is a client error.
+     */
+    public static function clientError(string $status): string
+    {
+        return "{$status} >= ".static::FIRST_FAILED_STATUS_CODE." AND {$status} < ".static::FIRST_SERVER_ERROR;
     }
 
     /**

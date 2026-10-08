@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use JsonException;
 use SQLite3;
@@ -71,6 +72,16 @@ class Stored
     public static function number(string $expression): string
     {
         return "CASE WHEN typeof({$expression}) IN ('integer', 'real') THEN {$expression} END";
+    }
+
+    /**
+     * Get the SQL of the duration a record of the type counts with, which is NULL for a scheduled task that was skipped and never ran.
+     */
+    public static function duration(RecordType $type): string
+    {
+        $number = self::number('duration');
+
+        return $type === RecordType::SCHEDULED_TASK ? "CASE WHEN status = '".Outcome::SKIPPED->value."' THEN NULL ELSE {$number} END" : $number;
     }
 
     /**

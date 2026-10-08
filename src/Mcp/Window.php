@@ -80,6 +80,21 @@ class Window
     }
 
     /**
+     * Get the bounds as the arguments of a later call that reads the same window: the instants they resolved to, a side with no bound left out.
+     *
+     * @return array{since?: float, until?: float}
+     */
+    public function arguments(): array
+    {
+        $bounds = [
+            'since' => $this->since,
+            'until' => $this->until,
+        ];
+
+        return array_filter($bounds, fn (?float $bound) => $bound !== null);
+    }
+
+    /**
      * Get the SQL condition that holds for the records of the window.
      */
     public function condition(): string

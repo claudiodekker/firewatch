@@ -33,7 +33,7 @@ return [
     */
 
     'tools' => [
-        'overview' => 'Entry point. Answers "what does the store hold?": how many records fall in the window and how many of them are requests, with the store\'s coverage and blind spots, and the verdict of every problem shape that ships, each checked at its default threshold within five seconds. Nothing is wrong only when every shape ran and is clean; a shape that did not run says so. Use it first, then `detect` for one shape, `rank` for the worst groups of a type, `occurrences` for individual records and `execution` for one in full. Windowed by since/until; without them everything stored counts. Empty is not clean.',
+        'overview' => 'Entry point. Answers "what is wrong in this application?" in a fixed order: the error rate (server errors 500 and above and client errors 400 to 499 among the window\'s requests, with their shares of the requests that have a status), the slowest groups by total time (up to 10, at most 3 per type), the records of all twelve types, the user directory (the whole store, never windowed), the actors (distinct signed-in actors and executions with no user, never summed), then the verdict of every problem shape, each checked at its default threshold within five seconds. Nothing is wrong only when every shape ran and is clean; a shape that did not run says so. Use it first, then `detect` for one shape, `rank` for the worst groups of a type, `occurrences` for individual records and `execution` for one in full. Windowed by since/until; without them everything stored counts. Empty is not clean.',
         'rank' => 'Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, worst first, to answer "what is slow, heavy or frequent?". Pass `type`, or `group` to break one group down by deploy (rows in first-seen order) to see whether it changed. `matching` finds a group by a substring of its label. `by` picks the measure, p95_duration by default and occurrences for exceptions. Percentiles are null with a `withheld` object when too few records support them; when no group has enough for the percentile, the order falls back to the maximum and a note says so. Rows carry when the group was first and last seen, its deploys and its slowest execution, and failure_pct where the type has a notion of failure. Windowed by since/until; `deploy` restricts the records; a cursor continues a cut list. Empty is not clean.',
         'execution' => 'One execution in full: a request, command, job attempt or scheduled task. Without arguments it returns the latest one that finished (greatest end time); `type` picks the latest of one kind; `execution_id` picks a specific one (a request\'s trace id is also its execution id). Shows outcome, stages, request headers and payload as captured, counted-versus-captured accounting for eight counters, up to five exceptions with application frames and source lines, and the child timeline. Not windowed. For every attempt of a job use `occurrences` with `job_id`. Recorded when finished: running work is absent.',
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
@@ -71,7 +71,17 @@ return [
 
     'store_clock' => 'Store clock: :time (epoch :epoch) - pass that number as since or until to measure what happens next against what came before',
 
-    'overview_summary' => 'The store holds :records records, :requests of them requests.',
+    'overview_summary' => 'In the window: records :records, requests with a status :with_status, server errors :server_errors, client errors :client_errors.',
+
+    'overview_summary_no_status' => 'In the window: records :records, requests with a status 0, so no error rate.',
+
+    'overview_unknown_types' => ':count record in the window is of no known type: it counts in records and in no row of records_by_type.|:count records in the window are of no known type: they count in records and in no row of records_by_type.',
+
+    'overview_directory_unwindowed' => 'user_directory counts the whole store: a user has no start to window by.',
+
+    'overview_next_rank' => 'Rank every :type group by total time: this answer lists at most three groups of a type.',
+
+    'overview_next_execution' => 'Open the execution of the window that finished last, in full.',
 
     'overview_detectors_findings' => 'Findings: :shapes.',
 

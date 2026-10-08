@@ -44,6 +44,7 @@ class Answer
      * @param  list<string>  $notes
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @param  list<array{tool: string, arguments: array<string, mixed>, why: string}>  $next
+     * @param  list<string>|null  $cuttable  the result lists the budget may shorten, the first named first; null for every list, the last first
      */
     public function __construct(
         public readonly string $tool,
@@ -58,6 +59,7 @@ class Answer
         public readonly array $notes = [],
         public readonly array $truncated = [],
         public readonly array $next = [],
+        public readonly ?array $cuttable = null,
     ) {
         if (count($notes) > self::LISTED || count($next) > self::LISTED) {
             throw new InvalidArgumentException('An answer carries at most '.self::LISTED.' notes and '.self::LISTED.' next calls.');
@@ -109,7 +111,7 @@ class Answer
         if ($this->bounded === null) {
             [$result, $truncated] = Bounds::capCells($this->result, $this->truncated);
 
-            [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $this->size(...));
+            [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $this->size(...), cuttable: $this->cuttable);
             $recounted = Bounds::recountCaps(original: $this->result, fitted: $fitted, truncated: $truncated);
 
             $this->bounded = [$fitted, $recounted];

@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
@@ -16,8 +15,11 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
+use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
+use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -35,8 +37,6 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @api
@@ -104,12 +104,13 @@ class Overview extends Tool
         $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
 
         $types = RecordType::events();
-        $structural = BlindSpots::for($types, storeLevel: true);
+        $structural = BlindSpots::for($types, actor: true, storeLevel: true);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
-            [[$total, $records, $requests, $oldest, $newest], $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
-                $this->countRecords($connection, $window),
+            [[$total, $oldest, $newest], $sections, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
+                $this->countRecords($connection),
+                FixedSections::read($connection, $window),
                 StoreFacts::read($connection),
                 $this->detectors->count($connection, $window, new Deadline($epoch)),
             ]);
@@ -134,32 +135,28 @@ class Overview extends Tool
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
 
-        if ($records === 0) {
+        if ($sections->records === 0) {
             $empty = Emptiness::windowEmpty($total);
 
             return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
-
-        $summary = __('firewatch::messages.overview_summary', [
-            'records' => $records,
-            'requests' => $requests,
-        ]).' '.$this->detectorSummary($judgements);
 
         return new Answer(
             tool: 'overview',
             now: $epoch,
             timezone: $timezone,
             window: $window,
-            summary: $summary,
+            summary: $this->summary($sections, $judgements),
             empty: null,
             result: [
-                'records' => $records,
-                'requests' => $requests,
+                ...$sections->result(),
                 'detectors' => $this->detectorRows($judgements),
             ],
             coverage: $coverage,
             blindSpots: $blindSpots,
-            next: $this->next($judgements),
+            notes: $this->notes($sections, $window),
+            next: $this->next($window, $sections, $judgements),
+            cuttable: ['slowest_by_total_time'],
         );
     }
 
@@ -177,6 +174,36 @@ class Overview extends Tool
         usort($rows, fn (array $a, array $b) => array_search($a['verdict'], $order, true) <=> array_search($b['verdict'], $order, true));
 
         return $rows;
+    }
+
+    /**
+     * Get the summary: the shapes first, then the figures of the window when they fit beside them.
+     *
+     * @param  list<Judgement>  $judgements
+     */
+    protected function summary(FixedSections $sections, array $judgements): string
+    {
+        $shapes = $this->detectorSummary($judgements);
+        $summary = "{$shapes} {$this->figures($sections)}";
+
+        return mb_strlen($summary) > Answer::SUMMARY_CHARACTERS ? $shapes : $summary;
+    }
+
+    /**
+     * Get the sentence that counts the records of the window and the errors among its requests.
+     */
+    protected function figures(FixedSections $sections): string
+    {
+        if ($sections->errorRate['with_status'] === 0) {
+            return __('firewatch::messages.overview_summary_no_status', ['records' => $sections->records]);
+        }
+
+        return __('firewatch::messages.overview_summary', [
+            'records' => $sections->records,
+            'server_errors' => $sections->errorRate['server_errors'],
+            'client_errors' => $sections->errorRate['client_errors'],
+            'with_status' => $sections->errorRate['with_status'],
+        ]);
     }
 
     /**
@@ -207,47 +234,84 @@ class Overview extends Tool
     }
 
     /**
-     * Get the calls that list the findings of each shape that has some.
+     * Get what the counts leave out or count differently from the window.
+     *
+     * @return list<string>
+     */
+    protected function notes(FixedSections $sections, Window $window): array
+    {
+        $notes = [];
+
+        if ($sections->unknownTypes() > 0) {
+            $notes[] = trans_choice('firewatch::messages.overview_unknown_types', $sections->unknownTypes(), ['count' => $sections->unknownTypes()]);
+        }
+
+        if ($window->since() !== null || $window->until() !== null) {
+            $notes[] = __('firewatch::messages.overview_directory_unwindowed');
+        }
+
+        return $notes;
+    }
+
+    /**
+     * Get the calls that follow, the first five: the findings of each shape that has some, the ranking of the slowest group's type, and the execution of the window that finished last.
      *
      * @param  list<Judgement>  $judgements
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(array $judgements): array
+    protected function next(Window $window, FixedSections $sections, array $judgements): array
     {
+        $bounds = $window->arguments();
         $calls = [];
 
         foreach ($judgements as $judgement) {
             if ($judgement->verdict === Verdict::FINDINGS) {
                 $calls[] = [
                     'tool' => 'detect',
-                    'arguments' => ['shape' => $judgement->detector->value],
+                    'arguments' => [
+                        'shape' => $judgement->detector->value,
+                        ...$bounds,
+                    ],
                     'why' => __('firewatch::messages.detect_next_shape'),
                 ];
             }
+        }
+
+        $slowest = $sections->slowestType();
+
+        if ($slowest !== null) {
+            $calls[] = [
+                'tool' => 'rank',
+                'arguments' => [
+                    'type' => $slowest->value,
+                    'by' => Measure::TOTAL_DURATION->value,
+                    ...$bounds,
+                ],
+                'why' => __('firewatch::messages.overview_next_rank', ['type' => $slowest->value]),
+            ];
+        }
+
+        if ($sections->latestExecution !== null) {
+            $calls[] = [
+                'tool' => 'execution',
+                'arguments' => ['execution_id' => $sections->latestExecution],
+                'why' => __('firewatch::messages.overview_next_execution'),
+            ];
         }
 
         return array_slice($calls, 0, Answer::LISTED);
     }
 
     /**
-     * Count all records, those of the window and the requests among them, and find the span the records cover.
+     * Count all records and find the span they cover.
      *
-     * @return array{int, int, int, float|null, float|null}
+     * @return array{int, float|null, float|null}
      */
-    protected function countRecords(SQLite3 $connection, Window $window): array
+    protected function countRecords(SQLite3 $connection): array
     {
-        $condition = $window->condition();
+        $rows = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records');
 
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), count(*) FILTER (WHERE {$condition} AND type = :type), min(started_at), max(started_at) FROM records");
-
-        $window->bind($statement);
-        $statement->bindValue(':type', ExecutionType::REQUEST->value);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-
-        /** @var array{int, int, int, float|null, float|null} */
-        return $result->fetchArray(SQLITE3_NUM);
+        /** @var array{int, float|null, float|null} */
+        return array_values($rows[0]);
     }
 }
