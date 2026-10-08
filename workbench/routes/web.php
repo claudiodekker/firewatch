@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Auth\GenericUser;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -39,3 +41,17 @@ Route::get('/quotes', function () {
 });
 
 Route::get('/catalog', fn () => Cache::remember('catalog', 60, fn () => 'spring'));
+
+Route::get('/members/{member}', function (string $member) {
+    $members = [
+        '7' => ['name' => 'Taylor Otwell', 'email' => 'taylor@example.com'],
+        '8' => ['name' => 'Taylor Swift', 'email' => 'swift@example.com'],
+        '9' => ['name' => 'Nuno Maduro', 'email' => 'nuno@example.com'],
+    ];
+
+    abort_unless(isset($members[$member]), 404);
+
+    Auth::setUser(new GenericUser(['id' => $member, ...$members[$member]]));
+
+    return 'ok';
+});
