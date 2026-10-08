@@ -23,7 +23,7 @@ it('lists the tools under a header, one line each', function () {
             '  execution    One execution in full: a request, command, job attempt or scheduled task.',
             '  trace        Follows one trace: its executions in start order and the lineage of every queued job.',
             '  detect       Runs named problem shapes and returns evidence, worst first.',
-            '  actor        Identifies one signed-in person.',
+            '  actor        Identifies one signed-in person and the work of the window tied to them.',
             '',
         ]));
 });
