@@ -71,7 +71,9 @@ return [
 
     'store_clock' => 'Store clock: :time (epoch :epoch) - pass that number as since or until to measure what happens next against what came before',
 
-    'overview_summary' => 'The store holds :records records, :requests of them requests.',
+    'overview_summary' => 'In the window: records :records, requests with a status :with_status, server errors :server_errors, client errors :client_errors.',
+
+    'overview_summary_no_status' => 'In the window: records :records, requests with a status 0, so no error rate.',
 
     'overview_unknown_types' => ':count record in the window is of no known type: it counts in records and in no row of records_by_type.|:count records in the window are of no known type: they count in records and in no row of records_by_type.',
 

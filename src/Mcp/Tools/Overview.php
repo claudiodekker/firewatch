@@ -142,17 +142,12 @@ class Overview extends Tool
             return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
-        $summary = __('firewatch::messages.overview_summary', [
-            'records' => $records,
-            'requests' => $sections->errorRate['requests'],
-        ]).' '.$this->detectorSummary($judgements);
-
         return new Answer(
             tool: 'overview',
             now: $epoch,
             timezone: $timezone,
             window: $window,
-            summary: $summary,
+            summary: $this->summary($sections, $judgements),
             empty: null,
             result: [
                 ...$sections->result(),
@@ -179,6 +174,36 @@ class Overview extends Tool
         usort($rows, fn (array $a, array $b) => array_search($a['verdict'], $order, true) <=> array_search($b['verdict'], $order, true));
 
         return $rows;
+    }
+
+    /**
+     * Get the summary: the shapes first, then the figures of the window when they fit beside them.
+     *
+     * @param  list<Judgement>  $judgements
+     */
+    protected function summary(FixedSections $sections, array $judgements): string
+    {
+        $shapes = $this->detectorSummary($judgements);
+        $summary = "{$shapes} {$this->figures($sections)}";
+
+        return mb_strlen($summary) > Answer::SUMMARY_CHARACTERS ? $shapes : $summary;
+    }
+
+    /**
+     * Get the sentence that counts the records of the window and the errors among its requests.
+     */
+    protected function figures(FixedSections $sections): string
+    {
+        if ($sections->errorRate['with_status'] === 0) {
+            return __('firewatch::messages.overview_summary_no_status', ['records' => $sections->records]);
+        }
+
+        return __('firewatch::messages.overview_summary', [
+            'records' => $sections->records,
+            'server_errors' => $sections->errorRate['server_errors'],
+            'client_errors' => $sections->errorRate['client_errors'],
+            'with_status' => $sections->errorRate['with_status'],
+        ]);
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
@@ -69,7 +70,7 @@ it('counts the records the store holds, and the requests among them', function (
     expect($envelope['empty'])->toBeNull()
         ->and($envelope['result']['error_rate']['requests'])->toBe(1)
         ->and($envelope['result']['records'])->toBeGreaterThanOrEqual(1)
-        ->and($envelope['summary'])->toBeIn(array_map(fn (string $findings) => __('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'requests' => 1]).$findings.' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']), ['', ' '.__('firewatch::messages.overview_detectors_findings', ['shapes' => 'memory (1)'])]))
+        ->and($envelope['summary'])->toBeIn(array_map(fn (string $findings) => $findings.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']).' '.__('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'server_errors' => 0, 'client_errors' => 0, 'with_status' => 1]), ['', __('firewatch::messages.overview_detectors_findings', ['shapes' => 'memory (1)']).' ']))
         ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $envelope['result']['records']])
         ->and($envelope['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($envelope['coverage']['newest_at']);
 });
@@ -845,6 +846,57 @@ describe('the next calls', function () {
     ]);
 });
 
+describe('the summary', function () {
+    it('names the shapes first, then the records and the errors among the requests with a status', function () {
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['status_code' => 503]),
+            syntheticRecord(RecordType::REQUEST)->with(['status_code' => 404]),
+            syntheticRecord(RecordType::REQUEST)->with(['status_code' => 422]),
+            syntheticRecord(RecordType::REQUEST)->without('status_code'),
+            syntheticRecord(RecordType::QUERY),
+        ]);
+        FakeDetector::ship(new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4, total: 3), new FakeDetector(DetectorName::MEMORY));
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['summary'])->toBe(implode(' ', [
+            __('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (3)']),
+            __('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'memory']),
+            __('firewatch::messages.overview_summary', ['records' => 5, 'server_errors' => 1, 'client_errors' => 2, 'with_status' => 3]),
+        ]));
+    });
+
+    it('says that no request has a status instead of an error rate of zero', function (RecordBuilder $record) {
+        ingest([$record]);
+        FakeDetector::ship(new FakeDetector(DetectorName::MEMORY, examined: 1));
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.overview_detectors_clean', 1, ['count' => 1]).' '.__('firewatch::messages.overview_summary_no_status', ['records' => 1]));
+    })->with([
+        'a request without a status' => [fn () => syntheticRecord(RecordType::REQUEST)->without('status_code')],
+        'no request' => [fn () => syntheticRecord(RecordType::COMMAND)],
+    ]);
+
+    it('leaves the figures out when they do not fit, and never cuts the shapes for them', function (int $over, bool $kept) {
+        ovwRequests(200);
+        $names = array_slice(DetectorName::cases(), 0, 8);
+        $figures = __('firewatch::messages.overview_summary', ['records' => 1, 'server_errors' => 0, 'client_errors' => 0, 'with_status' => 1]);
+        $shapes = fn (array $totals) => __('firewatch::messages.overview_detectors_findings', ['shapes' => implode(', ', array_map(fn (DetectorName $name, int $total) => "{$name->value} ({$total})", $names, $totals))]);
+        $missing = Answer::SUMMARY_CHARACTERS + $over - mb_strlen($shapes(array_fill(0, 8, 1)).' '.$figures);
+        $totals = array_map(fn (int $position) => (int) str_repeat('7', 1 + intdiv($missing, 8) + ($position < $missing % 8 ? 1 : 0)), range(0, 7));
+        FakeDetector::ship(...array_map(fn (DetectorName $name, int $total) => new FakeDetector($name, examined: 1, total: $total), $names, $totals));
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect(mb_strlen($shapes($totals).' '.$figures))->toBe(Answer::SUMMARY_CHARACTERS + $over)
+            ->and($envelope['summary'])->toBe($kept ? $shapes($totals).' '.$figures : $shapes($totals));
+    })->with([
+        'the most characters' => [0, true],
+        'one character more' => [1, false],
+    ]);
+});
+
 describe('the problem shapes', function () {
     /**
      * @return array<string, mixed>
@@ -885,7 +937,7 @@ describe('the problem shapes', function () {
             ['detector' => 'error-logs', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
             ['detector' => 'failing-http', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
             ['detector' => 'cache', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
-        ])->and($envelope['summary'])->toBe(__('firewatch::messages.overview_summary', ['records' => 3, 'requests' => 3]).' '.__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']));
+        ])->and($envelope['summary'])->toBe(__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']).' '.__('firewatch::messages.overview_summary', ['records' => 3, 'server_errors' => 1, 'client_errors' => 1, 'with_status' => 3]));
     });
 
     it('is clean over the requests examined, with no worst finding', function () {
@@ -958,7 +1010,7 @@ describe('the problem shapes', function () {
         ovwRequests(200);
         FakeDetector::ship(new FakeDetector(DetectorName::DATABASE_BOUND, examined: 5), new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4));
 
-        expect(Envelope::assert(Overview::class)['summary'])->toEndWith(trans_choice('firewatch::messages.overview_detectors_clean', 2, ['count' => 2]));
+        expect(Envelope::assert(Overview::class)['summary'])->toStartWith(trans_choice('firewatch::messages.overview_detectors_clean', 2, ['count' => 2]));
     });
 
     it('offers at most five shapes to list', function () {
