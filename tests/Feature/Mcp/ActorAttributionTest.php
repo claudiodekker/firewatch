@@ -117,7 +117,7 @@ it('attributes the requests of the window to the person and counts all the other
         'notes' => [
             __('firewatch::messages.actor_no_commands_note'),
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
-            __('firewatch::messages.actor_caveats_note'),
+            __('firewatch::messages.actor_identity_note'),
         ],
         'truncated' => [],
         'next' => [
@@ -305,9 +305,9 @@ it('counts the records of the window as the person\'s, someone else\'s or no one
         ])
         ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor', 'attributed' => 3, 'total' => 5, 'direct' => 1, 'dispatch' => 1, 'inside' => 1, 'unattributable' => 1]))
         ->and($envelope['notes'])->toBe([
-            __('firewatch::messages.actor_commands_note', ['commands' => 1, 'tasks' => 0, 'inside' => 1]),
+            actorCommandsNote(1, 0, 1),
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
-            __('firewatch::messages.actor_caveats_note'),
+            __('firewatch::messages.actor_identity_note'),
         ]);
 });
 
@@ -413,7 +413,7 @@ it('states the commands and tasks of the window, the attempts with no actor and 
 
     $envelope = attributedAnswer();
 
-    expect($envelope['notes'])->toBe([...array_map(fn (Closure $note) => $note(), $notes), __('firewatch::messages.actor_caveats_note')]);
+    expect($envelope['notes'])->toBe([...array_map(fn (Closure $note) => $note(), $notes), __('firewatch::messages.actor_identity_note')]);
 })->with([
     'none' => [[], [fn () => __('firewatch::messages.actor_no_commands_note')]],
     'two commands and a task, one of them inside' => [
@@ -423,7 +423,7 @@ it('states the commands and tasks of the window, the attempts with no actor and 
             attributedExecution(RecordType::SCHEDULED_TASK, 'task', offset: 3),
             attributedChild(RecordType::LOG, 'task', 'schedule', user: '7', offset: 4),
         ],
-        [fn () => __('firewatch::messages.actor_commands_note', ['commands' => 2, 'tasks' => 1, 'inside' => 1])],
+        [fn () => actorCommandsNote(2, 1, 1)],
     ],
     'one attempt with no actor' => [
         fn () => [attributedAttempt('attempt', 'job', offset: 1)],
@@ -455,10 +455,10 @@ it('carries all five notes for a person identified from records in a window with
 
     expect($envelope['notes'])->toBe([
         __('firewatch::messages.actor_from_records_note'),
-        __('firewatch::messages.actor_commands_note', ['commands' => 1, 'tasks' => 0, 'inside' => 0]),
+        actorCommandsNote(1, 0, 0),
         trans_choice('firewatch::messages.actor_no_actor_note', 1, ['count' => 1]),
         trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
-        __('firewatch::messages.actor_caveats_note'),
+        __('firewatch::messages.actor_identity_note'),
     ])
         ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => '99', 'attributed' => 1, 'total' => 4, 'direct' => 1, 'dispatch' => 0, 'inside' => 0, 'unattributable' => 3]));
 });

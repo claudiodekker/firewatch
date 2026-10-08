@@ -321,9 +321,9 @@ class Actor extends Tool
         $notes[] = $commands + $tasks === 0
             ? __('firewatch::messages.actor_no_commands_note')
             : __('firewatch::messages.actor_commands_note', [
-                'commands' => $commands,
-                'tasks' => $tasks,
-                'inside' => $attribution->inside(),
+                'commands' => trans_choice('firewatch::messages.actor_commands_count', $commands, ['count' => $commands]),
+                'tasks' => trans_choice('firewatch::messages.actor_tasks_count', $tasks, ['count' => $tasks]),
+                'inside' => trans_choice('firewatch::messages.actor_inside_count', $attribution->inside(), ['count' => $attribution->inside()]),
             ]);
 
         if ($attempts > 0) {
@@ -334,7 +334,7 @@ class Actor extends Tool
             $notes[] = trans_choice('firewatch::messages.actor_guest_note', $requests, ['count' => $requests]);
         }
 
-        $notes[] = __('firewatch::messages.actor_caveats_note');
+        $notes[] = __('firewatch::messages.actor_identity_note');
 
         return $notes;
     }

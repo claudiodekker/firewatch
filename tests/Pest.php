@@ -179,6 +179,18 @@ function attributionCounts(array $counts = []): array
 }
 
 /**
+ * Get the note of an actor answer on the commands and scheduled tasks of the window, each count in its grammatical number.
+ */
+function actorCommandsNote(int $commands, int $tasks, int $inside): string
+{
+    return __('firewatch::messages.actor_commands_note', [
+        'commands' => trans_choice('firewatch::messages.actor_commands_count', $commands, ['count' => $commands]),
+        'tasks' => trans_choice('firewatch::messages.actor_tasks_count', $tasks, ['count' => $tasks]),
+        'inside' => trans_choice('firewatch::messages.actor_inside_count', $inside, ['count' => $inside]),
+    ]);
+}
+
+/**
  * Get the activity of an actor answer, a row for each of the twelve types, from the counts of the types that have any.
  *
  * @param  array<string, array{int, int}>  $counts

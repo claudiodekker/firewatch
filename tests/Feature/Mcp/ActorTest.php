@@ -253,7 +253,7 @@ it('identifies a person, with when they were first and last seen and the stage t
         ],
         'coverage' => $envelope['coverage'],
         'blind_spots' => $envelope['blind_spots'],
-        'notes' => [__('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_caveats_note')],
+        'notes' => [__('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_identity_note')],
         'truncated' => [],
         'next' => [
             ['tool' => 'execution', 'arguments' => ['execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f'], 'why' => __('firewatch::messages.actor_next_execution')],
@@ -482,7 +482,7 @@ it('identifies an id that no directory row holds from a record that carries it',
         ],
         'coverage' => $envelope['coverage'],
         'blind_spots' => $envelope['blind_spots'],
-        'notes' => [__('firewatch::messages.actor_from_records_note'), __('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_caveats_note')],
+        'notes' => [__('firewatch::messages.actor_from_records_note'), __('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_identity_note')],
         'truncated' => [],
         'next' => [
             ['tool' => 'execution', 'arguments' => ['execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f'], 'why' => __('firewatch::messages.actor_next_execution')],
@@ -525,7 +525,7 @@ it('lets a directory stage decide before the records are read', function () {
     $envelope = actorAnswer('99');
 
     expect($envelope['result']['identity'])->toMatchArray(['id' => '5', 'matched_by' => 'username'])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_caveats_note')]);
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_identity_note')]);
 });
 
 it('identifies the signed-in user of a real request by name', function () {

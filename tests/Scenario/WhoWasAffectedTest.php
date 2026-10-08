@@ -142,9 +142,9 @@ it('says who was affected: the person meant, the work tied to them by each link,
         ->and(array_column($executions, 'started_at'))->toBe(array_values(Arr::sortDesc(array_column($executions, 'started_at'))))
         ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor Otwell', 'attributed' => 4, 'total' => 7, 'direct' => 2, 'dispatch' => 1, 'inside' => 1, 'unattributable' => 2]))
         ->and($envelope['notes'])->toBe([
-            __('firewatch::messages.actor_commands_note', ['commands' => 2, 'tasks' => 0, 'inside' => 1]),
+            actorCommandsNote(2, 0, 1),
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
-            __('firewatch::messages.actor_caveats_note'),
+            __('firewatch::messages.actor_identity_note'),
         ])
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial')
         ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'occurrences'])
@@ -187,10 +187,10 @@ it('states what it cannot attribute once the dispatch that tied a job to the per
         ->and(array_values(Arr::sort(array_column($envelope['result']['executions'], 'link'))))->toBe(['direct', 'direct', 'inside'])
         ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor Otwell', 'attributed' => 3, 'total' => 7, 'direct' => 2, 'dispatch' => 0, 'inside' => 1, 'unattributable' => 3]))
         ->and($envelope['notes'])->toBe([
-            __('firewatch::messages.actor_commands_note', ['commands' => 2, 'tasks' => 0, 'inside' => 1]),
+            actorCommandsNote(2, 0, 1),
             trans_choice('firewatch::messages.actor_no_actor_note', 1, ['count' => 1]),
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
-            __('firewatch::messages.actor_caveats_note'),
+            __('firewatch::messages.actor_identity_note'),
         ])
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial', 'history-cleared');
 });

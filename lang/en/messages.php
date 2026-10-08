@@ -324,7 +324,13 @@ return [
 
     'actor_executions_how' => 'The newest attributed execution is listed; narrow `since` and `until` to see the others.|The :listed newest attributed executions are listed; narrow `since` and `until` to see the others.',
 
-    'actor_commands_note' => ':commands commands and :tasks scheduled tasks ran in this window and carry no actor; :inside of them are shown as inside work; what this person set off through the others is not shown.',
+    'actor_commands_note' => ':commands and :tasks ran in this window and carry no actor; :inside shown as inside work; what this person set off through the others is not shown.',
+
+    'actor_commands_count' => ':count command|:count commands',
+
+    'actor_tasks_count' => ':count scheduled task|:count scheduled tasks',
+
+    'actor_inside_count' => ':count of them is|:count of them are',
 
     'actor_no_commands_note' => 'No commands or scheduled tasks ran in this window, so nothing was lost to them.',
 
@@ -332,7 +338,7 @@ return [
 
     'actor_guest_note' => ':count request carries no recorded user (a guest, a user of a non-default guard, or one Nightwatch could not resolve) and cannot be attributed.|:count requests carry no recorded user (a guest, a user of a non-default guard, or one Nightwatch could not resolve) and cannot be attributed.',
 
-    'actor_caveats_note' => 'User ids are keys recorded as sent, not qualified by guard or model; a reseeded database can give an id to another person. Only the latest name and username are searchable. `first_seen_at` is when the directory row was created, not when the person first acted. History before the coverage start is gone.',
+    'actor_identity_note' => 'User ids are keys recorded as sent, not qualified by guard or model; a reseeded database can give an id to another person. Only the latest name and username are searchable. `first_seen_at` is when the directory row was created, not when the person first acted. History before the coverage start is gone.',
 
     'actor_next_execution' => 'Open the newest execution attributed to this person, in full.',
 
