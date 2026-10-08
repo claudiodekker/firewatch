@@ -17,7 +17,7 @@ class Comparison
     /**
      * How long before the split an execution may have started to be counted as straddling it, in seconds.
      */
-    public const STRADDLING_SECONDS = 3600;
+    protected const STRADDLING_SECONDS = 3600;
 
     /**
      * The most deploys an answer with an empty side lists.

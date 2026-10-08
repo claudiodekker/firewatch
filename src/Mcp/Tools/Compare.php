@@ -61,6 +61,11 @@ class Compare extends Tool
     protected const MAXIMUM_LIMIT = 100;
 
     /**
+     * How much older than the split the oldest record of the store must be for the note to move `since`, in seconds.
+     */
+    protected const EARLIER_CHANGES_SECONDS = 3600;
+
+    /**
      * What a group id is, as the refusal of a malformed one says it.
      */
     protected const GROUP_ID_DESCRIPTION = 'a 32-character lowercase hex group id';
@@ -160,7 +165,7 @@ class Compare extends Tool
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total, straddling: $comparison?->straddling);
-        $filters = $group === null ? ["type: {$type?->value}"] : ["group: {$group}", ...($explicit === null ? [] : ["type: {$explicit->value}"])];
+        $filters = $this->filters($group, $explicit);
 
         if ($group !== null && $held === []) {
             $empty = Emptiness::noMatch($inWindow, $filters);
@@ -198,6 +203,26 @@ class Compare extends Tool
             cuttable: ['groups'],
             recount: $comparison->recounted(...),
         );
+    }
+
+    /**
+     * Get the filters of the call as an empty answer names them: the group when one is given, then the type the call names.
+     *
+     * @return list<string>
+     */
+    protected function filters(?string $group, ?RecordType $type): array
+    {
+        $filters = [];
+
+        if ($group !== null) {
+            $filters[] = "group: {$group}";
+        }
+
+        if ($type !== null) {
+            $filters[] = "type: {$type->value}";
+        }
+
+        return $filters;
     }
 
     /**
@@ -296,7 +321,7 @@ class Compare extends Tool
             ]);
         }
 
-        if ($request->get('since') === null && $oldest !== null && $oldest < $split - Comparison::STRADDLING_SECONDS) {
+        if ($request->get('since') === null && $oldest !== null && $oldest < $split - self::EARLIER_CHANGES_SECONDS) {
             $notes[] = __('firewatch::messages.compare_move_since_note');
         }
 
