@@ -104,7 +104,7 @@ class Overview extends Tool
         $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
 
         $types = RecordType::events();
-        $structural = BlindSpots::for($types, storeLevel: true);
+        $structural = BlindSpots::for($types, actor: true, storeLevel: true);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {

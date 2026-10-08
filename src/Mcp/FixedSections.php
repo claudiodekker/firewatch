@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Mcp\Detectors\Executions;
 use ClaudioDekker\Firewatch\RecordType;
 use SQLite3;
 
@@ -22,12 +23,14 @@ class FixedSections
      * @param  int  $records  the records of the window, those of no known type included
      * @param  list<array{type: string, records: int}>  $byType  the twelve types in catalogue order
      * @param  int  $userDirectory  the rows of the user directory, whatever the window
+     * @param  array{executions: int, signed_in_actors: int, without_actor: int}  $actors  people and executions, never to be summed
      */
     protected function __construct(
         public readonly array $errorRate,
         public readonly int $records,
         public readonly array $byType,
         public readonly int $userDirectory,
+        public readonly array $actors,
     ) {
         //
     }
@@ -40,6 +43,7 @@ class FixedSections
         $errorRate = self::errorRate($connection, $window);
         $counts = self::countByType($connection, $window);
         $userDirectory = self::countUsers($connection);
+        $actors = self::actors($connection, $window);
 
         $byType = array_map(fn (RecordType $type) => [
             'type' => $type->value,
@@ -51,6 +55,7 @@ class FixedSections
             records: array_sum($counts),
             byType: $byType,
             userDirectory: $userDirectory,
+            actors: $actors,
         );
     }
 
@@ -66,6 +71,7 @@ class FixedSections
             'records' => $this->records,
             'records_by_type' => $this->byType,
             'user_directory' => $this->userDirectory,
+            'actors' => $this->actors,
         ];
     }
 
@@ -122,6 +128,28 @@ class FixedSections
     protected static function countUsers(SQLite3 $connection): int
     {
         return Stored::rows($connection, 'SELECT count(*) AS users FROM users')[0]['users'];
+    }
+
+    /**
+     * Read the executions of the window, the distinct users recorded on them and how many have no recorded user.
+     *
+     * @return array{executions: int, signed_in_actors: int, without_actor: int}
+     */
+    protected static function actors(SQLite3 $connection, Window $window): array
+    {
+        $types = [];
+
+        foreach (Executions::TYPES as $position => $type) {
+            $types["type{$position}"] = $type->value;
+        }
+
+        $placeholders = implode(', ', array_map(fn (string $name) => ":{$name}", array_keys($types)));
+
+        /** @var array{executions: int, signed_in_actors: int, without_actor: int} */
+        return Stored::rows($connection, "SELECT count(*) AS executions,
+            count(DISTINCT NULLIF(user_id, '')) AS signed_in_actors,
+            count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS without_actor
+            FROM records WHERE type IN ({$placeholders}) AND {$window->condition()}", $types, $window)[0];
     }
 
     /**

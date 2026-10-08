@@ -324,7 +324,7 @@ describe('coverage and blind spots', function () {
     $ids = [
         'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification',
         'sync-jobs-unrecorded', 'vendor-defaults-unrecorded', 'exceptions-unreported', 'named-log-channels', 'memory-is-process-peak', 'query-bindings-unpaired',
-        'uninstrumented-dispatcher', 'application-opt-outs', 'values-truncated', 'octane-bootstrap',
+        'uninstrumented-dispatcher', 'actor-partial', 'application-opt-outs', 'values-truncated', 'octane-bootstrap',
     ];
 
     it('states the twelve types it read, the retention and that the history is complete from the first write', function () use ($types) {
@@ -519,6 +519,51 @@ describe('the record counts and the user directory', function () {
         ingest([syntheticRecord(RecordType::REQUEST)]);
 
         expect(Envelope::assert(Overview::class)['result']['user_directory'])->toBe(0);
+    });
+});
+
+describe('the actors', function () {
+    it('counts the distinct users across the executions and the executions with no user, as separate figures', function () {
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['user' => '7']),
+            syntheticRecord(RecordType::REQUEST)->with(['user' => '7']),
+            syntheticRecord(RecordType::JOB_ATTEMPT)->with(['user' => '7']),
+            syntheticRecord(RecordType::JOB_ATTEMPT)->with(['user' => '8']),
+            syntheticRecord(RecordType::REQUEST)->with(['user' => '']),
+            syntheticRecord(RecordType::JOB_ATTEMPT)->without('user'),
+        ]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['actors'])->toBe(['executions' => 6, 'signed_in_actors' => 2, 'without_actor' => 2]);
+    });
+
+    it('counts a command and a scheduled task as executions with no user', function () {
+        ingest([syntheticRecord(RecordType::COMMAND), syntheticRecord(RecordType::SCHEDULED_TASK)]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['actors'])->toBe(['executions' => 2, 'signed_in_actors' => 0, 'without_actor' => 2]);
+    });
+
+    it('does not count the user a child record carries', function () {
+        ingest([syntheticRecord(RecordType::QUERY)->with(['user' => '9']), syntheticRecord(RecordType::LOG)->with(['user' => '9'])]);
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['result']['actors'])->toBe(['executions' => 0, 'signed_in_actors' => 0, 'without_actor' => 0]);
+    });
+
+    it('counts only the executions that started in the window', function () {
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['user' => '7', 'timestamp' => 1790690400.0]),
+            syntheticRecord(RecordType::REQUEST)->with(['user' => '', 'timestamp' => 1790690400.0]),
+            syntheticRecord(RecordType::REQUEST)->with(['user' => '8', 'timestamp' => 1790773200.0]),
+        ]);
+
+        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+
+        expect($envelope['result']['actors'])->toBe(['executions' => 1, 'signed_in_actors' => 1, 'without_actor' => 0]);
     });
 });
 
