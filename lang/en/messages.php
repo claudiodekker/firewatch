@@ -314,6 +314,10 @@ return [
 
     'actor_summary_without_person' => ':attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributed cannot be attributed.',
 
+    'actor_nothing_attributed_summary' => 'Nothing in this window is attributed to :person.',
+
+    'actor_nothing_attributed_summary_without_person' => 'Nothing in this window is attributed to the person identified.',
+
     'actor_nothing_attributed' => 'Nothing in this window is attributed to :person, among the :population executions that started in it.',
 
     'actor_no_executions' => 'No request, command, job attempt or scheduled task started in this window, so nothing can be attributed; the store holds :population records: widen the window or move it.',

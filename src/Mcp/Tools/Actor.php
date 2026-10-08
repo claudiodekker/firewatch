@@ -165,8 +165,14 @@ class Actor extends Tool
             return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
+        if ($attribution?->total() === 0) {
+            $empty = Emptiness::noExecutions($total);
+
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        }
+
         return new Answer(
-            ...$this->stated($who, $identification, $attribution, $window, $total),
+            ...$this->stated($who, $identification, $attribution, $window),
             tool: $this->name(),
             now: $epoch,
             timezone: $timezone,
@@ -200,7 +206,7 @@ class Actor extends Tool
      *
      * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: list<array{tool: string, arguments: array<string, mixed>, why: string}>, cuttable: list<string>|null}
      */
-    protected function stated(string $who, Identification $identification, ?Attribution $attribution, Window $window, int $records): array
+    protected function stated(string $who, Identification $identification, ?Attribution $attribution, Window $window): array
     {
         $decidedBy = $identification->matchedBy;
 
@@ -210,7 +216,7 @@ class Actor extends Tool
 
         return $attribution === null
             ? $this->ambiguous($who, $decidedBy, $identification)
-            : $this->identified($decidedBy, $identification, $attribution, $window, $records);
+            : $this->identified($decidedBy, $identification, $attribution, $window);
     }
 
     /**
@@ -218,24 +224,20 @@ class Actor extends Tool
      *
      * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: list<array{tool: string, arguments: array<string, mixed>, why: string}>, cuttable: list<string>}
      */
-    protected function identified(MatchedBy $decidedBy, Identification $identification, Attribution $attribution, Window $window, int $records): array
+    protected function identified(MatchedBy $decidedBy, Identification $identification, Attribution $attribution, Window $window): array
     {
         $person = $identification->found->rows[0];
         $name = Stored::blank($person['name']);
         $named = is_string($name) ? $name : $person['id'];
 
-        $empty = match (true) {
-            $attribution->total() === 0 => Emptiness::noExecutions($records),
-            $attribution->attributed() === 0 => Emptiness::nothingAttributed($named, $attribution->total()),
-            default => null,
-        };
+        $empty = $attribution->attributed() === 0 ? Emptiness::nothingAttributed($named, $attribution->total()) : null;
 
         $listed = count($attribution->executions->rows);
         $how = trans_choice('firewatch::messages.actor_executions_how', $listed, ['listed' => $listed]);
         $cut = $attribution->executions->truncation(section: 'executions', how: $how);
 
         return [
-            'summary' => $this->summary($named, $person['id'], $attribution),
+            'summary' => $empty === null ? $this->summary($named, $person['id'], $attribution) : $this->nothingAttributed($named, $person['id']),
             'empty' => $empty,
             'result' => [
                 'identity' => [
@@ -267,10 +269,28 @@ class Actor extends Tool
             'unattributed' => $attribution->unattributed(),
         ];
 
+        return $this->naming('actor_summary', $named, $id, $counts);
+    }
+
+    /**
+     * Get the summary of a person to whom nothing in the window is attributed, named as the attribution summary names them.
+     */
+    protected function nothingAttributed(string $named, string $id): string
+    {
+        return $this->naming('actor_nothing_attributed_summary', $named, $id);
+    }
+
+    /**
+     * Get the sentence of a key that names the person by name, else by id, else leaves them out through the key's sentence without a person, whichever first fits a summary whole.
+     *
+     * @param  array<string, int>  $replace
+     */
+    protected function naming(string $key, string $named, string $id, array $replace = []): string
+    {
         foreach (array_unique([$named, $id]) as $person) {
-            $summary = __('firewatch::messages.actor_summary', [
+            $summary = __("firewatch::messages.{$key}", [
                 'person' => $person,
-                ...$counts,
+                ...$replace,
             ]);
 
             if (mb_strlen($summary) <= Answer::SUMMARY_CHARACTERS) {
@@ -278,7 +298,7 @@ class Actor extends Tool
             }
         }
 
-        return __('firewatch::messages.actor_summary_without_person', $counts);
+        return __("firewatch::messages.{$key}_without_person", $replace);
     }
 
     /**
