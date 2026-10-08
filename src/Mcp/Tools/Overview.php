@@ -18,6 +18,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
+use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -160,7 +161,7 @@ class Overview extends Tool
             coverage: $coverage,
             blindSpots: $blindSpots,
             notes: $this->notes($sections, $window),
-            next: $this->next($judgements),
+            next: $this->next($window, $sections, $judgements),
         );
     }
 
@@ -228,23 +229,49 @@ class Overview extends Tool
     }
 
     /**
-     * Get the calls that list the findings of each shape that has some.
+     * Get the calls that follow, the first five: the findings of each shape that has some, the ranking of the slowest group's type, and the execution of the window that finished last.
      *
      * @param  list<Judgement>  $judgements
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(array $judgements): array
+    protected function next(Window $window, FixedSections $sections, array $judgements): array
     {
+        $bounds = $window->arguments();
         $calls = [];
 
         foreach ($judgements as $judgement) {
             if ($judgement->verdict === Verdict::FINDINGS) {
                 $calls[] = [
                     'tool' => 'detect',
-                    'arguments' => ['shape' => $judgement->detector->value],
+                    'arguments' => [
+                        'shape' => $judgement->detector->value,
+                        ...$bounds,
+                    ],
                     'why' => __('firewatch::messages.detect_next_shape'),
                 ];
             }
+        }
+
+        $slowest = $sections->slowestType();
+
+        if ($slowest !== null) {
+            $calls[] = [
+                'tool' => 'rank',
+                'arguments' => [
+                    'type' => $slowest->value,
+                    'by' => Measure::TOTAL_DURATION->value,
+                    ...$bounds,
+                ],
+                'why' => __('firewatch::messages.overview_next_rank', ['type' => $slowest->value]),
+            ];
+        }
+
+        if ($sections->latestExecution !== null) {
+            $calls[] = [
+                'tool' => 'execution',
+                'arguments' => ['execution_id' => $sections->latestExecution],
+                'why' => __('firewatch::messages.overview_next_execution'),
+            ];
         }
 
         return array_slice($calls, 0, Answer::LISTED);

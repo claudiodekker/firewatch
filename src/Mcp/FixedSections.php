@@ -35,6 +35,7 @@ class FixedSections
      * @param  list<array{type: string, records: int}>  $byType  the twelve types in catalogue order
      * @param  int  $userDirectory  the rows of the user directory, whatever the window
      * @param  array{executions: int, signed_in_actors: int, without_actor: int}  $actors  people and executions, never to be summed
+     * @param  string|null  $latestExecution  the id of the execution of the window that finished last, or null when none finished
      */
     protected function __construct(
         public readonly array $errorRate,
@@ -43,6 +44,7 @@ class FixedSections
         public readonly array $byType,
         public readonly int $userDirectory,
         public readonly array $actors,
+        public readonly ?string $latestExecution,
     ) {
         //
     }
@@ -58,6 +60,7 @@ class FixedSections
         $counts = self::countByType($connection, $window);
         $userDirectory = self::countUsers($connection);
         $actors = self::actors($connection, $window);
+        $latestExecution = self::latestExecution($connection, $window);
 
         $byType = array_map(fn (RecordType $type) => [
             'type' => $type->value,
@@ -71,6 +74,7 @@ class FixedSections
             byType: $byType,
             userDirectory: $userDirectory,
             actors: $actors,
+            latestExecution: $latestExecution,
         );
     }
 
@@ -240,6 +244,36 @@ class FixedSections
      */
     protected static function actors(SQLite3 $connection, Window $window): array
     {
+        [$types, $placeholders] = self::executionTypes();
+
+        /** @var array{executions: int, signed_in_actors: int, without_actor: int} */
+        return Stored::rows($connection, "SELECT count(*) AS executions,
+            count(DISTINCT NULLIF(user_id, '')) AS signed_in_actors,
+            count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS without_actor
+            FROM records WHERE type IN ({$placeholders}) AND {$window->condition()}", $types, $window)[0];
+    }
+
+    /**
+     * Read the id of the execution of the window that finished last, or null when none of them finished.
+     */
+    protected static function latestExecution(SQLite3 $connection, Window $window): ?string
+    {
+        [$types, $placeholders] = self::executionTypes();
+
+        $latest = Stored::rows($connection, "SELECT execution_id FROM records
+            WHERE type IN ({$placeholders}) AND {$window->condition()} AND ended_at IS NOT NULL AND execution_id IS NOT NULL
+            ORDER BY ended_at DESC, id DESC LIMIT 1", $types, $window);
+
+        return $latest[0]['execution_id'] ?? null;
+    }
+
+    /**
+     * Get the four execution types as bindings by name, and the placeholders that name them.
+     *
+     * @return array{array<string, string>, string}
+     */
+    protected static function executionTypes(): array
+    {
         $types = [];
 
         foreach (Executions::TYPES as $position => $type) {
@@ -248,11 +282,7 @@ class FixedSections
 
         $placeholders = implode(', ', array_map(fn (string $name) => ":{$name}", array_keys($types)));
 
-        /** @var array{executions: int, signed_in_actors: int, without_actor: int} */
-        return Stored::rows($connection, "SELECT count(*) AS executions,
-            count(DISTINCT NULLIF(user_id, '')) AS signed_in_actors,
-            count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS without_actor
-            FROM records WHERE type IN ({$placeholders}) AND {$window->condition()}", $types, $window)[0];
+        return [$types, $placeholders];
     }
 
     /**

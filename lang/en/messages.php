@@ -77,6 +77,10 @@ return [
 
     'overview_directory_unwindowed' => 'user_directory counts the whole store: a user has no start to window by.',
 
+    'overview_next_rank' => 'Rank every :type group by total time: this answer lists at most three groups of a type.',
+
+    'overview_next_execution' => 'Open the execution of the window that finished last, in full.',
+
     'overview_detectors_findings' => 'Findings: :shapes.',
 
     'overview_detectors_not_evaluated' => 'Not evaluated: :shapes.',

@@ -4,7 +4,9 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
+use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
@@ -718,6 +720,131 @@ describe('the actors', function () {
     });
 });
 
+describe('the next calls', function () {
+    /**
+     * Run a call an answer offers and get what it answers.
+     *
+     * @param  array{tool: string, arguments: array<string, mixed>, why: string}  $call
+     * @return array<string, mixed>
+     */
+    function ovwFollow(array $call): array
+    {
+        $tool = ['detect' => Detect::class, 'rank' => Rank::class, 'execution' => Execution::class][$call['tool']];
+
+        return Envelope::assert($tool, $call['arguments']);
+    }
+
+    /**
+     * Get the calls an overview offers once its shapes are listed: the ranking of a type, then the execution with the id.
+     *
+     * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
+     */
+    function ovwLadder(string $type, string $executionId): array
+    {
+        return [
+            ['tool' => 'rank', 'arguments' => ['type' => $type, 'by' => 'total_duration'], 'why' => __('firewatch::messages.overview_next_rank', ['type' => $type])],
+            ['tool' => 'execution', 'arguments' => ['execution_id' => $executionId], 'why' => __('firewatch::messages.overview_next_execution')],
+        ];
+    }
+
+    /**
+     * Get the detect call an overview offers for a shape with findings.
+     *
+     * @return array{tool: string, arguments: array<string, mixed>, why: string}
+     */
+    function ovwShapeCall(string $shape): array
+    {
+        return ['tool' => 'detect', 'arguments' => ['shape' => $shape], 'why' => __('firewatch::messages.detect_next_shape')];
+    }
+
+    it('offers the ranking of the type that tops the slowest list, then the latest execution, and both run', function () {
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 200, 'trace_id' => 'the-request']),
+            syntheticRecord(RecordType::QUERY)->with(['duration' => 5000]),
+        ]);
+        FakeDetector::ship(new FakeDetector(DetectorName::FAILING_ROUTES, examined: 1));
+
+        $envelope = Envelope::assert(Overview::class);
+
+        expect($envelope['next'])->toBe(ovwLadder('query', 'the-request'))
+            ->and(ovwFollow($envelope['next'][0])['result']['groups'][0])->toMatchArray(['group' => $envelope['result']['slowest_by_total_time'][0]['group'], 'total_ms' => $envelope['result']['slowest_by_total_time'][0]['total_ms']])
+            ->and(ovwFollow($envelope['next'][1])['result']['header']['type'])->toBe('request');
+    });
+
+    it('offers no ranking when no group has a duration, and no execution when the window holds none', function () {
+        ingest([syntheticRecord(RecordType::EXCEPTION), syntheticRecord(RecordType::LOG)]);
+        FakeDetector::ship(new FakeDetector(DetectorName::EXCEPTION_CLUSTERS, examined: 1));
+
+        expect(Envelope::assert(Overview::class)['next'])->toBe([]);
+    });
+
+    it('offers the execution of the window that finished last, and none when no execution of the window finished', function (array $arguments, ?string $offered) {
+        $this->travelTo('2026-09-30 14:00:00');
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['trace_id' => 'long', 'timestamp' => 1790773200.0, 'duration' => 90_000_000]),
+            syntheticRecord(RecordType::COMMAND)->with(['trace_id' => 'short', 'timestamp' => 1790773210.0, 'duration' => 1_000_000]),
+            syntheticRecord(RecordType::REQUEST)->with(['trace_id' => 'unfinished', 'timestamp' => 1790773220.0])->without('duration'),
+            syntheticRecord(RecordType::REQUEST)->with(['trace_id' => 'later', 'timestamp' => 1790776000.0, 'duration' => 1_000_000]),
+        ]);
+        FakeDetector::ship(new FakeDetector(DetectorName::FAILING_ROUTES, examined: 1));
+
+        $envelope = Envelope::assert(Overview::class, $arguments);
+        $calls = array_column(array_filter($envelope['next'], fn (array $call) => $call['tool'] === 'execution'), 'arguments');
+
+        expect($calls)->toBe($offered === null ? [] : [['execution_id' => $offered]]);
+
+        if ($offered !== null) {
+            expect(Envelope::assert(Execution::class, $calls[0])['result']['header']['execution_id'])->toBe($offered);
+        }
+    })->with([
+        'the whole store' => [[], 'later'],
+        'a window that ends before the latest execution' => [['until' => 1790773300], 'long'],
+        'a window that holds only the shorter one' => [['since' => 1790773205, 'until' => 1790773215], 'short'],
+        'a window whose only execution did not finish' => [['since' => 1790773215, 'until' => 1790773300], null],
+    ]);
+
+    it('offers calls over the instants its window resolved to, so they read the same window when they run later', function () {
+        $this->travelTo('2026-09-30 14:00:00');
+        ingest([syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'trace_id' => 'the-request', 'timestamp' => 1790773200.0])]);
+
+        $envelope = Envelope::assert(Overview::class, ['since' => '-2h', 'until' => '2026-09-30 14:00:00']);
+        $this->travel(3)->hours();
+        $answers = array_map(ovwFollow(...), $envelope['next']);
+
+        expect($envelope['next'])->toEqual([
+            ['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes', 'since' => 1790769600.0, 'until' => 1790776800.0], 'why' => __('firewatch::messages.detect_next_shape')],
+            ['tool' => 'rank', 'arguments' => ['type' => 'request', 'by' => 'total_duration', 'since' => 1790769600.0, 'until' => 1790776800.0], 'why' => __('firewatch::messages.overview_next_rank', ['type' => 'request'])],
+            ['tool' => 'execution', 'arguments' => ['execution_id' => 'the-request'], 'why' => __('firewatch::messages.overview_next_execution')],
+        ])
+            ->and(array_column($answers, 'empty'))->toBe([null, null, null])
+            ->and($answers[0]['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1])
+            ->and($answers[0]['window'])->toMatchArray(['since' => 1790769600.0, 'until' => 1790776800.0])
+            ->and($answers[1]['result']['groups'])->toHaveCount(1)
+            ->and($answers[2]['result']['header']['execution_id'])->toBe('the-request');
+    });
+
+    it('offers one bound when the window has one', function () {
+        $this->travelTo('2026-09-30 14:00:00');
+        ingest([syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'timestamp' => 1790773200.0])]);
+
+        $envelope = Envelope::assert(Overview::class, ['since' => '-2h']);
+
+        expect(array_map(array_keys(...), array_column($envelope['next'], 'arguments')))->toBe([['shape', 'since'], ['type', 'by', 'since'], ['execution_id']]);
+    });
+
+    it('offers the shapes with findings first and at most five calls', function (int $shapes, array $tools) {
+        ingest([syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000])]);
+        FakeDetector::ship(...array_map(fn (DetectorName $name) => new FakeDetector($name, examined: 1, total: 1), array_slice(DetectorName::cases(), 0, $shapes)));
+
+        expect(array_column(Envelope::assert(Overview::class)['next'], 'tool'))->toBe($tools);
+    })->with([
+        'three shapes' => [3, ['detect', 'detect', 'detect', 'rank', 'execution']],
+        'four shapes' => [4, ['detect', 'detect', 'detect', 'detect', 'rank']],
+        'five shapes' => [5, ['detect', 'detect', 'detect', 'detect', 'detect']],
+        'six shapes' => [6, ['detect', 'detect', 'detect', 'detect', 'detect']],
+    ]);
+});
+
 describe('the problem shapes', function () {
     /**
      * @return array<string, mixed>
@@ -795,16 +922,18 @@ describe('the problem shapes', function () {
 
         $envelope = Envelope::assert(Overview::class);
         $call = $envelope['next'][0];
+        $executionId = storeRows('SELECT execution_id FROM records')[0]['execution_id'];
 
-        expect($envelope['next'])->toHaveCount(1)
+        expect($envelope['next'])->toBe([ovwShapeCall('failing-routes'), ...ovwLadder('request', $executionId)])
             ->and($call)->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes'], 'why' => __('firewatch::messages.detect_next_shape')])
             ->and(Envelope::assert(Detect::class, $call['arguments'])['result']['verdict'])->toBe('findings');
     });
 
-    it('offers nothing to list when no shape has findings', function () {
+    it('offers no shape to list when no shape has findings', function () {
         ovwRequests(200);
+        $executionId = storeRows('SELECT execution_id FROM records')[0]['execution_id'];
 
-        expect(Envelope::assert(Overview::class)['next'])->toBe([]);
+        expect(Envelope::assert(Overview::class)['next'])->toBe(ovwLadder('request', $executionId));
     });
 
     it('lists the shapes with findings first, then the clean ones, then those not evaluated, in the order of the catalogue within each', function () {
@@ -822,7 +951,7 @@ describe('the problem shapes', function () {
 
         expect(array_column($envelope['result']['detectors'], 'detector'))->toBe(['failing-routes', 'failing-jobs', 'database-bound', 'failing-tasks', 'n-plus-one', 'memory'])
             ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (2), failing-jobs (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, memory']))
-            ->and(array_column($envelope['next'], 'arguments'))->toBe([['shape' => 'failing-routes'], ['shape' => 'failing-jobs']]);
+            ->and($envelope['next'])->toBe([ovwShapeCall('failing-routes'), ovwShapeCall('failing-jobs'), ...ovwLadder('request', storeRows('SELECT execution_id FROM records')[0]['execution_id'])]);
     });
 
     it('says there are no findings only when every shape is clean', function () {
