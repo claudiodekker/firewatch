@@ -318,7 +318,7 @@ return [
 
     'actor_no_executions' => 'No request, command, job attempt or scheduled task started in this window, so nothing can be attributed; the store holds :population records: widen the window or move it.',
 
-    'actor_executions_how' => 'The :listed newest attributed executions are listed; narrow `since` and `until` to see the others.',
+    'actor_executions_how' => 'The newest attributed execution is listed; narrow `since` and `until` to see the others.|The :listed newest attributed executions are listed; narrow `since` and `until` to see the others.',
 
     'actor_commands_note' => ':commands commands and :tasks scheduled tasks ran in this window and carry no actor; :inside of them are shown as inside work; what this person set off through the others is not shown.',
 

@@ -387,7 +387,7 @@ it('lists at most the limit of executions, and says how to see the rest when the
             'shown' => $listed,
             'matched' => null,
             'reason' => 'limit',
-            'how' => __('firewatch::messages.actor_executions_how', ['listed' => $listed]),
+            'how' => trans_choice('firewatch::messages.actor_executions_how', $listed, ['listed' => $listed]),
         ]] : []);
 })->with([
     'one of one' => [1, 1, 1],

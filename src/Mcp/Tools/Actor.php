@@ -230,7 +230,8 @@ class Actor extends Tool
             default => null,
         };
 
-        $how = __('firewatch::messages.actor_executions_how', ['listed' => count($attribution->executions->rows)]);
+        $listed = count($attribution->executions->rows);
+        $how = trans_choice('firewatch::messages.actor_executions_how', $listed, ['listed' => $listed]);
         $cut = $attribution->executions->truncation(section: 'executions', how: $how);
 
         return [
