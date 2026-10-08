@@ -450,7 +450,7 @@ return [
 
     'occurrences_baseline_withheld' => 'The :percentile baseline has :have records and needs :needed; no record was left out for being below it.',
 
-    'occurrences_user_only' => 'Filtered by the user recorded on each record only: a job attempt this user dispatched is left out unless it carries the user itself.',
+    'occurrences_user_only' => 'Filtered by recorded user only; use `actor` for dispatch and inside links.',
 
     'occurrences_next_group' => 'The group of the first row: how it compares with its peers.',
 
