@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use Illuminate\Filesystem\Filesystem;
 use Laravel\Mcp\Server\McpServiceProvider;
+use Laravel\Nightwatch\NightwatchServiceProvider;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -47,6 +48,20 @@ abstract class TestCase extends Orchestra
         putenv('FIREWATCH_RETENTION_AGE');
 
         (new Filesystem)->deleteDirectory($this->storeDirectory);
+
+        NightwatchServiceProvider::flushState();
+    }
+
+    /**
+     * Give every application the test creates a trace of its own, as each process of a real application has.
+     *
+     * Nightwatch keeps one trace for a whole process, so the applications of a test process would share theirs, and its requests one execution id.
+     */
+    protected function refreshApplication()
+    {
+        NightwatchServiceProvider::flushState();
+
+        parent::refreshApplication();
     }
 
     /**
