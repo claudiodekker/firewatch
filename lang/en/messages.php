@@ -310,6 +310,16 @@ return [
 
     'actor_window_reason' => 'a person is identified over the whole store',
 
+    'actor_identified_summary' => 'Identified :person at the :stage stage.',
+
+    'actor_ambiguous_summary' => '`:who` matches :count people at the :stage stage; repeat with an id.',
+
+    'actor_ambiguous_summary_without_who' => ':count people were found at the :stage stage; repeat with an id.',
+
+    'actor_ambiguous_note' => 'Several people match; repeat with an id.',
+
+    'actor_candidates_how' => 'The :listed candidates seen most recently are listed; repeat with an id, or with more of the name or username.',
+
     'actor_unknown' => 'Nobody was identified by `:who`, among the :population people in the user directory.',
 
     'actor_unknown_summary' => 'Nobody was identified by `:who`.',

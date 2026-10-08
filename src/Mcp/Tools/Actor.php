@@ -14,6 +14,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Identification;
 use ClaudioDekker\Firewatch\Mcp\Instant;
+use ClaudioDekker\Firewatch\Mcp\MatchedBy;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
@@ -150,7 +151,7 @@ class Actor extends Tool
         }
 
         return new Answer(
-            ...$this->unknown($who, $identification),
+            ...$this->stated($who, $identification),
             tool: $this->name(),
             now: $epoch,
             timezone: $timezone,
@@ -173,6 +174,97 @@ class Actor extends Tool
         $identification = Identification::of($connection, $who);
 
         return [$total, $span['oldest'], $span['newest'], $facts, $identification];
+    }
+
+    /**
+     * Get what an answer states for the state of the identification.
+     *
+     * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
+     */
+    protected function stated(string $who, Identification $identification): array
+    {
+        $decidedBy = $identification->matchedBy;
+
+        if ($decidedBy === null) {
+            return $this->unknown($who, $identification);
+        }
+
+        return $identification->isAmbiguous()
+            ? $this->ambiguous($who, $decidedBy, $identification)
+            : $this->identified($decidedBy, $identification);
+    }
+
+    /**
+     * Get what an answer states for the one person found.
+     *
+     * @return array{summary: string, empty: null, result: array<string, mixed>, notes: list<string>, truncated: array{}}
+     */
+    protected function identified(MatchedBy $decidedBy, Identification $identification): array
+    {
+        $person = $identification->found->rows[0];
+        $name = Stored::blank($person['name']);
+
+        return [
+            'summary' => __('firewatch::messages.actor_identified_summary', [
+                'person' => is_string($name) ? $name : $person['id'],
+                'stage' => $decidedBy->value,
+            ]),
+            'empty' => null,
+            'result' => [
+                'identity' => [
+                    'id' => $person['id'],
+                    'name' => $name,
+                    'username' => Stored::blank($person['username']),
+                    'first_seen_at' => $person['first_seen'],
+                    'last_seen_at' => $person['last_seen'],
+                    'matched_by' => $decidedBy->value,
+                ],
+            ],
+            'notes' => [],
+            'truncated' => [],
+        ];
+    }
+
+    /**
+     * Get what an answer states for the several people the deciding stage found, none of whom is chosen.
+     *
+     * @return array{summary: string, empty: null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
+     */
+    protected function ambiguous(string $who, MatchedBy $decidedBy, Identification $identification): array
+    {
+        $candidates = $identification->found;
+        $how = __('firewatch::messages.actor_candidates_how', ['listed' => count($candidates->rows)]);
+        $cut = $candidates->truncation(section: 'candidates', how: $how, matched: $identification->foundCount);
+
+        return [
+            'summary' => $this->ambiguousSummary($who, $decidedBy, $identification->foundCount),
+            'empty' => null,
+            'result' => [
+                'matched_by' => $decidedBy->value,
+                'candidate_count' => $identification->foundCount,
+                'candidates' => array_map($this->listed(...), $candidates->rows),
+            ],
+            'notes' => [__('firewatch::messages.actor_ambiguous_note')],
+            'truncated' => $cut === null ? [] : [$cut],
+        ];
+    }
+
+    /**
+     * Get the summary of several people, which names `who` unless the sentence would then be cut and lose how to go on.
+     */
+    protected function ambiguousSummary(string $who, MatchedBy $decidedBy, int $count): string
+    {
+        $found = [
+            'count' => $count,
+            'stage' => $decidedBy->value,
+        ];
+
+        $named = __('firewatch::messages.actor_ambiguous_summary', [
+            ...$found,
+            'who' => $who,
+        ]);
+
+        return mb_strlen($named) <= Answer::SUMMARY_CHARACTERS ? $named : __('firewatch::messages.actor_ambiguous_summary_without_who', $found);
     }
 
     /**

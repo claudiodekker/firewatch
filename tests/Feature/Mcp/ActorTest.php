@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\RecordType;
@@ -121,6 +122,20 @@ it('accepts a who of 255 characters, counted as characters and after the trim', 
     '255 characters inside non-breaking spaces' => ["\u{00A0}".str_repeat('a', 255)."\u{00A0}"],
 ]);
 
+it('trims the whitespace of any script around who before it identifies', function (string $who) {
+    ingest([actorUser('7', 'Taylor Otwell'), actorUser('8', 'Nuno Maduro')]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['result']['identity'])->toMatchArray(['id' => '7', 'matched_by' => 'name'])
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_identified_summary', ['person' => 'Taylor Otwell', 'stage' => 'name']));
+})->with([
+    'ASCII spaces and a newline' => ["  taylor otwell \n"],
+    'non-breaking spaces' => ["\u{00A0}taylor otwell\u{00A0}"],
+    'an ideographic space and an em space' => ["\u{3000}taylor otwell\u{2003}"],
+    'a line separator at the end' => ["taylor otwell\u{2028}"],
+]);
+
 it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $key) {
     $text = actorRefusal(['who' => 'taylor', $argument => 'now']);
 
@@ -161,6 +176,221 @@ it('refuses the arguments before it reads the store', function () {
     ]);
     Exceptions::assertNothingReported();
 });
+
+it('identifies a person, with when they were first and last seen and the stage that decided', function () {
+    ingest([actorUser('7', 'Taylor Otwell', 'taylor@example.com', offset: 10), actorUser('8', 'Nuno', 'nuno@example.com', offset: 20)]);
+    ingest([actorUser('7', 'Taylor Otwell', 'taylor@example.com', offset: 40), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '7'])]);
+
+    $envelope = actorAnswer('taylor@example.com');
+
+    expect($envelope)->toBe([
+        'tool' => 'actor',
+        'now' => ACTOR_AT + 3600,
+        'window' => ['windowed' => false, 'reason' => __('firewatch::messages.actor_window_reason')],
+        'summary' => __('firewatch::messages.actor_identified_summary', ['person' => 'Taylor Otwell', 'stage' => 'username']),
+        'empty' => null,
+        'result' => [
+            'identity' => ['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@example.com', 'first_seen_at' => ACTOR_AT + 10, 'last_seen_at' => ACTOR_AT + 40, 'matched_by' => 'username'],
+        ],
+        'coverage' => $envelope['coverage'],
+        'blind_spots' => $envelope['blind_spots'],
+        'notes' => [],
+        'truncated' => [],
+        'next' => [],
+    ])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
+        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+});
+
+it('identifies by each stage', function (string $who, string $stage) {
+    ingest([actorUser('7', 'Taylor Otwell', 'taylor@example.com'), actorUser('8', 'Nuno Maduro', 'nuno@example.com')]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['result']['identity'])->toMatchArray(['id' => '7', 'matched_by' => $stage])
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_identified_summary', ['person' => 'Taylor Otwell', 'stage' => $stage]));
+})->with([
+    'the id' => ['7', 'id'],
+    'the id inside padding' => ["  7\n", 'id'],
+    'the username' => ['taylor@example.com', 'username'],
+    'the username in another case' => ['Taylor@EXAMPLE.com', 'username'],
+    'the name' => ['Taylor Otwell', 'name'],
+    'the name in another case' => ['tAYLOR oTWELL', 'name'],
+    'a part of the name' => ['otw', 'contains'],
+    'a part of the name in another case' => ['OTW', 'contains'],
+    'a part of the username' => ['lor@exam', 'contains'],
+    'a part of the username in another case' => ['LOR@EXAM', 'contains'],
+]);
+
+it('lets the first stage that finds anyone decide, and tries no later one', function (array $first, array $later, string $who, string $stage) {
+    ingest([actorUser('first', ...$first, offset: 10), actorUser('later', ...$later, offset: 20)]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['result'])->toHaveKeys(['identity'])
+        ->and($envelope['result']['identity'])->toMatchArray(['id' => 'first', 'matched_by' => $stage]);
+})->with([
+    'the id over a username' => [['name' => 'One'], ['name' => 'Two', 'username' => 'first'], 'first', 'id'],
+    'the username over a name' => [['name' => 'One', 'username' => 'sam'], ['name' => 'Sam'], 'sam', 'username'],
+    'the name over a part of a name' => [['name' => 'Sam'], ['name' => 'Samuel'], 'sam', 'name'],
+    'the name over a part of a username' => [['name' => 'Sam'], ['name' => 'Two', 'username' => 'sam@example.com'], 'sam', 'name'],
+]);
+
+it('matches an id exactly, and a number that is no id as a username', function (string $who, string $id, string $stage) {
+    ingest([actorUser('ABC', 'One', 'one'), actorUser('9', 'Two', 'abc'), actorUser('10', 'Three', '42')]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['result']['identity'])->toMatchArray(['id' => $id, 'matched_by' => $stage]);
+})->with([
+    'the id as stored' => ['ABC', 'ABC', 'id'],
+    'the id in another case' => ['abc', '9', 'username'],
+    'a number' => ['42', '10', 'username'],
+]);
+
+it('folds the case of ASCII letters only', function (string $who, ?string $stage) {
+    ingest([actorUser('7', 'Émile Zola', 'Émile@example.com')]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['empty']['kind'] ?? null)->toBe($stage === null ? 'no_match' : null)
+        ->and($envelope['result']['identity']['matched_by'] ?? null)->toBe($stage);
+})->with([
+    'the name as stored' => ['Émile Zola', 'name'],
+    'the name with its ASCII letters in another case' => ['ÉMILE zOLA', 'name'],
+    'the name with the accented letter in another case' => ['émile Zola', null],
+    'the username as stored' => ['Émile@example.com', 'username'],
+    'the username with the accented letter in another case' => ['émile@example.com', null],
+    'a part as stored' => ['Émi', 'contains'],
+    'a part with the accented letter in another case' => ['émi', null],
+]);
+
+it('reads the wildcards and the escape character of who as plain characters', function (string $who, string $literal, string $wild) {
+    ingest([actorUser('literal', $literal, offset: 10), actorUser('wild', $wild, offset: 20), actorUser('by-username', 'Three', $literal, offset: 5)]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['result'])->toBe([
+        'matched_by' => 'contains',
+        'candidate_count' => 2,
+        'candidates' => [actorRow('literal', $literal, null, 10), actorRow('by-username', 'Three', $literal, 5)],
+    ]);
+})->with([
+    'a percent sign' => ['0%', '100% Real', '100 Real'],
+    'a percent sign alone' => ['%', '100% Real', 'Plain'],
+    'an underscore' => ['a_b', 'xa_bx', 'xacbx'],
+    'an underscore alone' => ['_', 'xa_bx', 'Plain'],
+    'a backslash' => ['k\\s', 'back\\slash', 'backslash'],
+    'a backslash alone' => ['\\', 'back\\slash', 'Plain'],
+    'a backslash before a wildcard' => ['\\%', 'a\\%b', 'a\\xb'],
+]);
+
+it('identifies a person stored without a name or a username by the id only', function (RecordBuilder $user) {
+    ingest([$user, actorUser('8', 'null', 'null')]);
+
+    $envelope = actorAnswer('42');
+
+    expect($envelope['result']['identity'])->toBe(['id' => '42', 'name' => null, 'username' => null, 'first_seen_at' => ACTOR_AT, 'last_seen_at' => ACTOR_AT, 'matched_by' => 'id'])
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_identified_summary', ['person' => '42', 'stage' => 'id']));
+})->with([
+    'blank on the wire' => [fn () => actorUser('42')],
+    'absent from the wire' => [fn () => actorUser('42')->without('name', 'username')],
+]);
+
+it('identifies a person whose records are all gone', function () {
+    ingest([actorUser('7', 'Taylor', 'taylor@example.com')]);
+
+    $envelope = actorAnswer('taylor');
+
+    expect($envelope['empty'])->toBeNull()
+        ->and($envelope['result']['identity'])->toMatchArray(['id' => '7', 'matched_by' => 'name'])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0]);
+});
+
+it('lists everyone the deciding stage found when it found several, and guesses no one', function () {
+    ingest([
+        actorUser('7', 'Sam', 'sam@example.com', offset: 10),
+        actorUser('8', 'sam', 'sam@example.org', offset: 30),
+        actorUser('9', 'Samuel', offset: 50),
+        syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '7']),
+    ]);
+
+    $envelope = actorAnswer('SAM');
+
+    expect($envelope)->toBe([
+        'tool' => 'actor',
+        'now' => ACTOR_AT + 3600,
+        'window' => ['windowed' => false, 'reason' => __('firewatch::messages.actor_window_reason')],
+        'summary' => __('firewatch::messages.actor_ambiguous_summary', ['who' => 'SAM', 'count' => 2, 'stage' => 'name']),
+        'empty' => null,
+        'result' => [
+            'matched_by' => 'name',
+            'candidate_count' => 2,
+            'candidates' => [actorRow('8', 'sam', 'sam@example.org', 30), actorRow('7', 'Sam', 'sam@example.com', 10)],
+        ],
+        'coverage' => $envelope['coverage'],
+        'blind_spots' => $envelope['blind_spots'],
+        'notes' => [__('firewatch::messages.actor_ambiguous_note')],
+        'truncated' => [],
+        'next' => [],
+    ])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1])
+        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+});
+
+it('finds several people at the username stage when their usernames differ only in case', function () {
+    ingest([actorUser('7', 'One', 'Sam'), actorUser('8', 'Two', 'sam'), actorUser('9', 'sam')]);
+
+    $envelope = actorAnswer('sAM');
+
+    expect($envelope['result'])->toBe([
+        'matched_by' => 'username',
+        'candidate_count' => 2,
+        'candidates' => [actorRow('7', 'One', 'Sam', 0), actorRow('8', 'Two', 'sam', 0)],
+    ]);
+});
+
+it('lists ten candidates, newest sighting first, and says how many there are when there are more', function (int $people, array $listed, bool $cut) {
+    ingest(array_map(fn (int $number) => actorUser("user-{$number}", "Sam {$number}", offset: $number), range(1, $people)));
+
+    $envelope = actorAnswer('sam');
+
+    expect(array_column($envelope['result']['candidates'], 'id'))->toBe($listed)
+        ->and($envelope['result']['matched_by'])->toBe('contains')
+        ->and($envelope['result']['candidate_count'])->toBe($people)
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_ambiguous_summary', ['who' => 'sam', 'count' => $people, 'stage' => 'contains']))
+        ->and($envelope['truncated'])->toBe($cut ? [['section' => 'candidates', 'shown' => 10, 'matched' => $people, 'reason' => 'limit', 'how' => __('firewatch::messages.actor_candidates_how', ['listed' => 10])]] : []);
+})->with([
+    'ten' => [10, ['user-10', 'user-9', 'user-8', 'user-7', 'user-6', 'user-5', 'user-4', 'user-3', 'user-2', 'user-1'], false],
+    'eleven' => [11, ['user-11', 'user-10', 'user-9', 'user-8', 'user-7', 'user-6', 'user-5', 'user-4', 'user-3', 'user-2'], true],
+    'twelve' => [12, ['user-12', 'user-11', 'user-10', 'user-9', 'user-8', 'user-7', 'user-6', 'user-5', 'user-4', 'user-3'], true],
+]);
+
+it('says in markdown how to see past the ten candidates', function () {
+    ingest(array_map(fn (int $number) => actorUser("user-{$number}", "Sam {$number}", offset: $number), range(1, 11)));
+
+    $response = FirewatchServer::tool(Actor::class, ['who' => 'sam']);
+    $markdown = (fn () => $this->content())->call($response)[0];
+
+    expect(explode("\n", $markdown))->toContain(__('firewatch::messages.truncated', ['section' => 'candidates', 'shown' => 10, 'matched' => 11, 'reason' => 'limit', 'how' => __('firewatch::messages.actor_candidates_how', ['listed' => 10])]));
+});
+
+it('leaves who out of the summary of several people when the sentence with it would be cut', function (int $over, bool $named) {
+    $room = Answer::SUMMARY_CHARACTERS - mb_strlen(__('firewatch::messages.actor_ambiguous_summary', ['who' => '', 'count' => 2, 'stage' => 'name']));
+    $who = str_repeat('a', $room + $over);
+    ingest([actorUser('7', $who), actorUser('8', $who)]);
+
+    $envelope = actorAnswer($who);
+
+    expect($envelope['summary'])->toBe($named
+        ? __('firewatch::messages.actor_ambiguous_summary', ['who' => $who, 'count' => 2, 'stage' => 'name'])
+        : __('firewatch::messages.actor_ambiguous_summary_without_who', ['count' => 2, 'stage' => 'name']))
+        ->and(mb_strlen($envelope['summary']))->toBe($named ? Answer::SUMMARY_CHARACTERS : mb_strlen(__('firewatch::messages.actor_ambiguous_summary_without_who', ['count' => 2, 'stage' => 'name'])))
+        ->and($envelope['result']['candidate_count'])->toBe(2);
+})->with([
+    'a sentence of exactly the most characters' => [0, true],
+    'one character more' => [1, false],
+]);
 
 it('answers that nobody was identified, with the people the directory holds, newest sighting first', function () {
     ingest([
