@@ -406,6 +406,18 @@ _Avoid_: Significance test, tolerance
 A change for a group present on both sides whose before value is 0 and after value is above 0.
 _Avoid_: New, infinite change
 
+**Side**:
+One of the two parts a split point divides a compared window into, before or after, each clipped to the type's coverage start and stating its records and observed span.
+_Avoid_: Half, bucket, period
+
+**Noise floor**:
+The absolute change a measure must exceed to count as moved under the change rule: 1 ms for durations, 2 MiB for memory, 1 for counts.
+_Avoid_: Threshold, tolerance
+
+**Step-down**:
+Comparing a group by its median instead of its 95th percentile because either side has fewer than 20 records, stated as measured on p50; never down to the maximum.
+_Avoid_: Fallback, downgrade
+
 **Observed span**:
 The time from the first to the last start among a side's selected records, unknown below two records.
 _Avoid_: Window length, duration of the side
