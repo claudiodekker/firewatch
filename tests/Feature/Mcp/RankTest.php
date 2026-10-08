@@ -753,6 +753,19 @@ it('points from a ranking to the breakdown of its worst group, in a call that ru
         ->and($breakdown['result']['deploys'])->toHaveCount(1);
 });
 
+it('points to the breakdown over the instants its window resolved to, so it reads the same window when it runs later', function () {
+    $this->travelTo(Date::createFromTimestamp(RANK_AT + 60));
+    ingest([rankRecord(RecordType::REQUEST, 'a', 10, ['deploy' => 'v1'])]);
+
+    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'since' => '-2h', 'until' => 'now']);
+    $this->travel(3)->hours();
+    $breakdown = Envelope::assert(Rank::class, $envelope['next'][0]['arguments']);
+
+    expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => rankHash('a'), 'since' => RANK_AT - 7140, 'until' => RANK_AT + 60], 'why' => __('firewatch::messages.rank_next_group')]])
+        ->and($breakdown['empty'])->toBeNull()
+        ->and(array_column($breakdown['result']['deploys'], 'deploy'))->toBe(['v1']);
+});
+
 it('ranks a group holding a record whose duration is not a number by the records that have one', function () {
     ingest([
         ...rankGroup(RecordType::REQUEST, 'a', [10, 20]),

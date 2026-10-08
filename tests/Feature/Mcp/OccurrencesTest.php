@@ -12,6 +12,7 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
+use Illuminate\Support\Facades\Date;
 
 const OCC_AT = 1790776000.0;
 
@@ -660,6 +661,18 @@ it('points from a list to the group of its first row, in a call that runs', func
     $ranked = Envelope::assert(Rank::class, $envelope['next'][0]['arguments']);
 
     expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => occHash('a')], 'why' => __('firewatch::messages.occurrences_next_group')]])
+        ->and($ranked['empty'])->toBeNull();
+});
+
+it('points to the group over the instants its window resolved to, so the call reads the same window when it runs later', function () {
+    $this->travelTo(Date::createFromTimestamp(OCC_AT + 60));
+    ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a')])]);
+
+    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'since' => '-2h']);
+    $this->travel(3)->hours();
+    $ranked = Envelope::assert(Rank::class, $envelope['next'][0]['arguments']);
+
+    expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => occHash('a'), 'since' => OCC_AT - 7140], 'why' => __('firewatch::messages.occurrences_next_group')]])
         ->and($ranked['empty'])->toBeNull();
 });
 

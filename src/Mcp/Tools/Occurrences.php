@@ -331,7 +331,7 @@ class Occurrences extends Tool
             blindSpots: $blindSpots,
             notes: $this->notes($read['baseline'], $userId),
             truncated: $truncated,
-            next: $this->next($group, $listed['rows'][0]['group']),
+            next: $this->next($window, $group, $listed['rows'][0]['group']),
         );
     }
 
@@ -387,7 +387,7 @@ class Occurrences extends Tool
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(?string $group, ?string $first): array
+    protected function next(Window $window, ?string $group, ?string $first): array
     {
         if ($group !== null || $first === null) {
             return [];
@@ -395,7 +395,10 @@ class Occurrences extends Tool
 
         return [[
             'tool' => 'rank',
-            'arguments' => ['group' => $first],
+            'arguments' => [
+                'group' => $first,
+                ...$window->arguments(),
+            ],
             'why' => __('firewatch::messages.occurrences_next_group'),
         ]];
     }

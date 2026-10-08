@@ -199,7 +199,7 @@ class Detect extends Tool
                 result: ['detectors' => array_map(fn (Judgement $judgement) => $judgement->toArray(), $judgements)],
                 coverage: $coverage,
                 blindSpots: $blindSpots,
-                next: $this->shapesNext($judgements),
+                next: $this->shapesNext($window, $judgements),
             );
         }
 
@@ -217,7 +217,7 @@ class Detect extends Tool
             coverage: $coverage,
             blindSpots: $blindSpots,
             truncated: $cut ? [$this->truncation($shape, $judgement)] : [],
-            next: $judgement->reason === Reason::STORE_UNAVAILABLE ? [] : $this->next($shape, $judgement),
+            next: $judgement->reason === Reason::STORE_UNAVAILABLE ? [] : $this->next($window, $shape, $judgement),
         );
     }
 
@@ -294,8 +294,9 @@ class Detect extends Tool
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(Detector $shape, Judgement $judgement): array
+    protected function next(Window $window, Detector $shape, Judgement $judgement): array
     {
+        $bounds = $window->arguments();
         $calls = [];
 
         foreach ($judgement->findings as $position => $finding) {
@@ -312,16 +313,27 @@ class Detect extends Tool
             if ($position === 0 && $finding['group'] !== null) {
                 $calls[] = [
                     'tool' => 'occurrences',
-                    'arguments' => ['group' => $finding['group']],
+                    'arguments' => [
+                        'group' => $finding['group'],
+                        ...$bounds,
+                    ],
                     'why' => __('firewatch::messages.detect_next_occurrences'),
                 ];
                 $calls[] = [
                     'tool' => 'rank',
-                    'arguments' => ['group' => $finding['group']],
+                    'arguments' => [
+                        'group' => $finding['group'],
+                        ...$bounds,
+                    ],
                     'why' => __('firewatch::messages.detect_next_rank'),
                 ];
             } elseif ($position === 0 && $shape instanceof Ungrouped) {
-                $calls[] = $shape->occurrencesOf($finding);
+                $listing = $shape->occurrencesOf($finding);
+
+                $calls[] = [
+                    ...$listing,
+                    'arguments' => [...$listing['arguments'], ...$bounds],
+                ];
             }
         }
 
@@ -334,15 +346,19 @@ class Detect extends Tool
      * @param  list<Judgement>  $judgements
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function shapesNext(array $judgements): array
+    protected function shapesNext(Window $window, array $judgements): array
     {
+        $bounds = $window->arguments();
         $calls = [];
 
         foreach ($judgements as $judgement) {
             if ($judgement->verdict === Verdict::FINDINGS) {
                 $calls[] = [
                     'tool' => $this->name(),
-                    'arguments' => ['shape' => $judgement->detector->value],
+                    'arguments' => [
+                        'shape' => $judgement->detector->value,
+                        ...$bounds,
+                    ],
                     'why' => __('firewatch::messages.detect_next_shape'),
                 ];
             }
