@@ -10,6 +10,7 @@ cd "$root"
 usage() {
   cat >&2 <<'EOF'
 usage: app.sh start [port]               create a run with its own store, database and queue, and serve the workbench
+       app.sh restart <run>              serve the run's workbench again, keeping its store, with the variables given now
        app.sh doctor <run>               is this run's server ours and up, and does Firewatch boot against the run's store?
        app.sh get <run> <path>           send GET <path> to the run and wait for Firewatch to store it
        app.sh artisan <run> ...          run a testbench (artisan) command against the run
@@ -105,9 +106,8 @@ doctor() {
   [ "$ok" = 1 ]
 }
 
-stop() {
-  local run="$1" dir server listener pid
-  dir="$(run_dir "$run")"
+halt() {
+  local run="$1" server listener pid
   server="$(server_of "$run")"
   listener="$(listener_of "$run")"
   # On SIGTERM testbench deletes the skeleton's .env and testbench.yaml, which another run or composer serve may be serving from.
@@ -116,7 +116,24 @@ stop() {
     serving "$run" "$listener" || break
     sleep 0.25
   done
-  if serving "$run" "$listener"; then echo "the server of $run would not stop; left $dir in place" >&2; exit 1; fi
+  if serving "$run" "$listener"; then echo "the server of $run would not stop; left $runs/$run in place" >&2; exit 1; fi
+}
+
+serve() {
+  local run="$1"
+  php vendor/bin/testbench serve --port="$(cat "$runs/$run/port")" --no-reload >> "$evidence/$run/server.log" 2>&1 &
+  echo $! > "$runs/$run/server.pid"
+  for _ in $(seq 1 40); do
+    [ -n "$(listener_of "$run")" ] && break
+    [ -n "$(server_of "$run")" ] || break
+    sleep 0.25
+  done
+}
+
+stop() {
+  local run="$1" dir
+  dir="$(run_dir "$run")"
+  halt "$run"
   mkdir -p "$evidence/$run"
   if [ -f "$dir/app.sqlite" ]; then cp "$dir/app.sqlite" "$evidence/$run/"; fi
   if [ -d "$dir/store" ]; then cp -R "$dir/store" "$evidence/$run/"; fi
@@ -148,19 +165,20 @@ case "$cmd" in
     trap '[ "$started" = 1 ] || { stop "$run" >/dev/null; echo "start failed, see $logs" >&2; }' EXIT
 
     migrate_unrecorded > "$logs/migrate.log" 2>&1
-
-    php vendor/bin/testbench serve --port="$port" --no-reload > "$logs/server.log" 2>&1 &
-    echo $! > "$dir/server.pid"
-
-    for _ in $(seq 1 40); do
-      [ -n "$(listener_of "$run")" ] && break
-      [ -n "$(server_of "$run")" ] || break
-      sleep 0.25
-    done
+    serve "$run"
 
     doctor "$run" > "$logs/doctor.log"
     started=1
     echo "run=$run url=$APP_URL evidence=$logs"
+    ;;
+
+  restart)
+    run="${1:?run id}"
+    run_env "$run"
+    halt "$run"
+    serve "$run"
+    doctor "$run" >> "$evidence/$run/doctor.log" || { echo "restart failed, see $evidence/$run" >&2; exit 1; }
+    echo "run=$run url=$APP_URL evidence=$evidence/$run"
     ;;
 
   doctor)

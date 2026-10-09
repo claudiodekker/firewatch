@@ -9,16 +9,11 @@ use SQLite3;
 /**
  * @internal
  *
- * @phpstan-type Side array{since: float|null, until: float|null, clipped: bool, outside: bool, empty: bool, records: int, first: float|null, last: float|null}
+ * @phpstan-type Side array{deploy: string|null, since: float|null, until: float|null, clipped: bool, outside: bool, empty: bool, records: int, first: float|null, last: float|null, earlier: array{records: int, more: bool}|null}
  * @phpstan-type Row array{hash: string, label: mixed, method: mixed, beforeRecords: int, afterRecords: int, before: int|float|null, after: int|float|null, change: Change, steppedDown: bool, reason: ComparisonReason|null, have: int|null, needed: int|null}
  */
 class Comparison
 {
-    /**
-     * How long before the split an execution may have started to be counted as straddling it, in seconds.
-     */
-    protected const STRADDLING_SECONDS = 3600;
-
     /**
      * The most deploys an answer with an empty side lists.
      */
@@ -28,6 +23,14 @@ class Comparison
      * The most records that started before the coverage start an answer counts.
      */
     protected const EARLIER_COUNTED = 100;
+
+    /**
+     * The count of a side that counts the records before the coverage start, until it reads them.
+     */
+    protected const NONE_EARLIER = [
+        'records' => 0,
+        'more' => false,
+    ];
 
     /**
      * The most times longer one side's observed span may be than the other's for a volume measure to be judged.
@@ -56,10 +59,11 @@ class Comparison
      * @param  Side  $after
      * @param  Rows<Row>  $groups  in the order of the answer
      * @param  array<string, int>  $changes  every group's change counted, by its value, over the groups shown and cut
-     * @param  array{records: int, more: bool}  $earlier  the records of the type that started before the coverage start the before side begins at, counted up to a cap, and whether there are more
+     * @param  array{ComparisonReason, string}|null  $unevaluated
      * @param  Rows<array{deploy: string, records: int, first_at: float}>|null  $deploys  the deploys of the window, listed only when a side is empty
      */
     protected function __construct(
+        public readonly Boundary $boundary,
         public readonly RecordType $type,
         public readonly Measure $by,
         public readonly array $before,
@@ -67,39 +71,37 @@ class Comparison
         public readonly Rows $groups,
         public readonly array $changes,
         public readonly ?int $straddling,
-        public readonly array $earlier,
+        protected readonly ?array $unevaluated,
         public readonly ?Rows $deploys,
     ) {
         //
     }
 
     /**
-     * Compare the groups of the type before and after the split of the window, in the snapshot of the connection.
+     * Compare the groups of the type on the two sides of the boundary, a split of the window or a deploy pair, in the snapshot of the connection.
      */
-    public static function of(SQLite3 $connection, RecordType $type, Measure $by, Window $window, float $split, ?float $coverageStart, ?string $group, int $limit): self
+    public static function of(SQLite3 $connection, RecordType $type, Measure $by, Window $window, Boundary $boundary, ?float $coverageStart, ?string $group, int $limit): self
     {
-        $before = self::side(since: $window->since(), until: $split, coverageStart: $coverageStart);
-        $after = self::side(since: $split, until: $window->until(), coverageStart: $coverageStart);
+        [$before, $after] = $boundary->sides($window, $coverageStart);
 
         $beforeOfType = self::statistics($connection, $type, $by, $before, $window->timezone());
         $afterOfType = self::statistics($connection, $type, $by, $after, $window->timezone());
         $beforeGroups = self::selected($beforeOfType, $group);
         $afterGroups = self::selected($afterOfType, $group);
 
-        $before = self::counted($before, $beforeOfType, $beforeGroups);
-        $after = self::counted($after, $afterOfType, $afterGroups);
+        $before = self::earlier($connection, $type, self::counted($before, $beforeOfType, $beforeGroups), $coverageStart);
+        $after = self::earlier($connection, $type, self::counted($after, $afterOfType, $afterGroups), $coverageStart);
 
         $evaluated = ! $before['empty'] && ! $after['empty'] && ! $before['outside'] && ! $after['outside'];
         $rows = $evaluated ? self::rows($by, $beforeGroups, $afterGroups, self::likeSpans($before, $after)) : [];
         $changes = array_count_values(array_map(fn (array $row) => $row['change']->value, $rows));
 
-        $straddling = self::straddling($connection, $type, $before, $split, $group);
-        $oneSideEmpty = ! $before['outside'] && ! $after['outside'] && $before['empty'] !== $after['empty'];
-        $deploys = $oneSideEmpty ? self::deploys($connection, $type, Window::between($before['since'], $after['until'], $window->timezone()), $group) : null;
+        $straddling = $boundary->straddling($connection, $type, $before, $group);
+        $sides = Window::between($before['since'], $after['until'], $window->timezone());
+        $unevaluated = self::unevaluatedOn($connection, $type, $before, $after, $sides);
+        $deploys = $unevaluated !== null && $unevaluated[0] === ComparisonReason::EMPTY_SIDE ? self::deploys($connection, $type, $sides, $group) : null;
 
-        $earlier = self::earlier($connection, $type, $before, $coverageStart);
-
-        return new self($type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $earlier, $deploys);
+        return new self($boundary, $type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $unevaluated, $deploys);
     }
 
     /**
@@ -109,26 +111,15 @@ class Comparison
      */
     public function unevaluated(): ?array
     {
-        return match (true) {
-            $this->before['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'before'],
-            $this->after['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'after'],
-            $this->isEmpty() => null,
-            $this->before['empty'] => [ComparisonReason::EMPTY_SIDE, 'before'],
-            $this->after['empty'] => [ComparisonReason::EMPTY_SIDE, 'after'],
-            default => null,
-        };
+        return $this->unevaluated;
     }
 
     /**
-     * Determine if nothing matched: neither side holds a record of the type, or the one group asked for has none in a window whose sides both do.
+     * Determine if nothing matched: the window of the sides holds no record of the type, or the one group asked for has none in a window whose sides both hold the type.
      */
     public function isEmpty(): bool
     {
-        if ($this->before['outside'] || $this->after['outside']) {
-            return false;
-        }
-
-        return $this->before['empty'] === $this->after['empty'] && $this->changes === [];
+        return $this->unevaluated === null && $this->changes === [];
     }
 
     /**
@@ -145,6 +136,27 @@ class Comparison
     public function first(): ?string
     {
         return $this->groups->rows[0]['hash'] ?? null;
+    }
+
+    /**
+     * Get the deploys of the sides on which the group of the first row has records, in side order, none on a split.
+     *
+     * @return list<string>
+     */
+    public function firstDeploys(): array
+    {
+        $row = $this->groups->rows[0] ?? null;
+        $deploys = [];
+
+        if ($row !== null && $row['beforeRecords'] > 0 && $this->before['deploy'] !== null) {
+            $deploys[] = $this->before['deploy'];
+        }
+
+        if ($row !== null && $row['afterRecords'] > 0 && $this->after['deploy'] !== null) {
+            $deploys[] = $this->after['deploy'];
+        }
+
+        return $deploys;
     }
 
     /**
@@ -172,11 +184,7 @@ class Comparison
             'change' => $reason === null ? null : Change::NOT_EVALUATED->value,
             'reason' => $reason?->value,
             'side' => $side,
-            'before' => [
-                ...$this->sideResult($this->before),
-                'earlier_records' => $this->earlier['records'],
-                'earlier_more' => $this->earlier['more'],
-            ],
+            'before' => $this->sideResult($this->before),
             'after' => $this->sideResult($this->after),
             'rollup' => $reason === null ? $this->rollup() : null,
             'groups' => array_map($this->rowResult(...), $this->groups->rows),
@@ -219,21 +227,28 @@ class Comparison
     }
 
     /**
-     * Get a side as the answer states it.
+     * Get a side as the answer states it, led by its deploy on a deploy pair, and closed by the records that started before the coverage start where it counts them.
      *
      * @param  Side  $side
-     * @return array{since_at: float|null, until_at: float|null, clipped: bool, records: int, observed_span_ms: float|null}
+     * @return array{deploy?: string, since_at: float|null, until_at: float|null, clipped: bool, records: int, observed_span_ms: float|null, earlier_records?: int, earlier_more?: bool}
      */
     protected function sideResult(array $side): array
     {
         $span = self::span($side);
+        $deploy = $side['deploy'] === null ? [] : ['deploy' => $side['deploy']];
+        $earlier = $side['earlier'] === null ? [] : [
+            'earlier_records' => $side['earlier']['records'],
+            'earlier_more' => $side['earlier']['more'],
+        ];
 
         return [
+            ...$deploy,
             'since_at' => $side['since'],
             'until_at' => $side['until'],
             'clipped' => $side['clipped'],
             'records' => $side['records'],
             'observed_span_ms' => Stored::milliseconds($span),
+            ...$earlier,
         ];
     }
 
@@ -299,16 +314,17 @@ class Comparison
     }
 
     /**
-     * Get a side of the split clipped to the type's coverage start, and whether nothing of it is left.
+     * Get a side clipped to the type's coverage start, whether nothing of it is left, and whether it counts the records that started before that start.
      *
      * @return Side
      */
-    protected static function side(?float $since, ?float $until, ?float $coverageStart): array
+    public static function side(?float $since, ?float $until, ?string $deploy, ?float $coverageStart, bool $countsEarlier): array
     {
         $clipped = $coverageStart !== null && ($since === null || $since < $coverageStart);
         $start = $clipped ? $coverageStart : $since;
 
         return [
+            'deploy' => $deploy,
             'since' => $start,
             'until' => $until,
             'clipped' => $clipped,
@@ -317,11 +333,41 @@ class Comparison
             'records' => 0,
             'first' => null,
             'last' => null,
+            'earlier' => $countsEarlier ? self::NONE_EARLIER : null,
         ];
     }
 
     /**
-     * Read the statistics of every group of the type on one side.
+     * Get why a comparison of the sides cannot run, and the side, or both, it cannot run on: a side outside coverage, or a side with no record of the type while the window of the sides holds some.
+     *
+     * @param  Side  $before
+     * @param  Side  $after
+     * @return array{ComparisonReason, string}|null
+     */
+    protected static function unevaluatedOn(SQLite3 $connection, RecordType $type, array $before, array $after, Window $sides): ?array
+    {
+        return match (true) {
+            $before['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'before'],
+            $after['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'after'],
+            $before['empty'] && $after['empty'] => self::holds($connection, $type, $sides) ? [ComparisonReason::EMPTY_SIDE, 'both'] : null,
+            $before['empty'] => [ComparisonReason::EMPTY_SIDE, 'before'],
+            $after['empty'] => [ComparisonReason::EMPTY_SIDE, 'after'],
+            default => null,
+        };
+    }
+
+    /**
+     * Determine if the window holds a record of the type, which two sides of a split that are both empty never do and two deploys may.
+     */
+    protected static function holds(SQLite3 $connection, RecordType $type, Window $window): bool
+    {
+        $rows = Stored::rows($connection, 'SELECT EXISTS (SELECT 1 FROM '.$type->view().' WHERE '.$window->condition().') AS held', [], $window);
+
+        return $rows[0]['held'] === 1;
+    }
+
+    /**
+     * Read the statistics of every group of the type on one side, of its deploy alone on a deploy pair.
      *
      * @param  Side  $side
      * @return array<string, array<string, mixed>>
@@ -332,7 +378,7 @@ class Comparison
             return [];
         }
 
-        $ranking = new Ranking($type, $by, Window::between($side['since'], $side['until'], $timezone), deploy: null);
+        $ranking = new Ranking($type, $by, Window::between($side['since'], $side['until'], $timezone), deploy: $side['deploy']);
 
         return $ranking->statistics($connection);
     }
@@ -596,52 +642,29 @@ class Comparison
     }
 
     /**
-     * Count the executions of the type that started in the hour before the split, on the before side, and ended after it, or get null for a type that is no execution.
+     * Get a side that counts them with the records of the type, of its deploy alone on a deploy pair, that started before the coverage start it begins at, which it leaves out, up to a cap.
      *
-     * @param  Side  $before
+     * @param  Side  $side
+     * @return Side
      */
-    protected static function straddling(SQLite3 $connection, RecordType $type, array $before, float $split, ?string $group): ?int
+    protected static function earlier(SQLite3 $connection, RecordType $type, array $side, ?float $coverageStart): array
     {
-        if (! Ranking::isExecution($type)) {
-            return null;
+        if ($side['earlier'] === null || $coverageStart === null || $side['since'] !== $coverageStart) {
+            return $side;
         }
 
-        if ($before['outside']) {
-            return 0;
-        }
-
-        $from = max($before['since'] ?? -INF, $split - self::STRADDLING_SECONDS);
-        $rows = Stored::rows($connection, 'SELECT count(*) AS straddling FROM '.$type->view().' WHERE started_at >= :from AND started_at < :split AND ended_at > :split AND (:group IS NULL OR group_hash = :group)', [
-            'from' => $from,
-            'split' => $split,
-            'group' => $group,
+        $rows = Stored::rows($connection, 'SELECT count(*) AS earlier FROM (SELECT 1 FROM '.$type->view().' WHERE started_at < :start AND (:deploy IS NULL OR deploy = :deploy) LIMIT '.Rows::fetch(self::EARLIER_COUNTED).')', [
+            'start' => $coverageStart,
+            'deploy' => $side['deploy'],
         ]);
-
-        return is_int($rows[0]['straddling']) ? $rows[0]['straddling'] : 0;
-    }
-
-    /**
-     * Count the records of the type that started before the coverage start, which a before side that begins there leaves out, up to a cap.
-     *
-     * @param  Side  $before
-     * @return array{records: int, more: bool}
-     */
-    protected static function earlier(SQLite3 $connection, RecordType $type, array $before, ?float $coverageStart): array
-    {
-        if ($coverageStart === null || $before['since'] !== $coverageStart) {
-            return [
-                'records' => 0,
-                'more' => false,
-            ];
-        }
-
-        $rows = Stored::rows($connection, 'SELECT count(*) AS earlier FROM (SELECT 1 FROM '.$type->view().' WHERE started_at < :start LIMIT '.Rows::fetch(self::EARLIER_COUNTED).')', ['start' => $coverageStart]);
         $counted = is_int($rows[0]['earlier']) ? $rows[0]['earlier'] : 0;
 
-        return [
+        $side['earlier'] = [
             'records' => min($counted, self::EARLIER_COUNTED),
             'more' => $counted > self::EARLIER_COUNTED,
         ];
+
+        return $side;
     }
 
     /**

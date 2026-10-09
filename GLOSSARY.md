@@ -120,6 +120,10 @@ _Avoid_: Session, chain (as an entity)
 A record's normalized start instant in Unix seconds with microsecond resolution and its derived end.
 _Avoid_: Timestamp, created at, received at
 
+**Deploy**:
+The identity of the deployed code a record was captured under, an unordered string from Nightwatch's deployment setting or `FIREWATCH_DEPLOY`, matched exactly; a record with an empty or no deploy belongs to none.
+_Avoid_: Release, version, build
+
 ### Queued work
 
 **Job id**:
@@ -264,9 +268,16 @@ _Avoid_: Server time, current time
 The half-open interval on records' start times over which a windowed answer is computed; an absent bound means unbounded, never recent, except on compare (coverage start and the store clock) and trend (a derived bound, named on the window).
 _Avoid_: Time range, period, default range
 
+**Boundary**:
+What divides a compared window into a before side and an after side: a split point or a deploy pair, exactly one per comparison.
+
 **Split point**:
 An instant strictly inside a window that divides it into a before side and an after side, the record exactly at it being after.
 _Avoid_: Anchor, checkpoint
+
+**Deploy pair**:
+Two different deploys compared over one window: every record of the first is on the before side and every record of the second on the after side, whenever each started, so two deploys served side by side may interleave. It cannot separate an uncommitted edit, because the deploy does not change with one.
+_Avoid_: Release diff, deploy range
 
 **Straddling**:
 Executions of the compared type that started shortly before a split point and finished after it, which sit on the before side.
@@ -407,7 +418,7 @@ A change for a group present on both sides whose before value is 0 and after val
 _Avoid_: New, infinite change
 
 **Side**:
-One of the two parts a split point divides a compared window into, before or after, each clipped to the type's coverage start and stating its records and observed span; a before side that begins at the coverage start also counts the records that started before it, which are on neither side.
+One of the two parts a compared window is divided into, before or after: either part of a split point, or the records of one deploy of a deploy pair. Each is clipped to the type's coverage start and states its records and observed span; a side that begins at the coverage start, the before side of a split or either side of a deploy pair, also counts the records of the type, of its own deploy on a pair, that started before it, which are on neither side.
 _Avoid_: Half, bucket, period
 
 **Empty side**:

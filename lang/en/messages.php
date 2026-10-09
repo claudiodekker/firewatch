@@ -39,7 +39,7 @@ return [
         'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
         'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
         'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: read query one execution ran 3+ times, in runs. `database-bound`: request groups typically spending 60+ percent in queries. `failing-routes`: request groups answering 400+. `failing-jobs`: job groups with 1+ failed or released attempts. `queue-latency`: job groups with first-attempt wait or pending age of 5000+ milliseconds. `failing-tasks`: scheduled-task groups with failed or skipped tasks (no threshold). `exception-clusters`: exception groups with 1+ occurrences, escaped first. `error-logs`: error-level logs by message shape, 1+ occurrences (no `group`). `failing-http`: outgoing-request hosts answering 400+. `cache`: cache keys with a hit rate below 50 percent over 3+ reads, or a failed write or delete. `memory`: execution groups peaking at 64+ megabytes. Without `shape` all run; `threshold` and `group` need one. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold, unit and range, exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean: none among what was captured, weak over few records. Windowed.',
-        'compare' => 'Compares each group before and after a split: "did my change help?". split_at is a time, such as the now of an earlier answer; before is since to split_at, after is split_at to until. Without since: the type\'s coverage start; without until: now. Pass `type`, or `group` for one group. Rows are ordered by absolute change, so the largest change in either direction survives the limit; a rollup counts every group, cut or not. Too few records is not evaluated, never guessed; an empty side is never "no regression". Work spanning `split_at` counts as before.',
+        'compare' => 'Compares each group across a split or a deploy pair: "did my change help?". Give exactly one boundary. split_at is a time, such as the now of an earlier answer; before is since to split_at, after is split_at to until. Or deploy_before and deploy_after, exact deploy strings: each side is every record of its deploy in the window. A deploy pair cannot separate an uncommitted edit; a time split can. Without since: the type\'s coverage start; without until: now. Pass `type`, or `group` for one group. Rows are ordered by absolute change, so the largest change in either direction survives the limit; a rollup counts every group, cut or not. Too few records is not evaluated, never guessed; an empty side is never "no regression". Work spanning `split_at` counts as before.',
         'actor' => 'Identifies one signed-in person and the work of the window tied to them. `who` is a user id, a username or a name, tried in that order, then as a part of a name or username: the first stage that finds anyone decides. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the username is the email. Several matches are listed as candidates, never guessed: repeat with an id. An actor exists only once recorded acting. An execution is theirs by its own user, its job\'s dispatch, or a child inside a command or task. Attribution is partial: what no link reaches is counted, never guessed. Windowed by since/until; identity is read over the whole store.',
     ],
 
@@ -259,15 +259,25 @@ return [
 
     'compare_split_at_argument' => 'Where after begins, in the forms of since; a record at it is after. Strictly inside the window.',
 
+    'compare_deploy_before_argument' => 'The deploy of the before side, matched exactly. Needs deploy_after.',
+
+    'compare_deploy_after_argument' => 'The deploy of the after side, matched exactly, not deploy_before. Needs deploy_before.',
+
     'compare_by_argument' => 'p95_duration (default; occurrences for exceptions), p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory or queries.',
 
     'compare_limit_argument' => 'The most groups to list, 1 to 100. Default 20.',
 
-    'compare_since_argument' => 'Start of the before side, included, in the forms every tool takes. Absent: the start of what the store covers for the type.',
+    'compare_since_argument' => 'Start of the window, included, in the forms every tool takes. Absent: the start of what the store covers for the type.',
 
-    'compare_until_argument' => 'End of the after side, excluded, in the same forms. Absent: the store clock, now.',
+    'compare_until_argument' => 'End of the window, excluded, in the same forms. Absent: the store clock, now.',
 
     'compare_summary' => 'Compared :groups :type group by :by before and after the split: :changes.|Compared :groups :type groups by :by before and after the split: :changes.',
+
+    'compare_pair_summary' => 'Compared :groups :type group by :by from deploy :before to deploy :after: :changes.|Compared :groups :type groups by :by from deploy :before to deploy :after: :changes.',
+
+    'compare_empty_deploy_summary' => 'Not evaluated (empty_side): deploy :deploy, the :side side, holds no :type records in the window, which is not "no regression".',
+
+    'compare_empty_deploys_summary' => 'Not evaluated (empty_side): neither deploy :before, the before side, nor deploy :after, the after side, holds :type records in the window, which is not "no regression".',
 
     'compare_empty_side_summary' => 'Not evaluated (empty_side): the :side side holds no :type records, which is not "no regression".',
 
@@ -275,9 +285,17 @@ return [
 
     'compare_not_evaluated_note' => 'Nothing was compared, which says nothing about whether anything changed: exercise the application again, or move split_at or since.',
 
+    'compare_pair_not_evaluated_note' => 'Nothing was compared, which says nothing about whether anything changed: pass deploys the window holds, or widen it with since or until.',
+
+    'compare_deploy_pair_note' => 'A deploy pair cannot separate an uncommitted edit; a time split can.',
+
     'compare_earlier_note' => ':count :type record started before what the store covers for :type, so it is on neither side.|:count :type records started before what the store covers for :type, so they are on neither side.',
 
     'compare_earlier_more_note' => ':count or more :type records started before what the store covers for :type, so they are on neither side.',
+
+    'compare_earlier_deploy_note' => ':count :type record of deploy :deploy started before what the store covers for :type, so it is on neither side.|:count :type records of deploy :deploy started before what the store covers for :type, so they are on neither side.',
+
+    'compare_earlier_deploy_more_note' => ':count or more :type records of deploy :deploy started before what the store covers for :type, so they are on neither side.',
 
     'compare_move_since_note' => 'The before side reaches back more than an hour before the split, so it may hold earlier changes too: on a later round, pass the previous split as `since`.',
 
@@ -286,6 +304,8 @@ return [
     'compare_deploys_truncated_how' => 'These are the deploys first seen: narrow the window with `since` or `until`.',
 
     'compare_next_occurrences' => 'List the records of the first group listed.',
+
+    'compare_next_occurrences_deploy' => 'List the records of the first group listed under deploy :deploy.',
 
     'compare_next_rank' => 'Break the first group listed down by deploy.',
 

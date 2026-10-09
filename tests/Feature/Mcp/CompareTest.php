@@ -578,7 +578,7 @@ it('refuses what it can not compare, naming what it accepts', function (array $a
 
     return [
         'neither type nor group' => [['split_at' => COMPARE_SPLIT], 'missing_argument', 'type', $types, $example],
-        'no split' => [['type' => 'request'], 'missing_argument', 'split_at', 'a time in the forms of since: the now of an earlier answer', $example],
+        'no split' => [['type' => 'request'], 'missing_argument', 'split_at', 'exactly one boundary: `split_at` (a time, such as the now of an earlier answer), or `deploy_before` with `deploy_after` (exact deploy strings)', $example],
         'a type with no groups' => [['type' => 'log', 'split_at' => COMPARE_SPLIT], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"log"'],
         'a type in capitals' => [['type' => 'Request', 'split_at' => COMPARE_SPLIT], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"Request"'],
         'a measure that is none' => [['type' => 'request', 'split_at' => COMPARE_SPLIT, 'by' => 'p99_duration'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory, queries', 'compare(type: "request", split_at: "<time>", by: "p95_duration")', 'a measure of request', '"p99_duration"'],
@@ -606,7 +606,7 @@ it('refuses a split or a bound that is no time, and a window that does not start
     'an empty window' => [['split_at' => COMPARE_SPLIT, 'since' => 'now', 'until' => '-1d'], 'empty_window'],
 ]);
 
-it('refuses the deploy pair, which it does not take yet, an argument of another tool and one that is none', function (string $argument, string $code) {
+it('refuses the deploy pair beside a split, an argument of another tool and one that is none', function (string $argument, string $code) {
     $response = FirewatchServer::tool(Compare::class, ['type' => 'request', 'split_at' => COMPARE_SPLIT, $argument => 'x']);
 
     $response->assertHasErrors(["error: {$code}"]);
@@ -728,7 +728,7 @@ it('answers nothing for a window with no record, a type with none on either side
     }
 });
 
-it('is listed after actor, read only, idempotent and closed, with split_at required', function () {
+it('is listed after actor, read only, idempotent and closed, with no argument required', function () {
     $listing = app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
     $tools = array_column($listing['tools'], null, 'name');
     $compare = $tools['compare'];
@@ -736,8 +736,8 @@ it('is listed after actor, read only, idempotent and closed, with split_at requi
     expect(array_slice(array_keys($tools), -2))->toBe(['actor', 'compare'])
         ->and($compare['description'])->toBe(__('firewatch::messages.tools.compare'))
         ->and(str_word_count($compare['description']))->toBeLessThanOrEqual(150)
-        ->and(array_keys($compare['inputSchema']['properties']))->toBe(['type', 'group', 'split_at', 'by', 'since', 'until', 'limit', 'format'])
-        ->and($compare['inputSchema']['required'])->toBe(['split_at'])
+        ->and(array_keys($compare['inputSchema']['properties']))->toBe(['type', 'group', 'split_at', 'deploy_before', 'deploy_after', 'by', 'since', 'until', 'limit', 'format'])
+        ->and($compare['inputSchema'])->not->toHaveKey('required')
         ->and($compare['annotations'])->toMatchArray(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
 });
 
