@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
+use LogicException;
 use SQLite3;
 use SQLite3Result;
 use SQLite3Stmt;
@@ -143,6 +144,56 @@ class Ranking
             'records' => $records,
             'label' => $label,
         ];
+    }
+
+    /**
+     * Find when the first and the last record the filters select started, or null when they select none.
+     *
+     * @return array{float, float}|null
+     */
+    public function extent(SQLite3 $connection): ?array
+    {
+        $row = $this->query($connection, 'SELECT min(started_at) AS first, max(started_at) AS last FROM base')[0];
+
+        if ($row['first'] === null) {
+            return null;
+        }
+
+        return [$row['first'], $row['last']];
+    }
+
+    /**
+     * Read the records and the value of the measure of each bucket of an equal grid that holds a record, keyed by bucket index; the last bucket takes every record at or past its start.
+     *
+     * @return array<int, array{samples: int, value: int|float|null}>
+     */
+    public function buckets(SQLite3 $connection, float $origin, float $width, int $count): array
+    {
+        $value = match ($this->by) {
+            Measure::OCCURRENCES => 'count(*)',
+            Measure::MAX_DURATION => 'max(d)',
+            Measure::AVG_DURATION => 'avg(d)',
+            Measure::TOTAL_DURATION => 'sum(d)',
+            Measure::MAX_MEMORY => 'max(m)',
+            default => throw new LogicException("No trend states {$this->by->value}."),
+        };
+
+        $rows = $this->query($connection, "SELECT CASE WHEN :width = 0 THEN 0 ELSE min(:last, CAST((started_at - :origin) / :width AS INTEGER)) END AS bucket, count(*) AS samples, {$value} AS value FROM base GROUP BY bucket", bindings: [
+            'origin' => $origin,
+            'width' => $width,
+            'last' => $count - 1,
+        ]);
+
+        $buckets = [];
+
+        foreach ($rows as $row) {
+            $buckets[$row['bucket']] = [
+                'samples' => $row['samples'],
+                'value' => $row['value'],
+            ];
+        }
+
+        return $buckets;
     }
 
     /**
@@ -323,6 +374,7 @@ class Ranking
             Measure::P95_DURATION => $group['timed'] >= self::P95_FLOOR ? $group['p95'] : null,
             Measure::P50_DURATION => $group['timed'] >= self::P50_FLOOR ? $group['p50'] : null,
             Measure::MAX_DURATION => $group['max'],
+            Measure::AVG_DURATION => $group['avg'],
             Measure::TOTAL_DURATION => $group['total'],
             Measure::OCCURRENCES => $group['occurrences'],
             Measure::P95_MEMORY => $group['mem_timed'] >= self::P95_FLOOR ? $group['mem_p95'] : null,
@@ -556,9 +608,10 @@ class Ranking
     /**
      * Run a query over the records of the type that the window and the deploy leave, as the table `base`.
      *
+     * @param  array<string, int|float>  $bindings  bound by name after the window, the deploy and the group
      * @return list<array<string, mixed>>
      */
-    protected function query(SQLite3 $connection, string $sql, bool $filtered = true): array
+    protected function query(SQLite3 $connection, string $sql, bool $filtered = true, array $bindings = []): array
     {
         if ($filtered) {
             $deploy = "NULLIF(deploy, '')";
@@ -590,6 +643,10 @@ class Ranking
             $this->window->bind($statement);
             $statement->bindValue(':deploy', $this->deploy, $this->deploy === null ? SQLITE3_NULL : SQLITE3_TEXT);
             $statement->bindValue(':group', $this->group, $this->group === null ? SQLITE3_NULL : SQLITE3_TEXT);
+        }
+
+        foreach ($bindings as $name => $value) {
+            $statement->bindValue(":{$name}", $value);
         }
 
         /** @var SQLite3Result $result */

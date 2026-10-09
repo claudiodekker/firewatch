@@ -13,6 +13,8 @@ class Window
 {
     /**
      * Create a new window instance.
+     *
+     * @param  list<'since'|'until'>|null  $derived  the bounds filled in from the selected records; null for a tool that never derives one
      */
     protected function __construct(
         protected readonly bool $windowed,
@@ -20,6 +22,7 @@ class Window
         protected readonly ?float $until,
         protected readonly string $timezone,
         protected readonly string $reason,
+        protected readonly ?array $derived = null,
     ) {
         //
     }
@@ -53,6 +56,34 @@ class Window
     public static function none(string $reason, string $timezone): self
     {
         return new self(windowed: false, since: null, until: null, timezone: $timezone, reason: $reason);
+    }
+
+    /**
+     * Get the window with each bound it was not given filled in from the first and the last selected record, and named as derived; a derived until includes the record at it.
+     */
+    public function derive(?float $first, ?float $last): self
+    {
+        $derived = [];
+
+        if ($this->since === null && $first !== null) {
+            $derived[] = 'since';
+        }
+
+        if ($this->until === null && $last !== null) {
+            $derived[] = 'until';
+        }
+
+        return new self(windowed: true, since: $this->since ?? $first, until: $this->until ?? $last, timezone: $this->timezone, reason: '', derived: $derived);
+    }
+
+    /**
+     * Determine if the bound was derived from the selected records.
+     *
+     * @param  'since'|'until'  $bound
+     */
+    public function derives(string $bound): bool
+    {
+        return in_array($bound, $this->derived ?? [], true);
     }
 
     /**
@@ -95,11 +126,13 @@ class Window
     }
 
     /**
-     * Get the SQL condition that holds for the records of the window.
+     * Get the SQL condition that holds for the records of the window: half-open, except that a derived until includes the record at it.
      */
     public function condition(): string
     {
-        return '(:since IS NULL OR started_at >= :since) AND (:until IS NULL OR started_at < :until)';
+        $until = $this->derives('until') ? '<=' : '<';
+
+        return "(:since IS NULL OR started_at >= :since) AND (:until IS NULL OR started_at {$until} :until)";
     }
 
     /**
@@ -125,13 +158,22 @@ class Window
             ];
         }
 
-        return [
+        $window = [
             'windowed' => true,
             'basis' => 'started_at',
             'since' => $this->since,
             'until' => $this->until,
             'timezone' => $this->timezone,
-            'description' => __('firewatch::messages.window_description'),
+            'description' => __($this->derives('until') ? 'firewatch::messages.window_description_derived' : 'firewatch::messages.window_description'),
+        ];
+
+        if ($this->derived === null) {
+            return $window;
+        }
+
+        return [
+            ...$window,
+            'derived' => $this->derived,
         ];
     }
 
@@ -146,6 +188,15 @@ class Window
 
         if ($this->since === null && $this->until === null) {
             return __('firewatch::messages.window_unbounded');
+        }
+
+        if ($this->derived !== null && $this->derived !== []) {
+            return __('firewatch::messages.window_resolved', [
+                'since' => $this->bound($this->since),
+                'until' => $this->bound($this->until),
+                'timezone' => $this->timezone,
+                'derived' => implode(', ', array_map(fn (string $bound) => __("firewatch::messages.window_derived_{$bound}"), $this->derived)),
+            ]);
         }
 
         return __('firewatch::messages.window_bounded', [

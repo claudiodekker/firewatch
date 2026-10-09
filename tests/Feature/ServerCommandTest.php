@@ -16,7 +16,7 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 8]),
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 9]),
             '  overview     Entry point.',
             '  rank         Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
             '  occurrences  Lists individual records, newest first by default, for the selectors you give (at least o…',
@@ -25,6 +25,7 @@ it('lists the tools under a header, one line each', function () {
             '  detect       Runs named problem shapes and returns evidence, worst first.',
             '  actor        Identifies one signed-in person and the work of the window tied to them.',
             '  compare      Compares each group across a split or a deploy pair: "did my change help?".',
+            '  trend        Cuts the window into equal buckets and reports a measure per bucket, to see whether somet…',
             '',
         ]));
 });
@@ -173,6 +174,21 @@ it('lists the tools as JSON with the server name and version', function () {
                         'since' => ['description' => __('firewatch::messages.compare_since_argument'), 'type' => 'string'],
                         'until' => ['description' => __('firewatch::messages.compare_until_argument'), 'type' => 'string'],
                         'limit' => ['description' => __('firewatch::messages.compare_limit_argument'), 'type' => 'integer'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object'],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
+                    'name' => 'trend',
+                    'description' => __('firewatch::messages.tools.trend'),
+                    'inputSchema' => ['properties' => [
+                        'type' => ['description' => __('firewatch::messages.trend_type_argument'), 'type' => 'string'],
+                        'group' => ['description' => __('firewatch::messages.trend_group_argument'), 'type' => 'string'],
+                        'by' => ['description' => __('firewatch::messages.trend_by_argument'), 'type' => 'string'],
+                        'buckets' => ['description' => __('firewatch::messages.trend_buckets_argument'), 'type' => 'integer'],
+                        'since' => ['description' => __('firewatch::messages.trend_since_argument'), 'type' => 'string'],
+                        'until' => ['description' => __('firewatch::messages.trend_until_argument'), 'type' => 'string'],
+                        'deploy' => ['description' => __('firewatch::messages.trend_deploy_argument'), 'type' => 'string'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
