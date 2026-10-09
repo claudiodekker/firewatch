@@ -2,12 +2,14 @@
 
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
+use ClaudioDekker\Firewatch\Mcp\Tools\Fingerprint;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -96,6 +98,70 @@ it('states the blind spots of the requests it describes', function () {
     rawSqlRequests();
 
     $envelope = Envelope::assert(Describe::class, ['type' => 'request']);
+    $structural = array_values(array_filter($envelope['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'structural'));
+
+    expect($structural)->toBe(BlindSpots::for([RecordType::REQUEST]));
+});
+
+it('learns the recipe from describe, then finds the route it read in source by its group id and reads its occurrences', function () {
+    rawSqlRequests();
+
+    $described = Envelope::assert(Describe::class, ['type' => 'request']);
+    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['GET', 'HEAD'], 'path' => 'checkout']);
+    $held = $envelope['result']['held'];
+    $occurrences = Envelope::assert(Occurrences::class, $envelope['next'][0]['arguments']);
+
+    expect($described['result']['group_recipe'])->not->toBeNull()
+        ->and($envelope['result']['candidates'])->toHaveCount(1)
+        ->and($envelope['result']['candidates'][0]['input'])->toBe('GET|HEAD,,/checkout')
+        ->and($held)->toHaveCount(1)
+        ->and($held[0])->toMatchArray(['group' => $envelope['result']['candidates'][0]['group'], 'type' => 'request', 'records' => 2, 'label' => '/checkout'])
+        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'request', 'check' => 'agrees', 'detail' => null]])
+        ->and($envelope['empty'])->toBeNull()
+        ->and($occurrences['result']['rows'])->toHaveCount(2)
+        ->and(array_unique(array_column($occurrences['result']['rows'], 'group')))->toBe([$held[0]['group']]);
+});
+
+it('answers a route that is registered but never ran with a miss the recipe check lets the assistant trust', function () {
+    rawSqlRequests();
+
+    Route::post('/refund', fn () => 'refunded');
+
+    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['POST'], 'path' => '/refund']);
+
+    expect($envelope['result']['held'])->toBe([])
+        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'request', 'check' => 'agrees', 'detail' => null]])
+        ->and($envelope['empty']['kind'])->toBe('no_match')
+        ->and($envelope['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.agrees', ['group' => $envelope['result']['candidates'][0]['group'], 'types' => 'request']))
+        ->and($envelope['next'])->toBe([]);
+});
+
+it('reads a list query both ways when the driver is unknown, and names the reading the store holds', function () {
+    forceRequests();
+
+    Route::get('/orders', fn () => DB::select('select 1 where 1 in (?, ?)', [1, 2]));
+
+    test()->get('/orders');
+
+    $connection = storeRows('SELECT connection FROM queries')[0]['connection'];
+    $sql = 'select 1 where 1 in (?, ?)';
+    $arguments = ['type' => 'query', 'connection' => $connection, 'sql' => $sql];
+
+    $unknown = Envelope::assert(Fingerprint::class, $arguments);
+    $known = Envelope::assert(Fingerprint::class, [...$arguments, 'driver' => 'sqlite']);
+
+    expect($unknown['result']['candidates'])->toHaveCount(2)
+        ->and(array_column($unknown['result']['held'], 'group'))->toBe([$unknown['result']['candidates'][0]['group']])
+        ->and($unknown['result']['recipe_check'])->toBe([['type' => 'query', 'check' => 'agrees', 'detail' => __('firewatch::messages.fingerprint_assumption_normalised')]])
+        ->and($known['result']['candidates'])->toHaveCount(1)
+        ->and($known['result']['candidates'][0]['group'])->toBe($unknown['result']['candidates'][0]['group'])
+        ->and($known['result']['held'])->toBe($unknown['result']['held']);
+});
+
+it('states the blind spots of the type it fingerprints', function () {
+    rawSqlRequests();
+
+    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['GET'], 'path' => '/checkout']);
     $structural = array_values(array_filter($envelope['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'structural'));
 
     expect($structural)->toBe(BlindSpots::for([RecordType::REQUEST]));
