@@ -168,14 +168,13 @@ class Query extends Tool
 
         $blindSpots = [...BlindSpots::for($types), ...$this->conditions->for($facts, $types, $window)];
         $empty = $rows->rows === [] ? Emptiness::noRows() : null;
-        $more = in_array($rows->stop, [QueryStop::LIMIT, QueryStop::BUDGET], true);
 
         return new Answer(
             tool: $this->name(),
             now: $epoch,
             timezone: $timezone,
             window: $window,
-            summary: $empty === null ? $this->summary($rows, $more) : $empty->message,
+            summary: $empty === null ? $this->summary($rows) : $empty->message,
             empty: $empty,
             result: [
                 'columns' => $rows->columns,
@@ -185,8 +184,8 @@ class Query extends Tool
             ],
             coverage: $coverage,
             blindSpots: $blindSpots,
-            notes: [__('firewatch::messages.query_raw_values')],
-            truncated: $more ? [$this->truncation($rows)] : [],
+            notes: $this->notes($rows),
+            truncated: $rows->stop === QueryStop::COMPLETE ? [] : [$this->truncation($rows)],
             next: $rows->stop === QueryStop::LIMIT && $limit < self::MAXIMUM_LIMIT ? [$this->more($sql)] : [],
             cuttable: ['rows'],
             capHow: __('firewatch::messages.query_cap_how'),
@@ -196,9 +195,15 @@ class Query extends Tool
     /**
      * Get the summary of the rows the statement returned.
      */
-    protected function summary(SqlRows $rows, bool $more): string
+    protected function summary(SqlRows $rows): string
     {
-        return __($more ? 'firewatch::messages.query_summary_more' : 'firewatch::messages.query_summary', [
+        $key = match (true) {
+            $rows->stop->isAbnormal() => 'query_summary_partial',
+            $rows->stop === QueryStop::COMPLETE => 'query_summary',
+            default => 'query_summary_more',
+        };
+
+        return __("firewatch::messages.{$key}", [
             'rows' => trans_choice('firewatch::messages.query_rows_count', count($rows->rows)),
             'columns' => trans_choice('firewatch::messages.query_columns_count', count($rows->columns)),
             'shown' => count($rows->rows),
@@ -206,20 +211,50 @@ class Query extends Tool
     }
 
     /**
-     * Get the `truncated` entry of rows the limit or the row budget cut.
+     * Get the notes of the rows: the raw values, and for partial rows that they are unordered and why the statement stopped.
+     *
+     * @return list<string>
+     */
+    protected function notes(SqlRows $rows): array
+    {
+        $notes = [__('firewatch::messages.query_raw_values')];
+
+        if (! $rows->stop->isAbnormal()) {
+            return $notes;
+        }
+
+        $notes[] = __('firewatch::messages.query_partial_note');
+
+        if ($rows->detail === null) {
+            return $notes;
+        }
+
+        $notes[] = $rows->stop === QueryStop::ABORTED
+            ? __('firewatch::messages.aborted_stderr', ['stderr' => preg_replace('/\s+/', ' ', $rows->detail)])
+            : $rows->detail;
+
+        return $notes;
+    }
+
+    /**
+     * Get the `truncated` entry of rows the limit, the row budget or an abnormal stop cut.
      *
      * @return array{section: string, shown: int, matched: int|null, reason: string, how: string}
      */
     protected function truncation(SqlRows $rows): array
     {
-        $limited = $rows->stop === QueryStop::LIMIT;
+        [$reason, $how] = match (true) {
+            $rows->stop === QueryStop::LIMIT => [TruncationReason::LIMIT, 'query_limit_how'],
+            $rows->stop === QueryStop::BUDGET => [TruncationReason::SIZE, 'query_budget_how'],
+            default => [TruncationReason::PARTIAL, 'query_partial_how'],
+        };
 
         return [
             'section' => 'rows',
             'shown' => count($rows->rows),
             'matched' => null,
-            'reason' => ($limited ? TruncationReason::LIMIT : TruncationReason::SIZE)->value,
-            'how' => __($limited ? 'firewatch::messages.query_limit_how' : 'firewatch::messages.query_budget_how'),
+            'reason' => $reason->value,
+            'how' => __("firewatch::messages.{$how}"),
         ];
     }
 

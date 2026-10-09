@@ -21,7 +21,7 @@ test('every tool the assistant-facing text names in backticks is registered, or 
     $tools = array_column($listed, 'name');
     $arguments = array_merge(...array_map(fn (array $tool) => array_keys($tool['inputSchema']['properties']), $listed));
     $answerFields = ['next', 'withheld', 'detail', 'first_seen_at'];
-    $otherWords = ['database'];
+    $otherWords = ['database', 'started_at'];
     $shapes = array_column(DetectorName::cases(), 'value');
     $text = implode("\n", Arr::flatten(trans('firewatch::messages')));
 

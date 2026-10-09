@@ -61,6 +61,22 @@ class SqlFailure extends RuntimeException
     }
 
     /**
+     * Get the failure of a statement that was killed at its deadline before it returned a row.
+     */
+    public static function deadline(): self
+    {
+        return new self(ErrorCode::DEADLINE);
+    }
+
+    /**
+     * Get the failure of a statement that ran out of working memory before it returned a row.
+     */
+    public static function memory(): self
+    {
+        return new self(ErrorCode::MEMORY);
+    }
+
+    /**
      * Get the failure of a statement whose first row is over the answer budget.
      */
     public static function rowTooLarge(): self

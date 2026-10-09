@@ -28,10 +28,11 @@ function qcStandIn(string $script, float $deadline = ChildRunner::DEADLINE_SECON
  * Run the echoing stand-in child, which writes the given lines as its protocol, and get the text of the answer.
  *
  * @param  list<array<string, mixed>|string>  $lines
+ * @param  string  $script  the stand-in that writes them, `echo` to end at once or `hang` to wait to be killed
  */
-function qcEcho(array $lines): string
+function qcEcho(array $lines, string $script = 'echo', float $deadline = ChildRunner::DEADLINE_SECONDS): string
 {
-    qcStandIn('echo');
+    qcStandIn($script, $deadline);
 
     $output = implode("\n", array_map(fn (array|string $line) => is_string($line) ? $line : json_encode($line), $lines));
     $response = FirewatchServer::tool(Query::class, ['sql' => $output, 'format' => 'json']);
@@ -119,15 +120,44 @@ describe('the protocol', function () {
         'an unknown stop' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 0, 'stop' => 'unknown']]],
         'a state among other lines' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'state', 'state' => 'busy', 'found' => null]]],
         'a state a child never reports' => [[['k' => 'state', 'state' => 'unavailable', 'found' => null]]],
-        'an unknown error code' => [[['k' => 'error', 'code' => 'memory', 'message' => 'out of memory']]],
+        'an unknown error code' => [[['k' => 'error', 'code' => 'bogus', 'message' => 'out of memory']]],
+        'a stop the child never reports' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 0, 'stop' => 'deadline']]],
+        'an error stop with no message' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'row', 'r' => [1]], ['k' => 'end', 'rows' => 1, 'stop' => 'error']]],
+        'an error stop with no rows' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 0, 'stop' => 'error', 'message' => 'boom']]],
         'an unknown denial' => [[['k' => 'error', 'code' => 'not_allowed', 'subject' => 'everything', 'name' => null]]],
         'a failure the child reports' => [[['k' => 'error', 'code' => 'failed', 'message' => 'The request is unreadable.']]],
     ])->group('process');
 
-    it('answers a child that ended without a complete result as aborted, with its stderr', function (array $lines) {
+    it('answers a child that ended without a complete result and no row as aborted, with its stderr', function (array $lines) {
         $text = qcEcho($lines);
 
         expect($text)->toBe(__('firewatch::messages.aborted')."\n".__('firewatch::messages.aborted_stderr', ['stderr' => 'stand-in stderr']));
+
+        Exceptions::assertNothingReported();
+    })->with([
+        'no end line' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []]]],
+        'an end line that counts other rows' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 2, 'stop' => 'complete']]],
+    ])->group('process');
+
+    it('returns the rows a child streamed before it ended without a complete result, as partial with stop aborted', function (array $lines) {
+        $text = qcEcho($lines);
+        $envelope = json_decode($text, associative: true);
+
+        expect($envelope['result']['rows'])->toBe([[1]])
+            ->and($envelope['result']['stop'])->toBe('aborted')
+            ->and($envelope['summary'])->toBe(__('firewatch::messages.query_summary_partial', ['rows' => '1 row', 'columns' => '1 column']))
+            ->and($envelope['truncated'])->toBe([[
+                'section' => 'rows',
+                'shown' => 1,
+                'matched' => null,
+                'reason' => 'partial',
+                'how' => __('firewatch::messages.query_partial_how'),
+            ]])
+            ->and($envelope['notes'])->toBe([
+                __('firewatch::messages.query_raw_values'),
+                __('firewatch::messages.query_partial_note'),
+                __('firewatch::messages.aborted_stderr', ['stderr' => 'stand-in stderr']),
+            ]);
 
         Exceptions::assertNothingReported();
     })->with([
@@ -143,12 +173,49 @@ describe('the protocol', function () {
         expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.aborted')."\n".__('firewatch::messages.aborted_stderr', ['stderr' => 'stand-in stderr']));
     })->group('process');
 
-    it('kills a child that runs past its deadline, and answers aborted', function () {
+    it('kills a child that runs past its deadline before a row, and answers deadline', function () {
         qcStandIn('sleep', deadline: 0.2);
 
         $text = FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']);
 
-        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.aborted'));
+        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.deadline', ['seconds' => 10]));
+    })->group('process');
+
+    it('returns the rows of a child killed at its deadline as partial with stop deadline', function () {
+        $text = qcEcho([
+            ['k' => 'columns', 'columns' => ['n'], 'reads' => []],
+            ['k' => 'row', 'r' => [1]],
+            ['k' => 'row', 'r' => [2]],
+            '',
+        ], 'hang', deadline: 0.5);
+        $envelope = json_decode($text, associative: true);
+
+        expect($envelope['result']['rows'])->toBe([[1], [2]])
+            ->and($envelope['result']['stop'])->toBe('deadline')
+            ->and($envelope['truncated'][0]['reason'])->toBe('partial')
+            ->and($envelope['notes'])->toBe([__('firewatch::messages.query_raw_values'), __('firewatch::messages.query_partial_note')]);
+    })->group('process');
+
+    it('drops the line a kill cut short instead of failing on it', function () {
+        $text = qcEcho([
+            ['k' => 'columns', 'columns' => ['n'], 'reads' => []],
+            ['k' => 'row', 'r' => [1]],
+            '{"k":"row","r":[2',
+        ], 'hang', deadline: 0.5);
+        $envelope = json_decode($text, associative: true);
+
+        expect($envelope['result']['rows'])->toBe([[1]])
+            ->and($envelope['result']['stop'])->toBe('deadline');
+
+        Exceptions::assertNothingReported();
+    })->group('process');
+
+    it('kills a child whose output passes 1 MiB, and answers aborted without waiting for the deadline', function () {
+        qcStandIn('flood');
+
+        $text = FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']);
+
+        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.aborted')."\n".__('firewatch::messages.aborted_stderr', ['stderr' => 'stand-in stderr']));
     })->group('process');
 
     it('takes the record types read from the columns line, so they are known before any row', function () {

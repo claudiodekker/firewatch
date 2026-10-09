@@ -3,6 +3,8 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
+use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 
@@ -106,5 +108,23 @@ describe('the row budget', function () {
 
     it('answers a first row over the budget as row_too_large', function () {
         expect(qclAnswerText(['sql' => qclRows(1, 2000, columns: 9)]))->toBe(__('firewatch::messages.row_too_large', ['bytes' => '16,000']));
+    })->group('process');
+});
+
+/**
+ * Run the real child with a shorter deadline than the fixed one.
+ */
+function qclDeadline(float $seconds): void
+{
+    app()->instance(SqlRunner::class, new ChildRunner(app(Configuration::class), deadline: $seconds));
+}
+
+describe('the deadline', function () {
+    it('kills a heavy cross join at the deadline, and answers deadline', function () {
+        qclDeadline(1.0);
+
+        $sql = 'WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 20000) SELECT count(*) FROM c AS a, c AS b, c AS d';
+
+        expect(qclAnswerText(['sql' => $sql]))->toBe(__('firewatch::messages.deadline', ['seconds' => 10]));
     })->group('process');
 });

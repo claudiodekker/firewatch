@@ -22,6 +22,11 @@ class Policy
     public const ROW_BUDGET_BYTES = 16000;
 
     /**
+     * The most bytes of working memory SQLite has.
+     */
+    public const HEAP_LIMIT_BYTES = 33554432;
+
+    /**
      * The most characters a text cell has before it is cut.
      */
     public const CELL_CHARACTERS = 2000;

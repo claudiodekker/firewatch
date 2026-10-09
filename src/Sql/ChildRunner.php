@@ -53,6 +53,16 @@ class ChildRunner implements SqlRunner
     protected const STDERR_CHARACTERS = 500;
 
     /**
+     * The most bytes of stdout the parent reads before it kills the child.
+     */
+    protected const OUTPUT_CAP_BYTES = 1048576;
+
+    /**
+     * The stops a child's end line reports; the parent alone decides the others.
+     */
+    protected const REPORTED_STOPS = [QueryStop::COMPLETE, QueryStop::LIMIT, QueryStop::BUDGET, QueryStop::MEMORY, QueryStop::ERROR];
+
+    /**
      * The most bytes one read takes from a pipe.
      */
     protected const CHUNK_BYTES = 65536;
@@ -105,17 +115,17 @@ class ChildRunner implements SqlRunner
         ];
 
         $started = hrtime(true);
-        [$lines, $stderr] = $this->exchange($request);
+        [$lines, $stderr, $ending] = $this->exchange($request);
         $elapsed = intdiv(hrtime(true) - $started, 1_000_000);
 
-        return $this->fold($lines, $stderr, $elapsed);
+        return $this->fold($lines, $stderr, $ending, $elapsed);
     }
 
     /**
-     * Spawn the child, write the request to it and read its lines until it ends or the deadline passes, when it is killed.
+     * Spawn the child, write the request to it and read its lines until it ends, or until the deadline passes or its output passes the cap, when it is killed.
      *
      * @param  array<string, mixed>  $request
-     * @return array{list<string>, string} the stdout lines, and the start of stderr
+     * @return array{list<string>, string, Ending} the whole stdout lines, the start of stderr, and why the reading ended
      *
      * @throws SqlFailure
      */
@@ -132,6 +142,7 @@ class ChildRunner implements SqlRunner
         $output = '';
         $errors = '';
         $until = hrtime(true) + (int) ($this->deadline * 1e9);
+        $ending = Ending::EXITED;
 
         try {
             foreach ($pipes as $pipe) {
@@ -142,6 +153,8 @@ class ChildRunner implements SqlRunner
                 $left = $until - hrtime(true);
 
                 if ($left <= 0) {
+                    $ending = Ending::DEADLINE;
+
                     break;
                 }
 
@@ -174,14 +187,33 @@ class ChildRunner implements SqlRunner
                         $errors = mb_strcut($errors.$chunk, 0, static::STDERR_CHARACTERS * 4);
                     }
                 }
+
+                if (strlen($output) > static::OUTPUT_CAP_BYTES) {
+                    $ending = Ending::OUTPUT_CAP;
+
+                    break;
+                }
             }
+
+            $errors = mb_strcut($errors.(string) stream_get_contents($stderr), 0, static::STDERR_CHARACTERS * 4);
         } finally {
             $this->end($process, array_values(array_filter([$stdin, $stdout, $stderr])));
         }
 
-        $lines = array_values(array_filter(explode("\n", $output), fn (string $line) => $line !== ''));
+        return [$this->wholeLines($output), trim(mb_substr($errors, 0, static::STDERR_CHARACTERS)), $ending];
+    }
 
-        return [$lines, trim(mb_substr($errors, 0, static::STDERR_CHARACTERS))];
+    /**
+     * Get the lines of the output that end in a newline, dropping a last line a kill cut short.
+     *
+     * @return list<string>
+     */
+    protected function wholeLines(string $output): array
+    {
+        $last = strrpos($output, "\n");
+        $whole = $last === false ? '' : substr($output, 0, $last);
+
+        return array_values(array_filter(explode("\n", $whole), fn (string $line) => $line !== ''));
     }
 
     /**
@@ -206,12 +238,15 @@ class ChildRunner implements SqlRunner
     /**
      * Fold the child's lines into its rows, or into the store state or the failure they report.
      *
+     * A result is complete only when an end line arrives last and counts the rows that streamed. Any other end is
+     * partial rows with an abnormal stop, or the failure of that stop when no row streamed.
+     *
      * @param  list<string>  $lines
      *
      * @throws StoreUnusable
      * @throws SqlFailure
      */
-    protected function fold(array $lines, string $stderr, int $elapsedMilliseconds): SqlRows
+    protected function fold(array $lines, string $stderr, Ending $ending, int $elapsedMilliseconds): SqlRows
     {
         $columns = null;
         $reads = null;
@@ -239,21 +274,70 @@ class ChildRunner implements SqlRunner
             };
         }
 
-        if ($end === null || ($end['rows'] ?? null) !== count($rows)) {
-            throw SqlFailure::aborted($stderr);
-        }
-
-        if ($columns === null) {
+        if ($end !== null && $columns === null) {
             throw SqlFailure::failed('The child wrote its end line before its columns.');
         }
 
-        $stop = QueryStop::tryFrom(is_string($end['stop'] ?? null) ? $end['stop'] : '') ?? throw SqlFailure::failed('The end line carries no known stop.');
+        if ($end === null || ($end['rows'] ?? null) !== count($rows)) {
+            return $this->unfinished($columns, $rows, $reads, $stderr, $ending, $elapsedMilliseconds);
+        }
 
-        if ($stop === QueryStop::BUDGET && $rows === []) {
+        $stop = QueryStop::tryFrom(is_string($end['stop'] ?? null) ? $end['stop'] : '');
+
+        if ($stop === null || ! in_array($stop, static::REPORTED_STOPS, true)) {
+            throw SqlFailure::failed('The end line carries no known stop.');
+        }
+
+        return $this->finished($stop, $end, $columns, $rows, $reads ?? [], $elapsedMilliseconds);
+    }
+
+    /**
+     * Get the rows of a statement the child ended with an end line, or the failure of an abnormal stop that left no row.
+     *
+     * @param  array<string, mixed>  $end
+     * @param  list<string>  $columns
+     * @param  list<list<int|float|string|CutText|null>>  $rows
+     * @param  list<RecordType>  $reads
+     *
+     * @throws SqlFailure
+     */
+    protected function finished(QueryStop $stop, array $end, array $columns, array $rows, array $reads, int $elapsedMilliseconds): SqlRows
+    {
+        $message = is_string($end['message'] ?? null) ? $end['message'] : null;
+
+        if ($stop === QueryStop::ERROR && ($message === null || $rows === [])) {
+            throw SqlFailure::failed('The end line reports an error without a message or after no row.');
+        }
+
+        if ($rows === [] && $stop === QueryStop::BUDGET) {
             throw SqlFailure::rowTooLarge();
         }
 
-        return new SqlRows($columns, $rows, $stop, $reads ?? [], $elapsedMilliseconds);
+        if ($rows === [] && $stop === QueryStop::MEMORY) {
+            throw SqlFailure::memory();
+        }
+
+        return new SqlRows($columns, $rows, $stop, $reads, $elapsedMilliseconds, $stop === QueryStop::ERROR ? $message : null);
+    }
+
+    /**
+     * Get the rows streamed by a child that never finished, as partial, or the failure of its stop when no row streamed.
+     *
+     * @param  list<string>|null  $columns
+     * @param  list<list<int|float|string|CutText|null>>  $rows
+     * @param  list<RecordType>|null  $reads
+     *
+     * @throws SqlFailure
+     */
+    protected function unfinished(?array $columns, array $rows, ?array $reads, string $stderr, Ending $ending, int $elapsedMilliseconds): SqlRows
+    {
+        $deadline = $ending === Ending::DEADLINE;
+
+        if ($rows === []) {
+            throw $deadline ? SqlFailure::deadline() : SqlFailure::aborted($stderr);
+        }
+
+        return new SqlRows($columns ?? [], $rows, $deadline ? QueryStop::DEADLINE : QueryStop::ABORTED, $reads ?? [], $elapsedMilliseconds, $deadline || $stderr === '' ? null : $stderr);
     }
 
     /**

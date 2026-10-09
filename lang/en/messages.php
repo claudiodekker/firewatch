@@ -261,6 +261,10 @@ return [
 
     'row_too_large' => "error: row_too_large\nThe first row is larger than the :bytes-byte answer budget.\nhint: select fewer columns or cut text with substr().",
 
+    'deadline' => "error: deadline\nThe statement did not finish within :seconds seconds.\nhint: filter on `started_at` or an indexed column.",
+
+    'memory' => "error: memory\nThe statement needed more than :mebibytes MiB of working memory.\nhint: aggregate less, add filters, or select fewer columns; sorting and grouping large sets needs memory.",
+
     'aborted_stderr' => 'stderr: :stderr',
 
     'unavailable' => "error: unavailable\nThe SQL tool is unavailable: :reason. Every other Firewatch tool works.",
@@ -400,6 +404,8 @@ return [
 
     'query_summary' => 'Returned :rows (:columns).',
 
+    'query_summary_partial' => 'Returned :rows (:columns); the statement did not finish.',
+
     'query_summary_more' => 'Returned :rows (:columns). Showing the first :shown of more.',
 
     'query_rows_count' => ':count row|:count rows',
@@ -413,6 +419,10 @@ return [
     'query_limit_how' => 'Add LIMIT/OFFSET or a keyset condition on id, or raise `limit` up to 500.',
 
     'query_budget_how' => 'Select fewer columns, cut text with substr(), or add LIMIT.',
+
+    'query_partial_how' => 'Filter on started_at or an indexed column.',
+
+    'query_partial_note' => 'The statement did not finish; these rows are not in any particular order.',
 
     'query_cap_how' => 'Read the rest with substr(column, 2001, 2000).',
 
