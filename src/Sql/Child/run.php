@@ -179,6 +179,7 @@ try {
     $write([
         'k' => 'columns',
         'columns' => $columns,
+        'reads' => array_values($reads),
     ]);
 
     while (($row = $result->fetchArray(SQLITE3_NUM)) !== false) {
@@ -210,7 +211,6 @@ $write([
     'k' => 'end',
     'rows' => $rows,
     'stop' => $stop,
-    'reads' => array_values($reads),
 ]);
 
 $connection->close();

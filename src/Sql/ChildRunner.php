@@ -214,6 +214,7 @@ class ChildRunner implements SqlRunner
     protected function fold(array $lines, string $stderr, int $elapsedMilliseconds): SqlRows
     {
         $columns = null;
+        $reads = null;
         $rows = [];
         $end = null;
 
@@ -231,7 +232,7 @@ class ChildRunner implements SqlRunner
             match ($line['k']) {
                 'state' => throw count($lines) === 1 ? $this->unusable($line) : SqlFailure::failed('The child wrote a state line among others.'),
                 'error' => throw $this->failure($line),
-                'columns' => $columns = $columns === null ? $this->columns($line) : throw SqlFailure::failed('The child wrote its columns twice.'),
+                'columns' => [$columns, $reads] = $columns === null ? [$this->columns($line), $this->typesRead($line['reads'] ?? null)] : throw SqlFailure::failed('The child wrote its columns twice.'),
                 'row' => $rows[] = $this->row($line, $columns),
                 'end' => $end = $line,
                 default => throw SqlFailure::failed("The child wrote a line of the unknown kind {$line['k']}."),
@@ -248,7 +249,7 @@ class ChildRunner implements SqlRunner
 
         $stop = QueryStop::tryFrom(is_string($end['stop'] ?? null) ? $end['stop'] : '') ?? throw SqlFailure::failed('The end line carries no known stop.');
 
-        return new SqlRows($columns, $rows, $stop, $this->typesRead($end['reads'] ?? null), $elapsedMilliseconds);
+        return new SqlRows($columns, $rows, $stop, $reads ?? [], $elapsedMilliseconds);
     }
 
     /**
@@ -336,7 +337,7 @@ class ChildRunner implements SqlRunner
     protected function typesRead(mixed $reads): array
     {
         if (! is_array($reads)) {
-            throw SqlFailure::failed('The end line carries no reads.');
+            throw SqlFailure::failed('The columns line carries no reads.');
         }
 
         $views = [];

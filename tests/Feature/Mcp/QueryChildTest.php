@@ -109,13 +109,15 @@ describe('the protocol', function () {
         'a line that is no JSON' => [['not json']],
         'a line with no kind' => [[['columns' => ['n']]]],
         'a line of an unknown kind' => [[['k' => 'banner']]],
-        'a row before the columns' => [[['k' => 'row', 'r' => [1]], ['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 1, 'stop' => 'complete', 'reads' => []]]],
-        'a row of another width' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'row', 'r' => [1, 2]], ['k' => 'end', 'rows' => 1, 'stop' => 'complete', 'reads' => []]]],
-        'the columns twice' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 0, 'stop' => 'complete', 'reads' => []]]],
-        'a line after the end' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 0, 'stop' => 'complete', 'reads' => []], ['k' => 'row', 'r' => [1]]]],
-        'an end before the columns' => [[['k' => 'end', 'rows' => 0, 'stop' => 'complete', 'reads' => []]]],
-        'an unknown stop' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 0, 'stop' => 'budget', 'reads' => []]]],
-        'a state among other lines' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'state', 'state' => 'busy', 'found' => null]]],
+        'a row before the columns' => [[['k' => 'row', 'r' => [1]], ['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 1, 'stop' => 'complete']]],
+        'a row of another width' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'row', 'r' => [1, 2]], ['k' => 'end', 'rows' => 1, 'stop' => 'complete']]],
+        'the columns twice' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 0, 'stop' => 'complete']]],
+        'a line after the end' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 0, 'stop' => 'complete'], ['k' => 'row', 'r' => [1]]]],
+        'an end before the columns' => [[['k' => 'end', 'rows' => 0, 'stop' => 'complete']]],
+        'a columns line with no reads' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 0, 'stop' => 'complete']]],
+        'a read that is no table and view' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => [['requests']]], ['k' => 'end', 'rows' => 0, 'stop' => 'complete']]],
+        'an unknown stop' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 0, 'stop' => 'unknown']]],
+        'a state among other lines' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'state', 'state' => 'busy', 'found' => null]]],
         'a state a child never reports' => [[['k' => 'state', 'state' => 'unavailable', 'found' => null]]],
         'an unknown error code' => [[['k' => 'error', 'code' => 'memory', 'message' => 'out of memory']]],
         'an unknown denial' => [[['k' => 'error', 'code' => 'not_allowed', 'subject' => 'everything', 'name' => null]]],
@@ -129,8 +131,8 @@ describe('the protocol', function () {
 
         Exceptions::assertNothingReported();
     })->with([
-        'no end line' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'row', 'r' => [1]]]],
-        'an end line that counts other rows' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'row', 'r' => [1]], ['k' => 'end', 'rows' => 2, 'stop' => 'complete', 'reads' => []]]],
+        'no end line' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'row', 'r' => [1]]]],
+        'an end line that counts other rows' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'row', 'r' => [1]], ['k' => 'end', 'rows' => 2, 'stop' => 'complete']]],
     ])->group('process');
 
     it('answers a child that died before writing a line as aborted, with its stderr', function () {
@@ -147,6 +149,16 @@ describe('the protocol', function () {
         $text = FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']);
 
         expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.aborted'));
+    })->group('process');
+
+    it('takes the record types read from the columns line, so they are known before any row', function () {
+        $text = qcEcho([
+            ['k' => 'columns', 'columns' => ['n'], 'reads' => [['requests', null], ['users', null]]],
+            ['k' => 'row', 'r' => [1]],
+            ['k' => 'end', 'rows' => 1, 'stop' => 'complete'],
+        ]);
+
+        expect(json_decode($text, associative: true)['coverage']['types_read'])->toBe(['request', 'user']);
     })->group('process');
 
     it('answers a store state the child reports alone the way every tool does', function () {
