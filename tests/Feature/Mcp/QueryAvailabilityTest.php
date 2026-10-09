@@ -4,7 +4,9 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Sql\Availability;
+use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
@@ -92,4 +94,50 @@ describe('the static reasons', function () {
             unlink($binary);
         }
     })->group('process', 'posix');
+});
+
+/**
+ * Make an empty directory of the test's own for the runner's temp files.
+ */
+function qaTemporaryDirectory(): string
+{
+    $directory = sys_get_temp_dir().'/firewatch-temp-'.bin2hex(random_bytes(4));
+    mkdir($directory);
+
+    test()->beforeApplicationDestroyed(fn () => @rmdir($directory));
+
+    return $directory;
+}
+
+/**
+ * Get the files left in the directory.
+ *
+ * @return list<string>
+ */
+function qaLeft(string $directory): array
+{
+    return array_values(array_diff(scandir($directory), ['.', '..']));
+}
+
+describe('the temp files', function () {
+    it('leaves none of the call\'s files behind', function (string $script, float $deadline, string $text) {
+        $directory = qaTemporaryDirectory();
+        app()->instance(SqlRunner::class, new ChildRunner(app(Configuration::class), deadline: $deadline, script: dirname(__DIR__, 2)."/Fixtures/Sql/{$script}.php", temporaryDirectory: $directory));
+
+        expect(qaText())->toStartWith($text)
+            ->and(qaLeft($directory))->toBe([]);
+    })->with([
+        'a child that exits' => ['marker', ChildRunner::DEADLINE_SECONDS, '## query'],
+        'a child killed at the deadline' => ['sleep', 0.2, 'error: deadline'],
+        'a child killed at the output cap' => ['flood', ChildRunner::DEADLINE_SECONDS, 'error: aborted'],
+    ])->group('process');
+
+    it('leaves none of the call\'s files behind when the child can not be started', function () {
+        $directory = qaTemporaryDirectory();
+        $missing = new Availability(phpBinary: sys_get_temp_dir().'/firewatch-missing-php-'.bin2hex(random_bytes(4)));
+        $runner = new ChildRunner(app(Configuration::class), availability: $missing, temporaryDirectory: $directory);
+
+        expect(fn () => $runner->run('SELECT 1', 1))->toThrow(fn (SqlFailure $failure) => expect($failure->unavailable)->toBe(Unavailable::SPAWN_FAILED))
+            ->and(qaLeft($directory))->toBe([]);
+    })->group('process');
 });

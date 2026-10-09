@@ -63,9 +63,9 @@ class ChildRunner implements SqlRunner
     protected const REPORTED_STOPS = [QueryStop::COMPLETE, QueryStop::LIMIT, QueryStop::BUDGET, QueryStop::MEMORY, QueryStop::ERROR];
 
     /**
-     * The most bytes one read takes from a pipe.
+     * How long the parent waits between two looks at the child.
      */
-    protected const CHUNK_BYTES = 65536;
+    protected const POLL_MICROSECONDS = 10_000;
 
     /**
      * The store states a child reports.
@@ -81,12 +81,14 @@ class ChildRunner implements SqlRunner
      * Create a new child runner instance.
      *
      * @param  float  $deadline  seconds from spawn
+     * @param  string|null  $temporaryDirectory  where the call's files go, the system's when null
      */
     public function __construct(
         protected Configuration $configuration,
         protected float $deadline = self::DEADLINE_SECONDS,
         protected string $script = self::SCRIPT,
         protected Availability $availability = new Availability,
+        protected ?string $temporaryDirectory = null,
     ) {
         //
     }
@@ -123,85 +125,84 @@ class ChildRunner implements SqlRunner
     }
 
     /**
-     * Spawn the child, write the request to it and read its lines until it ends, or until the deadline passes or its output passes the cap, when it is killed.
+     * Spawn the child with its request on a temp file as stdin and its stdout and stderr on temp files, and poll it
+     * until it exits, its output passes the cap, or the deadline passes, when it is killed. The same on every platform.
      *
      * @param  array<string, mixed>  $request
-     * @return array{list<string>, string, Ending} the whole stdout lines, the start of stderr, and why the reading ended
+     * @return array{list<string>, string, Ending} the whole stdout lines, the start of stderr, and why the child stopped
      *
      * @throws SqlFailure
      */
     protected function exchange(array $request): array
     {
-        $process = @proc_open($this->command(), [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes, dirname(__DIR__, 2), $this->environment());
-
-        if (! is_resource($process)) {
-            throw SqlFailure::unavailable(Unavailable::SPAWN_FAILED);
-        }
-
-        [$stdin, $stdout, $stderr] = $pipes;
-        $input = json_encode($request, JSON_THROW_ON_ERROR);
-        $output = '';
-        $errors = '';
         $until = hrtime(true) + (int) ($this->deadline * 1e9);
-        $ending = Ending::EXITED;
+        $paths = [];
+        $handles = [];
 
         try {
-            foreach ($pipes as $pipe) {
-                stream_set_blocking($pipe, false);
+            foreach (['stdin', 'stdout', 'stderr'] as $name) {
+                // tempnam creates the file 0600 on POSIX, in the user's own %TEMP% on Windows.
+                $paths[$name] = @tempnam($this->temporaryDirectory ?? sys_get_temp_dir(), 'fws') ?: throw SqlFailure::unavailable(Unavailable::SPAWN_FAILED);
             }
 
-            while (! feof($stdout)) {
-                $left = $until - hrtime(true);
-
-                if ($left <= 0) {
-                    $ending = Ending::DEADLINE;
-
-                    break;
-                }
-
-                $read = feof($stderr) ? [$stdout] : [$stdout, $stderr];
-                $write = $stdin === null ? [] : [$stdin];
-                $except = null;
-
-                if (@stream_select($read, $write, $except, intdiv($left, 1_000_000_000), intdiv($left % 1_000_000_000, 1000)) === false) {
-                    break;
-                }
-
-                if ($write !== []) {
-                    // Written inside the loop, so a child that never reads can't hold the parent past the deadline.
-                    $written = @fwrite($stdin, $input);
-                    $input = $written === false ? '' : substr($input, $written);
-
-                    if ($input === '') {
-                        fclose($stdin);
-                        $stdin = null;
-                    }
-                }
-
-                foreach ($read as $pipe) {
-                    $chunk = (string) fread($pipe, static::CHUNK_BYTES);
-
-                    if ($pipe === $stdout) {
-                        $output .= $chunk;
-                    } else {
-                        // Drained past the excerpt, so a child that writes much to stderr never blocks on a full pipe.
-                        $errors = mb_strcut($errors.$chunk, 0, static::STDERR_CHARACTERS * 4);
-                    }
-                }
-
-                if (strlen($output) > static::OUTPUT_CAP_BYTES) {
-                    $ending = Ending::OUTPUT_CAP;
-
-                    break;
-                }
+            if (file_put_contents($paths['stdin'], json_encode($request, JSON_THROW_ON_ERROR)) === false) {
+                throw SqlFailure::unavailable(Unavailable::SPAWN_FAILED);
             }
 
-            $errors = mb_strcut($errors.(string) stream_get_contents($stderr), 0, static::STDERR_CHARACTERS * 4);
+            foreach (['stdout', 'stderr'] as $name) {
+                $handles[$name] = @fopen($paths[$name], 'rb') ?: throw SqlFailure::unavailable(Unavailable::SPAWN_FAILED);
+            }
+
+            $descriptors = [['file', $paths['stdin'], 'r'], ['file', $paths['stdout'], 'w'], ['file', $paths['stderr'], 'w']];
+            $process = @proc_open($this->command(), $descriptors, $pipes, dirname(__DIR__, 2), $this->environment());
+
+            if (! is_resource($process)) {
+                throw SqlFailure::unavailable(Unavailable::SPAWN_FAILED);
+            }
+
+            try {
+                $ending = $this->wait($process, $handles['stdout'], $until);
+            } finally {
+                $this->end($process);
+            }
+
+            $output = (string) stream_get_contents($handles['stdout'], static::OUTPUT_CAP_BYTES, 0);
+            $errors = (string) stream_get_contents($handles['stderr'], static::STDERR_CHARACTERS * 4, 0);
         } finally {
-            $this->end($process, array_values(array_filter([$stdin, $stdout, $stderr])));
+            // Unlinked only after proc_close, when the child holds none of the files open, which Windows requires.
+            array_map(fclose(...), $handles);
+            array_map(fn (string $path) => @unlink($path), $paths);
         }
 
         return [$this->wholeLines($output), trim(mb_substr($errors, 0, static::STDERR_CHARACTERS)), $ending];
+    }
+
+    /**
+     * Poll the child until it exits, its output passes the cap, or the deadline passes.
+     *
+     * @param  resource  $process
+     * @param  resource  $output  the parent's own handle on the child's stdout file
+     */
+    protected function wait($process, $output, int $until): Ending
+    {
+        while (true) {
+            // Read before the size, so the last bytes of a child that just exited are counted.
+            $running = proc_get_status($process)['running'];
+
+            if ((fstat($output)['size'] ?? 0) > static::OUTPUT_CAP_BYTES) {
+                return Ending::OUTPUT_CAP;
+            }
+
+            if (! $running) {
+                return Ending::EXITED;
+            }
+
+            if (hrtime(true) >= $until) {
+                return Ending::DEADLINE;
+            }
+
+            usleep(static::POLL_MICROSECONDS);
+        }
     }
 
     /**
@@ -218,17 +219,12 @@ class ChildRunner implements SqlRunner
     }
 
     /**
-     * Close the pipes, kill the child when it is still running, and reap it.
+     * Kill the child when it is still running, and reap it.
      *
      * @param  resource  $process
-     * @param  list<resource>  $pipes
      */
-    protected function end($process, array $pipes): void
+    protected function end($process): void
     {
-        foreach ($pipes as $pipe) {
-            fclose($pipe);
-        }
-
         if (proc_get_status($process)['running']) {
             proc_terminate($process, static::SIGKILL);
         }
