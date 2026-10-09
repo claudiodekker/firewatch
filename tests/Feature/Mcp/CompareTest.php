@@ -733,7 +733,7 @@ it('is listed between actor and trend, read only, idempotent and closed, with no
     $tools = array_column($listing['tools'], null, 'name');
     $compare = $tools['compare'];
 
-    expect(array_slice(array_keys($tools), -4))->toBe(['actor', 'compare', 'trend', 'query'])
+    expect(array_slice(array_keys($tools), -4))->toBe(['compare', 'trend', 'query', 'describe'])
         ->and($compare['description'])->toBe(__('firewatch::messages.tools.compare'))
         ->and(str_word_count($compare['description']))->toBeLessThanOrEqual(150)
         ->and(array_keys($compare['inputSchema']['properties']))->toBe(['type', 'group', 'split_at', 'deploy_before', 'deploy_after', 'by', 'since', 'until', 'limit', 'format'])

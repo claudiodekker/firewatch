@@ -83,12 +83,12 @@ test('every SQL error code has pinned text', function (SqlFailure $failure, Erro
     'a function outside the allow-list' => [
         SqlFailure::notAllowed(Denied::FUNCTION, 'printf'),
         ErrorCode::NOT_ALLOWED,
-        "error: not_allowed\nfunction `printf` is not allowed.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+        "error: not_allowed\nfunction `printf` is not allowed.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: `describe` lists the permitted functions.",
     ],
     'a table outside the readable set' => [
         SqlFailure::notAllowed(Denied::TABLE, 'sqlite_master'),
         ErrorCode::NOT_ALLOWED,
-        "error: not_allowed\ntable `sqlite_master` is not readable.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: the readable objects are the twelve record views, records, users, drift, meta, json_each and json_tree.",
+        "error: not_allowed\ntable `sqlite_master` is not readable.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: the readable objects are the twelve record views, records, users, drift, meta, json_each and json_tree. `describe` lists the readable tables.",
     ],
     'an action that is not a read' => [
         SqlFailure::notAllowed(Denied::ACTION, 'INSERT'),
@@ -118,12 +118,12 @@ test('every SQL error code has pinned text', function (SqlFailure $failure, Erro
     'invalid_sql' => [
         SqlFailure::invalid('no such table: orders'),
         ErrorCode::INVALID_SQL,
-        "error: invalid_sql\nno such table: orders\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+        "error: invalid_sql\nno such table: orders\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: `describe` lists the tables, views and columns.",
     ],
     'invalid_sql with a message cut at 300 characters' => [
         SqlFailure::invalid('near "'.str_repeat('x', 400).'": syntax error'),
         ErrorCode::INVALID_SQL,
-        "error: invalid_sql\nnear \"".str_repeat('x', 294)."\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+        "error: invalid_sql\nnear \"".str_repeat('x', 294)."\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: `describe` lists the tables, views and columns.",
     ],
     'aborted' => [
         SqlFailure::aborted(''),

@@ -34,6 +34,11 @@ class ChildRunner implements SqlRunner
     public const PROBE_DEADLINE_SECONDS = 2.0;
 
     /**
+     * The PHP memory limit of the child, in mebibytes.
+     */
+    public const MEMORY_LIMIT_MEBIBYTES = 64;
+
+    /**
      * The probe's request.
      */
     protected const PROBE = [
@@ -48,7 +53,7 @@ class ChildRunner implements SqlRunner
      * The ini the child runs under, forced over the host's so that no setting can change its output or its limits.
      */
     protected const INI = [
-        'memory_limit=64M',
+        'memory_limit='.self::MEMORY_LIMIT_MEBIBYTES.'M',
         'display_errors=0',
         'log_errors=1',
         'error_log=',
@@ -71,7 +76,7 @@ class ChildRunner implements SqlRunner
     /**
      * The most bytes of stdout the parent reads before it kills the child.
      */
-    protected const OUTPUT_CAP_BYTES = 1048576;
+    public const OUTPUT_CAP_BYTES = 1048576;
 
     /**
      * The stops a child's end line reports; the parent alone decides the others.

@@ -1,11 +1,13 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -63,3 +65,38 @@ it('states the blind spots of the requests the statement read', function () {
     expect($envelope['coverage']['types_read'])->toBe(['request'])
         ->and($structural)->toBe(BlindSpots::for([RecordType::REQUEST]));
 })->group('process');
+
+it('learns the request columns from describe, then finds the header with the statement it offers', function () {
+    rawSqlRequests();
+
+    $store = Envelope::assert(Describe::class);
+    $requests = Envelope::assert(Describe::class, ['type' => 'request']);
+    $columns = array_column($requests['result']['columns'], null, 'column');
+    $headerNames = Arr::first($store['result']['examples'], fn (array $example) => str_contains($example['sql'], 'json_each'));
+    $envelope = Envelope::assert(Query::class, ['sql' => $headerNames['sql']]);
+
+    expect(array_column($store['result']['types'], 'records', 'type')['request'])->toBe(2)
+        ->and($columns['headers'])->toMatchArray(['sql_type' => 'TEXT', 'wire' => 'headers', 'examples' => []])
+        ->and($columns['route_path']['examples'])->toBe(['/checkout'])
+        ->and($columns['status_code']['examples'])->toBe([200])
+        ->and($envelope['result']['rows'])->toContain(['x-tenant', 1]);
+})->group('process');
+
+it('describes the request view before anything was recorded, from the shipped catalogue', function () {
+    $envelope = Envelope::assert(Describe::class, ['type' => 'request']);
+
+    expect($envelope['coverage']['state'])->toBe('absent')
+        ->and($envelope['empty']['kind'])->toBe('no_store')
+        ->and(array_column($envelope['result']['columns'], 'column'))->toHaveCount(48)
+        ->and($envelope['result']['columns'][0]['column'])->toBe('id')
+        ->and(array_filter(array_column($envelope['result']['columns'], 'examples')))->toBe([]);
+});
+
+it('states the blind spots of the requests it describes', function () {
+    rawSqlRequests();
+
+    $envelope = Envelope::assert(Describe::class, ['type' => 'request']);
+    $structural = array_values(array_filter($envelope['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'structural'));
+
+    expect($structural)->toBe(BlindSpots::for([RecordType::REQUEST]));
+});

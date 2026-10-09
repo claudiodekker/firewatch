@@ -43,3 +43,4 @@
 - The `query` tool also stops at 32 MiB of working memory, 1 MiB of output, 16,000 bytes of rows and 2,000 characters a cell. A statement that stops early after some rows returns them as partial with its stop; one that stops before any is an error, `row_too_large` when the first row is over the budget.
 - `query` names why it can't run: `proc_open` disabled, sqlite3 missing, `PHP_BINARY` not executable, or SQLite older than 3.38.0.
 - `query` runs its child on Windows.
+- The `describe` tool states what the store holds (records per type, deploys, drift, size) and what `query` can read: every object and column with its type, unit, meaning and recent values, the ceilings, and example statements. It answers before a store exists, and `query`'s refusals point to it.

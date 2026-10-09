@@ -61,7 +61,7 @@ class Query extends Tool
     /**
      * The most rows an answer holds.
      */
-    protected const MAXIMUM_LIMIT = 500;
+    public const MAXIMUM_LIMIT = 500;
 
     /**
      * A statement that runs on any store, for the examples of a refusal.
