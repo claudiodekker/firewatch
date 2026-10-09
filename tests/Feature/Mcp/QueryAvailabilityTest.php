@@ -141,3 +141,34 @@ describe('the temp files', function () {
             ->and(qaLeft($directory))->toBe([]);
     })->group('process');
 });
+
+/**
+ * Get a runner on the given stand-in child, or on the real one.
+ */
+function qaRunner(?string $script = null, float $deadline = ChildRunner::DEADLINE_SECONDS): ChildRunner
+{
+    return new ChildRunner(app(Configuration::class), deadline: $deadline, script: $script === null ? ChildRunner::SCRIPT : dirname(__DIR__, 2)."/Fixtures/Sql/{$script}.php");
+}
+
+describe('the probe', function () {
+    it('finds a working child without reading the store', function () {
+        foreach (['', '-wal', '-shm'] as $suffix) {
+            @unlink(app(Configuration::class)->database.$suffix);
+        }
+
+        expect((new Availability)->reason(probe: qaRunner()))->toBeNull();
+    })->group('process');
+
+    it('names the reason a child\'s self-check reports', function () {
+        expect((new Availability)->reason(probe: qaRunner('unavailable')))->toBe(Unavailable::HEAP_LIMIT);
+    })->group('process');
+
+    it('is spawn_failed when the child never answers', function () {
+        expect((new Availability)->reason(probe: qaRunner('sleep', deadline: 0.2)))->toBe(Unavailable::SPAWN_FAILED);
+    })->group('process');
+
+    it('never spawns when a static reason holds', function () {
+        expect((new Availability(sqliteVersion: fn () => '3.37.2'))->reason(probe: qaRunner('marker')))->toBe(Unavailable::SQLITE_TOO_OLD)
+            ->and(qaSpawned())->toBeFalse();
+    })->group('process');
+});

@@ -35,9 +35,9 @@ class Availability
     }
 
     /**
-     * Get why the SQL tool can't run, or null when it can, from the static facts in check order.
+     * Get why the SQL tool can't run, or null when it can: the static facts in check order, then, given a runner, its child probed.
      */
-    public function reason(): ?Unavailable
+    public function reason(?ChildRunner $probe = null): ?Unavailable
     {
         clearstatcache(true, $this->phpBinary);
         $version = ($this->sqliteVersion)();
@@ -48,7 +48,7 @@ class Availability
             $version === null => Unavailable::SQLITE3_MISSING,
             ! is_file($this->phpBinary) || ! is_executable($this->phpBinary) => Unavailable::PHP_BINARY,
             version_compare($version, ModeResolver::MINIMUM_SQLITE_VERSION, '<') => Unavailable::SQLITE_TOO_OLD,
-            default => null,
+            default => $probe?->probe(),
         };
     }
 }

@@ -29,6 +29,22 @@ class ChildRunner implements SqlRunner
     public const DEADLINE_SECONDS = 10.0;
 
     /**
+     * The most seconds a probe waits for the child.
+     */
+    public const PROBE_DEADLINE_SECONDS = 2.0;
+
+    /**
+     * The probe's request: a fixed statement over an empty in-memory database, through the child's whole startup self-check.
+     */
+    protected const PROBE = [
+        'sql' => 'SELECT 1',
+        'limit' => 1,
+        'store' => ':memory:',
+        'application_id' => 0,
+        'version' => 0,
+    ];
+
+    /**
      * The ini the child runs under, forced over the host's so that no setting can change its output or its limits.
      */
     protected const INI = [
@@ -117,8 +133,37 @@ class ChildRunner implements SqlRunner
             'version' => Schema::VERSION,
         ];
 
+        return $this->call($request, $this->deadline);
+    }
+
+    /**
+     * Probe the child: null when it starts, passes its self-check and answers SELECT 1, else why it can't run.
+     */
+    public function probe(): ?Unavailable
+    {
+        try {
+            $rows = $this->call(static::PROBE, min($this->deadline, static::PROBE_DEADLINE_SECONDS));
+        } catch (SqlFailure $failure) {
+            return $failure->unavailable ?? Unavailable::SPAWN_FAILED;
+        } catch (StoreUnusable) {
+            return Unavailable::SPAWN_FAILED;
+        }
+
+        return $rows->stop === QueryStop::COMPLETE && $rows->rows === [[1]] ? null : Unavailable::SPAWN_FAILED;
+    }
+
+    /**
+     * Hand the child a request and fold what it wrote.
+     *
+     * @param  array<string, mixed>  $request
+     *
+     * @throws StoreUnusable
+     * @throws SqlFailure
+     */
+    protected function call(array $request, float $deadline): SqlRows
+    {
         $started = hrtime(true);
-        [$lines, $stderr, $ending] = $this->exchange($request);
+        [$lines, $stderr, $ending] = $this->exchange($request, $deadline);
         $elapsed = intdiv(hrtime(true) - $started, 1_000_000);
 
         return $this->fold($lines, $stderr, $ending, $elapsed);
@@ -133,9 +178,9 @@ class ChildRunner implements SqlRunner
      *
      * @throws SqlFailure
      */
-    protected function exchange(array $request): array
+    protected function exchange(array $request, float $deadline): array
     {
-        $until = hrtime(true) + (int) ($this->deadline * 1e9);
+        $until = hrtime(true) + (int) ($deadline * 1e9);
         $paths = [];
         $handles = [];
 
