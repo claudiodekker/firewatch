@@ -26,7 +26,7 @@ class BudgetSection
     protected function __construct(
         protected ?array $counts,
         protected array $exceeded,
-        protected int $matched,
+        protected int $over,
         protected int $ignored,
     ) {
         //
@@ -101,7 +101,7 @@ class BudgetSection
      */
     public function exceeded(): int
     {
-        return $this->matched;
+        return $this->over;
     }
 
     /**
@@ -111,14 +111,14 @@ class BudgetSection
      */
     public function truncation(): ?array
     {
-        if ($this->matched <= self::LISTED) {
+        if ($this->over <= self::LISTED) {
             return null;
         }
 
         return [
             'section' => 'budgets_exceeded',
             'shown' => count($this->exceeded),
-            'matched' => $this->matched,
+            'matched' => $this->over,
             'reason' => TruncationReason::LIMIT->value,
             'how' => __('firewatch::messages.overview_budgets_truncated_how'),
         ];
@@ -129,7 +129,7 @@ class BudgetSection
      */
     public function note(): string
     {
-        $ignored = $this->ignored > 0 ? "; ignored_entries: {$this->ignored}" : '';
+        $ignored = $this->ignored > 0 ? __('firewatch::messages.budget_ignored', ['count' => $this->ignored]) : '';
 
         if ($this->counts === null) {
             return __('firewatch::messages.overview_budgets_unevaluated', [

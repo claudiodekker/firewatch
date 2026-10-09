@@ -81,7 +81,7 @@ it('says what is wrong now: the error rate, the slowest groups, every count and 
         ->and($envelope['summary'])->toEndWith(__('firewatch::messages.overview_summary', ['records' => $result['records'], 'with_status' => 6, 'server_errors' => 1, 'client_errors' => 1]))
         ->and($envelope['summary'])->not->toContain(explode(':', __('firewatch::messages.overview_detectors_clean'))[0])
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial')
-        ->and($envelope['notes'])->toBe(['Budgets: not evaluated (no_budget_configured)']);
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
 });
 
 it('lists the groups that took the most time with their type, at most three of a type, and none without a duration', function () {
@@ -133,7 +133,7 @@ it('offers calls that read the same window when they run later, and every one of
     expect($envelope['result']['records'])->toBe($envelope['coverage']['records'])
         ->and($labels)->toEqualCanonicalizing(['/orders', '/reports', __('firewatch::messages.rank_no_route')])
         ->and($tools)->toContain('detect', 'rank', 'execution')
-        ->and($envelope['notes'])->toBe(['Budgets: not evaluated (no_budget_configured)', __('firewatch::messages.overview_directory_unwindowed')]);
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), __('firewatch::messages.overview_directory_unwindowed')]);
 
     foreach ($envelope['next'] as $call) {
         $answer = whatsWrongFollow($call);

@@ -620,7 +620,7 @@ describe('the record counts and the user directory', function () {
                 ['type' => 'outgoing-request', 'records' => 0],
                 ['type' => 'queued-job', 'records' => 1],
             ])
-            ->and($envelope['notes'])->toBe(['Budgets: not evaluated (no_budget_configured)']);
+            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
     });
 
     it('counts a record of no known type among the records and in no row, and says how many', function () {
@@ -631,7 +631,7 @@ describe('the record counts and the user directory', function () {
         expect($envelope['result']['records'])->toBe(3)
             ->and(array_sum(array_column($envelope['result']['records_by_type'], 'records')))->toBe(1)
             ->and($envelope['result']['records_by_type'])->toHaveCount(12)
-            ->and($envelope['notes'])->toBe(['Budgets: not evaluated (no_budget_configured)', trans_choice('firewatch::messages.overview_unknown_types', 2, ['count' => 2])]);
+            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), trans_choice('firewatch::messages.overview_unknown_types', 2, ['count' => 2])]);
     });
 
     it('counts only the records that started in the window, by type', function () {
@@ -651,7 +651,7 @@ describe('the record counts and the user directory', function () {
         expect($envelope['result']['user_directory'])->toBe(2)
             ->and($envelope['result']['records'])->toBe(1)
             ->and(array_sum(array_column($envelope['result']['records_by_type'], 'records')))->toBe(1)
-            ->and($envelope['notes'])->toBe(['Budgets: not evaluated (no_budget_configured)']);
+            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
     });
 
     it('counts the user directory over the whole store whatever the window, and says so', function (array $arguments) {
@@ -664,7 +664,7 @@ describe('the record counts and the user directory', function () {
         $envelope = Envelope::assert(Overview::class, $arguments);
 
         expect($envelope['result']['user_directory'])->toBe(2)
-            ->and($envelope['notes'])->toBe(['Budgets: not evaluated (no_budget_configured)', __('firewatch::messages.overview_directory_unwindowed')]);
+            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), __('firewatch::messages.overview_directory_unwindowed')]);
     })->with([
         'a start' => [['since' => 1790773000]],
         'an end' => [['until' => 1790773300]],

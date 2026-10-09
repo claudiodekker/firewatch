@@ -8,6 +8,38 @@ use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 const OVERVIEW_BUDGET_AT = 1790776000.0;
 
 /**
+ * Get the note that counts the groups by verdict.
+ */
+function overviewBudgetNote(int $exceeded, int $within, int $notEvaluated, int $ignored = 0): string
+{
+    return __('firewatch::messages.overview_budgets', [
+        'groups' => trans_choice('firewatch::messages.overview_budgets_groups', $exceeded, ['count' => $exceeded]),
+        'within' => $within,
+        'not_evaluated' => $notEvaluated,
+        'ignored' => $ignored > 0 ? __('firewatch::messages.budget_ignored', ['count' => $ignored]) : '',
+    ]);
+}
+
+/**
+ * Get the note of budgets that cannot be evaluated.
+ */
+function overviewBudgetUnevaluated(int $ignored = 0): string
+{
+    return __('firewatch::messages.overview_budgets_unevaluated', [
+        'reason' => 'no_budget_configured',
+        'ignored' => $ignored > 0 ? __('firewatch::messages.budget_ignored', ['count' => $ignored]) : '',
+    ]);
+}
+
+/**
+ * Get the summary sentence that counts the groups over budget.
+ */
+function overviewBudgetOver(int $count): string
+{
+    return trans_choice('firewatch::messages.overview_budgets_over', $count, ['count' => $count]);
+}
+
+/**
  * @param  list<array<string, mixed>>  $budgets
  */
 function overviewBudgetsAre(array $budgets): void
@@ -61,14 +93,14 @@ describe('the counts', function () {
         $answer = overviewBudgetAnswer();
 
         expect($answer['result']['budgets'])->toBe(['exceeded' => 2, 'within' => 1, 'not_evaluated' => 2, 'ignored_entries' => 1])
-            ->and($answer['notes'])->toContain('Budgets: 2 groups exceeded, 1 within, 2 not evaluated; ignored_entries: 1. Groups not listed are not proven within budget unless counted as within.');
+            ->and($answer['notes'])->toContain(overviewBudgetNote(2, 1, 2, 1));
     });
 
     it('counts one exceeded group in the singular', function () {
         overviewBudgetsAre([['type' => 'command', 'duration' => 100]]);
         ingest(overviewBudgetGroup(RecordType::COMMAND, 'a', [500]));
 
-        expect(overviewBudgetAnswer()['notes'])->toContain('Budgets: 1 group exceeded, 0 within, 0 not evaluated. Groups not listed are not proven within budget unless counted as within.');
+        expect(overviewBudgetAnswer()['notes'])->toContain(overviewBudgetNote(1, 0, 0));
     });
 
     it('states no ignored entries when the normaliser dropped none', function () {
@@ -79,7 +111,7 @@ describe('the counts', function () {
 
         expect($answer['result']['budgets'])->toBe(['exceeded' => 0, 'within' => 1, 'not_evaluated' => 0])
             ->and($answer['result'])->not->toHaveKey('budgets_exceeded')
-            ->and($answer['notes'])->toContain('Budgets: 0 groups exceeded, 1 within, 0 not evaluated. Groups not listed are not proven within budget unless counted as within.');
+            ->and($answer['notes'])->toContain(overviewBudgetNote(0, 1, 0));
     });
 
     it('counts only the groups with a record in the window', function () {
@@ -102,7 +134,7 @@ describe('the counts', function () {
 
         expect($answer['result']['budgets'])->toBe(['state' => 'not_evaluated', 'reason' => 'no_budget_configured'])
             ->and($answer['result'])->not->toHaveKey('budgets_exceeded')
-            ->and($answer['notes'])->toContain('Budgets: not evaluated (no_budget_configured)');
+            ->and($answer['notes'])->toContain(overviewBudgetUnevaluated());
     });
 
     it('says the budgets are not evaluated when every entry was ignored, and states how many', function () {
@@ -112,7 +144,7 @@ describe('the counts', function () {
         $answer = overviewBudgetAnswer();
 
         expect($answer['result']['budgets'])->toBe(['state' => 'not_evaluated', 'reason' => 'no_budget_configured', 'ignored_entries' => 2])
-            ->and($answer['notes'])->toContain('Budgets: not evaluated (no_budget_configured); ignored_entries: 2');
+            ->and($answer['notes'])->toContain(overviewBudgetUnevaluated(2));
     });
 
     it('puts the budgets after the fixed sections and before the detectors', function () {
@@ -209,7 +241,7 @@ describe('the rest of the answer', function () {
             ...overviewBudgetGroup(RecordType::COMMAND, 'c', [10]),
         ]);
 
-        expect(overviewBudgetAnswer()['summary'])->toContain('2 groups over budget.');
+        expect(overviewBudgetAnswer()['summary'])->toContain(overviewBudgetOver(2));
 
         overviewBudgetsAre([['type' => 'command', 'duration' => 1000]]);
 
@@ -220,7 +252,7 @@ describe('the rest of the answer', function () {
         overviewBudgetsAre([['type' => 'command', 'duration' => 100]]);
         ingest(overviewBudgetGroup(RecordType::COMMAND, 'a', [500]));
 
-        expect(overviewBudgetAnswer()['summary'])->toContain('1 group over budget.');
+        expect(overviewBudgetAnswer()['summary'])->toContain(overviewBudgetOver(1));
     });
 
     it('leaves the detectors, the rows and the summary of an answer without budgets as they were', function () {
@@ -240,6 +272,6 @@ describe('the rest of the answer', function () {
             ->and($with['result']['slowest_by_total_time'])->toBe($without['result']['slowest_by_total_time'])
             ->and($with['result']['records'])->toBe($without['result']['records'])
             ->and($with['empty'])->toBe($without['empty'])
-            ->and($with['summary'])->toBe(str_replace(' In the window:', ' 2 groups over budget. In the window:', $without['summary']));
+            ->and($with['summary'])->toBe(str_replace(' In the window:', ' '.overviewBudgetOver(2).' In the window:', $without['summary']));
     });
 });
