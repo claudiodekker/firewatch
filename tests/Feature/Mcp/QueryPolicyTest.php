@@ -326,6 +326,8 @@ it('refuses every table outside the readable set by the name SQLite reads', func
     'an unreadable table counted through a CTE' => ['WITH m AS (SELECT name FROM sqlite_master) SELECT count(*) FROM m', 'sqlite_master'],
 ])->group('process');
 
-it('refuses a table the linked SQLite lacks as invalid SQL', function () {
-    expect(qpRefusal('SELECT * FROM dbstat'))->toBe(['error: invalid_sql', 'no such table: dbstat']);
+it('refuses dbstat as unreadable where the linked SQLite has it, and as invalid SQL where it lacks it', function () {
+    $linked = (new SQLite3(':memory:'))->querySingle("SELECT count(*) FROM pragma_module_list WHERE name = 'dbstat'") === 1;
+
+    expect(qpRefusal('SELECT * FROM dbstat'))->toBe($linked ? qpDenied('table', 'dbstat') : ['error: invalid_sql', 'no such table: dbstat']);
 })->group('process');
