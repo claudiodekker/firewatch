@@ -138,7 +138,11 @@ class BudgetSection
             ]);
         }
 
-        return __('firewatch::messages.overview_budgets', array_merge($this->counts, ['ignored' => $ignored]));
+        return __('firewatch::messages.overview_budgets', [
+            ...$this->counts,
+            'groups' => trans_choice('firewatch::messages.overview_budgets_groups', $this->counts['exceeded'], ['count' => $this->counts['exceeded']]),
+            'ignored' => $ignored,
+        ]);
     }
 
     /**

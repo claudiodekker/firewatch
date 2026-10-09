@@ -64,6 +64,13 @@ describe('the counts', function () {
             ->and($answer['notes'])->toContain('Budgets: 2 groups exceeded, 1 within, 2 not evaluated; ignored_entries: 1. Groups not listed are not proven within budget unless counted as within.');
     });
 
+    it('counts one exceeded group in the singular', function () {
+        overviewBudgetsAre([['type' => 'command', 'duration' => 100]]);
+        ingest(overviewBudgetGroup(RecordType::COMMAND, 'a', [500]));
+
+        expect(overviewBudgetAnswer()['notes'])->toContain('Budgets: 1 group exceeded, 0 within, 0 not evaluated. Groups not listed are not proven within budget unless counted as within.');
+    });
+
     it('states no ignored entries when the normaliser dropped none', function () {
         overviewBudgetsAre([['type' => 'command', 'duration' => 100]]);
         ingest(overviewBudgetGroup(RecordType::COMMAND, 'a', [10]));

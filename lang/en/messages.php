@@ -92,7 +92,9 @@ return [
 
     'overview_detectors_clean' => 'No findings: the shape is clean over what was captured.|No findings: all :count shapes are clean over what was captured.',
 
-    'overview_budgets' => 'Budgets: :exceeded groups exceeded, :within within, :not_evaluated not evaluated:ignored. Groups not listed are not proven within budget unless counted as within.',
+    'overview_budgets' => 'Budgets: :groups exceeded, :within within, :not_evaluated not evaluated:ignored. Groups not listed are not proven within budget unless counted as within.',
+
+    'overview_budgets_groups' => ':count group|:count groups',
 
     'overview_budgets_unevaluated' => 'Budgets: not evaluated (:reason):ignored',
 
