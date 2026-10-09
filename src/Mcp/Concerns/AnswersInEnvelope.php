@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Concerns;
 
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
+use ClaudioDekker\Firewatch\Mcp\Call;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -97,9 +98,7 @@ trait AnswersInEnvelope
      */
     protected function call(array $arguments): string
     {
-        $written = array_map(fn (string $name, mixed $value) => $name.': '.json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), array_keys($arguments), $arguments);
-
-        return $this->name().'('.implode(', ', $written).')';
+        return Call::written($this->name(), $arguments);
     }
 
     /**
