@@ -313,17 +313,29 @@ class ChildRunner implements SqlRunner
      *
      * @param  array<string, mixed>  $line
      * @param  list<string>|null  $columns
-     * @return list<int|float|string|null>
+     * @return list<int|float|string|CutText|null>
      */
     protected function row(array $line, ?array $columns): array
     {
         $row = $line['r'] ?? null;
 
-        if ($columns === null || ! is_array($row) || ! array_is_list($row) || count($row) !== count($columns) || array_filter($row, is_array(...)) !== []) {
+        if ($columns === null || ! is_array($row) || ! array_is_list($row) || count($row) !== count($columns)) {
             throw SqlFailure::failed('A row line does not fit the columns.');
         }
 
-        return $row;
+        return array_map($this->cell(...), $row);
+    }
+
+    /**
+     * Get the value a cell of a row line carries: a scalar, or the text the child cut at the cell cap.
+     */
+    protected function cell(mixed $cell): int|float|string|CutText|null
+    {
+        if (is_array($cell) && is_string($cell['text'] ?? null) && is_int($cell['omitted'] ?? null)) {
+            return new CutText($cell['text'], $cell['omitted']);
+        }
+
+        return is_int($cell) || is_float($cell) || is_string($cell) || $cell === null ? $cell : throw SqlFailure::failed('A row line carries a cell that is no value.');
     }
 
     /**

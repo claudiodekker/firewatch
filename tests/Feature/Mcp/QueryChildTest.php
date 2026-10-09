@@ -161,6 +161,18 @@ describe('the protocol', function () {
         expect(json_decode($text, associative: true)['coverage']['types_read'])->toBe(['request', 'user']);
     })->group('process');
 
+    it('shows a text cell the child cut with the notice for the characters it left out', function () {
+        $text = qcEcho([
+            ['k' => 'columns', 'columns' => ['text'], 'reads' => []],
+            ['k' => 'row', 'r' => [['text' => 'abc', 'omitted' => 40]]],
+            ['k' => 'end', 'rows' => 1, 'stop' => 'complete'],
+        ]);
+        $envelope = json_decode($text, associative: true);
+
+        expect($envelope['result']['rows'])->toBe([['abc'.__('firewatch::messages.cell_truncated', ['count' => 40])]])
+            ->and($envelope['truncated'][0]['reason'])->toBe('cap');
+    })->group('process');
+
     it('answers a store state the child reports alone the way every tool does', function () {
         $text = qcEcho([['k' => 'state', 'state' => 'schema_mismatch', 'found' => 2]]);
         $envelope = json_decode($text, associative: true);

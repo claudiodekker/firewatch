@@ -17,6 +17,21 @@ class Policy
     public const SQL_BYTES = 16384;
 
     /**
+     * The most bytes the rows of one answer have, each measured as the JSON of its cells.
+     */
+    public const ROW_BUDGET_BYTES = 16000;
+
+    /**
+     * The most bytes of working memory SQLite has.
+     */
+    public const HEAP_LIMIT_BYTES = 33554432;
+
+    /**
+     * The most characters a text cell has before it is cut.
+     */
+    public const CELL_CHARACTERS = 2000;
+
+    /**
      * The name a denied action is refused with, by code; a code missing here is refused by its number.
      */
     protected const ACTION_NAMES = [
@@ -206,9 +221,11 @@ class Policy
     }
 
     /**
-     * Get a value as the protocol carries it: raw, except a blob and an infinite float, which JSON can't hold.
+     * Get a value as the protocol carries it: raw, except a blob and an infinite float, which JSON can't hold, and text over the cell cap.
+     *
+     * @return int|float|string|array{text: string, omitted: int}|null
      */
-    public static function cell(mixed $value, bool $blob): int|float|string|null
+    public static function cell(mixed $value, bool $blob): int|float|string|array|null
     {
         if ($blob) {
             return '<blob '.strlen((string) $value).' bytes>';
@@ -216,6 +233,13 @@ class Policy
 
         if (is_float($value) && is_infinite($value)) {
             return $value > 0 ? 'Infinity' : '-Infinity';
+        }
+
+        if (is_string($value) && mb_strlen($value) > self::CELL_CHARACTERS) {
+            return [
+                'text' => mb_substr($value, 0, self::CELL_CHARACTERS),
+                'omitted' => mb_strlen($value) - self::CELL_CHARACTERS,
+            ];
         }
 
         return is_int($value) || is_float($value) || is_string($value) ? $value : null;

@@ -47,6 +47,7 @@ class Answer
      * @param  list<array{tool: string, arguments: array<string, mixed>, why: string}>  $next
      * @param  list<string>|null  $cuttable  the result lists the budget may shorten, the first named first; null for every list, the last first
      * @param  (Closure(array<string, mixed>): array<string, mixed>)|null  $recount  restates what a result says of its own lists once the budget has shortened them
+     * @param  string|null  $capHow  what the cap entry tells the reader, when it is not that no tool shows the rest of a value
      */
     public function __construct(
         public readonly string $tool,
@@ -63,6 +64,7 @@ class Answer
         public readonly array $next = [],
         public readonly ?array $cuttable = null,
         protected ?Closure $recount = null,
+        protected ?string $capHow = null,
     ) {
         if (count($notes) > self::LISTED || count($next) > self::LISTED) {
             throw new InvalidArgumentException('An answer carries at most '.self::LISTED.' notes and '.self::LISTED.' next calls.');
@@ -113,15 +115,24 @@ class Answer
     protected function bounded(): array
     {
         if ($this->bounded === null) {
-            [$result, $truncated] = Bounds::capCells($this->result, $this->truncated);
+            $how = $this->capHow();
+            [$result, $truncated] = Bounds::capCells($this->result, $this->truncated, $how);
 
             [$fitted, $truncated] = Bounds::fitAnswer(result: $result, truncated: $truncated, size: $this->size(...), cuttable: $this->cuttable);
-            $recounted = Bounds::recountCaps(original: $this->result, fitted: $fitted, truncated: $truncated);
+            $recounted = Bounds::recountCaps(original: $this->result, fitted: $fitted, truncated: $truncated, how: $how);
 
             $this->bounded = [$this->recounted($fitted), $recounted];
         }
 
         return $this->bounded;
+    }
+
+    /**
+     * Get what the cap entry tells the reader to do about the cells it cut.
+     */
+    protected function capHow(): string
+    {
+        return $this->capHow ?? __('firewatch::messages.cap_how', ['characters' => number_format(Bounds::CELL_CHARACTERS)]);
     }
 
     /**

@@ -189,6 +189,7 @@ class Query extends Tool
             truncated: $more ? [$this->truncation($rows)] : [],
             next: $more && $limit < self::MAXIMUM_LIMIT ? [$this->more($sql)] : [],
             cuttable: ['rows'],
+            capHow: __('firewatch::messages.query_cap_how'),
         );
     }
 

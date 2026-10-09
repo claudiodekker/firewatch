@@ -410,6 +410,8 @@ return [
 
     'query_limit_how' => 'Add LIMIT/OFFSET or a keyset condition on id, or raise `limit` up to 500.',
 
+    'query_cap_how' => 'Read the rest with substr(column, 2001, 2000).',
+
     'query_next_more' => 'The same statement with the most rows an answer holds.',
 
     'execution_id_argument' => 'The execution id to open (a request\'s trace id is its execution id). Omit for the latest finished execution. Excludes type.',
