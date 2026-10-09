@@ -149,9 +149,12 @@ class BudgetSection
      */
     protected static function row(RecordType $type, string $hash, array $budget, BudgetVerdict $verdict, Window $window): array
     {
-        $measures = array_filter($verdict->measures, fn (array $measure) => $measure['exceeded']);
-        $ratios = array_map(fn (array $measure) => $measure['measured'] / $measure['ceiling'], $measures);
-        $worst = $measures[array_search(max($ratios), $ratios, true)];
+        $ratio = fn (array $measure) => $measure['measured'] / $measure['ceiling'];
+        $exceeded = array_values(array_filter($verdict->measures, fn (array $measure) => $measure['exceeded']));
+
+        usort($exceeded, fn (array $a, array $b) => $ratio($b) <=> $ratio($a));
+
+        $worst = $exceeded[0];
 
         return [
             'type' => $type->value,
@@ -163,7 +166,7 @@ class BudgetSection
             'ceiling' => $worst['ceiling'],
             'measured_on' => $verdict->measuredOn,
             'next' => Call::written('rank', array_merge(['group' => $hash], $window->arguments())),
-            'ratio' => max($ratios),
+            'ratio' => $ratio($worst),
         ];
     }
 }
