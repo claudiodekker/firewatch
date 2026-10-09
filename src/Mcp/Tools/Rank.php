@@ -165,7 +165,7 @@ class Rank extends Tool
                 }
 
                 $by = $this->measure($request, $type, $group);
-                $ranking = new Ranking($type, $by, $window, $deploy, $matching, $group);
+                $ranking = new Ranking($type, $by, $window, $deploy, $matching, $group, $this->configuration);
 
                 $read = $inWindow !== 0;
                 $facts = StoreFacts::read($connection);

@@ -2,6 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use LogicException;
@@ -76,6 +78,7 @@ class Ranking
         protected ?string $deploy,
         protected ?string $matching = null,
         protected ?string $group = null,
+        protected ?Configuration $configuration = null,
     ) {
         //
     }
@@ -220,6 +223,40 @@ class Ranking
     }
 
     /**
+     * Read what a budget judges of every group of the type in the window, keyed like the statistics: the figure of each quantity is the nearest-rank 95th percentile from 20 executions that ran, else the maximum.
+     *
+     * @return array<string, array{executions: int, ran: int, duration: int|float|null, memory: int|float|null, measured_on: string, label: mixed, route_methods: mixed, route_path: mixed, name: mixed}>
+     */
+    public function budgets(SQLite3 $connection): array
+    {
+        $matchers = $this->type === RecordType::REQUEST ? ', route_methods, route_path' : ', name';
+
+        $latest = $this->query($connection, "SELECT group_hash, n AS executions, ran, label{$matchers} FROM (SELECT group_hash, label{$matchers}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n, COUNT(*) FILTER (WHERE NOT skipped) OVER (PARTITION BY group_hash) AS ran FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
+        $durations = $this->percentiles($connection, 'd', 'NOT skipped');
+        $memories = $this->percentiles($connection, 'm', 'NOT skipped');
+        $budgets = [];
+
+        foreach ($latest as $row) {
+            $hash = $row['group_hash'];
+            $percentile = $row['ran'] >= self::P95_FLOOR ? 'p95' : 'max';
+
+            $budgets[$hash] = [
+                'executions' => $row['executions'],
+                'ran' => $row['ran'],
+                'duration' => ($durations[$hash] ?? null)[$percentile] ?? null,
+                'memory' => ($memories[$hash] ?? null)[$percentile] ?? null,
+                'measured_on' => $percentile,
+                'label' => $row['label'],
+                'route_methods' => $row['route_methods'] ?? null,
+                'route_path' => $row['route_path'] ?? null,
+                'name' => $row['name'] ?? null,
+            ];
+        }
+
+        return $budgets;
+    }
+
+    /**
      * Read what the records of every group of the window add up to, with when each was first seen in the store and its slowest execution.
      *
      * @return list<array<string, mixed>>
@@ -241,6 +278,14 @@ class Ranking
 
             foreach ($slowest as $row) {
                 $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
+            }
+        }
+
+        if ($this->configuration !== null && self::isExecution($this->type)) {
+            $type = ExecutionType::from($this->type->value);
+
+            foreach ($this->budgets($connection) as $hash => $budget) {
+                $groups[$hash]['budget'] = BudgetVerdict::ofGroup($this->configuration, $type, $budget)->toArray();
             }
         }
 
@@ -316,9 +361,9 @@ class Ranking
     /**
      * Read the nearest-rank median and 95th percentile of one quantity of every group, and the values of a group too small to have a median.
      *
-     * @return array<string, array{n: int, p50: int|float|null, p95: int|float|null, raw: list<int|float>|null}>
+     * @return array<string, array{n: int, p50: int|float|null, p95: int|float|null, max: int|float|null, raw: list<int|float>|null}>
      */
-    protected function percentiles(SQLite3 $connection, string $column): array
+    protected function percentiles(SQLite3 $connection, string $column, string $where = '1'): array
     {
         $percentiles = [];
 
@@ -326,7 +371,7 @@ class Ranking
         $p95Rank = self::nearestRank(self::P95_RANK);
         $p50Floor = self::P50_FLOOR;
 
-        $rows = $this->query($connection, "SELECT group_hash, n, max(CASE WHEN rn = {$p50Rank} THEN v END) AS p50, max(CASE WHEN rn = {$p95Rank} THEN v END) AS p95, group_concat(CASE WHEN n < {$p50Floor} THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL) GROUP BY group_hash");
+        $rows = $this->query($connection, "SELECT group_hash, n, max(CASE WHEN rn = {$p50Rank} THEN v END) AS p50, max(CASE WHEN rn = {$p95Rank} THEN v END) AS p95, max(CASE WHEN rn = n THEN v END) AS max, group_concat(CASE WHEN n < {$p50Floor} THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL AND {$where}) GROUP BY group_hash");
 
         foreach ($rows as $row) {
             /** @var list<int|float>|null $raw */
@@ -340,6 +385,7 @@ class Ranking
                 'n' => $row['n'],
                 'p50' => $row['p50'],
                 'p95' => $row['p95'],
+                'max' => $row['max'],
                 'raw' => $raw,
             ];
         }
@@ -498,6 +544,10 @@ class Ranking
             ];
         }
 
+        if (isset($group['budget'])) {
+            $row['budget'] = $group['budget'];
+        }
+
         return $row;
     }
 
@@ -536,6 +586,10 @@ class Ranking
                 'withheld' => $withheld === [] ? null : $withheld,
                 'values_ms' => $deploy['raw'] === null ? null : array_map(self::milliseconds(...), $deploy['raw']),
             ];
+        }
+
+        if (isset($deploy['budget'])) {
+            $row['budget'] = $deploy['budget'];
         }
 
         return $row;
@@ -624,7 +678,8 @@ class Ranking
             }
 
             if (self::isExecution($this->type)) {
-                array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q');
+                array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q', $this->type === RecordType::SCHEDULED_TASK ? "COALESCE(status = '".Outcome::SKIPPED->value."', 0) AS skipped" : '0 AS skipped');
+                array_push($columns, ...($this->type === RecordType::REQUEST ? ['route_methods', 'route_path'] : ['name']));
             }
 
             $failure = Failure::expression($this->type);
