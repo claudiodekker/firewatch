@@ -15,9 +15,6 @@ use Illuminate\Support\Facades\Route;
  */
 function afterTheDeployServe(float $created, string $deploy, float $offset, array $blocks): void
 {
-    $started = $_SERVER['REQUEST_TIME_FLOAT'];
-    test()->beforeApplicationDestroyed(fn () => $_SERVER['REQUEST_TIME_FLOAT'] = $started);
-
     foreach ($blocks as [$uri, $count, $gap]) {
         foreach (range(1, $count) as $ignored) {
             // Nightwatch reads a request's start once, when its provider registers, which makes the start, and so each observed span, the test's to set.
@@ -43,6 +40,9 @@ function afterTheDeployServe(float $created, string $deploy, float $offset, arra
  */
 function afterTheDeployServeAll(): float
 {
+    $started = $_SERVER['REQUEST_TIME_FLOAT'];
+    test()->beforeApplicationDestroyed(fn () => $_SERVER['REQUEST_TIME_FLOAT'] = $started);
+
     $created = floor(microtime(true)) - 7200;
     test()->travelTo(Date::createFromTimestamp($created));
 

@@ -16,6 +16,11 @@ const DATABASE_BOUND_QUERY = 'with recursive counter(n) as (select 1 union all s
  */
 function databaseBoundRequest(): void
 {
+    $started = $_SERVER['REQUEST_TIME_FLOAT'];
+    test()->beforeApplicationDestroyed(fn () => $_SERVER['REQUEST_TIME_FLOAT'] = $started);
+
+    // Nightwatch reads a request's start once, when its provider registers; the process's own start would count every earlier test into the request's duration.
+    $_SERVER['REQUEST_TIME_FLOAT'] = microtime(true);
     forceRequests();
     config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
 
