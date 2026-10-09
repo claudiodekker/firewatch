@@ -68,7 +68,7 @@ it('says what is wrong now: the error rate, the slowest groups, every count and 
     $verdicts = array_column($result['detectors'], 'verdict', 'detector');
     $withFindings = array_keys($verdicts, 'findings', true);
 
-    expect(array_keys($result))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'detectors'])
+    expect(array_keys($result))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'budgets', 'detectors'])
         ->and($result['error_rate'])->toBe(['requests' => 6, 'with_status' => 6, 'server_errors' => 1, 'server_error_pct' => 16.7, 'client_errors' => 1, 'client_error_pct' => 16.7])
         ->and(array_keys($counts))->toBe(['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'])
         ->and($counts)->toMatchArray(['request' => 6, 'command' => 0, 'job-attempt' => 0, 'scheduled-task' => 0, 'query' => 2, 'log' => 1, 'mail' => 0, 'notification' => 0, 'outgoing-request' => 1, 'queued-job' => 0])
@@ -81,7 +81,7 @@ it('says what is wrong now: the error rate, the slowest groups, every count and 
         ->and($envelope['summary'])->toEndWith(__('firewatch::messages.overview_summary', ['records' => $result['records'], 'with_status' => 6, 'server_errors' => 1, 'client_errors' => 1]))
         ->and($envelope['summary'])->not->toContain(explode(':', __('firewatch::messages.overview_detectors_clean'))[0])
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial')
-        ->and($envelope['notes'])->toBe([]);
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
 });
 
 it('lists the groups that took the most time with their type, at most three of a type, and none without a duration', function () {
@@ -133,7 +133,7 @@ it('offers calls that read the same window when they run later, and every one of
     expect($envelope['result']['records'])->toBe($envelope['coverage']['records'])
         ->and($labels)->toEqualCanonicalizing(['/orders', '/reports', __('firewatch::messages.rank_no_route')])
         ->and($tools)->toContain('detect', 'rank', 'execution')
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_directory_unwindowed')]);
+        ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), __('firewatch::messages.overview_directory_unwindowed')]);
 
     foreach ($envelope['next'] as $call) {
         $answer = whatsWrongFollow($call);

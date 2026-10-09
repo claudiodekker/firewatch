@@ -55,6 +55,32 @@ readonly class BudgetVerdict
     }
 
     /**
+     * Judge a group on the figures of the executions that ran, against the entry that governs it.
+     *
+     * @param  array{ran: int, duration: int|float|null, memory: int|float|null, measured_on: string, route_methods?: mixed, route_path?: mixed, name?: mixed}  $budget
+     */
+    public static function ofGroup(Configuration $configuration, ExecutionType $type, array $budget): self
+    {
+        $ignored = $configuration->ignoredBudgetEntries;
+
+        if ($configuration->budgets === []) {
+            return self::notEvaluated(BudgetReason::NO_BUDGET_CONFIGURED, $ignored);
+        }
+
+        if ($budget['ran'] === 0) {
+            return self::notEvaluated(BudgetReason::NOT_RUN, $ignored);
+        }
+
+        $entry = self::governing($configuration->budgets, $type, $budget);
+
+        if ($entry === null) {
+            return self::notEvaluated(BudgetReason::NO_MATCHING_BUDGET, $ignored);
+        }
+
+        return self::judge($entry, $budget['duration'], $budget['memory'], $budget['measured_on'], $ignored);
+    }
+
+    /**
      * Judge a duration in microseconds and a peak memory in bytes against the ceilings of the entry.
      */
     public static function judge(BudgetEntry $entry, mixed $duration, mixed $memory, string $measuredOn, int $ignored): self
@@ -118,6 +144,19 @@ readonly class BudgetVerdict
             'measures' => $this->measures,
             ...($this->ignoredEntries > 0 ? ['ignored_entries' => $this->ignoredEntries] : []),
         ];
+    }
+
+    /**
+     * Get the verdict as the short cell of a ranking row: the state and the figure it was measured on, or the reason it was not evaluated.
+     */
+    public function cell(): string
+    {
+        $details = $this->state === BudgetState::NOT_EVALUATED ? $this->reason?->value : $this->measuredOn;
+
+        return __('firewatch::messages.budget_cell', [
+            'state' => $this->state->value,
+            'details' => $details.($this->ignoredEntries > 0 ? __('firewatch::messages.budget_ignored', ['count' => $this->ignoredEntries]) : ''),
+        ]);
     }
 
     /**

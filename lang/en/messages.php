@@ -92,6 +92,16 @@ return [
 
     'overview_detectors_clean' => 'No findings: the shape is clean over what was captured.|No findings: all :count shapes are clean over what was captured.',
 
+    'overview_budgets' => 'Budgets: :groups exceeded, :within within, :not_evaluated not evaluated:ignored. Groups not listed are not proven within budget unless counted as within.',
+
+    'overview_budgets_groups' => ':count group|:count groups',
+
+    'overview_budgets_unevaluated' => 'Budgets: not evaluated (:reason):ignored',
+
+    'overview_budgets_over' => ':count group over budget.|:count groups over budget.',
+
+    'overview_budgets_truncated_how' => 'Rank a type of execution: each of its groups carries a budget verdict.',
+
     'window_empty' => 'No records fall in this window, and the store holds :population records: widen the window or move it.',
 
     'no_match' => 'No record matched the filters (:filters), among :population records before filtering.',
@@ -359,6 +369,10 @@ return [
     'execution_any_type' => 'type: any execution type',
 
     'budget_line' => 'Budget: :state (:details)',
+
+    'budget_cell' => ':state (:details)',
+
+    'budget_ignored' => '; ignored_entries: :count',
 
     'execution_summary' => 'Showed the :type :id: outcome :outcome.',
 

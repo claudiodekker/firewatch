@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\BudgetSection;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
@@ -108,9 +109,10 @@ class Overview extends Tool
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
         try {
-            [[$total, $oldest, $newest], $sections, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
+            [[$total, $oldest, $newest], $sections, $budgets, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
                 $this->countRecords($connection),
                 FixedSections::read($connection, $window),
+                BudgetSection::read($connection, $window, $this->configuration),
                 StoreFacts::read($connection),
                 $this->detectors->count($connection, $window, new Deadline($epoch)),
             ]);
@@ -146,15 +148,17 @@ class Overview extends Tool
             now: $epoch,
             timezone: $timezone,
             window: $window,
-            summary: $this->summary($sections, $judgements),
+            summary: $this->summary($sections, $budgets, $judgements),
             empty: null,
             result: [
                 ...$sections->result(),
+                ...$budgets->result(),
                 'detectors' => $this->detectorRows($judgements),
             ],
             coverage: $coverage,
             blindSpots: $blindSpots,
-            notes: $this->notes($sections, $window),
+            notes: $this->notes($sections, $budgets, $window),
+            truncated: array_filter([$budgets->truncation()]),
             next: $this->next($window, $sections, $judgements),
             cuttable: ['slowest_by_total_time'],
         );
@@ -181,9 +185,14 @@ class Overview extends Tool
      *
      * @param  list<Judgement>  $judgements
      */
-    protected function summary(FixedSections $sections, array $judgements): string
+    protected function summary(FixedSections $sections, BudgetSection $budgets, array $judgements): string
     {
         $shapes = $this->detectorSummary($judgements);
+
+        if ($budgets->exceeded() > 0) {
+            $shapes .= ' '.trans_choice('firewatch::messages.overview_budgets_over', $budgets->exceeded(), ['count' => $budgets->exceeded()]);
+        }
+
         $summary = "{$shapes} {$this->figures($sections)}";
 
         return mb_strlen($summary) > Answer::SUMMARY_CHARACTERS ? $shapes : $summary;
@@ -238,9 +247,9 @@ class Overview extends Tool
      *
      * @return list<string>
      */
-    protected function notes(FixedSections $sections, Window $window): array
+    protected function notes(FixedSections $sections, BudgetSection $budgets, Window $window): array
     {
-        $notes = [];
+        $notes = [$budgets->note()];
 
         if ($sections->unknownTypes() > 0) {
             $notes[] = trans_choice('firewatch::messages.overview_unknown_types', $sections->unknownTypes(), ['count' => $sections->unknownTypes()]);

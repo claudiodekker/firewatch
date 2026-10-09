@@ -135,7 +135,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 17. Answers and analysis
 
 - Empty is not clean. Every answer states the store clock, the window, coverage and the blind spots of the record types it examined, also when empty, and no tool can switch a blind spot off.
-- A detector answers only `findings`, `clean` or `not_evaluated`, always with `examined`. Empty input is `not_evaluated`, never `clean`. A budget (planned, #78 and #79) answers `within`, `exceeded` or `not_evaluated` and is never `within` by absence. Slowness is never a detector (ADR 0009).
+- A detector answers only `findings`, `clean` or `not_evaluated`, always with `examined`. Empty input is `not_evaluated`, never `clean`. A budget answers `within`, `exceeded` or `not_evaluated` and is never `within` by absence. `execution` judges one execution, and `rank` and `overview` judge a group on its p95 when every measured quantity has 20 executions that ran, else on its maximum, stating `measured_on`; a skipped task is `not_run`. Slowness is never a detector (ADR 0009).
 - Values the sensors never populate (four counters, two failure flags) are reported as stored and never presented as healthy; the blind spots say so.
 - An absent window bound means unbounded, never recent, except on compare (coverage start and the store clock) and trend (a derived bound the window names).
 - Coverage is read from the recorded markers. A window before the coverage start is "no data", never zero or clean; ranking, compare and trend clip to it, and detectors exclude the executions whose needed children were removed.

@@ -24,7 +24,7 @@ Preconditions:
 - A fresh run. For `overview-empty`, call `app.sh mcp <run> overview` before anything else. It answers `Nothing to report: no store has been written yet.` and `Store: absent`.
 - Then `app.sh get <run>` for `/products`, `/purchases`, `/invoices/42` and `/exports`, and `app.sh artisan <run> queue:work --stop-when-empty --no-interaction`.
 
-- **Overview.** `app.sh mcp <run> overview` starts with `Findings: ` and prints, in this order, `error_rate`, a `### slowest_by_total_time` table of at most ten rows, `records`, a `### records_by_type` table of twelve rows, `user_directory`, `actors` and a `### detectors` table of eleven rows. Its `error_rate` counts 4 requests and 1 server error.
+- **Overview.** `app.sh mcp <run> overview` starts with `Findings: ` and prints, in this order, `error_rate`, a `### slowest_by_total_time` table of at most ten rows, `records`, a `### records_by_type` table of twelve rows, `user_directory`, `actors`, `budgets` and a `### detectors` table of eleven rows. Its `error_rate` counts 4 requests and 1 server error.
 - **Rank.** `app.sh mcp <run> rank '{"type":"request","by":"max_duration"}'` answers `Ranked 4 request groups by max_duration, worst first.` with one row per route. `/products` has `queries` 25.
 - **Occurrences by status.** `app.sh mcp <run> occurrences '{"type":"request","status":"5xx","format":"json"}' | jq '.result.rows[] | {name, status: .detail.status_code}'` prints one row: `/invoices/{invoice}`, `500`.
 - **Occurrences by substring.** `app.sh mcp <run> occurrences '{"type":"request","matching":"purchases","format":"json"}' | jq -r '.result.rows[0].trace_id'` prints the trace id of the `/purchases` request. Keep it for the next two steps.
