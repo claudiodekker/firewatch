@@ -13,6 +13,7 @@ enum Measure: string
     case P95_DURATION = 'p95_duration';
     case P50_DURATION = 'p50_duration';
     case MAX_DURATION = 'max_duration';
+    case AVG_DURATION = 'avg_duration';
     case TOTAL_DURATION = 'total_duration';
     case OCCURRENCES = 'occurrences';
     case P95_MEMORY = 'p95_memory';
@@ -34,6 +35,20 @@ enum Measure: string
     protected const MEMORY_NOISE_FLOOR = 2 * Ranking::MEGABYTE;
 
     /**
+     * The measures only a trend states, which neither a ranking nor a comparison takes.
+     *
+     * @var list<self>
+     */
+    protected const TREND_ONLY = [self::AVG_DURATION];
+
+    /**
+     * The measures a trend states, in the order they are listed.
+     *
+     * @var list<self>
+     */
+    protected const TRENDED = [self::OCCURRENCES, self::MAX_DURATION, self::AVG_DURATION, self::TOTAL_DURATION, self::MAX_MEMORY];
+
+    /**
      * Get the types that have groups to rank.
      *
      * @return list<RecordType>
@@ -50,7 +65,7 @@ enum Measure: string
      */
     public static function for(RecordType $type): array
     {
-        return array_values(array_filter(self::cases(), fn (self $measure) => $measure !== self::P50_MEMORY && $measure->fits($type)));
+        return array_values(array_filter(self::cases(), fn (self $measure) => $measure !== self::P50_MEMORY && ! $measure->isTrendOnly() && $measure->fits($type)));
     }
 
     /**
@@ -60,7 +75,17 @@ enum Measure: string
      */
     public static function compared(RecordType $type): array
     {
-        return array_values(array_filter(self::cases(), fn (self $measure) => $measure->movement() !== null && $measure->fits($type)));
+        return array_values(array_filter(self::cases(), fn (self $measure) => $measure->movement() !== null && ! $measure->isTrendOnly() && $measure->fits($type)));
+    }
+
+    /**
+     * Get the measures a type is trended by, in the order they are listed.
+     *
+     * @return list<self>
+     */
+    public static function trended(RecordType $type): array
+    {
+        return array_values(array_filter(self::TRENDED, fn (self $measure) => $measure->fits($type)));
     }
 
     /**
@@ -84,6 +109,14 @@ enum Measure: string
     }
 
     /**
+     * Determine if only a trend states the measure.
+     */
+    protected function isTrendOnly(): bool
+    {
+        return in_array($this, self::TREND_ONLY, true);
+    }
+
+    /**
      * Get the measure a percentile falls back to when no group has enough records for it, or null for one that is no percentile.
      */
     public function fallback(): ?self
@@ -103,7 +136,7 @@ enum Measure: string
     public function movement(): ?array
     {
         return match ($this) {
-            self::P95_DURATION, self::P50_DURATION, self::MAX_DURATION, self::TOTAL_DURATION => [Microseconds::PER_MILLISECOND, Change::SLOWER, Change::FASTER],
+            self::P95_DURATION, self::P50_DURATION, self::MAX_DURATION, self::AVG_DURATION, self::TOTAL_DURATION => [Microseconds::PER_MILLISECOND, Change::SLOWER, Change::FASTER],
             self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY => [self::MEMORY_NOISE_FLOOR, Change::HEAVIER, Change::LIGHTER],
             self::OCCURRENCES, self::QUERIES => [1, Change::MORE_CALLS, Change::FEWER_CALLS],
             self::LAST_SEEN => null,
@@ -155,6 +188,41 @@ enum Measure: string
             self::P95_MEMORY => ['p95 memory', Ranking::P95_FLOOR],
             self::P50_MEMORY => ['p50 memory', Ranking::P50_FLOOR],
             default => null,
+        };
+    }
+
+    /**
+     * Get the suffix of the fields that carry the measure: its unit, or the name of the count.
+     */
+    public function unit(): string
+    {
+        return match ($this) {
+            self::P95_DURATION, self::P50_DURATION, self::MAX_DURATION, self::AVG_DURATION, self::TOTAL_DURATION => '_ms',
+            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY => '_mb',
+            default => '_'.$this->value,
+        };
+    }
+
+    /**
+     * Get the name of the field that carries one value of the measure: `occurrences`, `max_duration_ms` or `max_memory_mb`.
+     */
+    public function field(): string
+    {
+        return match ($this->unit()) {
+            '_ms', '_mb' => $this->value.$this->unit(),
+            default => $this->value,
+        };
+    }
+
+    /**
+     * Get a stored value of the measure as an answer writes it.
+     */
+    public function shown(int|float|null $value): int|float|null
+    {
+        return match ($this->unit()) {
+            '_ms' => Stored::milliseconds($value),
+            '_mb' => Stored::megabytes($value),
+            default => $value,
         };
     }
 }

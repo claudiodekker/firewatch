@@ -16,7 +16,7 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did while it was developed: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and Firewatch itself sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after). Every answer ends with `next`: calls you can run as written.
+        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time). Every answer ends with `next`: calls you can run as written.
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used.
         TEXT,
@@ -41,6 +41,7 @@ return [
         'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: read query one execution ran 3+ times, in runs. `database-bound`: request groups typically spending 60+ percent in queries. `failing-routes`: request groups answering 400+. `failing-jobs`: job groups with 1+ failed or released attempts. `queue-latency`: job groups with first-attempt wait or pending age of 5000+ milliseconds. `failing-tasks`: scheduled-task groups with failed or skipped tasks (no threshold). `exception-clusters`: exception groups with 1+ occurrences, escaped first. `error-logs`: error-level logs by message shape, 1+ occurrences (no `group`). `failing-http`: outgoing-request hosts answering 400+. `cache`: cache keys with a hit rate below 50 percent over 3+ reads, or a failed write or delete. `memory`: execution groups peaking at 64+ megabytes. Without `shape` all run; `threshold` and `group` need one. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold, unit and range, exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean: none among what was captured, weak over few records. Windowed.',
         'compare' => 'Compares each group across a split or a deploy pair: "did my change help?". Give exactly one boundary. split_at is a time, such as the now of an earlier answer; before is since to split_at, after is split_at to until. Or deploy_before and deploy_after, exact deploy strings: each side is every record of its deploy in the window. A deploy pair cannot separate an uncommitted edit; a time split can. Without since: the type\'s coverage start; without until: now. Pass `type`, or `group` for one group. Rows are ordered by absolute change, so the largest change in either direction survives the limit; a rollup counts every group, cut or not. Too few records is not evaluated, never guessed; an empty side is never "no regression". Work spanning `split_at` counts as before.',
         'actor' => 'Identifies one signed-in person and the work of the window tied to them. `who` is a user id, a username or a name, tried in that order, then as a part of a name or username: the first stage that finds anyone decides. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the username is the email. Several matches are listed as candidates, never guessed: repeat with an id. An actor exists only once recorded acting. An execution is theirs by its own user, its job\'s dispatch, or a child inside a command or task. Attribution is partial: what no link reaches is counted, never guessed. Windowed by since/until; identity is read over the whole store.',
+        'trend' => 'Cuts the window into equal buckets and reports a measure per bucket, to see whether something rose, fell or held, and where it peaked. Pass `type` or `group`. `by`: occurrences (default), max_duration, avg_duration, total_duration, max_memory (execution types only). Missing since/until are derived from the selected records, and the window says which. Empty bucket: 0 for occurrences, null for other measures. Buckets that start before coverage are partial. Bucket edges can be passed back as since/until. Windowed.',
     ],
 
     /*
@@ -112,6 +113,14 @@ return [
     'window_none' => 'none (unbounded)',
 
     'window_not_windowed' => 'Not windowed: :reason',
+
+    'window_description_derived' => 'Half-open on started_at, except a derived until: it is the last selected record and includes it.',
+
+    'window_resolved' => 'Window: since :since until :until (:timezone, half-open; :derived)',
+
+    'window_derived_since' => 'since derived from the first record',
+
+    'window_derived_until' => 'until derived from the last record and included',
 
     'store_line' => 'Store: :store',
 
@@ -308,6 +317,36 @@ return [
     'compare_next_occurrences_deploy' => 'List the records of the first group listed under deploy :deploy.',
 
     'compare_next_rank' => 'Break the first group listed down by deploy.',
+
+    'trend_type_argument' => 'A type with groups. Required unless group.',
+
+    'trend_group_argument' => 'One group id (32 hex).',
+
+    'trend_by_argument' => 'The measure, default occurrences; no percentiles.',
+
+    'trend_buckets_argument' => '2 to 60. Default 12.',
+
+    'trend_since_argument' => 'Start, included; the forms every tool takes.',
+
+    'trend_until_argument' => 'End; the same forms. Derived: included.',
+
+    'trend_deploy_argument' => 'An exact deploy string.',
+
+    'trend_summary' => ':type :by :direction over :buckets buckets; the peak is bucket :peak.',
+
+    'trend_summary_no_peak' => ':type :by :direction over :buckets buckets, with no peak.',
+
+    'trend_sample_too_small_summary' => 'Not evaluated (sample_too_small): :have of :buckets buckets carry :by, and a direction needs :needed.',
+
+    'trend_outside_coverage_summary' => 'Not evaluated (outside_coverage): the window ends at or before the history the store holds for :type.',
+
+    'trend_partial_note' => ':count bucket starts before what the store covers for :type, so it is partial and left out of the direction and peak.|:count buckets start before what the store covers for :type, so they are partial and left out of the direction and peak.',
+
+    'trend_width_zero_note' => 'Every selected record started at one instant, so the window has a width of 0 and one bucket.',
+
+    'trend_idle_note' => 'No records for :duration since the last one.',
+
+    'trend_next_occurrences' => 'List the records of the peak bucket.',
 
     'execution_id_argument' => 'The execution id to open (a request\'s trace id is its execution id). Omit for the latest finished execution. Excludes type.',
 

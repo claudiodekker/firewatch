@@ -105,6 +105,12 @@ class Envelope
 
         $bound = fn (?float $epoch) => $epoch === null ? 'none (unbounded)' : Date::createFromTimestamp($epoch, $window['timezone'])->format('Y-m-d H:i:s.u');
 
+        $derived = implode(', ', array_map(fn (string $side) => __("firewatch::messages.window_derived_{$side}"), $window['derived'] ?? []));
+
+        if ($derived !== '') {
+            return "Window: since {$bound($window['since'])} until {$bound($window['until'])} ({$window['timezone']}, half-open; {$derived})";
+        }
+
         return "Window: since {$bound($window['since'])} until {$bound($window['until'])} ({$window['timezone']}, half-open)";
     }
 }
