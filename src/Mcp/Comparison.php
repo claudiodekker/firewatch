@@ -9,7 +9,7 @@ use SQLite3;
 /**
  * @internal
  *
- * @phpstan-type Side array{since: float|null, until: float|null, clipped: bool, outside: bool, empty: bool, records: int, first: float|null, last: float|null}
+ * @phpstan-type Side array{deploy: string|null, since: float|null, until: float|null, clipped: bool, outside: bool, empty: bool, records: int, first: float|null, last: float|null}
  * @phpstan-type Row array{hash: string, label: mixed, method: mixed, beforeRecords: int, afterRecords: int, before: int|float|null, after: int|float|null, change: Change, steppedDown: bool, reason: ComparisonReason|null, have: int|null, needed: int|null}
  */
 class Comparison
@@ -56,7 +56,7 @@ class Comparison
      * @param  Side  $after
      * @param  Rows<Row>  $groups  in the order of the answer
      * @param  array<string, int>  $changes  every group's change counted, by its value, over the groups shown and cut
-     * @param  array{records: int, more: bool}  $earlier  the records of the type that started before the coverage start the before side begins at, counted up to a cap, and whether there are more
+     * @param  array{records: int, more: bool}|null  $earlier  the records of the type that started before the coverage start the before side of a split begins at, counted up to a cap, and whether there are more
      * @param  Rows<array{deploy: string, records: int, first_at: float}>|null  $deploys  the deploys of the window, listed only when a side is empty
      */
     protected function __construct(
@@ -67,19 +67,18 @@ class Comparison
         public readonly Rows $groups,
         public readonly array $changes,
         public readonly ?int $straddling,
-        public readonly array $earlier,
+        public readonly ?array $earlier,
         public readonly ?Rows $deploys,
     ) {
         //
     }
 
     /**
-     * Compare the groups of the type before and after the split of the window, in the snapshot of the connection.
+     * Compare the groups of the type on the two sides of the boundary, a split of the window or a deploy pair, in the snapshot of the connection.
      */
-    public static function of(SQLite3 $connection, RecordType $type, Measure $by, Window $window, float $split, ?float $coverageStart, ?string $group, int $limit): self
+    public static function of(SQLite3 $connection, RecordType $type, Measure $by, Window $window, float|DeployPair $boundary, ?float $coverageStart, ?string $group, int $limit): self
     {
-        $before = self::side(since: $window->since(), until: $split, coverageStart: $coverageStart);
-        $after = self::side(since: $split, until: $window->until(), coverageStart: $coverageStart);
+        [$before, $after] = self::sides($window, $boundary, $coverageStart);
 
         $beforeOfType = self::statistics($connection, $type, $by, $before, $window->timezone());
         $afterOfType = self::statistics($connection, $type, $by, $after, $window->timezone());
@@ -93,11 +92,11 @@ class Comparison
         $rows = $evaluated ? self::rows($by, $beforeGroups, $afterGroups, self::likeSpans($before, $after)) : [];
         $changes = array_count_values(array_map(fn (array $row) => $row['change']->value, $rows));
 
-        $straddling = self::straddling($connection, $type, $before, $split, $group);
+        $straddling = $boundary instanceof DeployPair ? null : self::straddling($connection, $type, $before, $boundary, $group);
         $oneSideEmpty = ! $before['outside'] && ! $after['outside'] && $before['empty'] !== $after['empty'];
         $deploys = $oneSideEmpty ? self::deploys($connection, $type, Window::between($before['since'], $after['until'], $window->timezone()), $group) : null;
 
-        $earlier = self::earlier($connection, $type, $before, $coverageStart);
+        $earlier = $boundary instanceof DeployPair ? null : self::earlier($connection, $type, $before, $coverageStart);
 
         return new self($type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $earlier, $deploys);
     }
@@ -172,11 +171,7 @@ class Comparison
             'change' => $reason === null ? null : Change::NOT_EVALUATED->value,
             'reason' => $reason?->value,
             'side' => $side,
-            'before' => [
-                ...$this->sideResult($this->before),
-                'earlier_records' => $this->earlier['records'],
-                'earlier_more' => $this->earlier['more'],
-            ],
+            'before' => $this->beforeResult(),
             'after' => $this->sideResult($this->after),
             'rollup' => $reason === null ? $this->rollup() : null,
             'groups' => array_map($this->rowResult(...), $this->groups->rows),
@@ -219,16 +214,38 @@ class Comparison
     }
 
     /**
-     * Get a side as the answer states it.
+     * Get the before side as the answer states it, with the records that started before the coverage start on a split.
+     *
+     * @return array<string, mixed>
+     */
+    protected function beforeResult(): array
+    {
+        $before = $this->sideResult($this->before);
+
+        if ($this->earlier === null) {
+            return $before;
+        }
+
+        return [
+            ...$before,
+            'earlier_records' => $this->earlier['records'],
+            'earlier_more' => $this->earlier['more'],
+        ];
+    }
+
+    /**
+     * Get a side as the answer states it, led by its deploy on a deploy pair.
      *
      * @param  Side  $side
-     * @return array{since_at: float|null, until_at: float|null, clipped: bool, records: int, observed_span_ms: float|null}
+     * @return array<string, mixed>
      */
     protected function sideResult(array $side): array
     {
         $span = self::span($side);
+        $deploy = $side['deploy'] === null ? [] : ['deploy' => $side['deploy']];
 
         return [
+            ...$deploy,
             'since_at' => $side['since'],
             'until_at' => $side['until'],
             'clipped' => $side['clipped'],
@@ -299,16 +316,37 @@ class Comparison
     }
 
     /**
-     * Get a side of the split clipped to the type's coverage start, and whether nothing of it is left.
+     * Get the before and the after side: the window on either side of a split, or every record of each deploy of a pair in the whole window.
+     *
+     * @return array{Side, Side}
+     */
+    protected static function sides(Window $window, float|DeployPair $boundary, ?float $coverageStart): array
+    {
+        if ($boundary instanceof DeployPair) {
+            return [
+                self::side(since: $window->since(), until: $window->until(), deploy: $boundary->before, coverageStart: $coverageStart),
+                self::side(since: $window->since(), until: $window->until(), deploy: $boundary->after, coverageStart: $coverageStart),
+            ];
+        }
+
+        return [
+            self::side(since: $window->since(), until: $boundary, deploy: null, coverageStart: $coverageStart),
+            self::side(since: $boundary, until: $window->until(), deploy: null, coverageStart: $coverageStart),
+        ];
+    }
+
+    /**
+     * Get a side clipped to the type's coverage start, and whether nothing of it is left.
      *
      * @return Side
      */
-    protected static function side(?float $since, ?float $until, ?float $coverageStart): array
+    protected static function side(?float $since, ?float $until, ?string $deploy, ?float $coverageStart): array
     {
         $clipped = $coverageStart !== null && ($since === null || $since < $coverageStart);
         $start = $clipped ? $coverageStart : $since;
 
         return [
+            'deploy' => $deploy,
             'since' => $start,
             'until' => $until,
             'clipped' => $clipped,
@@ -321,7 +359,7 @@ class Comparison
     }
 
     /**
-     * Read the statistics of every group of the type on one side.
+     * Read the statistics of every group of the type on one side, of its deploy alone on a deploy pair.
      *
      * @param  Side  $side
      * @return array<string, array<string, mixed>>
@@ -332,7 +370,7 @@ class Comparison
             return [];
         }
 
-        $ranking = new Ranking($type, $by, Window::between($side['since'], $side['until'], $timezone), deploy: null);
+        $ranking = new Ranking($type, $by, Window::between($side['since'], $side['until'], $timezone), deploy: $side['deploy']);
 
         return $ranking->statistics($connection);
     }

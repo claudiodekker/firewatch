@@ -75,10 +75,11 @@ class Answer
      * Create a new answer that holds no result and states why.
      *
      * @param  list<array<string, mixed>>  $blindSpots
+     * @param  list<string>  $notes
      */
-    public static function empty(string $tool, float $now, string $timezone, Window $window, Emptiness $empty, Coverage $coverage, array $blindSpots): self
+    public static function empty(string $tool, float $now, string $timezone, Window $window, Emptiness $empty, Coverage $coverage, array $blindSpots, array $notes = []): self
     {
-        return new self(tool: $tool, now: $now, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots);
+        return new self(tool: $tool, now: $now, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots, notes: $notes);
     }
 
     /**
