@@ -136,10 +136,18 @@ class DeployPair implements Boundary
     }
 
     /**
-     * Get the summary of a comparison whose deploy holds no record of the type in the window, naming it.
+     * Get the summary of a comparison whose deploy, or both, holds no record of the type in the window, naming it.
      */
     public function emptySideSummary(Comparison $comparison, string $side): string
     {
+        if ($side === 'both') {
+            return __('firewatch::messages.compare_empty_deploys_summary', [
+                'before' => $this->before,
+                'after' => $this->after,
+                'type' => $comparison->type->value,
+            ]);
+        }
+
         return __('firewatch::messages.compare_empty_deploy_summary', [
             'deploy' => $side === 'before' ? $this->before : $this->after,
             'side' => $side,

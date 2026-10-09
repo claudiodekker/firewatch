@@ -287,6 +287,56 @@ it('evaluates nothing when a deploy has no records in the window, says which, an
     'the before deploy' => ['v9', 'v1', 'before', 'v9'],
 ]);
 
+it('evaluates nothing when neither deploy has records in a window that holds the type, names both sides, and lists the deploys of the window', function () {
+    pairIngest([
+        ...pairRecords('a', 'v1', 0, [100, 100, 100]),
+        ...pairRecords('b', 'v2', 30, [100, 100]),
+        ...pairRecords('b', null, 40, [100]),
+    ]);
+
+    $envelope = pairAnswer(['deploy_before' => 'v8', 'deploy_after' => 'v9']);
+
+    expect($envelope)->toEqual([
+        'tool' => 'compare',
+        'now' => PAIR_NOW,
+        'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => PAIR_CREATED, 'until' => PAIR_NOW, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
+        'summary' => __('firewatch::messages.compare_empty_deploys_summary', ['before' => 'v8', 'after' => 'v9', 'type' => 'request']),
+        'empty' => null,
+        'result' => [
+            'type' => 'request',
+            'by' => 'p95_duration',
+            'change' => 'not_evaluated',
+            'reason' => 'empty_side',
+            'side' => 'both',
+            'before' => ['deploy' => 'v8', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 0, 'observed_span_ms' => null, 'earlier_records' => 0, 'earlier_more' => false],
+            'after' => ['deploy' => 'v9', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 0, 'observed_span_ms' => null, 'earlier_records' => 0, 'earlier_more' => false],
+            'rollup' => null,
+            'groups' => [],
+            'deploys' => [
+                ['deploy' => 'v1', 'records' => 3, 'first_at' => PAIR_START],
+                ['deploy' => 'v2', 'records' => 2, 'first_at' => PAIR_START + 30],
+            ],
+        ],
+        'coverage' => [
+            ...$envelope['coverage'],
+            'straddling' => null,
+        ],
+        'blind_spots' => $envelope['blind_spots'],
+        'notes' => [__('firewatch::messages.compare_pair_not_evaluated_note'), __('firewatch::messages.compare_deploy_pair_note')],
+        'truncated' => [],
+        'next' => [],
+    ]);
+});
+
+it('answers no match when the window holds no records of the type under any deploy', function () {
+    pairIngest(pairRecords('a', 'v1', 0, [100, 100, 100]));
+
+    $envelope = pairAnswer(['type' => 'command', 'deploy_before' => 'v8', 'deploy_after' => 'v9']);
+
+    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 3, 'filters' => 'type: command, deploy_before: v8, deploy_after: v9'])])
+        ->and($envelope['result'])->toBe([]);
+});
+
 it('lists at most ten deploys beside an empty deploy, and says so when the window holds more', function (int $deploys, array $truncated) {
     pairIngest(array_merge(...array_map(fn (int $index) => pairRecords('a', sprintf('v%02d', $index), $index, [100]), range(1, $deploys))));
 
@@ -315,7 +365,8 @@ it('says a deploy pair cannot separate an uncommitted edit on every pair answer,
     $evaluated = pairAnswer();
     $emptySide = pairAnswer(['deploy_after' => 'v9']);
     $windowEmpty = pairAnswer(['since' => PAIR_START + 100, 'until' => PAIR_START + 200]);
-    $noMatch = pairAnswer(['deploy_before' => 'v8', 'deploy_after' => 'v9']);
+    $bothEmpty = pairAnswer(['deploy_before' => 'v8', 'deploy_after' => 'v9']);
+    $noMatch = pairAnswer(['type' => 'query']);
     $noGroup = Envelope::assert(Compare::class, ['group' => pairHash('f'), 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
     $split = Envelope::assert(Compare::class, ['type' => 'request', 'split_at' => PAIR_START + 300]);
     $splitEmpty = Envelope::assert(Compare::class, ['type' => 'query', 'split_at' => PAIR_START + 300]);
@@ -327,12 +378,13 @@ it('says a deploy pair cannot separate an uncommitted edit on every pair answer,
         ->and($evaluated['empty'])->toBeNull()
         ->and($emptySide['result']['reason'])->toBe('empty_side')
         ->and($windowEmpty['empty']['kind'])->toBe('window_empty')
-        ->and($noMatch['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'type: request, deploy_before: v8, deploy_after: v9'])])
+        ->and($bothEmpty['result'])->toMatchArray(['reason' => 'empty_side', 'side' => 'both'])
+        ->and($noMatch['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'type: query, deploy_before: v1, deploy_after: v2'])])
         ->and($noGroup['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'group: '.pairHash('f').', deploy_before: v1, deploy_after: v2'])])
         ->and($split['empty'])->toBeNull()
         ->and($splitEmpty['empty']['kind'])->toBe('no_match');
 
-    foreach ([$noStore, $storeEmpty, $evaluated, $emptySide, $windowEmpty, $noMatch, $noGroup] as $envelope) {
+    foreach ([$noStore, $storeEmpty, $evaluated, $emptySide, $bothEmpty, $windowEmpty, $noMatch, $noGroup] as $envelope) {
         expect($envelope['notes'])->toContain($sentence)
             ->and($envelope['coverage']['straddling'])->toBeNull()
             ->and(array_column($envelope['blind_spots'], 'id'))->not->toContain('visible-at-completion');

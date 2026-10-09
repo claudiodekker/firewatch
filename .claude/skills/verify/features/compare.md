@@ -5,7 +5,7 @@
 ## Sub-features
 
 - `compare-split` compares every group of the type before and after the split, with `measured_on: p50` where a side has fewer than 20 records.
-- `compare-empty-side` answers `not_evaluated` / `empty_side` with no rows when a side holds no records of the type, says which side and lists the window's deploys.
+- `compare-empty-side` answers `not_evaluated` / `empty_side` with no rows when a side holds no records of the type, says which side (`both` when neither deploy of a pair has any while the window holds the type) and lists the window's deploys.
 - `compare-group` gives one group its one row, `new` or `gone` when it is on one side only while the type is on both.
 - `compare-next` offers `occurrences` and `rank` for the first group listed, over the same window.
 - `compare-pair` compares every record of `deploy_before` against every record of `deploy_after` in one window, with `straddling` `null`, no `visible-at-completion` blind spot and the note `A deploy pair cannot separate an uncommitted edit; a time split can.` on every answer, empty or not.
@@ -42,7 +42,8 @@ Preconditions:
 - **Same question by time split.** `compare` with `"split_at":<the noted clock>,"until":<until of the pair answer>` lists the same rows with the same counts and tokens, `straddling` `0`, and the earlier-records note without a deploy instead of the pair's sentence.
 - **Next calls.** `.next` lists `occurrences` for the first group under each deploy that holds it (one call for a `new` or `gone` group), then `rank` with `group`; each runs over the pair's window and the `rank` breakdown shows both deploys.
 - **Empty side.** With `"deploy_before":"v2","deploy_after":"v3"` the answer is `not_evaluated` / `empty_side` on side `after`, the summary names deploy `v3`, `deploys` lists `v1` 8 and `v2` 12 by first record, and `.next` is `[]`.
-- **No match.** With `"type":"job-attempt"` the answer is `no_match` with the filters `type: job-attempt, deploy_before: v1, deploy_after: v2`, and still carries the pair's sentence.
+- **Both deploys empty.** With `"deploy_before":"v8","deploy_after":"v9"` the answer is `not_evaluated` / `empty_side` on side `both`, the summary names both deploys, `deploys` lists `v1` 8 and `v2` 12, and `.next` is `[]`.
+- **No match.** A window that holds no records of the type is `no_match`, not `empty_side`: with `"type":"job-attempt"` the answer is `no_match` with the filters `type: job-attempt, deploy_before: v1, deploy_after: v2`, and still carries the pair's sentence.
 - **Refusals.** Half a pair is `error: missing_argument` for the missing half, the same deploy twice or `""` is `error: invalid_argument`.
 
 ## Gotchas

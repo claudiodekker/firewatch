@@ -277,6 +277,8 @@ return [
 
     'compare_empty_deploy_summary' => 'Not evaluated (empty_side): deploy :deploy, the :side side, holds no :type records in the window, which is not "no regression".',
 
+    'compare_empty_deploys_summary' => 'Not evaluated (empty_side): neither deploy :before, the before side, nor deploy :after, the after side, holds :type records in the window, which is not "no regression".',
+
     'compare_empty_side_summary' => 'Not evaluated (empty_side): the :side side holds no :type records, which is not "no regression".',
 
     'compare_outside_coverage_summary' => 'Not evaluated (outside_coverage): the :side side lies before the history the store holds for :type.',

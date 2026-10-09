@@ -59,6 +59,7 @@ class Comparison
      * @param  Side  $after
      * @param  Rows<Row>  $groups  in the order of the answer
      * @param  array<string, int>  $changes  every group's change counted, by its value, over the groups shown and cut
+     * @param  array{ComparisonReason, string}|null  $unevaluated
      * @param  Rows<array{deploy: string, records: int, first_at: float}>|null  $deploys  the deploys of the window, listed only when a side is empty
      */
     protected function __construct(
@@ -70,6 +71,7 @@ class Comparison
         public readonly Rows $groups,
         public readonly array $changes,
         public readonly ?int $straddling,
+        protected readonly ?array $unevaluated,
         public readonly ?Rows $deploys,
     ) {
         //
@@ -95,10 +97,11 @@ class Comparison
         $changes = array_count_values(array_map(fn (array $row) => $row['change']->value, $rows));
 
         $straddling = $boundary->straddling($connection, $type, $before, $group);
-        $oneSideEmpty = ! $before['outside'] && ! $after['outside'] && $before['empty'] !== $after['empty'];
-        $deploys = $oneSideEmpty ? self::deploys($connection, $type, Window::between($before['since'], $after['until'], $window->timezone()), $group) : null;
+        $sides = Window::between($before['since'], $after['until'], $window->timezone());
+        $unevaluated = self::unevaluatedOn($connection, $type, $before, $after, $sides);
+        $deploys = $unevaluated !== null && $unevaluated[0] === ComparisonReason::EMPTY_SIDE ? self::deploys($connection, $type, $sides, $group) : null;
 
-        return new self($boundary, $type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $deploys);
+        return new self($boundary, $type, $by, $before, $after, Rows::bound($rows, $limit), $changes, $straddling, $unevaluated, $deploys);
     }
 
     /**
@@ -108,26 +111,15 @@ class Comparison
      */
     public function unevaluated(): ?array
     {
-        return match (true) {
-            $this->before['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'before'],
-            $this->after['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'after'],
-            $this->isEmpty() => null,
-            $this->before['empty'] => [ComparisonReason::EMPTY_SIDE, 'before'],
-            $this->after['empty'] => [ComparisonReason::EMPTY_SIDE, 'after'],
-            default => null,
-        };
+        return $this->unevaluated;
     }
 
     /**
-     * Determine if nothing matched: neither side holds a record of the type, or the one group asked for has none in a window whose sides both do.
+     * Determine if nothing matched: the window of the sides holds no record of the type, or the one group asked for has none in a window whose sides both hold the type.
      */
     public function isEmpty(): bool
     {
-        if ($this->before['outside'] || $this->after['outside']) {
-            return false;
-        }
-
-        return $this->before['empty'] === $this->after['empty'] && $this->changes === [];
+        return $this->unevaluated === null && $this->changes === [];
     }
 
     /**
@@ -343,6 +335,35 @@ class Comparison
             'last' => null,
             'earlier' => $countsEarlier ? self::NONE_EARLIER : null,
         ];
+    }
+
+    /**
+     * Get why a comparison of the sides cannot run, and the side, or both, it cannot run on: a side outside coverage, or a side with no record of the type while the window of the sides holds some.
+     *
+     * @param  Side  $before
+     * @param  Side  $after
+     * @return array{ComparisonReason, string}|null
+     */
+    protected static function unevaluatedOn(SQLite3 $connection, RecordType $type, array $before, array $after, Window $sides): ?array
+    {
+        return match (true) {
+            $before['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'before'],
+            $after['outside'] => [ComparisonReason::OUTSIDE_COVERAGE, 'after'],
+            $before['empty'] && $after['empty'] => self::holds($connection, $type, $sides) ? [ComparisonReason::EMPTY_SIDE, 'both'] : null,
+            $before['empty'] => [ComparisonReason::EMPTY_SIDE, 'before'],
+            $after['empty'] => [ComparisonReason::EMPTY_SIDE, 'after'],
+            default => null,
+        };
+    }
+
+    /**
+     * Determine if the window holds a record of the type, which two sides of a split that are both empty never do and two deploys may.
+     */
+    protected static function holds(SQLite3 $connection, RecordType $type, Window $window): bool
+    {
+        $rows = Stored::rows($connection, 'SELECT EXISTS (SELECT 1 FROM '.$type->view().' WHERE '.$window->condition().') AS held', [], $window);
+
+        return $rows[0]['held'] === 1;
     }
 
     /**
