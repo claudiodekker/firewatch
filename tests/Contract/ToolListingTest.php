@@ -55,6 +55,6 @@ test('every argument description is at most 30 words', function () {
 test('the instructions describe every listed tool once, in the order an assistant drills down', function () {
     preg_match_all('/`([a-z]+)` \(/', __('firewatch::messages.instructions'), $matches);
 
-    expect($matches[1])->toBe(['overview', 'detect', 'rank', 'occurrences', 'execution', 'trace', 'actor', 'compare', 'trend'])
+    expect($matches[1])->toBe(['overview', 'detect', 'rank', 'occurrences', 'execution', 'trace', 'actor', 'compare', 'trend', 'query'])
         ->and(array_diff(array_column(toolListing()['tools'], 'name'), $matches[1]))->toBe([]);
 });

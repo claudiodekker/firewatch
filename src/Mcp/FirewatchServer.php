@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trend;
@@ -47,6 +48,7 @@ class FirewatchServer extends Server
         Actor::class,
         Compare::class,
         Trend::class,
+        Query::class,
     ];
 
     /**

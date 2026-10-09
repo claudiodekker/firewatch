@@ -247,6 +247,12 @@ class Answer
         $lines = [];
 
         foreach ($result as $label => $value) {
+            if ($label === 'rows' && $this->isGrid($result)) {
+                array_push($lines, '', "### {$label}", '', Markdown::grid($result['columns'], $value), '');
+
+                continue;
+            }
+
             if ($this->isTable($value)) {
                 array_push($lines, '', "### {$label}", '', Markdown::table($value), '');
 
@@ -257,6 +263,31 @@ class Answer
         }
 
         return $lines;
+    }
+
+    /**
+     * Determine if the result holds rows positional to its columns, as the assistant's own SQL returns them.
+     *
+     * @param  array<string, mixed>  $result
+     *
+     * @phpstan-assert-if-true array{columns: list<string>, rows: non-empty-list<list<mixed>>} $result
+     */
+    protected function isGrid(array $result): bool
+    {
+        $columns = $result['columns'] ?? null;
+        $rows = $result['rows'] ?? null;
+
+        if (! is_array($columns) || ! array_is_list($columns) || ! is_array($rows) || $rows === [] || ! array_is_list($rows)) {
+            return false;
+        }
+
+        foreach ($rows as $row) {
+            if (! is_array($row) || ! array_is_list($row) || count($row) !== count($columns)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

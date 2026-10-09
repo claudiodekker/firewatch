@@ -40,6 +40,16 @@ class Reader
     }
 
     /**
+     * Ensure the store can be read, before anything else is spent on it.
+     *
+     * @throws StoreUnusable
+     */
+    public function ensureUsable(): void
+    {
+        $this->snapshot(fn () => null);
+    }
+
+    /**
      * Run the callback inside one read snapshot of the store.
      *
      * @template TResult

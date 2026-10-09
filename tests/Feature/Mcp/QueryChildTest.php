@@ -1,0 +1,228 @@
+<?php
+
+use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
+use ClaudioDekker\Firewatch\Mcp\Tools\Query;
+use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\SqlFailure;
+use ClaudioDekker\Firewatch\Sql\SqlRunner;
+use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreState;
+use ClaudioDekker\Firewatch\Store\StoreUnusable;
+use ClaudioDekker\Firewatch\Store\Writer;
+use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Support\Facades\Exceptions;
+use Symfony\Component\Process\Process;
+
+beforeEach(function () {
+    $writer = new Writer(app(Configuration::class), sqliteVersion: '3.45.1');
+    $writer->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('request', '{}')"));
+});
+
+function qcStandIn(string $script, float $deadline = ChildRunner::DEADLINE_SECONDS): void
+{
+    app()->instance(SqlRunner::class, new ChildRunner(app(Configuration::class), deadline: $deadline, script: dirname(__DIR__, 2)."/Fixtures/Sql/{$script}.php"));
+}
+
+/**
+ * Run the echoing stand-in child, which writes the given lines as its protocol, and get the text of the answer.
+ *
+ * @param  list<array<string, mixed>|string>  $lines
+ */
+function qcEcho(array $lines): string
+{
+    qcStandIn('echo');
+
+    $output = implode("\n", array_map(fn (array|string $line) => is_string($line) ? $line : json_encode($line), $lines));
+    $response = FirewatchServer::tool(Query::class, ['sql' => $output, 'format' => 'json']);
+
+    return (fn () => $this->content())->call($response)[0];
+}
+
+/**
+ * Get the state a real child reports for the store, read through the runner alone, without the server's preflight.
+ */
+function qcChildState(): StoreUnusable
+{
+    try {
+        app(ChildRunner::class)->run('SELECT count(*) FROM records', 1);
+    } catch (StoreUnusable $unusable) {
+        return $unusable;
+    }
+
+    throw new RuntimeException('The child found the store usable.');
+}
+
+describe('isolation', function () {
+    it('starts the child with none of the application\'s environment variables', function () {
+        setEnvironmentVariable('APP_KEY', 'base64:secret');
+        setEnvironmentVariable('FIREWATCH_QUERY_SENTINEL', 'leaked');
+        qcStandIn('environment');
+
+        $envelope = Envelope::assert(Query::class, ['sql' => 'SELECT 1']);
+        $names = array_merge(...$envelope['result']['rows']);
+
+        // macOS gives every process its text encoding, whatever environment it is started with.
+        expect(array_diff($names, ['PHPRC', 'PHP_INI_SCAN_DIR', 'SystemRoot', '__CF_USER_TEXT_ENCODING']))->toBe([])
+            ->and($names)->not->toContain('APP_KEY', 'FIREWATCH_QUERY_SENTINEL');
+    })->group('process');
+
+    it('forces its own ini over a hostile host ini', function () {
+        $directory = sys_get_temp_dir().'/firewatch-ini-'.bin2hex(random_bytes(4));
+        mkdir($directory);
+        file_put_contents("{$directory}/prepend.php", '<?php echo "stray output\n";');
+        file_put_contents("{$directory}/php.ini", "precision=3\nserialize_precision=5\nauto_prepend_file={$directory}/prepend.php\n");
+        setEnvironmentVariable('PHPRC', $directory);
+
+        $envelope = Envelope::assert(Query::class, ['sql' => 'SELECT 0.1 + 0.2 AS sum']);
+
+        expect($envelope['result']['rows'])->toBe([[0.30000000000000004]]);
+
+        array_map(unlink(...), glob("{$directory}/*"));
+        rmdir($directory);
+    })->group('process');
+});
+
+describe('raw values', function () {
+    it('returns values as stored, and what JSON can not hold in words', function () {
+        $envelope = Envelope::assert(Query::class, ['sql' => "SELECT 9223372036854775807 AS big, 1e999 AS high, -1e999 AS low, x'00ff10' AS bytes, CAST(x'ff61' AS TEXT) AS broken, NULL AS missing, 1.5 AS fraction"]);
+
+        expect($envelope['result']['rows'])->toBe([[PHP_INT_MAX, 'Infinity', '-Infinity', '<blob 3 bytes>', "\u{FFFD}a", null, 1.5]]);
+    })->group('process');
+
+    it('returns text that holds a NUL byte cut at it, as the SQLite driver reads it', function () {
+        $envelope = Envelope::assert(Query::class, ['sql' => "SELECT CAST(x'610062' AS TEXT) AS text"]);
+
+        expect($envelope['result']['rows'])->toBe([['a']]);
+    })->group('process');
+});
+
+describe('the protocol', function () {
+    it('trusts nothing but whole protocol lines in their order', function (array $lines) {
+        $text = qcEcho($lines);
+
+        expect($text)->toBe(__('firewatch::messages.failed'));
+
+        Exceptions::assertReported(SqlFailure::class);
+        Exceptions::assertReportedCount(1);
+    })->with([
+        'a line that is no JSON' => [['not json']],
+        'a line with no kind' => [[['columns' => ['n']]]],
+        'a line of an unknown kind' => [[['k' => 'banner']]],
+        'a row before the columns' => [[['k' => 'row', 'r' => [1]], ['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 1, 'stop' => 'complete', 'reads' => []]]],
+        'a row of another width' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'row', 'r' => [1, 2]], ['k' => 'end', 'rows' => 1, 'stop' => 'complete', 'reads' => []]]],
+        'the columns twice' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 0, 'stop' => 'complete', 'reads' => []]]],
+        'a line after the end' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 0, 'stop' => 'complete', 'reads' => []], ['k' => 'row', 'r' => [1]]]],
+        'an end before the columns' => [[['k' => 'end', 'rows' => 0, 'stop' => 'complete', 'reads' => []]]],
+        'an unknown stop' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'end', 'rows' => 0, 'stop' => 'budget', 'reads' => []]]],
+        'a state among other lines' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'state', 'state' => 'busy', 'found' => null]]],
+        'a state a child never reports' => [[['k' => 'state', 'state' => 'unavailable', 'found' => null]]],
+        'an unknown error code' => [[['k' => 'error', 'code' => 'memory', 'message' => 'out of memory']]],
+        'an unknown denial' => [[['k' => 'error', 'code' => 'not_allowed', 'subject' => 'everything', 'name' => null]]],
+        'a failure the child reports' => [[['k' => 'error', 'code' => 'failed', 'message' => 'The request is unreadable.']]],
+    ])->group('process');
+
+    it('answers a child that ended without a complete result as aborted, with its stderr', function (array $lines) {
+        $text = qcEcho($lines);
+
+        expect($text)->toBe(__('firewatch::messages.aborted')."\n".__('firewatch::messages.aborted_stderr', ['stderr' => 'stand-in stderr']));
+
+        Exceptions::assertNothingReported();
+    })->with([
+        'no end line' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'row', 'r' => [1]]]],
+        'an end line that counts other rows' => [[['k' => 'columns', 'columns' => ['n']], ['k' => 'row', 'r' => [1]], ['k' => 'end', 'rows' => 2, 'stop' => 'complete', 'reads' => []]]],
+    ])->group('process');
+
+    it('answers a child that died before writing a line as aborted, with its stderr', function () {
+        qcStandIn('silent');
+
+        $text = FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']);
+
+        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.aborted')."\n".__('firewatch::messages.aborted_stderr', ['stderr' => 'stand-in stderr']));
+    })->group('process');
+
+    it('kills a child that runs past its deadline, and answers aborted', function () {
+        qcStandIn('sleep', deadline: 0.2);
+
+        $text = FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']);
+
+        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.aborted'));
+    })->group('process');
+
+    it('answers a store state the child reports alone the way every tool does', function () {
+        $text = qcEcho([['k' => 'state', 'state' => 'schema_mismatch', 'found' => 2]]);
+        $envelope = json_decode($text, associative: true);
+
+        expect($envelope['empty']['kind'])->toBe('store_unusable')
+            ->and($envelope['coverage']['reason'])->toBe('newer_schema');
+    })->group('process');
+
+    it('answers an isolation the child could not establish as unavailable', function () {
+        $text = qcEcho([['k' => 'error', 'code' => 'unavailable', 'reason' => 'authorizer']]);
+
+        expect($text)->toBe(__('firewatch::messages.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.authorizer')]));
+    })->group('process');
+
+    it('drops the rows before a runtime error, and answers invalid SQL', function () {
+        $text = FirewatchServer::tool(Query::class, ['sql' => "SELECT json_extract(column1, '$') FROM (VALUES ('{}'), ('{'))"]);
+
+        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.invalid_sql', ['message' => 'malformed JSON']));
+    })->group('process');
+});
+
+describe('the store as the child finds it', function () {
+    it('reports a store that is gone as absent', function () {
+        $path = app(Configuration::class)->database;
+
+        foreach (['', '-wal', '-shm'] as $suffix) {
+            @unlink($path.$suffix);
+        }
+
+        expect(qcChildState())->state->toBe(StoreState::ABSENT);
+    })->group('process', 'posix');
+
+    it('reports a store stamped by another application or schema', function (string $stamp, StoreState $state, ?int $found) {
+        (new SQLite3(app(Configuration::class)->database))->exec($stamp);
+
+        expect(qcChildState())->state->toBe($state)->found->toBe($found);
+    })->with([
+        'another application' => ['PRAGMA application_id = 7', StoreState::FOREIGN, null],
+        'a newer schema' => ['PRAGMA user_version = '.(Schema::VERSION + 1), StoreState::SCHEMA_MISMATCH, Schema::VERSION + 1],
+    ])->group('process');
+
+    it('reports a damaged store as corrupt', function () {
+        $path = app(Configuration::class)->database;
+        clearstatcache(true, $path);
+        $handle = fopen($path, 'r+b');
+        fseek($handle, 100);
+        fwrite($handle, str_repeat("\xff", filesize($path) - 100));
+        fclose($handle);
+
+        expect(qcChildState())->state->toBe(StoreState::CORRUPT);
+    })->group('process');
+
+    it('reports a store that stays locked past the busy timeout as busy', function () {
+        $connection = new SQLite3(app(Configuration::class)->database);
+        $connection->exec('PRAGMA journal_mode = DELETE');
+        $connection->exec('BEGIN EXCLUSIVE');
+
+        expect(qcChildState())->state->toBe(StoreState::BUSY);
+
+        $connection->exec('ROLLBACK');
+    })->group('process');
+});
+
+it('screens the statement again in the child, which is authoritative', function () {
+    $request = json_encode([
+        'sql' => 'SELECT 1; SELECT 2',
+        'limit' => 1,
+        'store' => app(Configuration::class)->database,
+        'application_id' => Schema::APPLICATION_ID,
+        'version' => Schema::VERSION,
+    ]);
+
+    $process = new Process([PHP_BINARY, ChildRunner::SCRIPT], input: $request);
+    $process->run();
+
+    expect($process->getOutput())->toBe('{"k":"error","code":"not_allowed","subject":"second_statement","name":null}'."\n");
+})->group('process');

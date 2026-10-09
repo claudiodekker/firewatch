@@ -2,6 +2,10 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Sql\Child\Denied;
+use ClaudioDekker\Firewatch\Sql\Child\Policy;
+use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
+use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use RuntimeException;
 
 /**
@@ -9,6 +13,11 @@ use RuntimeException;
  */
 class Refusal extends RuntimeException
 {
+    /**
+     * The most characters of SQLite's message an invalid statement is refused with.
+     */
+    protected const SQL_MESSAGE_CHARACTERS = 300;
+
     /**
      * Create a new refusal instance.
      */
@@ -134,6 +143,77 @@ class Refusal extends RuntimeException
     public static function internal(): self
     {
         return new self(ErrorCode::INTERNAL, __('firewatch::messages.internal'));
+    }
+
+    /**
+     * Get the refusal of a SQL statement that was refused or could not be run; the SQL itself is never echoed.
+     */
+    public static function sql(SqlFailure $failure): self
+    {
+        $text = match ($failure->error) {
+            ErrorCode::NOT_ALLOWED => self::notAllowed($failure->denied ?? Denied::ACTION, (string) $failure->name),
+            ErrorCode::INVALID_SQL => self::invalidSql((string) $failure->detail),
+            ErrorCode::ABORTED => self::aborted((string) $failure->detail),
+            ErrorCode::UNAVAILABLE => self::unavailable($failure->unavailable),
+            default => __('firewatch::messages.failed'),
+        };
+
+        return new self($failure->error, $text);
+    }
+
+    /**
+     * Get the text of a statement SQLite could not compile or run, with the start of SQLite's message.
+     */
+    protected static function invalidSql(string $detail): string
+    {
+        $message = mb_substr($detail, 0, self::SQL_MESSAGE_CHARACTERS);
+
+        return __('firewatch::messages.invalid_sql', ['message' => $message]);
+    }
+
+    /**
+     * Get the text of a call whose isolation could not be established.
+     */
+    protected static function unavailable(?Unavailable $reason): string
+    {
+        $because = __("firewatch::messages.sql_unavailable.{$reason?->value}");
+
+        return __('firewatch::messages.unavailable', ['reason' => $because]);
+    }
+
+    /**
+     * Get the text of a statement the SQL policy refuses, with a hint where there is a next step.
+     */
+    protected static function notAllowed(Denied $denied, string $name): string
+    {
+        $message = __("firewatch::messages.sql_denied.{$denied->value}", [
+            'name' => $name,
+            'bytes' => number_format(Policy::SQL_BYTES),
+        ]);
+
+        $text = __('firewatch::messages.not_allowed', ['message' => $message]);
+
+        return match ($denied) {
+            Denied::FUNCTION => $text,
+            Denied::TABLE => $text."\n".__('firewatch::messages.sql_hint_table'),
+            default => $text."\n".__('firewatch::messages.sql_hint_forms'),
+        };
+    }
+
+    /**
+     * Get the text of a query process that ended without a complete result, with the start of its stderr.
+     */
+    protected static function aborted(string $stderr): string
+    {
+        $text = __('firewatch::messages.aborted');
+
+        if ($stderr === '') {
+            return $text;
+        }
+
+        $flattened = preg_replace('/\s+/', ' ', $stderr);
+
+        return $text."\n".__('firewatch::messages.aborted_stderr', ['stderr' => $flattened]);
     }
 
     /**

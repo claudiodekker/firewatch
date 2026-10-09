@@ -12,6 +12,8 @@ use ClaudioDekker\Firewatch\Console\Commands\ClearCommand;
 use ClaudioDekker\Firewatch\Console\Commands\DoctorCommand;
 use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use ClaudioDekker\Firewatch\Mcp\StrayOutput;
+use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use Composer\InstalledVersions;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Database\Events\QueryExecuted;
@@ -109,6 +111,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->registerNotices();
         $this->registerNightwatchInstall();
         $this->registerConfiguration();
+        $this->registerSqlRunner();
         $this->resolveMode();
         $this->redirectStrayServerOutput();
         $this->configureNightwatch();
@@ -192,6 +195,14 @@ class FirewatchServiceProvider extends ServiceProvider
         $configuration = $normaliser->resolve(is_array($raw) ? $raw : []);
 
         $this->app->instance(Configuration::class, $configuration);
+    }
+
+    /**
+     * Run the assistant's SQL in the SQL child, unless a runner is already bound.
+     */
+    protected function registerSqlRunner(): void
+    {
+        $this->app->bindIf(SqlRunner::class, ChildRunner::class);
     }
 
     /**

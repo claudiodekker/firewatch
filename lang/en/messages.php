@@ -16,7 +16,7 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did while it was developed: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and Firewatch itself sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time). Every answer ends with `next`: calls you can run as written.
+        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time), `query` (your own read-only SQL, last resort). Every answer ends with `next`: calls you can run as written.
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used.
         TEXT,
@@ -42,6 +42,7 @@ return [
         'compare' => 'Compares each group across a split or a deploy pair: "did my change help?". Give exactly one boundary. split_at is a time, such as the now of an earlier answer; before is since to split_at, after is split_at to until. Or deploy_before and deploy_after, exact deploy strings: each side is every record of its deploy in the window. A deploy pair cannot separate an uncommitted edit; a time split can. Without since: the type\'s coverage start; without until: now. Pass `type`, or `group` for one group. Rows are ordered by absolute change, so the largest change in either direction survives the limit; a rollup counts every group, cut or not. Too few records is not evaluated, never guessed; an empty side is never "no regression". Work spanning `split_at` counts as before.',
         'actor' => 'Identifies one signed-in person and the work of the window tied to them. `who` is a user id, a username or a name, tried in that order, then as a part of a name or username: the first stage that finds anyone decides. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the username is the email. Several matches are listed as candidates, never guessed: repeat with an id. An actor exists only once recorded acting. An execution is theirs by its own user, its job\'s dispatch, or a child inside a command or task. Attribution is partial: what no link reaches is counted, never guessed. Windowed by since/until; identity is read over the whole store.',
         'trend' => 'Cuts the window into equal buckets and reports a measure per bucket, to see whether something rose, fell or held, and where it peaked. Pass `type` or `group`. `by`: occurrences (default), max_duration, avg_duration, total_duration, max_memory (execution types only). Missing since/until are derived from the selected records, and the window says which. Empty bucket: 0 for occurrences, null for other measures. Buckets that start before coverage are partial. Bucket edges can be passed back as since/until. Windowed.',
+        'query' => 'Last resort: runs your own read-only SQL on Firewatch\'s store. One SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the twelve record views (requests, commands, job_attempts, scheduled_tasks, queries, exceptions, logs, cache_events, mail, notifications, outgoing_requests, queued_jobs), records, users, drift, meta, json_each and json_tree; anything else, and a function off the allow-list, is refused. Values are raw: times epoch seconds, durations microseconds, memory bytes. `limit` 1 to 500 (default 50). Blind spots follow the record types read. Prefer `rank`, `occurrences` and `detect`, which convert units. Not windowed.',
     ],
 
     /*
@@ -238,6 +239,37 @@ return [
 
     'empty_window' => "error: empty_window\n`since` (:since) is not before `until` (:until).\nargument: since\naccepted: a `since` earlier than `until`\nexample: :tool(since: \"-1d\", until: \"now\")",
 
+    'not_allowed' => "error: not_allowed\n:message\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+
+    'sql_denied' => [
+        'function' => 'function `:name` is not allowed.',
+        'table' => 'table `:name` is not readable.',
+        'action' => 'action `:name` is not allowed.',
+        'second_statement' => 'one statement only.',
+        'no_columns' => 'the statement returns no rows.',
+        'too_long' => 'the SQL is longer than :bytes bytes.',
+        'nul' => 'the SQL contains a NUL byte.',
+    ],
+
+    'sql_hint_table' => 'hint: the readable objects are the twelve record views, records, users, drift, meta, json_each and json_tree.',
+
+    'sql_hint_forms' => 'hint: only SELECT, WITH ... SELECT, VALUES and EXPLAIN are allowed.',
+
+    'invalid_sql' => "error: invalid_sql\n:message\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+
+    'aborted' => "error: aborted\nThe query process ended unexpectedly.",
+
+    'aborted_stderr' => 'stderr: :stderr',
+
+    'unavailable' => "error: unavailable\nThe SQL tool is unavailable: :reason. Every other Firewatch tool works.",
+
+    'sql_unavailable' => [
+        'spawn_failed' => 'the query process could not be started',
+        'authorizer' => 'SQLite cannot install an authorizer',
+    ],
+
+    'failed' => "error: failed\nThe SQL tool failed unexpectedly; the failure was reported to the application's exception handler. Run `php artisan firewatch:doctor`.",
+
     'rank_type_argument' => 'The type to rank, required unless group: request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request or queued-job.',
 
     'rank_by_argument' => 'The measure: p95_duration (default; occurrences for exceptions), p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen or queries.',
@@ -357,6 +389,28 @@ return [
     'trend_idle_note' => 'No records for :duration since the last one.',
 
     'trend_next_occurrences' => 'List the records of the peak bucket.',
+
+    'query_sql_argument' => 'One SELECT, WITH ... SELECT, VALUES or EXPLAIN statement, up to 16,384 bytes.',
+
+    'query_limit_argument' => 'The most rows to return, 1 to 500. Default 50. A LIMIT of your own applies inside it.',
+
+    'query_window_reason' => 'The statement owns its bounds.',
+
+    'query_summary' => 'Returned :rows (:columns).',
+
+    'query_summary_more' => 'Returned :rows (:columns). Showing the first :shown of more.',
+
+    'query_rows_count' => ':count row|:count rows',
+
+    'query_columns_count' => ':count column|:count columns',
+
+    'query_no_rows' => 'The statement returned no rows.',
+
+    'query_raw_values' => 'Values are raw: times are epoch seconds, durations microseconds.',
+
+    'query_limit_how' => 'Add LIMIT/OFFSET or a keyset condition on id, or raise `limit` up to 500.',
+
+    'query_next_more' => 'The same statement with the most rows an answer holds.',
 
     'execution_id_argument' => 'The execution id to open (a request\'s trace id is its execution id). Omit for the latest finished execution. Excludes type.',
 

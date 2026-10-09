@@ -2,6 +2,9 @@
 
 use ClaudioDekker\Firewatch\Mcp\ErrorCode;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
+use ClaudioDekker\Firewatch\Sql\Child\Denied;
+use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
+use ClaudioDekker\Firewatch\Sql\SqlFailure;
 
 test('every general error code has pinned text', function (Closure $refusal, ErrorCode $code, string $text) {
     $refusal = $refusal();
@@ -68,5 +71,83 @@ test('every general error code has pinned text', function (Closure $refusal, Err
         fn () => Refusal::internal(),
         ErrorCode::INTERNAL,
         "error: internal\nThe tool failed unexpectedly; the exception was reported to the application's exception handler, which logs it by default.",
+    ],
+]);
+
+test('every SQL error code has pinned text', function (SqlFailure $failure, ErrorCode $code, string $text) {
+    $refusal = Refusal::sql($failure);
+
+    expect($refusal->error)->toBe($code)
+        ->and($refusal->getMessage())->toBe($text);
+})->with([
+    'a function outside the allow-list' => [
+        SqlFailure::notAllowed(Denied::FUNCTION, 'printf'),
+        ErrorCode::NOT_ALLOWED,
+        "error: not_allowed\nfunction `printf` is not allowed.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+    ],
+    'a table outside the readable set' => [
+        SqlFailure::notAllowed(Denied::TABLE, 'sqlite_master'),
+        ErrorCode::NOT_ALLOWED,
+        "error: not_allowed\ntable `sqlite_master` is not readable.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: the readable objects are the twelve record views, records, users, drift, meta, json_each and json_tree.",
+    ],
+    'an action that is not a read' => [
+        SqlFailure::notAllowed(Denied::ACTION, 'INSERT'),
+        ErrorCode::NOT_ALLOWED,
+        "error: not_allowed\naction `INSERT` is not allowed.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: only SELECT, WITH ... SELECT, VALUES and EXPLAIN are allowed.",
+    ],
+    'a second statement' => [
+        SqlFailure::notAllowed(Denied::SECOND_STATEMENT),
+        ErrorCode::NOT_ALLOWED,
+        "error: not_allowed\none statement only.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: only SELECT, WITH ... SELECT, VALUES and EXPLAIN are allowed.",
+    ],
+    'no result columns' => [
+        SqlFailure::notAllowed(Denied::NO_COLUMNS),
+        ErrorCode::NOT_ALLOWED,
+        "error: not_allowed\nthe statement returns no rows.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: only SELECT, WITH ... SELECT, VALUES and EXPLAIN are allowed.",
+    ],
+    'SQL that is too long' => [
+        SqlFailure::notAllowed(Denied::TOO_LONG),
+        ErrorCode::NOT_ALLOWED,
+        "error: not_allowed\nthe SQL is longer than 16,384 bytes.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: only SELECT, WITH ... SELECT, VALUES and EXPLAIN are allowed.",
+    ],
+    'a NUL byte' => [
+        SqlFailure::notAllowed(Denied::NUL),
+        ErrorCode::NOT_ALLOWED,
+        "error: not_allowed\nthe SQL contains a NUL byte.\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: only SELECT, WITH ... SELECT, VALUES and EXPLAIN are allowed.",
+    ],
+    'invalid_sql' => [
+        SqlFailure::invalid('no such table: orders'),
+        ErrorCode::INVALID_SQL,
+        "error: invalid_sql\nno such table: orders\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+    ],
+    'invalid_sql with a message cut at 300 characters' => [
+        SqlFailure::invalid('near "'.str_repeat('x', 400).'": syntax error'),
+        ErrorCode::INVALID_SQL,
+        "error: invalid_sql\nnear \"".str_repeat('x', 294)."\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+    ],
+    'aborted' => [
+        SqlFailure::aborted(''),
+        ErrorCode::ABORTED,
+        "error: aborted\nThe query process ended unexpectedly.",
+    ],
+    'aborted with stderr' => [
+        SqlFailure::aborted("PHP Fatal error:  Allowed memory size\nexhausted"),
+        ErrorCode::ABORTED,
+        "error: aborted\nThe query process ended unexpectedly.\nstderr: PHP Fatal error: Allowed memory size exhausted",
+    ],
+    'unavailable when the process can not be started' => [
+        SqlFailure::unavailable(Unavailable::SPAWN_FAILED),
+        ErrorCode::UNAVAILABLE,
+        "error: unavailable\nThe SQL tool is unavailable: the query process could not be started. Every other Firewatch tool works.",
+    ],
+    'unavailable without an authorizer' => [
+        SqlFailure::unavailable(Unavailable::AUTHORIZER),
+        ErrorCode::UNAVAILABLE,
+        "error: unavailable\nThe SQL tool is unavailable: SQLite cannot install an authorizer. Every other Firewatch tool works.",
+    ],
+    'failed' => [
+        SqlFailure::failed('A row line does not fit the columns.'),
+        ErrorCode::FAILED,
+        "error: failed\nThe SQL tool failed unexpectedly; the failure was reported to the application's exception handler. Run `php artisan firewatch:doctor`.",
     ],
 ]);
