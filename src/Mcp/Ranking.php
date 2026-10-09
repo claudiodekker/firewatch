@@ -223,25 +223,36 @@ class Ranking
     }
 
     /**
-     * Read what a budget judges of every group of the type in the window, keyed like the statistics: the figure of each quantity is the nearest-rank 95th percentile from 20 executions that ran, else the maximum.
+     * Read what a budget judges of every group of the type in the window, keyed like the statistics.
      *
-     * @return array<string, array{executions: int, ran: int, duration: int|float|null, memory: int|float|null, measured_on: string, label: mixed, route_methods: mixed, route_path: mixed, name: mixed}>
+     * The figure of each quantity is the nearest-rank 95th percentile when every quantity that has a value has at least 20 of them, else the maximum.
+     *
+     * @return array<string, array{
+     *     ran: int,
+     *     duration: int|float|null,
+     *     memory: int|float|null,
+     *     measured_on: string,
+     *     label: mixed,
+     *     route_methods: mixed,
+     *     route_path: mixed,
+     *     name: mixed,
+     * }>
      */
     public function budgets(SQLite3 $connection): array
     {
         $matchers = $this->type === RecordType::REQUEST ? ', route_methods, route_path' : ', name';
 
-        $latest = $this->query($connection, "SELECT group_hash, n AS executions, ran, label{$matchers} FROM (SELECT group_hash, label{$matchers}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n, COUNT(*) FILTER (WHERE NOT skipped) OVER (PARTITION BY group_hash) AS ran FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
+        $latest = $this->query($connection, "SELECT group_hash, ran, label{$matchers} FROM (SELECT group_hash, label{$matchers}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n, COUNT(*) FILTER (WHERE NOT skipped) OVER (PARTITION BY group_hash) AS ran FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
         $durations = $this->percentiles($connection, 'd', 'NOT skipped');
         $memories = $this->percentiles($connection, 'm', 'NOT skipped');
         $budgets = [];
 
         foreach ($latest as $row) {
             $hash = $row['group_hash'];
-            $percentile = $row['ran'] >= self::P95_FLOOR ? 'p95' : 'max';
+            $counts = array_filter([$durations[$hash]['n'] ?? null, $memories[$hash]['n'] ?? null]);
+            $percentile = $counts !== [] && min($counts) >= self::P95_FLOOR ? 'p95' : 'max';
 
             $budgets[$hash] = [
-                'executions' => $row['executions'],
                 'ran' => $row['ran'],
                 'duration' => ($durations[$hash] ?? null)[$percentile] ?? null,
                 'memory' => ($memories[$hash] ?? null)[$percentile] ?? null,
@@ -285,7 +296,7 @@ class Ranking
             $type = ExecutionType::from($this->type->value);
 
             foreach ($this->budgets($connection) as $hash => $budget) {
-                $groups[$hash]['budget'] = BudgetVerdict::ofGroup($this->configuration, $type, $budget)->toArray();
+                $groups[$hash]['budget'] = BudgetVerdict::ofGroup($this->configuration, $type, $budget)->cell();
             }
         }
 

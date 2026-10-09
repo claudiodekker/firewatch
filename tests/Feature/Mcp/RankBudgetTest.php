@@ -36,29 +36,33 @@ function rankBudgetGroup(RecordType $type, string $letter, array $milliseconds, 
 }
 
 /**
- * @param  array<string, mixed>  $arguments
- * @return array<string, mixed>
+ * Get the cell a ranking row states a budget in.
  */
-function rankBudgetOf(RecordType $type, array $arguments = []): array
+function rankBudgetCell(string $state, string $details): string
+{
+    return __('firewatch::messages.budget_cell', ['state' => $state, 'details' => $details]);
+}
+
+/**
+ * @param  array<string, mixed>  $arguments
+ */
+function rankBudgetOf(RecordType $type, array $arguments = []): string
 {
     return Envelope::assert(Rank::class, ['type' => $type->value, ...$arguments])['result']['groups'][0]['budget'];
 }
 
 describe('a group against its budget', function () {
-    it('judges the maximum below 20 executions and the nearest-rank p95 from 20', function (int $executions, array $slowest, string $state, string $measuredOn, float $measured) {
+    it('judges the maximum below 20 executions and the nearest-rank p95 from 20', function (int $executions, array $slowest, string $state, string $measuredOn) {
         rankBudgetsAre([['type' => 'command', 'duration' => 100]]);
         ingest(rankBudgetGroup(RecordType::COMMAND, 'a', [...array_fill(0, $executions - count($slowest), 10), ...$slowest]));
 
-        $budget = rankBudgetOf(RecordType::COMMAND);
-
-        expect($budget)->toMatchArray(['state' => $state, 'measured_on' => $measuredOn, 'entry' => 1])
-            ->and($budget['measures'][0])->toMatchArray(['measure' => 'duration', 'measured' => $measured, 'ceiling' => 100]);
+        expect(rankBudgetOf(RecordType::COMMAND))->toBe(rankBudgetCell($state, $measuredOn));
     })->with([
-        '19 executions, one slow: the maximum' => [19, [500], 'exceeded', 'max', 500.0],
-        '20 executions, one slow: the p95 skips it' => [20, [500], 'within', 'p95', 10.0],
-        '20 executions, two slow: the 19th is the p95' => [20, [101, 500], 'exceeded', 'p95', 101.0],
-        '20 executions, the 19th at the ceiling' => [20, [100, 500], 'within', 'p95', 100.0],
-        '19 executions, the maximum at the ceiling' => [19, [100], 'within', 'max', 100.0],
+        '19 executions, one slow: the maximum' => [19, [500], 'exceeded', 'max'],
+        '20 executions, one slow: the p95 skips it' => [20, [500], 'within', 'p95'],
+        '20 executions, two slow: the 19th is the p95' => [20, [101, 500], 'exceeded', 'p95'],
+        '20 executions, the 19th at the ceiling' => [20, [100, 500], 'within', 'p95'],
+        '19 executions, the maximum at the ceiling' => [19, [100], 'within', 'max'],
     ]);
 
     it('judges memory on the same figure as duration', function () {
@@ -68,10 +72,17 @@ describe('a group against its budget', function () {
             ...rankBudgetGroup(RecordType::COMMAND, 'a', [10], ['peak_memory_usage' => 48 * RANK_BUDGET_MEGABYTE]),
         ]);
 
-        $budget = rankBudgetOf(RecordType::COMMAND);
+        expect(rankBudgetOf(RecordType::COMMAND))->toBe(rankBudgetCell('within', 'p95'));
+    });
 
-        expect($budget)->toMatchArray(['state' => 'within', 'measured_on' => 'p95'])
-            ->and($budget['measures'][0])->toMatchArray(['measure' => 'memory', 'measured' => 8.0, 'ceiling' => 32]);
+    it('states the maximum when a quantity has fewer than 20 values, whatever the other has', function () {
+        rankBudgetsAre([['type' => 'command', 'memory' => 32]]);
+        ingest([
+            ...rankBudgetGroup(RecordType::COMMAND, 'a', array_fill(0, 19, 10), ['peak_memory_usage' => 8 * RANK_BUDGET_MEGABYTE]),
+            ...rankBudgetGroup(RecordType::COMMAND, 'a', [10], ['peak_memory_usage' => null]),
+        ]);
+
+        expect(rankBudgetOf(RecordType::COMMAND))->toBe(rankBudgetCell('within', 'max'));
     });
 
     it('leaves the skipped task runs out of the figure', function () {
@@ -81,24 +92,21 @@ describe('a group against its budget', function () {
             ...rankBudgetGroup(RecordType::SCHEDULED_TASK, 'a', [9_000], ['status' => 'skipped', 'peak_memory_usage' => 900 * RANK_BUDGET_MEGABYTE]),
         ]);
 
-        $budget = rankBudgetOf(RecordType::SCHEDULED_TASK);
-
-        expect($budget)->toMatchArray(['state' => 'within', 'measured_on' => 'max'])
-            ->and(array_column($budget['measures'], 'measured', 'measure'))->toEqual(['duration' => 20, 'memory' => 4]);
+        expect(rankBudgetOf(RecordType::SCHEDULED_TASK))->toBe(rankBudgetCell('within', 'max'));
     });
 
     it('does not evaluate a group whose every run was skipped', function () {
         rankBudgetsAre([['type' => 'scheduled-task', 'duration' => 100]]);
         ingest(rankBudgetGroup(RecordType::SCHEDULED_TASK, 'a', [9_000, 9_000], ['status' => 'skipped']));
 
-        expect(rankBudgetOf(RecordType::SCHEDULED_TASK))->toMatchArray(['state' => 'not_evaluated', 'reason' => 'not_run', 'entry' => null, 'measures' => []]);
+        expect(rankBudgetOf(RecordType::SCHEDULED_TASK))->toBe(rankBudgetCell('not_evaluated', 'not_run'));
     });
 
     it('counts the failed executions', function () {
         rankBudgetsAre([['type' => 'command', 'duration' => 100]]);
         ingest(rankBudgetGroup(RecordType::COMMAND, 'a', [10, 500], ['exit_code' => 1]));
 
-        expect(rankBudgetOf(RecordType::COMMAND))->toMatchArray(['state' => 'exceeded', 'measured_on' => 'max']);
+        expect(rankBudgetOf(RecordType::COMMAND))->toBe(rankBudgetCell('exceeded', 'max'));
     });
 
     it('is the verdict of the entry that governs the group, from its latest record', function () {
@@ -111,16 +119,19 @@ describe('a group against its budget', function () {
             ...rankBudgetGroup(RecordType::REQUEST, 'b', [300], ['route_methods' => ['GET'], 'route_path' => 'invoices/{invoice}']),
         ]);
 
-        $entries = collect(Envelope::assert(Rank::class, ['type' => 'request'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['group'] => $row['budget']['entry']]);
+        $cells = collect(Envelope::assert(Rank::class, ['type' => 'request'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['group'] => $row['budget']]);
 
-        expect($entries->all())->toBe([str_repeat('a', 32) => 1, str_repeat('b', 32) => 2]);
+        expect($cells->all())->toBe([
+            str_repeat('a', 32) => rankBudgetCell('exceeded', 'max'),
+            str_repeat('b', 32) => rankBudgetCell('within', 'max'),
+        ]);
     });
 
     it('does not evaluate a group with no budget configured, or none that matches', function (array $budgets, string $reason) {
         rankBudgetsAre($budgets);
         ingest(rankBudgetGroup(RecordType::COMMAND, 'a', [10]));
 
-        expect(rankBudgetOf(RecordType::COMMAND))->toMatchArray(['state' => 'not_evaluated', 'reason' => $reason, 'entry' => null, 'measured_on' => null]);
+        expect(rankBudgetOf(RecordType::COMMAND))->toBe(rankBudgetCell('not_evaluated', $reason));
     })->with([
         'no budget' => [[], 'no_budget_configured'],
         'no entry of the type' => [[['type' => 'request', 'duration' => 100]], 'no_matching_budget'],
@@ -131,7 +142,7 @@ describe('a group against its budget', function () {
         rankBudgetsAre([['type' => 'command', 'duration' => 100], ['type' => 'bogus', 'duration' => 100]]);
         ingest(rankBudgetGroup(RecordType::COMMAND, 'a', [10]));
 
-        expect(rankBudgetOf(RecordType::COMMAND))->toMatchArray(['state' => 'within', 'ignored_entries' => 1]);
+        expect(rankBudgetOf(RecordType::COMMAND))->toBe(rankBudgetCell('within', 'max'.__('firewatch::messages.budget_ignored', ['count' => 1])));
     });
 
     it('judges each group of the ranking, honouring the deploy and the window', function () {
@@ -141,9 +152,9 @@ describe('a group against its budget', function () {
             ...rankBudgetGroup(RecordType::COMMAND, 'a', [10], ['deploy' => 'v2', 'timestamp' => RANK_BUDGET_AT + 100]),
         ]);
 
-        expect(rankBudgetOf(RecordType::COMMAND))->toMatchArray(['state' => 'exceeded', 'measured_on' => 'max'])
-            ->and(rankBudgetOf(RecordType::COMMAND, ['deploy' => 'v2']))->toMatchArray(['state' => 'within'])
-            ->and(rankBudgetOf(RecordType::COMMAND, ['since' => RANK_BUDGET_AT + 50]))->toMatchArray(['state' => 'within']);
+        expect(rankBudgetOf(RecordType::COMMAND))->toBe(rankBudgetCell('exceeded', 'max'))
+            ->and(rankBudgetOf(RecordType::COMMAND, ['deploy' => 'v2']))->toBe(rankBudgetCell('within', 'max'))
+            ->and(rankBudgetOf(RecordType::COMMAND, ['since' => RANK_BUDGET_AT + 50]))->toBe(rankBudgetCell('within', 'max'));
     });
 });
 
@@ -159,8 +170,11 @@ describe('the deploys of a group', function () {
         $deploys = Envelope::assert(Rank::class, ['group' => str_repeat('a', 32)])['result']['deploys'];
 
         expect(array_column($deploys, 'deploy'))->toBe(['v1', 'v2', __('firewatch::messages.rank_no_deploy')])
-            ->and(array_column(array_column($deploys, 'budget'), 'state'))->toBe(['exceeded', 'within', 'within'])
-            ->and($deploys[0]['budget']['measures'][0])->toMatchArray(['measured' => 500.0, 'ceiling' => 100]);
+            ->and(array_column($deploys, 'budget'))->toBe([
+                rankBudgetCell('exceeded', 'max'),
+                rankBudgetCell('within', 'max'),
+                rankBudgetCell('within', 'max'),
+            ]);
     });
 
     it('states the ignored entries on a deploy row', function () {
@@ -169,7 +183,7 @@ describe('the deploys of a group', function () {
 
         $deploys = Envelope::assert(Rank::class, ['group' => str_repeat('a', 32)])['result']['deploys'];
 
-        expect($deploys[0]['budget'])->toMatchArray(['state' => 'within', 'ignored_entries' => 1]);
+        expect($deploys[0]['budget'])->toBe(rankBudgetCell('within', 'max'.__('firewatch::messages.budget_ignored', ['count' => 1])));
     });
 });
 
@@ -181,10 +195,10 @@ describe('the types without a budget', function () {
         expect(Envelope::assert(Rank::class, ['type' => $type->value])['result']['groups'][0])->not->toHaveKey('budget');
     })->with([RecordType::QUERY, RecordType::OUTGOING_REQUEST, RecordType::QUEUED_JOB]);
 
-    it('gives the row of each execution type a budget key', function (RecordType $type) {
+    it('gives the row of each execution type a budget cell', function (RecordType $type) {
         rankBudgetsAre([]);
         ingest(rankBudgetGroup($type, 'a', [10]));
 
-        expect(Envelope::assert(Rank::class, ['type' => $type->value])['result']['groups'][0]['budget'])->toMatchArray(['state' => 'not_evaluated', 'reason' => 'no_budget_configured']);
+        expect(rankBudgetOf($type))->toBe(rankBudgetCell('not_evaluated', 'no_budget_configured'));
     })->with([RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK]);
 });

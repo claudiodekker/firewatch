@@ -370,6 +370,10 @@ return [
 
     'budget_line' => 'Budget: :state (:details)',
 
+    'budget_cell' => ':state (:details)',
+
+    'budget_ignored' => '; ignored_entries: :count',
+
     'execution_summary' => 'Showed the :type :id: outcome :outcome.',
 
     'execution_not_found_trace' => "error: not_found\nNo execution `:id` exists in the store, but that value is a trace id; `trace(trace_id: \":id\")` follows it.\nargument: :argument\naccepted: :accepted\nexample: :example",

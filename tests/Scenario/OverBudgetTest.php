@@ -11,6 +11,14 @@ use Illuminate\Support\Facades\Route;
  *
  * The slow route sleeps past its 1 ms ceiling and the quick one stays far under its ceiling, so the verdicts do not depend on how fast the machine is.
  */
+function overBudgetCell(string $state, string $details, int $ignored = 0): string
+{
+    return __('firewatch::messages.budget_cell', [
+        'state' => $state,
+        'details' => $details.($ignored > 0 ? __('firewatch::messages.budget_ignored', ['count' => $ignored]) : ''),
+    ]);
+}
+
 function overBudgetTraffic(): void
 {
     test()->refreshApplication();
@@ -49,9 +57,8 @@ it('judges the groups of a ranking against their budgets, from the real sensors'
 
     $verdicts = collect(Envelope::assert(Rank::class, ['type' => 'request'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['label'] => $row['budget']]);
 
-    expect($verdicts['/slow'])->toMatchArray(['state' => 'exceeded', 'measured_on' => 'max', 'ignored_entries' => 1])
-        ->and($verdicts['/slow']['measures'][0])->toMatchArray(['measure' => 'duration', 'ceiling' => 1, 'exceeded' => true])
-        ->and($verdicts['/quick'])->toMatchArray(['state' => 'within', 'measured_on' => 'max', 'ignored_entries' => 1]);
+    expect($verdicts['/slow'])->toBe(overBudgetCell('exceeded', 'max', 1))
+        ->and($verdicts['/quick'])->toBe(overBudgetCell('within', 'max', 1));
 });
 
 it('does not judge a task that was skipped, and judges the one that ran', function () {
@@ -59,8 +66,8 @@ it('does not judge a task that was skipped, and judges the one that ran', functi
 
     $verdicts = collect(Envelope::assert(Rank::class, ['type' => 'scheduled-task'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['label'] => $row['budget']]);
 
-    expect($verdicts['send-digest']['state'])->toBe('within')
-        ->and($verdicts['sync-stock'])->toMatchArray(['state' => 'not_evaluated', 'reason' => 'not_run']);
+    expect($verdicts['send-digest'])->toBe(overBudgetCell('within', 'max', 1))
+        ->and($verdicts['sync-stock'])->toBe(overBudgetCell('not_evaluated', 'not_run', 1));
 });
 
 it('lists the exceeded groups in the overview and counts the rest', function () {
@@ -73,7 +80,7 @@ it('lists the exceeded groups in the overview and counts the rest', function () 
         ->and($envelope['result']['budgets']['within'])->toBeGreaterThanOrEqual(2)
         ->and($rows)->toHaveCount(1)
         ->and($rows[0])->toMatchArray(['type' => 'request', 'label' => '/slow', 'measure' => 'duration', 'ceiling' => 1, 'measured_on' => 'max'])
-        ->and($envelope['summary'])->toContain('1 group over budget.');
+        ->and($envelope['summary'])->toContain(trans_choice('firewatch::messages.overview_budgets_over', 1, ['count' => 1]));
 });
 
 it('opens the group an overview row points at, and finds it exceeded', function () {
@@ -85,5 +92,5 @@ it('opens the group an overview row points at, and finds it exceeded', function 
 
     $deploys = Envelope::assert(Rank::class, ['group' => $row['group']])['result']['deploys'];
 
-    expect($deploys[0]['budget']['state'])->toBe('exceeded');
+    expect($deploys[0]['budget'])->toBe(overBudgetCell('exceeded', 'max', 1));
 });

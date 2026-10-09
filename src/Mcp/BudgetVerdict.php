@@ -147,6 +147,19 @@ readonly class BudgetVerdict
     }
 
     /**
+     * Get the verdict as the short cell of a ranking row: the state and the figure it was measured on, or the reason it was not evaluated.
+     */
+    public function cell(): string
+    {
+        $details = $this->state === BudgetState::NOT_EVALUATED ? $this->reason?->value : $this->measuredOn;
+
+        return __('firewatch::messages.budget_cell', [
+            'state' => $this->state->value,
+            'details' => $details.($this->ignoredEntries > 0 ? __('firewatch::messages.budget_ignored', ['count' => $this->ignoredEntries]) : ''),
+        ]);
+    }
+
+    /**
      * Get the verdict as the one line of markdown.
      */
     public function line(): string
