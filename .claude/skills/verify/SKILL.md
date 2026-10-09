@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, occurrences, execution, trace, detect, actor, compare, trend) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
+description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, occurrences, execution, trace, detect, actor, compare, trend, query) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
 ---
 
 # Verify Firewatch in the workbench
@@ -8,7 +8,7 @@ description: Serve the Firewatch testbench workbench on its own port, store, dat
 Firewatch is a Laravel package, so there is no app of its own. The repo's `workbench/` is the app. `vendor/bin/testbench serve` boots a Laravel skeleton with Firewatch installed and the routes in `workbench/routes/web.php`. A user touches three things, and none of them is a page:
 
 - **Capture.** Firewatch records what the application does (requests, commands, queued jobs) into a SQLite store.
-- **The MCP server.** An assistant starts `firewatch:server` and calls its nine tools over stdio.
+- **The MCP server.** An assistant starts `firewatch:server` and calls its ten tools over stdio.
 - **The commands.** `firewatch:server --list`, `firewatch:clear` and `firewatch:doctor`.
 
 Every helper is a subcommand of `.claude/skills/verify/scripts/app.sh` and runs from anywhere in the checkout. Feature recipes live in [`features/README.md`](features/README.md). Read the index, then the feature file you are verifying.
@@ -36,7 +36,7 @@ Run it first whenever anything looks off. It records nothing:
 .claude/skills/verify/scripts/app.sh doctor <run>
 # ok   server process 3470 is running
 # ok   port 8300 is served by our php -S (3519)
-# ok   firewatch:server dev-master lists: overview rank occurrences execution trace detect actor compare trend
+# ok   firewatch:server dev-master lists: overview rank occurrences execution trace detect actor compare trend query
 # ok   the skeleton holds testbench.yaml, so the workbench routes are loaded
 # ok   the store at /…/.verify/runs/<run>/store/firewatch.sqlite holds 71 records
 ```
@@ -139,6 +139,7 @@ Never point a run at `storage/firewatch/firewatch.sqlite` in the skeleton, which
 ## Gotchas
 
 - Every testbench process prints `Nightwatch's provider was registered before Firewatch's…` to stderr. Testbench's CLI discovers Nightwatch beside Firewatch, which `composer.json` keeps a real install from doing. It is expected here, and the store notes it once as `structure` drift with detail `provider order`. Any other notice is a finding.
+- A Pest run of the in-process tests rewrites the skeleton's package manifest without Firewatch, and `doctor` then fails with `firewatch:server --list printed no tools`. Run `php vendor/bin/testbench package:discover` and start a fresh run.
 - A `firewatch:*` command always runs Off. It never records itself, so `artisan <run> firewatch:clear` adds nothing to the store.
 - `queue:work` leaves no command record, because Nightwatch records its job attempts in place of the command. The workbench has no `inspire` command. Use `about` when a recipe needs a recorded command.
 - Percentiles need 3 samples. Send a request three times before asserting `p50_ms` or `p95_ms`, or the answer withholds them with `sample_too_small`.
