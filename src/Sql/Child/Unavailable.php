@@ -3,8 +3,6 @@
 namespace ClaudioDekker\Firewatch\Sql\Child;
 
 /**
- * Why the SQL tool's isolation can't be established, in the order the checks run.
- *
  * @internal
  */
 enum Unavailable: string

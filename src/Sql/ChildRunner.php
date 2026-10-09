@@ -34,7 +34,7 @@ class ChildRunner implements SqlRunner
     public const PROBE_DEADLINE_SECONDS = 2.0;
 
     /**
-     * The probe's request: a fixed statement over an empty in-memory database, through the child's whole startup self-check.
+     * The probe's request.
      */
     protected const PROBE = [
         'sql' => 'SELECT 1',
@@ -137,7 +137,7 @@ class ChildRunner implements SqlRunner
     }
 
     /**
-     * Probe the child: null when it starts, passes its self-check and answers SELECT 1, else why it can't run.
+     * Probe the child.
      */
     public function probe(): ?Unavailable
     {
@@ -170,8 +170,7 @@ class ChildRunner implements SqlRunner
     }
 
     /**
-     * Spawn the child with its request on a temp file as stdin and its stdout and stderr on temp files, and poll it
-     * until it exits, its output passes the cap, or the deadline passes, when it is killed. The same on every platform.
+     * Spawn the child on temp files and poll it until it exits, its output passes the cap, or the deadline passes, when it is killed.
      *
      * @param  array<string, mixed>  $request
      * @return array{list<string>, string, Ending} the whole stdout lines, the start of stderr, and why the child stopped
@@ -231,14 +230,14 @@ class ChildRunner implements SqlRunner
     protected function wait($process, $output, int $until): Ending
     {
         while (true) {
-            // Read before the size, so the last bytes of a child that just exited are counted.
-            $running = proc_get_status($process)['running'];
+            $exitedBeforeMeasuring = ! proc_get_status($process)['running'];
+            $written = fstat($output)['size'] ?? 0;
 
-            if ((fstat($output)['size'] ?? 0) > static::OUTPUT_CAP_BYTES) {
+            if ($written > static::OUTPUT_CAP_BYTES) {
                 return Ending::OUTPUT_CAP;
             }
 
-            if (! $running) {
+            if ($exitedBeforeMeasuring) {
                 return Ending::EXITED;
             }
 

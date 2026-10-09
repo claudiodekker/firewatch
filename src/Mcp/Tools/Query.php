@@ -117,7 +117,7 @@ class Query extends Tool
     }
 
     /**
-     * Check that the SQL child can run, read the arguments, check the store, run the statement in the child, and put its rows in the envelope.
+     * Run the statement in the SQL child and put its rows in the envelope.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {

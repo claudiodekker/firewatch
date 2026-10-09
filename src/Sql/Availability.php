@@ -8,9 +8,6 @@ use Closure;
 use SQLite3;
 
 /**
- * Whether the SQL tool's isolation can be established on this machine, with the closed reason when it can't.
- * Every fact is read on every call, so fixing the cause needs no restart.
- *
  * @internal
  */
 class Availability
@@ -35,7 +32,7 @@ class Availability
     }
 
     /**
-     * Get why the SQL tool can't run, or null when it can: the static facts in check order, then, given a runner, its child probed.
+     * Get why the SQL tool can't run, or null when it can.
      */
     public function reason(?ChildRunner $probe = null): ?Unavailable
     {
