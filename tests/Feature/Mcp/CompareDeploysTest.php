@@ -165,6 +165,8 @@ it('refuses a boundary that is not exactly one of the two forms, naming what it 
         'the same deploy on both sides' => [['deploy_before' => 'v1', 'deploy_after' => 'v1'], 'invalid_argument', 'deploy_after', 'a deploy other than deploy_before', $pairExample, null, 'a deploy other than deploy_before', '"v1"'],
         'an empty deploy_before' => [['deploy_before' => '', 'deploy_after' => 'v2'], 'invalid_argument', 'deploy_before', $deploy, $pairExample, null, 'an exact deploy string', '""'],
         'an empty deploy_after' => [['deploy_before' => 'v1', 'deploy_after' => ''], 'invalid_argument', 'deploy_after', $deploy, $pairExample, null, 'an exact deploy string', '""'],
+        'an empty deploy_before alone' => [['deploy_before' => ''], 'invalid_argument', 'deploy_before', $deploy, $pairExample, null, 'an exact deploy string', '""'],
+        'an empty deploy_after alone' => [['deploy_after' => ''], 'invalid_argument', 'deploy_after', $deploy, $pairExample, null, 'an exact deploy string', '""'],
         'a deploy that is no string' => [['deploy_before' => 1, 'deploy_after' => 'v2'], 'invalid_argument', 'deploy_before', $deploy, $pairExample, null, 'an exact deploy string', '1'],
     ];
 });

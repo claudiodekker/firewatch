@@ -33,10 +33,13 @@ class DeployPair implements Boundary
     }
 
     /**
-     * Read the deploy pair a call passes: two different, exact deploy strings, or a refusal.
+     * Read the deploy pair a call passes, judging each deploy given before naming a missing half: two different, exact deploy strings, or a refusal.
      */
     public static function read(mixed $before, mixed $after): self
     {
+        $before = self::deploy('deploy_before', $before);
+        $after = self::deploy('deploy_after', $after);
+
         if ($after === null) {
             throw Refusal::missing(argument: 'deploy_after', accepted: 'an exact deploy string, with deploy_before', example: self::EXAMPLE);
         }
@@ -45,10 +48,8 @@ class DeployPair implements Boundary
             throw Refusal::missing(argument: 'deploy_before', accepted: 'an exact deploy string, with deploy_after', example: self::EXAMPLE);
         }
 
-        $pair = new self(self::deploy('deploy_before', $before), self::deploy('deploy_after', $after));
-
-        if ($pair->before !== $pair->after) {
-            return $pair;
+        if ($before !== $after) {
+            return new self($before, $after);
         }
 
         $shown = json_encode($after, JSON_THROW_ON_ERROR);
@@ -57,11 +58,11 @@ class DeployPair implements Boundary
     }
 
     /**
-     * Read one deploy of the pair: an exact deploy string, which is never empty, since an empty one marks a record with no deploy.
+     * Read one deploy of the pair, or null when it is not given: an exact deploy string, which is never empty, since an empty one marks a record with no deploy.
      */
-    protected static function deploy(string $argument, mixed $value): string
+    protected static function deploy(string $argument, mixed $value): ?string
     {
-        if (is_string($value) && $value !== '') {
+        if ($value === null || (is_string($value) && $value !== '')) {
             return $value;
         }
 
