@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Accounting;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\BudgetVerdict;
 use ClaudioDekker\Firewatch\Mcp\Children;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -171,7 +172,11 @@ class Execution extends Tool
         $row = $found['row'];
         $children = $found['children'];
         $type = RecordType::from($row['type']);
-        $header = ExecutionHeader::of($type, $row);
+        $budget = BudgetVerdict::of($this->configuration, ExecutionType::from($type->value), $row);
+        $header = [
+            ...ExecutionHeader::of($type, $row),
+            'budget' => $budget->toArray(),
+        ];
         $exceptions = ExceptionSection::of($children);
         $entries = Timeline::of($children);
         $timeline = Rows::bound($entries, $limit);
@@ -216,6 +221,7 @@ class Execution extends Tool
             blindSpots: $blindSpots,
             truncated: $truncated,
             next: $next,
+            notes: [$budget->line()],
         );
     }
 

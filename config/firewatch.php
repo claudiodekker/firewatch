@@ -108,7 +108,8 @@ return [
     |
     | A budget caps the duration (ms) and memory (MB) of a request, command,
     | job-attempt or scheduled task, matched by methods and path or by its
-    | name. No tool reads budgets yet, so they don't change any answer.
+    | name. The first matching entry with a matcher governs, else the first
+    | entry of the type without one. The execution tool judges against it.
     |
     */
 
