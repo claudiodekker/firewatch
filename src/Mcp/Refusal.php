@@ -198,7 +198,7 @@ class Refusal extends RuntimeException
         $text = __('firewatch::messages.not_allowed', ['message' => $message]);
 
         return match ($denied) {
-            Denied::FUNCTION => $text,
+            Denied::FUNCTION => $text."\n".__('firewatch::messages.sql_hint_function'),
             Denied::TABLE => $text."\n".__('firewatch::messages.sql_hint_table'),
             default => $text."\n".__('firewatch::messages.sql_hint_forms'),
         };

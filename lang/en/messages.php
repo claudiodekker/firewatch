@@ -252,11 +252,13 @@ return [
         'nul' => 'the SQL contains a NUL byte.',
     ],
 
-    'sql_hint_table' => 'hint: the readable objects are the twelve record views, records, users, drift, meta, json_each and json_tree.',
+    'sql_hint_function' => 'hint: `describe` lists the permitted functions.',
+
+    'sql_hint_table' => 'hint: the readable objects are the twelve record views, records, users, drift, meta, json_each and json_tree. `describe` lists the readable tables.',
 
     'sql_hint_forms' => 'hint: only SELECT, WITH ... SELECT, VALUES and EXPLAIN are allowed.',
 
-    'invalid_sql' => "error: invalid_sql\n:message\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type",
+    'invalid_sql' => "error: invalid_sql\n:message\nargument: sql\naccepted: one SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the readable objects\nexample: SELECT type, count(*) FROM records GROUP BY type\nhint: `describe` lists the tables, views and columns.",
 
     'aborted' => "error: aborted\nThe query process ended unexpectedly.",
 
