@@ -44,7 +44,7 @@ Preconditions:
 - **Empty side.** With `"deploy_before":"v2","deploy_after":"v3"` the answer is `not_evaluated` / `empty_side` on side `after`, the summary names deploy `v3`, `deploys` lists `v1` 8 and `v2` 12 by first record, and `.next` is `[]`.
 - **Both deploys empty.** With `"deploy_before":"v8","deploy_after":"v9"` the answer is `not_evaluated` / `empty_side` on side `both`, the summary names both deploys, `deploys` lists `v1` 8 and `v2` 12, and `.next` is `[]`.
 - **No match.** A window that holds no records of the type is `no_match`, not `empty_side`: with `"type":"job-attempt"` the answer is `no_match` with the filters `type: job-attempt, deploy_before: v1, deploy_after: v2`, and still carries the pair's sentence.
-- **Refusals.** Half a pair is `error: missing_argument` for the missing half, the same deploy twice or `""` is `error: invalid_argument`.
+- **Refusals.** Half a pair is `error: missing_argument` for the missing half, the same deploy twice or `""` is `error: invalid_argument`. A deploy that is given is judged before the missing half, so `{"type":"request","deploy_before":""}` is `error: invalid_argument` for `deploy_before`.
 
 ## Gotchas
 
