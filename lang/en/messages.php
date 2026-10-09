@@ -16,7 +16,7 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did while it was developed: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and Firewatch itself sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time), `query` (your own read-only SQL, last resort). Every answer ends with `next`: calls you can run as written.
+        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time), `query` (your own read-only SQL, last resort), `describe` (store facts, deploys, units and every column `query` reads with example statements; `type` gives one object's columns and recent values). Every answer ends with `next`: calls you can run as written.
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used.
         TEXT,
@@ -43,6 +43,7 @@ return [
         'actor' => 'Identifies one signed-in person and the work of the window tied to them. `who` is a user id, a username or a name, tried in that order, then as a part of a name or username: the first stage that finds anyone decides. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the username is the email. Several matches are listed as candidates, never guessed: repeat with an id. An actor exists only once recorded acting. An execution is theirs by its own user, its job\'s dispatch, or a child inside a command or task. Attribution is partial: what no link reaches is counted, never guessed. Windowed by since/until; identity is read over the whole store.',
         'trend' => 'Cuts the window into equal buckets and reports a measure per bucket, to see whether something rose, fell or held, and where it peaked. Pass `type` or `group`. `by`: occurrences (default), max_duration, avg_duration, total_duration, max_memory (execution types only). Missing since/until are derived from the selected records, and the window says which. Empty bucket: 0 for occurrences, null for other measures. Buckets that start before coverage are partial. Bucket edges can be passed back as since/until. Windowed.',
         'query' => 'Last resort: runs your own read-only SQL on Firewatch\'s store. One SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the twelve record views (requests, commands, job_attempts, scheduled_tasks, queries, exceptions, logs, cache_events, mail, notifications, outgoing_requests, queued_jobs), records, users, drift, meta, json_each and json_tree; anything else, and a function off the allow-list, is refused. Values are raw: times epoch seconds, durations microseconds, memory bytes. `limit` 1 to 500 (default 50). Blind spots follow the record types read. Prefer `rank`, `occurrences` and `detect`, which convert units. Not windowed.',
+        'describe' => 'Schema, units, deploys and examples for `query`.',
     ],
 
     /*
@@ -432,6 +433,42 @@ return [
     'query_cap_how' => 'Read the rest with substr(column, 2001, 2000).',
 
     'query_next_more' => 'The same statement with the most rows an answer holds.',
+
+    'describe_type_argument' => 'A record type or user.',
+
+    'describe_window_reason' => 'the schema and the store facts are not bounded by time',
+
+    'describe_summary' => 'The store holds :records record of :types types; the SQL tool is :sql.|The store holds :records records of :types types; the SQL tool is :sql.',
+
+    'describe_summary_empty' => 'The store holds no records yet; the schema below is what the SQL tool reads.',
+
+    'describe_summary_absent' => 'No store exists yet; the schema below is the shipped catalogue.',
+
+    'describe_summary_unusable' => 'The store cannot be read; the schema below is the shipped catalogue.',
+
+    'describe_sql_available' => 'available',
+
+    'describe_sql_unavailable' => 'unavailable',
+
+    'describe_type_summary' => ':object has :columns columns and holds :records record.|:object has :columns columns and holds :records records.',
+
+    'describe_type_summary_empty' => ':object has :columns columns and holds no records yet, so no example values.',
+
+    'describe_json_access' => "JSON columns hold JSON text: read a field with data ->> '\$.field' and expand a list or object with json_each(column). data holds every field, including ones the contract does not know.",
+
+    'describe_join_keys' => 'Join children to their execution on execution_id, queued work on job_id, a causal chain on trace_id and a group on group_hash; all four are indexed.',
+
+    'describe_deploys_how' => 'Run query with SELECT deploy, max(started_at) FROM records GROUP BY deploy for every deploy.',
+
+    'describe_bytes_note' => 'file_bytes is the main file only; live_bytes is the pages in use, the write-ahead log not counted.',
+
+    'describe_unknown_types' => 'Records of types outside the contract are stored as sent: :types.',
+
+    'describe_next_type' => 'Columns, recent values and example statements for :type.',
+
+    'describe_next_rank' => 'Rank the groups of this type, worst first.',
+
+    'describe_next_query' => 'Run the first example statement.',
 
     'objects' => [
         'requests' => 'One row per HTTP request the application served.',

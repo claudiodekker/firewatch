@@ -16,7 +16,7 @@ it('lists the tools under a header, one line each', function () {
 
     expect($result)->toBe(0)
         ->and(Artisan::output())->toBe(implode("\n", [
-            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 10]),
+            __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 11]),
             '  overview     Entry point.',
             '  rank         Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, …',
             '  occurrences  Lists individual records, newest first by default, for the selectors you give (at least o…',
@@ -27,6 +27,7 @@ it('lists the tools under a header, one line each', function () {
             '  compare      Compares each group across a split or a deploy pair: "did my change help?".',
             '  trend        Cuts the window into equal buckets and reports a measure per bucket, to see whether somet…',
             '  query        Last resort: runs your own read-only SQL on Firewatch\'s store.',
+            '  describe     Schema, units, deploys and examples for `query`.',
             '',
         ]));
 });
@@ -200,6 +201,15 @@ it('lists the tools as JSON with the server name and version', function () {
                     'inputSchema' => ['properties' => [
                         'sql' => ['description' => __('firewatch::messages.query_sql_argument'), 'type' => 'string'],
                         'limit' => ['description' => __('firewatch::messages.query_limit_argument'), 'type' => 'integer'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object'],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
+                    'name' => 'describe',
+                    'description' => __('firewatch::messages.tools.describe'),
+                    'inputSchema' => ['properties' => [
+                        'type' => ['description' => __('firewatch::messages.describe_type_argument'), 'type' => 'string'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],

@@ -212,7 +212,7 @@ class Writer
     {
         $run = fn (SQLite3 $connection) => $transactional ? $this->transactionOn($connection, fn () => $callback($connection)) : $callback($connection);
 
-        if (! $this->hasWalResetBug()) {
+        if (! static::hasWalResetBug($this->sqliteVersion)) {
             return $run($this->connection());
         }
 
@@ -266,12 +266,12 @@ class Writer
     }
 
     /**
-     * Determine if the SQLite release can reset the write-ahead log under a concurrent writer.
+     * Determine if a SQLite release can reset the write-ahead log under a concurrent writer.
      */
-    protected function hasWalResetBug(): bool
+    public static function hasWalResetBug(string $sqliteVersion): bool
     {
         foreach (static::WAL_RESET_BUG as [$affected, $fixed]) {
-            if (version_compare($this->sqliteVersion, $affected, '>=') && version_compare($this->sqliteVersion, $fixed, '<')) {
+            if (version_compare($sqliteVersion, $affected, '>=') && version_compare($sqliteVersion, $fixed, '<')) {
                 return true;
             }
         }

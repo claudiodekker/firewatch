@@ -13,9 +13,6 @@ use SQLite3Result;
 /**
  * The objects the SQL tool reads, as the shipped schema builds them, with what the schema can't say.
  *
- * The column list, order, SQL type, wire field, nullability and indexes are read from the schema built in memory,
- * never declared: a store that can be read has that very schema, and one that can't still has a catalogue.
- *
  * @internal
  */
 class Catalogue
@@ -133,7 +130,7 @@ class Catalogue
     ];
 
     /**
-     * The kinds of a cache event, as the wire spells them; no enum holds them.
+     * The kinds of a cache event, as the wire spells them.
      */
     protected const CACHE_EVENTS = ['hit', 'miss', 'write', 'write-failure', 'delete', 'delete-failure'];
 
@@ -327,7 +324,7 @@ class Catalogue
     }
 
     /**
-     * Get the rows a pragma returns. The argument is a name of the shipped schema, never the caller's.
+     * Get the rows a pragma returns.
      *
      * @return list<array<string, mixed>>
      */
@@ -346,8 +343,6 @@ class Catalogue
 
     /**
      * Get the wire field a column of an object is stored from and the JSON type it accepts, or null for a column Firewatch adds or derives.
-     *
-     * A key stored under the column's own name wins (a child's `execution_id`, not an attempt's `attempt_id`).
      *
      * @return array{wire: string, type: string}|null
      */
