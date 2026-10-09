@@ -79,6 +79,58 @@ function pairRollup(int $groups, array $counts = [], int $cut = 0): array
     ];
 }
 
+/**
+ * Get the coverage of a pair answer over the request records of a store created at its creation instant.
+ *
+ * @return array<string, mixed>
+ */
+function pairCoverage(int $records, float $oldest, float $newest): array
+{
+    return [
+        'state' => 'ok',
+        'reason' => null,
+        'oldest_at' => $oldest,
+        'newest_at' => $newest,
+        'records' => $records,
+        'types_read' => ['request'],
+        'history' => [
+            'from' => PAIR_CREATED,
+            'reason' => 'created',
+            'retention' => [
+                'age_seconds' => 3153600000,
+                'records' => 100000,
+            ],
+        ],
+        'straddling' => null,
+    ];
+}
+
+/**
+ * Get the blind spots of a pair answer over request records, then the drift of the request records stored with no deploy field.
+ *
+ * @return list<array<string, mixed>>
+ */
+function pairBlindSpots(int $withoutDeploy): array
+{
+    $structural = array_map(fn (string $id) => [
+        'id' => $id,
+        'kind' => 'structural',
+        'message' => __("firewatch::messages.blind_spots.{$id}"),
+    ], ['console-requests', 'payload-on-server-error-only', 'dead-counters', 'memory-is-process-peak', 'octane-bootstrap']);
+
+    $drift = [
+        'id' => 'drift',
+        'kind' => 'condition',
+        'message' => __('firewatch::messages.conditions.drift', ['count' => $withoutDeploy, 'kind' => 'missing_field', 'type' => 'request', 'last' => '2026-09-30 11:46:40.000000']),
+        'count' => $withoutDeploy,
+        'drift_kind' => 'missing_field',
+        'type' => 'request',
+        'last_at' => PAIR_CREATED,
+    ];
+
+    return [...$structural, $drift];
+}
+
 it('compares every record of each deploy in the window, interleaved in time, and leaves out the records with no deploy', function () {
     pairIngest([
         ...pairRecords('a', 'v1', 0, array_fill(0, 20, 100), step: 2, fields: ['route_path' => '/orders', 'method' => 'GET']),
@@ -125,11 +177,8 @@ it('compares every record of each deploy in the window, interleaved in time, and
             ],
             'deploys' => null,
         ],
-        'coverage' => [
-            ...$envelope['coverage'],
-            'straddling' => null,
-        ],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => pairCoverage(48, PAIR_START, PAIR_NOW + 1),
+        'blind_spots' => pairBlindSpots(withoutDeploy: 3),
         'notes' => [__('firewatch::messages.compare_deploy_pair_note')],
         'truncated' => [],
         'next' => [
@@ -137,10 +186,7 @@ it('compares every record of each deploy in the window, interleaved in time, and
             ['tool' => 'occurrences', 'arguments' => ['group' => pairHash('a'), 'deploy' => 'v2', 'since' => PAIR_CREATED, 'until' => PAIR_NOW], 'why' => __('firewatch::messages.compare_next_occurrences_deploy', ['deploy' => 'v2'])],
             ['tool' => 'rank', 'arguments' => ['group' => pairHash('a'), 'since' => PAIR_CREATED, 'until' => PAIR_NOW], 'why' => __('firewatch::messages.compare_next_rank')],
         ],
-    ])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 48, 'types_read' => ['request']])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('console-requests')
-        ->and(array_column($envelope['blind_spots'], 'id'))->not->toContain('visible-at-completion');
+    ]);
 });
 
 it('refuses a boundary that is not exactly one of the two forms, naming what it accepts', function (array $arguments, string $key, string $argument, string $accepted, string $example, ?string $with = null, ?string $expected = null, ?string $value = null) {
@@ -219,6 +265,7 @@ it('steps the 95th percentile down to the median when a deploy has fewer than 20
 })->with([
     '20 records a deploy' => [20, 20, ['change' => 'slower', 'measured_on' => null, 'reason' => null]],
     '19 records before' => [19, 20, ['change' => 'slower', 'measured_on' => 'p50', 'reason' => null]],
+    '3 records after' => [20, 3, ['change' => 'slower', 'measured_on' => 'p50', 'reason' => null, 'have' => null, 'needed' => null]],
     '2 records after' => [20, 2, ['change' => 'not_evaluated', 'measured_on' => null, 'reason' => 'sample_too_small', 'have' => 2, 'needed' => 3]],
 ]);
 
@@ -247,7 +294,6 @@ it('evaluates nothing when a deploy has no records in the window, says which, an
     ]);
 
     $envelope = pairAnswer(['deploy_before' => $before, 'deploy_after' => $after]);
-    $present = $side === 'after' ? $before : $after;
 
     expect($envelope)->toEqual([
         'tool' => 'compare',
@@ -271,17 +317,12 @@ it('evaluates nothing when a deploy has no records in the window, says which, an
                 ['deploy' => 'v3', 'records' => 2, 'first_at' => PAIR_START + 30],
             ],
         ],
-        'coverage' => [
-            ...$envelope['coverage'],
-            'straddling' => null,
-        ],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => pairCoverage(7, PAIR_START - 60, PAIR_START + 40),
+        'blind_spots' => pairBlindSpots(withoutDeploy: 1),
         'notes' => [__('firewatch::messages.compare_pair_not_evaluated_note'), __('firewatch::messages.compare_deploy_pair_note')],
         'truncated' => [],
         'next' => [],
-    ])
-        ->and($present)->toBe('v1')
-        ->and($envelope['summary'])->toContain('"no regression"');
+    ]);
 })->with([
     'the after deploy' => ['v1', 'v9', 'after', 'v9'],
     'the before deploy' => ['v9', 'v1', 'before', 'v9'],
@@ -317,11 +358,8 @@ it('evaluates nothing when neither deploy has records in a window that holds the
                 ['deploy' => 'v2', 'records' => 2, 'first_at' => PAIR_START + 30],
             ],
         ],
-        'coverage' => [
-            ...$envelope['coverage'],
-            'straddling' => null,
-        ],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => pairCoverage(6, PAIR_START, PAIR_START + 40),
+        'blind_spots' => pairBlindSpots(withoutDeploy: 1),
         'notes' => [__('firewatch::messages.compare_pair_not_evaluated_note'), __('firewatch::messages.compare_deploy_pair_note')],
         'truncated' => [],
         'next' => [],
