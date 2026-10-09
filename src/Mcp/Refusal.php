@@ -154,6 +154,7 @@ class Refusal extends RuntimeException
             ErrorCode::NOT_ALLOWED => self::notAllowed($failure->denied ?? Denied::ACTION, (string) $failure->name),
             ErrorCode::INVALID_SQL => self::invalidSql((string) $failure->detail),
             ErrorCode::ABORTED => self::aborted((string) $failure->detail),
+            ErrorCode::ROW_TOO_LARGE => __('firewatch::messages.row_too_large', ['bytes' => number_format(Policy::ROW_BUDGET_BYTES)]),
             ErrorCode::UNAVAILABLE => self::unavailable($failure->unavailable),
             default => __('firewatch::messages.failed'),
         };

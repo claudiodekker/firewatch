@@ -249,6 +249,10 @@ class ChildRunner implements SqlRunner
 
         $stop = QueryStop::tryFrom(is_string($end['stop'] ?? null) ? $end['stop'] : '') ?? throw SqlFailure::failed('The end line carries no known stop.');
 
+        if ($stop === QueryStop::BUDGET && $rows === []) {
+            throw SqlFailure::rowTooLarge();
+        }
+
         return new SqlRows($columns, $rows, $stop, $reads ?? [], $elapsedMilliseconds);
     }
 

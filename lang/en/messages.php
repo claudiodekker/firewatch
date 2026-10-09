@@ -259,6 +259,8 @@ return [
 
     'aborted' => "error: aborted\nThe query process ended unexpectedly.",
 
+    'row_too_large' => "error: row_too_large\nThe first row is larger than the :bytes-byte answer budget.\nhint: select fewer columns or cut text with substr().",
+
     'aborted_stderr' => 'stderr: :stderr',
 
     'unavailable' => "error: unavailable\nThe SQL tool is unavailable: :reason. Every other Firewatch tool works.",
@@ -409,6 +411,8 @@ return [
     'query_raw_values' => 'Values are raw: times are epoch seconds, durations microseconds.',
 
     'query_limit_how' => 'Add LIMIT/OFFSET or a keyset condition on id, or raise `limit` up to 500.',
+
+    'query_budget_how' => 'Select fewer columns, cut text with substr(), or add LIMIT.',
 
     'query_cap_how' => 'Read the rest with substr(column, 2001, 2000).',
 

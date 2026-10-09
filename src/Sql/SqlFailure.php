@@ -61,6 +61,14 @@ class SqlFailure extends RuntimeException
     }
 
     /**
+     * Get the failure of a statement whose first row is over the answer budget.
+     */
+    public static function rowTooLarge(): self
+    {
+        return new self(ErrorCode::ROW_TOO_LARGE);
+    }
+
+    /**
      * Get the failure of the SQL pipeline itself, saying what broke.
      */
     public static function failed(string $detail): self

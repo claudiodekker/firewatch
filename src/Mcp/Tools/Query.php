@@ -168,7 +168,7 @@ class Query extends Tool
 
         $blindSpots = [...BlindSpots::for($types), ...$this->conditions->for($facts, $types, $window)];
         $empty = $rows->rows === [] ? Emptiness::noRows() : null;
-        $more = $rows->stop === QueryStop::LIMIT;
+        $more = in_array($rows->stop, [QueryStop::LIMIT, QueryStop::BUDGET], true);
 
         return new Answer(
             tool: $this->name(),
@@ -187,7 +187,7 @@ class Query extends Tool
             blindSpots: $blindSpots,
             notes: [__('firewatch::messages.query_raw_values')],
             truncated: $more ? [$this->truncation($rows)] : [],
-            next: $more && $limit < self::MAXIMUM_LIMIT ? [$this->more($sql)] : [],
+            next: $rows->stop === QueryStop::LIMIT && $limit < self::MAXIMUM_LIMIT ? [$this->more($sql)] : [],
             cuttable: ['rows'],
             capHow: __('firewatch::messages.query_cap_how'),
         );
@@ -206,18 +206,20 @@ class Query extends Tool
     }
 
     /**
-     * Get the `truncated` entry of rows the limit cut.
+     * Get the `truncated` entry of rows the limit or the row budget cut.
      *
      * @return array{section: string, shown: int, matched: int|null, reason: string, how: string}
      */
     protected function truncation(SqlRows $rows): array
     {
+        $limited = $rows->stop === QueryStop::LIMIT;
+
         return [
             'section' => 'rows',
             'shown' => count($rows->rows),
             'matched' => null,
-            'reason' => TruncationReason::LIMIT->value,
-            'how' => __('firewatch::messages.query_limit_how'),
+            'reason' => ($limited ? TruncationReason::LIMIT : TruncationReason::SIZE)->value,
+            'how' => __($limited ? 'firewatch::messages.query_limit_how' : 'firewatch::messages.query_budget_how'),
         ];
     }
 

@@ -7,7 +7,7 @@ namespace ClaudioDekker\Firewatch\Sql;
  *
  * @internal
  */
-final readonly class CutText
+readonly class CutText
 {
     /**
      * Create a new cut text instance.

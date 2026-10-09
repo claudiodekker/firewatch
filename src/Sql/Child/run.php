@@ -20,8 +20,10 @@ const SQLITE_NOTADB = 26;
 
 const BUSY_TIMEOUT_MILLISECONDS = 1000;
 
-$write = function (array $line): void {
-    fwrite(STDOUT, json_encode($line, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR)."\n");
+$encode = fn (array $line): string => json_encode($line, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+
+$write = function (array $line) use ($encode): void {
+    fwrite(STDOUT, $encode($line)."\n");
 };
 
 $state = fn (string $state, ?int $found = null) => [
@@ -166,6 +168,7 @@ if (! $selects || ! $statement->readOnly()) {
 }
 
 $rows = 0;
+$bytes = 0;
 $stop = 'complete';
 
 try {
@@ -195,11 +198,20 @@ try {
             $cells[] = Policy::cell($value, $result->columnType($index) === SQLITE3_BLOB);
         }
 
+        $size = strlen($encode($cells));
+
+        if ($bytes + $size > Policy::ROW_BUDGET_BYTES) {
+            $stop = 'budget';
+
+            break;
+        }
+
         $write([
             'k' => 'row',
             'r' => $cells,
         ]);
         $rows++;
+        $bytes += $size;
     }
 } catch (SQLite3Exception $exception) {
     $write($denial === null ? $classify($exception) : $refuse(...$denial));
