@@ -174,7 +174,7 @@ return [
         'actor-partial' => 'Commands and scheduled tasks carry no actor; requests with no recorded user may be guests or users of a non-default guard; ids are keys, not people; names come from the application\'s user callback, and impersonation shows the impersonated user.',
         'visible-at-completion' => 'An execution is recorded when it finishes: work still running is absent, and work spanning a boundary sits on the side where it started.',
         'application-opt-outs' => 'Anything the application\'s opt-outs excluded (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.',
-        'values-truncated' => 'Long values are cut at ingest (:field_bytes bytes per string, bindings :bindings_bytes bytes in all) and again to :characters characters when printed.',
+        'values-truncated' => 'Long values are cut at ingest (:field_bytes bytes per string, bindings :bindings_bytes bytes in all) and again to :characters characters when printed; the SQL tool shows the stored value up to that cap, and substr() reads the rest of a cell.',
         'octane-bootstrap' => 'Under Octane the request bootstrap stage is always 0, because the worker is already booted; compare stage shares only between requests served the same way.',
     ],
 
@@ -259,6 +259,12 @@ return [
 
     'aborted' => "error: aborted\nThe query process ended unexpectedly.",
 
+    'row_too_large' => "error: row_too_large\nThe first row is larger than the :bytes-byte answer budget.\nhint: select fewer columns or cut text with substr().",
+
+    'deadline' => "error: deadline\nThe statement did not finish within :seconds seconds.\nhint: filter on `started_at` or an indexed column.",
+
+    'memory' => "error: memory\nThe statement needed more than :mebibytes MiB of working memory.\nhint: aggregate less, add filters, or select fewer columns; sorting and grouping large sets needs memory.",
+
     'aborted_stderr' => 'stderr: :stderr',
 
     'unavailable' => "error: unavailable\nThe SQL tool is unavailable: :reason. Every other Firewatch tool works.",
@@ -266,6 +272,7 @@ return [
     'sql_unavailable' => [
         'spawn_failed' => 'the query process could not be started',
         'authorizer' => 'SQLite cannot install an authorizer',
+        'heap_limit' => 'SQLite did not accept a heap limit',
     ],
 
     'failed' => "error: failed\nThe SQL tool failed unexpectedly; the failure was reported to the application's exception handler. Run `php artisan firewatch:doctor`.",
@@ -398,6 +405,8 @@ return [
 
     'query_summary' => 'Returned :rows (:columns).',
 
+    'query_summary_partial' => 'Returned :rows (:columns); the statement did not finish.',
+
     'query_summary_more' => 'Returned :rows (:columns). Showing the first :shown of more.',
 
     'query_rows_count' => ':count row|:count rows',
@@ -409,6 +418,14 @@ return [
     'query_raw_values' => 'Values are raw: times are epoch seconds, durations microseconds.',
 
     'query_limit_how' => 'Add LIMIT/OFFSET or a keyset condition on id, or raise `limit` up to 500.',
+
+    'query_budget_how' => 'Select fewer columns, cut text with substr(), or add LIMIT.',
+
+    'query_partial_how' => 'Filter on started_at or an indexed column.',
+
+    'query_partial_note' => 'The statement did not finish; these rows are not in any particular order.',
+
+    'query_cap_how' => 'Read the rest with substr(column, 2001, 2000).',
 
     'query_next_more' => 'The same statement with the most rows an answer holds.',
 

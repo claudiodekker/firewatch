@@ -9,4 +9,5 @@ enum Unavailable: string
 {
     case SPAWN_FAILED = 'spawn_failed';
     case AUTHORIZER = 'authorizer';
+    case HEAP_LIMIT = 'heap_limit';
 }

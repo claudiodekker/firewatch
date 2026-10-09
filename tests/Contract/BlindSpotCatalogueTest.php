@@ -20,7 +20,7 @@ test('the structural blind spot catalogue pins its ids and sentences', function 
         'actor-partial' => 'Commands and scheduled tasks carry no actor; requests with no recorded user may be guests or users of a non-default guard; ids are keys, not people; names come from the application\'s user callback, and impersonation shows the impersonated user.',
         'visible-at-completion' => 'An execution is recorded when it finishes: work still running is absent, and work spanning a boundary sits on the side where it started.',
         'application-opt-outs' => 'Anything the application\'s opt-outs excluded (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.',
-        'values-truncated' => 'Long values are cut at ingest (65,535 bytes per string, bindings 16,384 bytes in all) and again to 2,000 characters when printed.',
+        'values-truncated' => 'Long values are cut at ingest (65,535 bytes per string, bindings 16,384 bytes in all) and again to 2,000 characters when printed; the SQL tool shows the stored value up to that cap, and substr() reads the rest of a cell.',
         'octane-bootstrap' => 'Under Octane the request bootstrap stage is always 0, because the worker is already booted; compare stage shares only between requests served the same way.',
     ]);
 });

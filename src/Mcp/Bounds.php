@@ -2,6 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Sql\Child\Policy;
+use ClaudioDekker\Firewatch\Sql\CutText;
 use Closure;
 
 /**
@@ -12,7 +14,7 @@ class Bounds
     /**
      * The most characters a cell has.
      */
-    public const CELL_CHARACTERS = 2000;
+    public const CELL_CHARACTERS = Policy::CELL_CHARACTERS;
 
     /**
      * The most characters an answer has, estimated from the 8,000 tokens of its hard budget at 3 characters to a token.
@@ -24,17 +26,16 @@ class Bounds
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
+     * @param  string  $how  what the cap entry tells the reader to do about the cut
      * @return array{array<string, mixed>, list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>}
      */
-    public static function capCells(array $result, array $truncated): array
+    public static function capCells(array $result, array $truncated, string $how): array
     {
         foreach ($result as $section => $value) {
             $cut = 0;
             $result[$section] = self::cap($value, $cut);
 
             if ($cut > 0) {
-                $how = __('firewatch::messages.cap_how', ['characters' => number_format(self::CELL_CHARACTERS)]);
-
                 $truncated[] = [
                     'section' => (string) $section,
                     'shown' => $cut,
@@ -56,7 +57,7 @@ class Bounds
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
      */
-    public static function recountCaps(array $original, array $fitted, array $truncated): array
+    public static function recountCaps(array $original, array $fitted, array $truncated, string $how): array
     {
         $kept = array_values(array_filter($truncated, fn (array $entry) => $entry['reason'] !== TruncationReason::CAP->value));
 
@@ -66,13 +67,13 @@ class Bounds
             }
         }
 
-        [, $recounted] = self::capCells($original, $kept);
+        [, $recounted] = self::capCells($original, $kept, $how);
 
         return $recounted;
     }
 
     /**
-     * Cut a value's strings to the cell cap on a character boundary, counting the cells cut.
+     * Cut a value's strings to the cell cap on a character boundary, counting the cells cut, and show a cell the child cut with its notice.
      */
     protected static function cap(mixed $value, int &$cut): mixed
     {
@@ -82,6 +83,12 @@ class Bounds
             }
 
             return $value;
+        }
+
+        if ($value instanceof CutText) {
+            $cut++;
+
+            return $value->text.__('firewatch::messages.cell_truncated', ['count' => $value->omitted]);
         }
 
         if (! is_string($value) || mb_strlen($value) <= self::CELL_CHARACTERS) {

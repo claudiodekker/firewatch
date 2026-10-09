@@ -14,14 +14,18 @@ const SQLITE_ERROR = 1;
 
 const SQLITE_BUSY = 5;
 
+const SQLITE_NOMEM = 7;
+
 const SQLITE_CORRUPT = 11;
 
 const SQLITE_NOTADB = 26;
 
 const BUSY_TIMEOUT_MILLISECONDS = 1000;
 
-$write = function (array $line): void {
-    fwrite(STDOUT, json_encode($line, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR)."\n");
+$encode = fn (array $line): string => json_encode($line, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+
+$write = function (array $line) use ($encode): void {
+    fwrite(STDOUT, $encode($line)."\n");
 };
 
 $state = fn (string $state, ?int $found = null) => [
@@ -73,6 +77,13 @@ try {
     $connection->exec('PRAGMA query_only = 1');
     $connection->exec('PRAGMA trusted_schema = 0');
     $connection->exec('PRAGMA temp_store = MEMORY');
+    $connection->exec('PRAGMA hard_heap_limit = '.Policy::HEAP_LIMIT_BYTES);
+
+    if ($connection->querySingle('PRAGMA hard_heap_limit') !== Policy::HEAP_LIMIT_BYTES) {
+        $write($error('unavailable', 'reason', Unavailable::HEAP_LIMIT->value));
+
+        return;
+    }
 
     // Deferred: the stamp reads below take the one snapshot the statement then reads in.
     $connection->exec('BEGIN');
@@ -166,7 +177,10 @@ if (! $selects || ! $statement->readOnly()) {
 }
 
 $rows = 0;
+$bytes = 0;
 $stop = 'complete';
+$message = null;
+$columns = null;
 
 try {
     $result = $statement->execute() ?: throw new SQLite3Exception($connection->lastErrorMsg(), $connection->lastErrorCode());
@@ -179,6 +193,7 @@ try {
     $write([
         'k' => 'columns',
         'columns' => $columns,
+        'reads' => array_values($reads),
     ]);
 
     while (($row = $result->fetchArray(SQLITE3_NUM)) !== false) {
@@ -194,23 +209,45 @@ try {
             $cells[] = Policy::cell($value, $result->columnType($index) === SQLITE3_BLOB);
         }
 
+        $size = strlen($encode($cells));
+
+        if ($bytes + $size > Policy::ROW_BUDGET_BYTES) {
+            $stop = 'budget';
+
+            break;
+        }
+
         $write([
             'k' => 'row',
             'r' => $cells,
         ]);
         $rows++;
+        $bytes += $size;
     }
 } catch (SQLite3Exception $exception) {
-    $write($denial === null ? $classify($exception) : $refuse(...$denial));
+    $nomem = ($exception->getCode() & 0xFF) === SQLITE_NOMEM;
 
-    return;
+    if ($nomem && $columns === null) {
+        $write($error('memory', 'message', $connection->lastErrorMsg()));
+
+        return;
+    }
+
+    if (! $nomem && ($rows === 0 || $denial !== null)) {
+        $write($denial === null ? $classify($exception) : $refuse(...$denial));
+
+        return;
+    }
+
+    $stop = $nomem ? 'memory' : 'error';
+    $message = $nomem ? null : $connection->lastErrorMsg();
 }
 
 $write([
     'k' => 'end',
     'rows' => $rows,
     'stop' => $stop,
-    'reads' => array_values($reads),
+    ...($message === null ? [] : ['message' => $message]),
 ]);
 
 $connection->close();
