@@ -472,6 +472,10 @@ return [
 
     'describe_next_query' => 'Run the first example statement.',
 
+    'fingerprint_assumption_normalised' => 'the driver is one Nightwatch normalises: mariadb, mysql, pgsql, sqlite, sqlsrv or singlestore',
+
+    'fingerprint_assumption_written' => 'the driver is any other, so the SQL is hashed as written',
+
     'objects' => [
         'requests' => 'One row per HTTP request the application served.',
         'commands' => 'One row per Artisan command that ran.',

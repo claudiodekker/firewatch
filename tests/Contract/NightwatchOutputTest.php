@@ -1,6 +1,8 @@
 <?php
 
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
+use ClaudioDekker\Firewatch\Mcp\Recipe;
+use ClaudioDekker\Firewatch\RecordType;
 use Laravel\Nightwatch\Core;
 use Workbench\App\Fixtures\Producer;
 use Workbench\App\Fixtures\Sensors;
@@ -65,24 +67,31 @@ test('each type with a duration is stamped at its start or its end, as the contr
     expect($stampedAt)->toBe($producer->type()->isStampedAtEnd() ? 'end' : 'start');
 })->with(array_filter(Producer::cases(), fn (Producer $producer) => array_key_exists('duration', $producer->type()->acceptedTypes())));
 
-test('each type is grouped by the recipe recomputed from its record', function (Producer $producer, Closure $recipe) {
+test('each type with a recipe is grouped by a candidate the shipped recipe computes from its record', function (Producer $producer) {
     $record = sensorRecord($producer);
 
-    expect(hash('xxh128', $recipe($record)))->toBe($record['_group']);
-})->with([
-    'request' => [Producer::REQUEST, fn (array $record) => implode('|', $record['route_methods']).",{$record['route_domain']},{$record['route_path']}"],
-    'command' => [Producer::COMMAND, fn (array $record) => $record['name']],
-    'job attempt' => [Producer::JOB_ATTEMPT, fn (array $record) => $record['name']],
-    'scheduled task' => [Producer::SCHEDULED_TASK, fn (array $record) => "{$record['name']},{$record['cron']},{$record['timezone']}"],
-    'query' => [Producer::QUERY, fn (array $record) => "{$record['connection']},{$record['sql']}"],
-    'exception' => [Producer::EXCEPTION, fn (array $record) => "{$record['class']},{$record['code']},{$record['file']},{$record['line']}"],
-    'fatal error' => [Producer::FATAL_ERROR, fn (array $record) => "{$record['class']},{$record['code']},{$record['file']},{$record['line']}"],
-    'cache event' => [Producer::CACHE_EVENT, fn (array $record) => "{$record['store']},{$record['key']}"],
-    'mail' => [Producer::MAIL, fn (array $record) => $record['class']],
-    'notification' => [Producer::NOTIFICATION, fn (array $record) => $record['class']],
-    'outgoing request' => [Producer::OUTGOING_REQUEST, fn (array $record) => $record['host']],
-    'queued job' => [Producer::QUEUED_JOB, fn (array $record) => $record['name']],
-]);
+    expect(array_column(Recipe::candidates($producer->type(), $record), 'group'))->toContain($record['_group']);
+})->with(array_filter(Producer::cases(), fn (Producer $producer) => ! in_array($producer->type(), [RecordType::EXCEPTION, RecordType::LOG, RecordType::USER], true)));
+
+test('an exception is grouped by its class, code, file and line', function (Producer $producer) {
+    $record = sensorRecord($producer);
+
+    expect(hash('xxh128', "{$record['class']},{$record['code']},{$record['file']},{$record['line']}"))->toBe($record['_group']);
+})->with([Producer::EXCEPTION, Producer::FATAL_ERROR]);
+
+test('a query on a driver Nightwatch normalises is grouped by its normalised SQL, and on another by its SQL as written', function () {
+    $record = sensorRecord(Producer::QUERY_LIST);
+
+    $normalised = Recipe::candidates(RecordType::QUERY, $record, 'sqlite');
+    $written = Recipe::candidates(RecordType::QUERY, $record, 'array');
+    $open = Recipe::candidates(RecordType::QUERY, $record);
+
+    expect($record['sql'])->toBe('select 1 where 1 in (?, ?)')
+        ->and(array_column($normalised, 'group'))->toBe([$record['_group']])
+        ->and($normalised[0]['input'])->toBe("{$record['connection']},select 1 where 1 in (...?)")
+        ->and(array_column($written, 'group'))->not->toContain($record['_group'])
+        ->and(array_column($open, 'group'))->toBe([$record['_group'], $written[0]['group']]);
+});
 
 test('Nightwatch writes no group for the types that have none', function (Producer $producer) {
     $record = sensorRecord($producer);

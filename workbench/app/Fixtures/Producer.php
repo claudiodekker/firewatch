@@ -32,6 +32,7 @@ enum Producer: string
     case JOB_ATTEMPT = 'job-attempt';
     case SCHEDULED_TASK = 'scheduled-task';
     case QUERY = 'query';
+    case QUERY_LIST = 'query.list';
     case EXCEPTION = 'exception';
     case FATAL_ERROR = 'exception.fatal';
     case LOG = 'log';
@@ -49,6 +50,7 @@ enum Producer: string
     {
         return match ($this) {
             self::FATAL_ERROR => RecordType::EXCEPTION,
+            self::QUERY_LIST => RecordType::QUERY,
             default => RecordType::from($this->value),
         };
     }
@@ -75,6 +77,7 @@ enum Producer: string
             self::JOB_ATTEMPT => $this->jobAttempt(),
             self::SCHEDULED_TASK => $this->scheduledTask(),
             self::QUERY => DB::select('select 1'),
+            self::QUERY_LIST => DB::select('select 1 where 1 in (?, ?)', [1, 2]),
             self::EXCEPTION => Nightwatch::report(new RuntimeException('The payment failed.')),
             self::FATAL_ERROR => Nightwatch::report($this->fatalError()),
             self::LOG => Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]),
