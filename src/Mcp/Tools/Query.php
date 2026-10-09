@@ -229,11 +229,13 @@ class Query extends Tool
             return $notes;
         }
 
-        $notes[] = $rows->stop === QueryStop::ABORTED
-            ? __('firewatch::messages.aborted_stderr', ['stderr' => preg_replace('/\s+/', ' ', $rows->detail)])
-            : $rows->detail;
+        if ($rows->stop !== QueryStop::ABORTED) {
+            return [...$notes, mb_substr($rows->detail, 0, Refusal::SQL_MESSAGE_CHARACTERS)];
+        }
 
-        return $notes;
+        $stderr = preg_replace('/\s+/', ' ', $rows->detail);
+
+        return [...$notes, __('firewatch::messages.aborted_stderr', ['stderr' => $stderr])];
     }
 
     /**

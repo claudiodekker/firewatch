@@ -128,3 +128,22 @@ describe('the deadline', function () {
         expect(qclAnswerText(['sql' => $sql]))->toBe(__('firewatch::messages.deadline', ['seconds' => 10]));
     })->group('process');
 });
+
+describe('the heap ceiling', function () {
+    it('answers a statement that needs more than 32 MiB before its first row as the memory error', function () {
+        $sql = "WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 400000) SELECT group_concat(n || '".str_repeat('x', 100)."') FROM c";
+
+        expect(qclAnswerText(['sql' => $sql]))->toBe(__('firewatch::messages.memory', ['mebibytes' => 32]));
+    })->group('process');
+
+    it('returns the rows before the memory ran out as partial with stop memory', function () {
+        $big = "(SELECT length(group_concat(n || '".str_repeat('x', 100)."')) FROM c)";
+        $sql = "WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 400000), small(i) AS (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) SELECT i, CASE WHEN i = 3 THEN {$big} ELSE 0 END FROM small";
+
+        $envelope = Envelope::assert(Query::class, ['sql' => $sql]);
+
+        expect($envelope['result']['rows'])->toBe([[1, 0], [2, 0]])
+            ->and($envelope['result']['stop'])->toBe('memory')
+            ->and($envelope['truncated'][0]['reason'])->toBe('partial');
+    })->group('process');
+});

@@ -272,6 +272,7 @@ return [
     'sql_unavailable' => [
         'spawn_failed' => 'the query process could not be started',
         'authorizer' => 'SQLite cannot install an authorizer',
+        'heap_limit' => 'SQLite did not accept a heap limit',
     ],
 
     'failed' => "error: failed\nThe SQL tool failed unexpectedly; the failure was reported to the application's exception handler. Run `php artisan firewatch:doctor`.",

@@ -22,9 +22,14 @@ class Policy
     public const ROW_BUDGET_BYTES = 16000;
 
     /**
+     * The most mebibytes of working memory SQLite has.
+     */
+    public const HEAP_LIMIT_MEBIBYTES = 32;
+
+    /**
      * The most bytes of working memory SQLite has.
      */
-    public const HEAP_LIMIT_BYTES = 33554432;
+    public const HEAP_LIMIT_BYTES = self::HEAP_LIMIT_MEBIBYTES * 1024 * 1024;
 
     /**
      * The most characters a text cell has before it is cut.

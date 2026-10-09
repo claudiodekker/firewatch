@@ -254,11 +254,47 @@ describe('the protocol', function () {
         expect($text)->toBe(__('firewatch::messages.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.authorizer')]));
     })->group('process');
 
-    it('drops the rows before a runtime error, and answers invalid SQL', function () {
-        $text = FirewatchServer::tool(Query::class, ['sql' => "SELECT json_extract(column1, '$') FROM (VALUES ('{}'), ('{'))"]);
+    it('answers a runtime error before any row as invalid SQL', function () {
+        $text = FirewatchServer::tool(Query::class, ['sql' => "SELECT json_extract('{', '$')"]);
 
         expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.invalid_sql', ['message' => 'malformed JSON']));
     })->group('process');
+
+    it('returns the rows before a runtime error as partial with stop error, and SQLite\'s message as a note', function () {
+        $envelope = Envelope::assert(Query::class, ['sql' => "SELECT json_extract(column1, '$') FROM (VALUES ('{}'), ('{'))"]);
+
+        expect($envelope['result']['rows'])->toBe([['{}']])
+            ->and($envelope['result']['stop'])->toBe('error')
+            ->and($envelope['truncated'][0]['reason'])->toBe('partial')
+            ->and($envelope['notes'])->toBe([
+                __('firewatch::messages.query_raw_values'),
+                __('firewatch::messages.query_partial_note'),
+                'malformed JSON',
+            ]);
+    })->group('process');
+
+    it('cuts the message of an error stop to 300 characters in its note', function () {
+        $text = qcEcho([
+            ['k' => 'columns', 'columns' => ['n'], 'reads' => []],
+            ['k' => 'row', 'r' => [1]],
+            ['k' => 'end', 'rows' => 1, 'stop' => 'error', 'message' => str_repeat('m', 301)],
+        ]);
+
+        expect(json_decode($text, associative: true)['notes'][2])->toBe(str_repeat('m', 300));
+    })->group('process');
+
+    it('answers a heap limit SQLite did not accept as unavailable', function () {
+        $text = qcEcho([['k' => 'error', 'code' => 'unavailable', 'reason' => 'heap_limit']]);
+
+        expect($text)->toBe(__('firewatch::messages.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.heap_limit')]));
+    })->group('process');
+
+    it('answers memory ran out before the first row as the memory error', function (array $lines) {
+        expect(qcEcho($lines))->toBe(__('firewatch::messages.memory', ['mebibytes' => 32]));
+    })->with([
+        'while compiling' => [[['k' => 'error', 'code' => 'memory', 'message' => 'out of memory']]],
+        'at the end line' => [[['k' => 'columns', 'columns' => ['n'], 'reads' => []], ['k' => 'end', 'rows' => 0, 'stop' => 'memory']]],
+    ])->group('process');
 });
 
 describe('the store as the child finds it', function () {

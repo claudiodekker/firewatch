@@ -17,7 +17,7 @@ class Refusal extends RuntimeException
     /**
      * The most characters of SQLite's message an invalid statement is refused with.
      */
-    protected const SQL_MESSAGE_CHARACTERS = 300;
+    public const SQL_MESSAGE_CHARACTERS = 300;
 
     /**
      * Create a new refusal instance.
@@ -156,7 +156,7 @@ class Refusal extends RuntimeException
             ErrorCode::INVALID_SQL => self::invalidSql((string) $failure->detail),
             ErrorCode::ABORTED => self::aborted((string) $failure->detail),
             ErrorCode::DEADLINE => __('firewatch::messages.deadline', ['seconds' => (int) ChildRunner::DEADLINE_SECONDS]),
-            ErrorCode::MEMORY => __('firewatch::messages.memory', ['mebibytes' => intdiv(Policy::HEAP_LIMIT_BYTES, 1048576)]),
+            ErrorCode::MEMORY => __('firewatch::messages.memory', ['mebibytes' => Policy::HEAP_LIMIT_MEBIBYTES]),
             ErrorCode::ROW_TOO_LARGE => __('firewatch::messages.row_too_large', ['bytes' => number_format(Policy::ROW_BUDGET_BYTES)]),
             ErrorCode::UNAVAILABLE => self::unavailable($failure->unavailable),
             default => __('firewatch::messages.failed'),

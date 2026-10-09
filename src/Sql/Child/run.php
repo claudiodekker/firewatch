@@ -14,6 +14,8 @@ const SQLITE_ERROR = 1;
 
 const SQLITE_BUSY = 5;
 
+const SQLITE_NOMEM = 7;
+
 const SQLITE_CORRUPT = 11;
 
 const SQLITE_NOTADB = 26;
@@ -75,6 +77,13 @@ try {
     $connection->exec('PRAGMA query_only = 1');
     $connection->exec('PRAGMA trusted_schema = 0');
     $connection->exec('PRAGMA temp_store = MEMORY');
+    $connection->exec('PRAGMA hard_heap_limit = '.Policy::HEAP_LIMIT_BYTES);
+
+    if ($connection->querySingle('PRAGMA hard_heap_limit') !== Policy::HEAP_LIMIT_BYTES) {
+        $write($error('unavailable', 'reason', Unavailable::HEAP_LIMIT->value));
+
+        return;
+    }
 
     // Deferred: the stamp reads below take the one snapshot the statement then reads in.
     $connection->exec('BEGIN');
@@ -170,6 +179,8 @@ if (! $selects || ! $statement->readOnly()) {
 $rows = 0;
 $bytes = 0;
 $stop = 'complete';
+$message = null;
+$columns = null;
 
 try {
     $result = $statement->execute() ?: throw new SQLite3Exception($connection->lastErrorMsg(), $connection->lastErrorCode());
@@ -214,15 +225,29 @@ try {
         $bytes += $size;
     }
 } catch (SQLite3Exception $exception) {
-    $write($denial === null ? $classify($exception) : $refuse(...$denial));
+    $nomem = ($exception->getCode() & 0xFF) === SQLITE_NOMEM;
 
-    return;
+    if ($nomem && $columns === null) {
+        $write($error('memory', 'message', $connection->lastErrorMsg()));
+
+        return;
+    }
+
+    if (! $nomem && ($rows === 0 || $denial !== null)) {
+        $write($denial === null ? $classify($exception) : $refuse(...$denial));
+
+        return;
+    }
+
+    $stop = $nomem ? 'memory' : 'error';
+    $message = $nomem ? null : $connection->lastErrorMsg();
 }
 
 $write([
     'k' => 'end',
     'rows' => $rows,
     'stop' => $stop,
+    ...($message === null ? [] : ['message' => $message]),
 ]);
 
 $connection->close();

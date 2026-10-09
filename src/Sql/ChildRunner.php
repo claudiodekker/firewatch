@@ -374,6 +374,7 @@ class ChildRunner implements SqlRunner
             $code === 'not_allowed' && $denied !== null => SqlFailure::notAllowed($denied, $text('name')),
             $code === 'invalid_sql' && $message !== null => SqlFailure::invalid($message),
             $code === 'unavailable' && $reason !== null => SqlFailure::unavailable($reason),
+            $code === 'memory' => SqlFailure::memory(),
             $code === 'failed' => SqlFailure::failed($message ?? 'The child failed without a message.'),
             default => SqlFailure::failed('The error line carries no known code and facts.'),
         };
