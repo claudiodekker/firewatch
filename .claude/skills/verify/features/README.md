@@ -41,4 +41,5 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Actor](./actor.md) covers `actor`: one person identified by id, username, name or a part of either, the candidates when several fit, and the known actors when nobody does.
 - [Compare](./compare.md) covers `compare`: the groups of one type before and after a `split_at` or between the deploys of a pair, an empty side, and its refusals.
 - [Trend](./trend.md) covers `trend`: a measure over equal buckets with derived bounds, a direction, a peak, partial buckets and its refusals.
+- [Query](./query.md) covers `query`: the assistant's own read-only SQL, its rows and the record types it read, the limit, a refusal and the deadline.
 - [Clear the store](./clear.md) covers `firewatch:clear` with its confirmation, `--type`, `--force` and `--drop`, and the `firewatch:doctor` stub.

@@ -93,6 +93,14 @@ class Emptiness
     }
 
     /**
+     * Get an empty answer for a statement that returned no rows; it ran on the store, so it says nothing of what is clean.
+     */
+    public static function noRows(): self
+    {
+        return new self(EmptyKind::NO_MATCH, null, __('firewatch::messages.query_no_rows'));
+    }
+
+    /**
      * Get an empty answer for text that identified none of the people in the user directory.
      */
     public static function unknownActor(string $who, int $people): self

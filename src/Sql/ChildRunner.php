@@ -1,0 +1,388 @@
+<?php
+
+namespace ClaudioDekker\Firewatch\Sql;
+
+use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Sql\Child\Denied;
+use ClaudioDekker\Firewatch\Sql\Child\Policy;
+use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
+use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreState;
+use ClaudioDekker\Firewatch\Store\StoreUnusable;
+
+/**
+ * The parent of the SQL child: spawns it, hands it the request, reads its lines and folds them into rows or a failure.
+ *
+ * @internal
+ */
+class ChildRunner implements SqlRunner
+{
+    /**
+     * The child script, run by path because the child loads no autoloader.
+     */
+    public const SCRIPT = __DIR__.'/Child/run.php';
+
+    /**
+     * The wall-clock deadline of one statement from spawn, in seconds.
+     */
+    public const DEADLINE_SECONDS = 10.0;
+
+    /**
+     * The ini the child runs under, forced over the host's so that no setting can change its output or its limits.
+     */
+    protected const INI = [
+        'memory_limit=64M',
+        'display_errors=0',
+        'log_errors=1',
+        'error_log=',
+        'precision=-1',
+        'serialize_precision=-1',
+        'auto_prepend_file=',
+        'auto_append_file=',
+    ];
+
+    /**
+     * The variables the child inherits: those PHP finds its ini with, so the sqlite3 extension loads, and Windows' system root.
+     */
+    protected const INHERITED_VARIABLES = ['PHPRC', 'PHP_INI_SCAN_DIR', 'SystemRoot'];
+
+    /**
+     * The most characters of the child's stderr a failure keeps.
+     */
+    protected const STDERR_CHARACTERS = 500;
+
+    /**
+     * The most bytes one read takes from a pipe.
+     */
+    protected const CHUNK_BYTES = 65536;
+
+    /**
+     * The store states a child reports.
+     */
+    protected const STATES = [StoreState::ABSENT, StoreState::FOREIGN, StoreState::SCHEMA_MISMATCH, StoreState::CORRUPT, StoreState::BUSY];
+
+    /**
+     * The signal that kills a child at once.
+     */
+    protected const SIGKILL = 9;
+
+    /**
+     * Create a new child runner instance.
+     *
+     * @param  float  $deadline  seconds from spawn
+     */
+    public function __construct(
+        protected Configuration $configuration,
+        protected float $deadline = self::DEADLINE_SECONDS,
+        protected string $script = self::SCRIPT,
+    ) {
+        //
+    }
+
+    /**
+     * Run one read-only statement of the assistant in the SQL child and get its rows.
+     *
+     * @param  int<1, 500>  $limit
+     *
+     * @throws StoreUnusable
+     * @throws SqlFailure
+     */
+    public function run(string $sql, int $limit): SqlRows
+    {
+        $denied = Policy::screen($sql);
+
+        if ($denied !== null) {
+            throw SqlFailure::notAllowed($denied);
+        }
+
+        $request = [
+            'sql' => $sql,
+            'limit' => $limit,
+            'store' => $this->configuration->database,
+            'application_id' => Schema::APPLICATION_ID,
+            'version' => Schema::VERSION,
+        ];
+
+        $started = hrtime(true);
+        [$lines, $stderr] = $this->exchange($request);
+        $elapsed = intdiv(hrtime(true) - $started, 1_000_000);
+
+        return $this->fold($lines, $stderr, $elapsed);
+    }
+
+    /**
+     * Spawn the child, write the request to it and read its lines until it ends or the deadline passes, when it is killed.
+     *
+     * @param  array<string, mixed>  $request
+     * @return array{list<string>, string} the stdout lines, and the start of stderr
+     *
+     * @throws SqlFailure
+     */
+    protected function exchange(array $request): array
+    {
+        $process = @proc_open($this->command(), [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes, dirname(__DIR__, 2), $this->environment());
+
+        if (! is_resource($process)) {
+            throw SqlFailure::unavailable(Unavailable::SPAWN_FAILED);
+        }
+
+        [$stdin, $stdout, $stderr] = $pipes;
+        $input = json_encode($request, JSON_THROW_ON_ERROR);
+        $output = '';
+        $errors = '';
+        $until = hrtime(true) + (int) ($this->deadline * 1e9);
+
+        try {
+            foreach ($pipes as $pipe) {
+                stream_set_blocking($pipe, false);
+            }
+
+            while (! feof($stdout)) {
+                $left = $until - hrtime(true);
+
+                if ($left <= 0) {
+                    break;
+                }
+
+                $read = feof($stderr) ? [$stdout] : [$stdout, $stderr];
+                $write = $stdin === null ? [] : [$stdin];
+                $except = null;
+
+                if (@stream_select($read, $write, $except, intdiv($left, 1_000_000_000), intdiv($left % 1_000_000_000, 1000)) === false) {
+                    break;
+                }
+
+                if ($write !== []) {
+                    // Written inside the loop, so a child that never reads can't hold the parent past the deadline.
+                    $written = @fwrite($stdin, $input);
+                    $input = $written === false ? '' : substr($input, $written);
+
+                    if ($input === '') {
+                        fclose($stdin);
+                        $stdin = null;
+                    }
+                }
+
+                foreach ($read as $pipe) {
+                    $chunk = (string) fread($pipe, static::CHUNK_BYTES);
+
+                    if ($pipe === $stdout) {
+                        $output .= $chunk;
+                    } else {
+                        // Drained past the excerpt, so a child that writes much to stderr never blocks on a full pipe.
+                        $errors = mb_strcut($errors.$chunk, 0, static::STDERR_CHARACTERS * 4);
+                    }
+                }
+            }
+        } finally {
+            $this->end($process, array_values(array_filter([$stdin, $stdout, $stderr])));
+        }
+
+        $lines = array_values(array_filter(explode("\n", $output), fn (string $line) => $line !== ''));
+
+        return [$lines, trim(mb_substr($errors, 0, static::STDERR_CHARACTERS))];
+    }
+
+    /**
+     * Close the pipes, kill the child when it is still running, and reap it.
+     *
+     * @param  resource  $process
+     * @param  list<resource>  $pipes
+     */
+    protected function end($process, array $pipes): void
+    {
+        foreach ($pipes as $pipe) {
+            fclose($pipe);
+        }
+
+        if (proc_get_status($process)['running']) {
+            proc_terminate($process, static::SIGKILL);
+        }
+
+        proc_close($process);
+    }
+
+    /**
+     * Fold the child's lines into its rows, or into the store state or the failure they report.
+     *
+     * @param  list<string>  $lines
+     *
+     * @throws StoreUnusable
+     * @throws SqlFailure
+     */
+    protected function fold(array $lines, string $stderr, int $elapsedMilliseconds): SqlRows
+    {
+        $columns = null;
+        $rows = [];
+        $end = null;
+
+        foreach ($lines as $position => $text) {
+            $line = json_decode($text, associative: true);
+
+            if (! is_array($line) || ! is_string($line['k'] ?? null)) {
+                throw SqlFailure::failed("Line {$position} of the child is not a protocol line.");
+            }
+
+            if ($end !== null) {
+                throw SqlFailure::failed('The child wrote a line after its end line.');
+            }
+
+            match ($line['k']) {
+                'state' => throw count($lines) === 1 ? $this->unusable($line) : SqlFailure::failed('The child wrote a state line among others.'),
+                'error' => throw $this->failure($line),
+                'columns' => $columns = $columns === null ? $this->columns($line) : throw SqlFailure::failed('The child wrote its columns twice.'),
+                'row' => $rows[] = $this->row($line, $columns),
+                'end' => $end = $line,
+                default => throw SqlFailure::failed("The child wrote a line of the unknown kind {$line['k']}."),
+            };
+        }
+
+        if ($end === null || ($end['rows'] ?? null) !== count($rows)) {
+            throw SqlFailure::aborted($stderr);
+        }
+
+        if ($columns === null) {
+            throw SqlFailure::failed('The child wrote its end line before its columns.');
+        }
+
+        $stop = QueryStop::tryFrom(is_string($end['stop'] ?? null) ? $end['stop'] : '') ?? throw SqlFailure::failed('The end line carries no known stop.');
+
+        return new SqlRows($columns, $rows, $stop, $this->typesRead($end['reads'] ?? null), $elapsedMilliseconds);
+    }
+
+    /**
+     * Get the store state a state line reports.
+     *
+     * @param  array<string, mixed>  $line
+     */
+    protected function unusable(array $line): StoreUnusable|SqlFailure
+    {
+        $state = StoreState::tryFrom(is_string($line['state'] ?? null) ? $line['state'] : '');
+        $found = $line['found'] ?? null;
+
+        if ($state === null || ! in_array($state, static::STATES, true) || ($found !== null && ! is_int($found))) {
+            return SqlFailure::failed('The state line carries no state a child reports.');
+        }
+
+        return new StoreUnusable($state, $found);
+    }
+
+    /**
+     * Get the failure an error line reports.
+     *
+     * @param  array<string, mixed>  $line
+     */
+    protected function failure(array $line): SqlFailure
+    {
+        $text = fn (string $key) => is_string($line[$key] ?? null) ? $line[$key] : null;
+        $code = $line['code'] ?? null;
+        $denied = Denied::tryFrom((string) $text('subject'));
+        $reason = Unavailable::tryFrom((string) $text('reason'));
+        $message = $text('message');
+
+        return match (true) {
+            $code === 'not_allowed' && $denied !== null => SqlFailure::notAllowed($denied, $text('name')),
+            $code === 'invalid_sql' && $message !== null => SqlFailure::invalid($message),
+            $code === 'unavailable' && $reason !== null => SqlFailure::unavailable($reason),
+            $code === 'failed' => SqlFailure::failed($message ?? 'The child failed without a message.'),
+            default => SqlFailure::failed('The error line carries no known code and facts.'),
+        };
+    }
+
+    /**
+     * Get the column names a columns line carries.
+     *
+     * @param  array<string, mixed>  $line
+     * @return list<string>
+     */
+    protected function columns(array $line): array
+    {
+        $columns = $line['columns'] ?? null;
+
+        if (! is_array($columns) || ! array_is_list($columns) || $columns !== array_filter($columns, is_string(...))) {
+            throw SqlFailure::failed('The columns line carries no list of names.');
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Get the values a row line carries, one for each column.
+     *
+     * @param  array<string, mixed>  $line
+     * @param  list<string>|null  $columns
+     * @return list<int|float|string|null>
+     */
+    protected function row(array $line, ?array $columns): array
+    {
+        $row = $line['r'] ?? null;
+
+        if ($columns === null || ! is_array($row) || ! array_is_list($row) || count($row) !== count($columns) || array_filter($row, is_array(...)) !== []) {
+            throw SqlFailure::failed('A row line does not fit the columns.');
+        }
+
+        return $row;
+    }
+
+    /**
+     * Get the record types of what the authorizer saw the statement read, in case order; ambiguity over-attaches.
+     *
+     * A view is read under its own name and again as records with the view responsible, and records read under no
+     * view, or through a common table expression, could be of any type.
+     *
+     * @return list<RecordType>
+     */
+    protected function typesRead(mixed $reads): array
+    {
+        if (! is_array($reads)) {
+            throw SqlFailure::failed('The end line carries no reads.');
+        }
+
+        $views = [];
+
+        foreach (RecordType::events() as $type) {
+            $views[(string) $type->view()] = $type;
+        }
+
+        $read = [];
+
+        foreach ($reads as $pair) {
+            [$table, $via] = is_array($pair) && count($pair) === 2 ? array_values($pair) : throw SqlFailure::failed('A read is no table and view.');
+
+            array_push($read, ...match (true) {
+                isset($views[$table]) => [$views[$table]],
+                $table === 'records' && isset($views[$via]) => [$views[$via]],
+                $table === 'records' => array_values($views),
+                $table === 'users' => [RecordType::USER],
+                default => [],
+            });
+        }
+
+        return array_values(array_filter(RecordType::cases(), fn (RecordType $type) => in_array($type, $read, true)));
+    }
+
+    /**
+     * Get the argument vector of the child: no shell, and the forced ini over the host's.
+     *
+     * @return list<string>
+     */
+    protected function command(): array
+    {
+        $settings = array_merge(...array_map(fn (string $setting) => ['-d', $setting], static::INI));
+
+        return [PHP_BINARY, ...$settings, $this->script];
+    }
+
+    /**
+     * Get the child's environment: only the inherited variables the parent has, so no application variable reaches it.
+     *
+     * @return array<string, string>
+     */
+    protected function environment(): array
+    {
+        $values = array_map(getenv(...), static::INHERITED_VARIABLES);
+
+        return array_filter(array_combine(static::INHERITED_VARIABLES, $values), is_string(...));
+    }
+}

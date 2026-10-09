@@ -16,4 +16,9 @@ enum ErrorCode: string
     case NOT_FOUND = 'not_found';
     case BAD_CURSOR = 'bad_cursor';
     case INTERNAL = 'internal';
+    case NOT_ALLOWED = 'not_allowed';
+    case INVALID_SQL = 'invalid_sql';
+    case ABORTED = 'aborted';
+    case UNAVAILABLE = 'unavailable';
+    case FAILED = 'failed';
 }

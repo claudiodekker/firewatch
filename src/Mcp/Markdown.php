@@ -61,14 +61,26 @@ class Markdown
     public static function table(array $rows): string
     {
         $columns = array_keys($rows[0]);
+        $cells = array_map(fn (array $row) => array_map(fn (string $column) => $row[$column] ?? null, $columns), $rows);
 
+        return self::grid($columns, $cells);
+    }
+
+    /**
+     * Render rows positional to their columns as a table, so that a duplicate column name keeps its column.
+     *
+     * @param  list<string>  $columns
+     * @param  list<list<mixed>>  $rows
+     */
+    public static function grid(array $columns, array $rows): string
+    {
         $lines = [
             '| '.implode(' | ', array_map(self::cell(...), $columns)).' |',
             '|'.str_repeat(' --- |', count($columns)),
         ];
 
         foreach ($rows as $row) {
-            $lines[] = '| '.implode(' | ', array_map(fn (string $column) => self::cell($row[$column] ?? null), $columns)).' |';
+            $lines[] = '| '.implode(' | ', array_map(self::cell(...), $row)).' |';
         }
 
         return implode("\n", $lines);

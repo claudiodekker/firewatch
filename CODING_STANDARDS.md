@@ -2,7 +2,7 @@
 
 The reviewer reads this file. Apply every rule to each changed hunk in the diff. Skip anything the repo's tooling already enforces (Pint, PHPStan/Larastan, arch tests).
 
-This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process (planned, #80). The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`; these rules govern how it is implemented.
+This is a Laravel package with no HTTP layer of its own. Its entry points are Artisan commands (`firewatch:*`) and MCP tools; its state is a SQLite store; it takes Nightwatch's output through one seam (its own ingest, swapped in for Nightwatch's, with a veto on `IngestingEvents` behind it) and runs assistant SQL in a child process. The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`; these rules govern how it is implemented.
 
 ## 1. Sibling changes
 
@@ -28,7 +28,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 4. Queries
 
-- Queries use bound parameters. Values are never interpolated into SQL text. The one exception is the SQL tool (planned, #80), whose single statement is the assistant's own (section 18).
+- Queries use bound parameters. Values are never interpolated into SQL text. The one exception is the SQL tool, whose single statement is the assistant's own (section 18).
 - Queries behind an entry point are bounded by a row limit (fetch `limit + 1`, so exactly `limit` rows is a complete list) or by design to one execution, one trace or one job lineage. An absent window bound means unbounded, so the limit is what bounds the answer.
 - One tool call reads inside one deferred snapshot, so every query of one answer sees the same data.
 - Instants are bound as floats, never text. Durations are integer microseconds and computed unrounded; rounding happens only when a value is written into an answer.
@@ -44,14 +44,14 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 ## 6. Types and values
 
 - Enum values are spelled exactly as the design spells them (`job-attempt`, `not_evaluated`). Only an enum that renders text has a `label()` method.
-- Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool (planned, #80) returns raw values. An instant held as Unix seconds is named for the moment it marks (`$now`, `$since`, `$cutoff`) and needs no suffix.
+- Answer fields carry the unit as a suffix (`_ms`, `_mb`, `_bytes`, `_pct`, and `_at` for instants). The store holds Unix seconds and integer microseconds and bytes; conversion happens only when an answer is written, and the SQL tool returns raw values. An instant held as Unix seconds is named for the moment it marks (`$now`, `$since`, `$cutoff`) and needs no suffix.
 - Each step that does real work (reads rows, plans, writes, hashes, calls another class) gets its own statement and a named variable. Don't nest it inside another call's argument, where a reader skims past it. Resolving a dependency isn't real work in this sense: don't split a call's arguments into single-use locals, e.g. `new DefaultLogChannel($this->app->make('config'))` stays inline.
 - Record data is JSON-encoded with the seam's flag set, so wire floats keep their fraction.
 - A string is cut only by the design's rules: 65,535 bytes at a UTF-8 boundary with the `... [truncated, N bytes total]` suffix counted in the limit, bindings and answer cells with their own caps, and a record's `data` capped as a whole. The trace and JSON-string fields are exempt. Limits are constants, and no `truncated` flag is stored.
 
 ## 7. Errors and integrations
 
-- Two seams exist, each with a real and a fake adapter: the SQL runner (the parent that spawns the child process; planned, #80) and the provider's notices (`Notices`, which the test case fakes for every application it creates). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
+- Two seams exist, each with a real and a fake adapter: the SQL runner (`Sql\SqlRunner`: `ChildRunner` spawns the child process, `Tests\Support\FakeSqlRunner` stands in) and the provider's notices (`Notices`, which the test case fakes for every application it creates). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
 - The boundaries that may catch `Throwable` and `report()` it are Firewatch's ingest, provider boot, process entry points and the tool layer.
 - Nothing is thrown into the host application. The tool layer turns an unexpected failure into the `internal` tool error, also when `app.debug` is on, because a rethrow ends the stdio process.
 - Calls that could act on nothing (an empty batch, an empty result set) check for empty input first.
@@ -60,7 +60,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 - Queue workers and Octane run Firewatch's ingest, and the MCP server reuses its process too, so call-specific statics and singletons are reset between executions and tool calls.
 - The mode and the configuration are read once per process. A store connection is keyed by `getmypid()`: after a fork the inherited handle is abandoned unused and a new one is opened. Every write batch and reader call checks the file's identity, so a file deleted or replaced under a live connection is reopened; where no identity exists (Windows) the check does nothing and never throws.
-- The MCP server and the SQL child (planned, #80) write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
+- The MCP server and the SQL child write only protocol output to stdout; diagnostics go to stderr or the log. The server forces `display_errors` to stderr and `app.debug` off, uses no console output helper, and holds no state between calls. Its boot touches nothing in the store.
 - Windows is supported: no code assumes POSIX (file modes, `stream_select()` on `proc_open` pipes) without a Windows path that the platform job (planned, #88) runs (ADR 0012).
 
 ## 9. Configuration
@@ -87,7 +87,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - Tests have five layers with one job each. A scenario test (`tests/Scenario`, the default) builds a store from real Nightwatch sensor traffic, walks the tool ladder as an assistant would and asserts the structured answer, with a positive, a negative and a blind-spot case. A feature test (`tests/Feature`) drives one thing a user, an MCP client or Nightwatch triggers (a command, an ingest, a retention pass, a spawned second process) end to end and asserts the state it leaves. A contract test (`tests/Contract`) pins Nightwatch's output, the fixtures and Firewatch's fixed text and shapes, and holds no behaviour. A unit test (`tests/Unit`) covers only what a feature test can't reach (arithmetic tables, grammars, polling, error classification), and a unit test that a feature or scenario test already covers is deleted. An arch test (`tests/Arch`) enforces an invariant, not a style preference.
 - Telemetry comes from the real sensors driven through the workbench. A synthetic record is allowed only for exact durations or timestamps, volume, many groups, deploy identities, drift shapes and other-process writers; it derives from a committed wire fixture through the record builder and goes through Firewatch's real ingest. Nothing inserts into the store except a corruption or foreign-file test. A wire fixture is generated by the workbench command, never edited by hand.
 - A real-sensor test asserts counts, relations, verdicts and shapes, never exact instants or durations.
-- Fixed wording (blind-spot sentences, empty kinds, error messages, detector caveats, doctor messages and other user-facing text) is asserted through its language key, `__('firewatch::messages.key')`, never a copy of the translated string. A contract test (`tests/Contract`) is the exception: it pins the English text itself, so a reworded sentence fails a test. Ids, error codes and closed sets are written as literals in the test, so changing one fails a test. Long text (the server instructions, tool descriptions) is asserted structurally, and limits numerically (40 words per blind spot, 150 per tool description, `tools/list` under 6,000 tokens, a figure #86 owns bringing back down). No snapshot files are committed.
+- Fixed wording (blind-spot sentences, empty kinds, error messages, detector caveats, doctor messages and other user-facing text) is asserted through its language key, `__('firewatch::messages.key')`, never a copy of the translated string. A contract test (`tests/Contract`) is the exception: it pins the English text itself, so a reworded sentence fails a test. Ids, error codes and closed sets are written as literals in the test, so changing one fails a test. Long text (the server instructions, tool descriptions) is asserted structurally, and limits numerically (40 words per blind spot, 150 per tool description, `tools/list` under 6,500 tokens, a figure #86 owns bringing back down). No snapshot files are committed.
 - JSON answers are asserted in full; the markdown rendering once per tool through the shared helper. Every `next` call an answer offers is executed and returns a non-error answer.
 - A test that spawns a real process carries the `process` tag, and one that asserts a file mode or another POSIX-only fact carries `posix`. Real processes run with shortened deadlines passed through constructor arguments, never a real wait.
 - Each test uses its own temporary store path. A test that needs a clock moves Laravel's (`travelTo()`, with `Sleep` faked to follow it).
@@ -110,7 +110,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 - Long user-facing text (blind-spot sentences, tool descriptions, instructions, doctor messages) is a key in the package's `messages` language file, read through the package namespace (`__('firewatch::messages.failed')`). The file is loaded only where Firewatch is Active or Off. Tool classes override `description()` to read it, and set explicit tool names rather than relying on the default kebab-cased class name.
 - Notices written while the provider registers (stepped aside, ingest not replaced, provider order, a missing veto event, configuration issues) go to the PHP error log through `Notices`, never through `report()`, so they stay out of the application's own telemetry. They are literals in the provider, because the language file loads only after they fire. Command descriptions stay literals, as in Laravel.
-- Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction. In prose, "the `query` tool" is the SQL tool (planned, #80) and "the `query` record type" is the record.
+- Code, answers and text use the glossary term, not its _Avoid_ words. The word verdict is reserved for detectors and budgets: compare rows carry a change token and trends a direction. In prose, "the `query` tool" is the SQL tool and "the `query` record type" is the record.
 
 ## 15. Packages
 
@@ -141,12 +141,12 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 - Coverage is read from the recorded markers. A window before the coverage start is "no data", never zero or clean; ranking, compare and trend clip to it, and detectors exclude the executions whose needed children were removed.
 - A statistic is per occurrence. Percentiles are nearest rank, computed in SQL. A statistic below its sample floor (3 for p50, 20 for p95) is NULL with a `withheld` reason, never replaced by the maximum; the budget verdict on a group is the one stated exception. Order statistics and counts decide, so one outlier never flips a change token. A trend's direction is the one median taken in PHP: it is over at most 60 bucket values the SQL already computed, not over records, and has no floor beyond the four valued buckets it needs.
 - A person is attributed only by the recorded user, a job attempt's dispatch (one hop) or a child that carried the user inside a command or task, never by trace, `caused_by`, IP or timing, and every actor answer (planned, #73 and #74) counts what it could not attribute (ADR 0007).
-- Detectors run on the server's reader, never through the SQL tool (planned, #80), and their threshold is per call only, stated on the result.
+- Detectors run on the server's reader, never through the SQL tool, and their threshold is per call only, stated on the result.
 - Identifiers print in full and go back into tools unchanged.
 
 ## 18. SQL access
 
-Planned, not built yet: #80, #81 and #82 build what this section describes.
+#80 built the child, its authorizer and allow-lists, the deadline and the completeness rule. Planned, not built yet: the memory and output ceilings and partial rows (#81), and the availability check and the Windows path (#82).
 
 - The assistant's SQL runs only in the short-lived child that boots no framework, opens the store read-only and installs a closed authorizer: read actions on a fixed set of objects and an allow-list of functions, never a deny-list. It runs one statement through `prepare()`, never `query()` or `exec()` (ADR 0008).
 - If the isolation can't be established the tool refuses with `unavailable`; there is no in-process or degraded mode. The tool stays registered.
