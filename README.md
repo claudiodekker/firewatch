@@ -26,7 +26,7 @@ claude mcp add firewatch -- php artisan firewatch:server
 
 The server speaks MCP over stdio. Use only this command to start it, never `mcp:start` or `mcp:inspector`. To see the tools an assistant would get, run `php artisan firewatch:server --list`.
 
-Eight tools exist so far:
+Nine tools exist so far:
 
 - `overview` answers what is wrong now, in a fixed order: the error rate of the requests, the slowest groups by total time, the records of each type, the user directory, the signed-in actors, and for each problem shape whether it found something, was clean or could not be evaluated.
 - `rank` lists the worst groups of one record type by a measure such as `p95_duration`, over a time window, optionally matched by label, split by deploy and paged with a cursor.
@@ -36,6 +36,7 @@ Eight tools exist so far:
 - `detect` runs problem shapes, worst first: `n-plus-one` a query one execution ran 3+ times; `database-bound` routes typically spending 60%+ in queries; `failing-routes` routes answering 400+; `failing-jobs` jobs with a failed or released attempt; `queue-latency` jobs pending or waiting 5+ seconds; `failing-tasks` failed or skipped scheduled tasks; `exception-clusters` exception groups, escaped first; `error-logs` error logs by message shape; `failing-http` hosts answering 400+; `cache` keys hit under 50% over 3+ reads, or with a failed write or delete; `memory` executions peaking at 64+ MB.
 - `actor` identifies one signed-in person from a user id, a username, a name or a part of either, and lists the window's executions tied to them by their own user, a job's dispatch or a child inside a command or task. It counts the work it cannot attribute. Several people who fit are listed and never guessed between.
 - `compare` answers "did my change help?": note `now` from an answer, change the code, use the application, then pass that value as `split_at`. Each group of one type is compared before and after it and gets a change such as slower, faster, steady, new or gone. To compare two deploys instead, pass `deploy_before` and `deploy_after` (set the identity with `FIREWATCH_DEPLOY`). A side with too few records, or none, is not evaluated.
+- `trend` answers "is this getting worse?": it cuts a window into 2 to 60 equal buckets (12 by default) and states a count, a maximum, average or total duration, or peak memory per bucket, whether it rose, fell or held, and the busiest bucket. Leave `since` or `until` out and the window runs from the first to the last record.
 
 Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see. A clean `detect` answer counts what it examined.
 

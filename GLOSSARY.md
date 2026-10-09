@@ -453,6 +453,18 @@ _Avoid_: Uneven windows, skew
 The statement of a trend as rose, fell or held, from the medians of its first and last halves under the change rule.
 _Avoid_: Trend verdict, slope
 
+**Bucket**:
+One of the equal slices a trend cuts its window into, half-open like the window except that the last one takes a derived until; a bucket with a value, records and no partial flag is valued, and only valued buckets decide the direction and the peak.
+_Avoid_: Interval, bin, period
+
+**Partial bucket**:
+A bucket that starts before the type's coverage start, so it holds only the records from that start on; it is flagged and left out of the direction and the peak.
+_Avoid_: Incomplete bucket, clipped bucket
+
+**Peak**:
+The valued bucket with the highest value of a trend's measure, the earliest on a tie; there is none below two valued buckets or when they all hold the same value.
+_Avoid_: Maximum, spike
+
 **Dominant stage**:
 The stage of an execution group with the highest mean duration.
 _Avoid_: Bottleneck, slowest phase
@@ -488,7 +500,7 @@ The percentile of a measure over a selection, computed before other filters, aga
 _Avoid_: Average, norm
 
 **Derived bound**:
-A window bound the tool filled in from the selected records because none was given, named on the window.
+A window bound the tool filled in from the selected records because none was given, named on the window: a derived since is the first selected record, and a derived until is the last one and includes it.
 _Avoid_: Default window, implied range
 
 **Accounting**:
