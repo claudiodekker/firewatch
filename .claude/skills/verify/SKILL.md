@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, occurrences, execution, trace, detect, actor, compare, trend, query) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
+description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, occurrences, execution, trace, detect, actor, compare, trend, query, describe, fingerprint) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
 ---
 
 # Verify Firewatch in the workbench
@@ -8,7 +8,7 @@ description: Serve the Firewatch testbench workbench on its own port, store, dat
 Firewatch is a Laravel package, so there is no app of its own. The repo's `workbench/` is the app. `vendor/bin/testbench serve` boots a Laravel skeleton with Firewatch installed and the routes in `workbench/routes/web.php`. A user touches three things, and none of them is a page:
 
 - **Capture.** Firewatch records what the application does (requests, commands, queued jobs) into a SQLite store.
-- **The MCP server.** An assistant starts `firewatch:server` and calls its ten tools over stdio.
+- **The MCP server.** An assistant starts `firewatch:server` and calls its twelve tools over stdio.
 - **The commands.** `firewatch:server --list`, `firewatch:clear` and `firewatch:doctor`.
 
 Every helper is a subcommand of `.claude/skills/verify/scripts/app.sh` and runs from anywhere in the checkout. Feature recipes live in [`features/README.md`](features/README.md). Read the index, then the feature file you are verifying.

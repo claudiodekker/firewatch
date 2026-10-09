@@ -44,3 +44,4 @@
 - `query` names why it can't run: `proc_open` disabled, sqlite3 missing, `PHP_BINARY` not executable, or SQLite older than 3.38.0.
 - `query` runs its child on Windows.
 - The `describe` tool states what the store holds (records per type, deploys, drift, size) and what `query` can read: every object and column with its type, unit, meaning and recent values, the ceilings, and example statements. It answers before a store exists, and `query`'s refusals point to it.
+- The `fingerprint` tool turns facts read in source (a route's methods and path, a job, command or task name, a query's connection and SQL, a cache key, a host, a mail or notification class) into Nightwatch's group id, says which record types hold it, and checks the recipe against the newest whole stored record. A query without a driver gets one candidate per normalisation.
