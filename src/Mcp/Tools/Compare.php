@@ -384,7 +384,7 @@ class Compare extends Tool
     }
 
     /**
-     * Get the calls that list the records of the first group listed, of each deploy on a deploy pair, and break it down by deploy, over the same window.
+     * Get the calls that list the records of the first group listed, of each deploy that holds some on a deploy pair, and break it down by deploy, over the same window.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
@@ -397,7 +397,7 @@ class Compare extends Tool
         }
 
         $type = $comparison->type === RecordType::QUEUED_JOB ? ['type' => $comparison->type->value] : [];
-        $deploys = $boundary instanceof DeployPair ? [$boundary->before, $boundary->after] : [null];
+        $deploys = $boundary instanceof DeployPair ? $this->holding($comparison, $boundary) : [null];
 
         $occurrences = array_map(fn (?string $deploy) => [
             'tool' => 'occurrences',
@@ -422,6 +422,27 @@ class Compare extends Tool
                 'why' => __('firewatch::messages.compare_next_rank'),
             ],
         ];
+    }
+
+    /**
+     * Get the deploys of the pair under which the first group listed has records.
+     *
+     * @return list<string>
+     */
+    protected function holding(Comparison $comparison, DeployPair $pair): array
+    {
+        $row = $comparison->groups->rows[0];
+        $deploys = [];
+
+        if ($row['beforeRecords'] > 0) {
+            $deploys[] = $pair->before;
+        }
+
+        if ($row['afterRecords'] > 0) {
+            $deploys[] = $pair->after;
+        }
+
+        return $deploys;
     }
 
     /**

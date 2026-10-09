@@ -392,3 +392,22 @@ it('reads an omitted since as the coverage start of the type and an omitted unti
         ->and($earlier['result']['after'])->toMatchArray(['since_at' => PAIR_CREATED, 'clipped' => true, 'records' => 3])
         ->and($earlier['notes'])->toBe([__('firewatch::messages.compare_deploy_pair_note')]);
 });
+
+it('offers the records of a group that is new or gone only under the deploy that holds them', function (string $letter, string $deploy) {
+    pairIngest([
+        ...pairRecords('a', 'v2', 600, [100, 100, 100]),
+        ...pairRecords('b', 'v1', 0, [100, 100, 100]),
+        ...pairRecords('b', 'v2', 600, [100, 100, 100]),
+        ...pairRecords('c', 'v1', 0, [100, 100, 100]),
+    ]);
+
+    $envelope = Envelope::assert(Compare::class, ['group' => pairHash($letter), 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
+    $records = Envelope::assert(Occurrences::class, $envelope['next'][0]['arguments']);
+
+    expect(array_column($envelope['next'], 'tool'))->toBe(['occurrences', 'rank'])
+        ->and($envelope['next'][0]['arguments'])->toEqual(['group' => pairHash($letter), 'deploy' => $deploy, 'since' => PAIR_CREATED, 'until' => PAIR_NOW])
+        ->and($records['result']['rows'])->toHaveCount(3);
+})->with([
+    'a new group' => ['a', 'v2'],
+    'a gone group' => ['c', 'v1'],
+]);
