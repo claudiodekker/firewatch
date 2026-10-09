@@ -157,4 +157,28 @@ enum Measure: string
             default => null,
         };
     }
+
+    /**
+     * Get the suffix of the fields that carry the measure: its unit, or the name of the count.
+     */
+    public function unit(): string
+    {
+        return match ($this) {
+            self::P95_DURATION, self::P50_DURATION, self::MAX_DURATION, self::TOTAL_DURATION => '_ms',
+            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY => '_mb',
+            default => '_'.$this->value,
+        };
+    }
+
+    /**
+     * Get a stored value of the measure as an answer writes it.
+     */
+    public function shown(int|float|null $value): int|float|null
+    {
+        return match ($this->unit()) {
+            '_ms' => Stored::milliseconds($value),
+            '_mb' => Stored::megabytes($value),
+            default => $value,
+        };
+    }
 }

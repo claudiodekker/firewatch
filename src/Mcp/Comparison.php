@@ -260,7 +260,7 @@ class Comparison
      */
     protected function rowResult(array $row): array
     {
-        $unit = $this->unit();
+        $unit = $this->by->unit();
         $difference = $row['before'] === null || $row['after'] === null ? null : $row['after'] - $row['before'];
         $percent = self::percent($row['before'], $row['after']);
 
@@ -277,9 +277,9 @@ class Comparison
             ...$shown,
             'before_records' => $row['beforeRecords'],
             'after_records' => $row['afterRecords'],
-            "before{$unit}" => $this->value($row['before']),
-            "after{$unit}" => $this->value($row['after']),
-            "difference{$unit}" => $this->value($difference),
+            "before{$unit}" => $this->by->shown($row['before']),
+            "after{$unit}" => $this->by->shown($row['after']),
+            "difference{$unit}" => $this->by->shown($difference),
             'change_pct' => $percent === null ? null : round($percent, self::PERCENT_DECIMALS),
             'change' => $row['change']->value,
             'measured_on' => $row['steppedDown'] ? self::MEASURED_ON_MEDIAN : null,
@@ -287,30 +287,6 @@ class Comparison
             'have' => $row['have'],
             'needed' => $row['needed'],
         ];
-    }
-
-    /**
-     * Get the suffix of the fields that carry the measure: its unit, or the name of the count.
-     */
-    protected function unit(): string
-    {
-        return match ($this->by) {
-            Measure::P95_DURATION, Measure::P50_DURATION, Measure::MAX_DURATION, Measure::TOTAL_DURATION => '_ms',
-            Measure::P95_MEMORY, Measure::P50_MEMORY, Measure::MAX_MEMORY => '_mb',
-            default => '_'.$this->by->value,
-        };
-    }
-
-    /**
-     * Get a value of the measure as the answer writes it.
-     */
-    protected function value(int|float|null $value): int|float|null
-    {
-        return match ($this->unit()) {
-            '_ms' => Stored::milliseconds($value),
-            '_mb' => Stored::megabytes($value),
-            default => $value,
-        };
     }
 
     /**
