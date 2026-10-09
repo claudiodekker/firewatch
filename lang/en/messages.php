@@ -270,6 +270,10 @@ return [
     'unavailable' => "error: unavailable\nThe SQL tool is unavailable: :reason. Every other Firewatch tool works.",
 
     'sql_unavailable' => [
+        'proc_open_missing' => '`proc_open` is disabled or missing',
+        'sqlite3_missing' => 'the sqlite3 extension is not loaded',
+        'php_binary' => 'PHP_BINARY is not an executable file',
+        'sqlite_too_old' => 'SQLite is older than 3.38.0',
         'spawn_failed' => 'the query process could not be started',
         'authorizer' => 'SQLite cannot install an authorizer',
         'heap_limit' => 'SQLite did not accept a heap limit',

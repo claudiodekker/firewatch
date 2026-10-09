@@ -86,6 +86,7 @@ class ChildRunner implements SqlRunner
         protected Configuration $configuration,
         protected float $deadline = self::DEADLINE_SECONDS,
         protected string $script = self::SCRIPT,
+        protected Availability $availability = new Availability,
     ) {
         //
     }
@@ -473,7 +474,7 @@ class ChildRunner implements SqlRunner
     {
         $settings = array_merge(...array_map(fn (string $setting) => ['-d', $setting], static::INI));
 
-        return [PHP_BINARY, ...$settings, $this->script];
+        return [$this->availability->phpBinary, ...$settings, $this->script];
     }
 
     /**

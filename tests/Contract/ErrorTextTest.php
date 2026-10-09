@@ -135,6 +135,26 @@ test('every SQL error code has pinned text', function (SqlFailure $failure, Erro
         ErrorCode::ABORTED,
         "error: aborted\nThe query process ended unexpectedly.\nstderr: PHP Fatal error: Allowed memory size exhausted",
     ],
+    'unavailable without proc_open' => [
+        SqlFailure::unavailable(Unavailable::PROC_OPEN_MISSING),
+        ErrorCode::UNAVAILABLE,
+        "error: unavailable\nThe SQL tool is unavailable: `proc_open` is disabled or missing. Every other Firewatch tool works.",
+    ],
+    'unavailable without the sqlite3 extension' => [
+        SqlFailure::unavailable(Unavailable::SQLITE3_MISSING),
+        ErrorCode::UNAVAILABLE,
+        "error: unavailable\nThe SQL tool is unavailable: the sqlite3 extension is not loaded. Every other Firewatch tool works.",
+    ],
+    'unavailable without an executable PHP_BINARY' => [
+        SqlFailure::unavailable(Unavailable::PHP_BINARY),
+        ErrorCode::UNAVAILABLE,
+        "error: unavailable\nThe SQL tool is unavailable: PHP_BINARY is not an executable file. Every other Firewatch tool works.",
+    ],
+    'unavailable on an old SQLite' => [
+        SqlFailure::unavailable(Unavailable::SQLITE_TOO_OLD),
+        ErrorCode::UNAVAILABLE,
+        "error: unavailable\nThe SQL tool is unavailable: SQLite is older than 3.38.0. Every other Firewatch tool works.",
+    ],
     'unavailable when the process can not be started' => [
         SqlFailure::unavailable(Unavailable::SPAWN_FAILED),
         ErrorCode::UNAVAILABLE,
@@ -144,6 +164,11 @@ test('every SQL error code has pinned text', function (SqlFailure $failure, Erro
         SqlFailure::unavailable(Unavailable::AUTHORIZER),
         ErrorCode::UNAVAILABLE,
         "error: unavailable\nThe SQL tool is unavailable: SQLite cannot install an authorizer. Every other Firewatch tool works.",
+    ],
+    'unavailable without a heap limit' => [
+        SqlFailure::unavailable(Unavailable::HEAP_LIMIT),
+        ErrorCode::UNAVAILABLE,
+        "error: unavailable\nThe SQL tool is unavailable: SQLite did not accept a heap limit. Every other Firewatch tool works.",
     ],
     'failed' => [
         SqlFailure::failed('A row line does not fit the columns.'),
