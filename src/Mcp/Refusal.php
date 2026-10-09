@@ -54,6 +54,19 @@ class Refusal extends RuntimeException
     }
 
     /**
+     * Get the refusal of a type whose group id source cannot give, with the reason and where to look instead.
+     */
+    public static function noRecipe(string $type, string $accepted, string $example): self
+    {
+        return new self(ErrorCode::INVALID_ARGUMENT, __('firewatch::messages.no_recipe', [
+            'type' => $type,
+            'reason' => __("firewatch::messages.no_recipe_reasons.{$type}"),
+            'accepted' => $accepted,
+            'example' => $example,
+        ]));
+    }
+
+    /**
      * Get the refusal of an argument that no tool takes.
      *
      * @param  list<string>  $accepted

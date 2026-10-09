@@ -37,6 +37,11 @@ test('every general error code has pinned text', function (Closure $refusal, Err
         ErrorCode::CONFLICTING_ARGUMENTS,
         "error: conflicting_arguments\n`type` does not apply with `execution_id`.\nargument: type\naccepted: execution_id or type\nexample: execution(execution_id: \"abc\")",
     ],
+    'a type without a recipe' => [
+        fn () => Refusal::noRecipe('log', 'request, command', 'fingerprint(type: "request")'),
+        ErrorCode::INVALID_ARGUMENT,
+        "error: invalid_argument\n`type` cannot be log: logs have no group.\nargument: type\naccepted: request, command\nexample: fingerprint(type: \"request\")",
+    ],
     'unreadable_time' => [
         fn () => Refusal::time('since', 'yesterday', 'overview'),
         ErrorCode::UNREADABLE_TIME,
