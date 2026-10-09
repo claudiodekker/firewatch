@@ -358,6 +358,8 @@ return [
 
     'execution_any_type' => 'type: any execution type',
 
+    'budget_line' => 'Budget: :state (:details)',
+
     'execution_summary' => 'Showed the :type :id: outcome :outcome.',
 
     'execution_not_found_trace' => "error: not_found\nNo execution `:id` exists in the store, but that value is a trace id; `trace(trace_id: \":id\")` follows it.\nargument: :argument\naccepted: :accepted\nexample: :example",
