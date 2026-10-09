@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\Boundary;
 use ClaudioDekker\Firewatch\Mcp\Comparison;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
@@ -19,6 +20,7 @@ use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
+use ClaudioDekker\Firewatch\Mcp\SplitPoint;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TimeGrammar;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -63,24 +65,9 @@ class Compare extends Tool
     protected const MAXIMUM_LIMIT = 100;
 
     /**
-     * How much older than the split the oldest record of the store must be for the note to move `since`, in seconds.
-     */
-    protected const EARLIER_CHANGES_SECONDS = 3600;
-
-    /**
      * What a group id is, as the refusal of a malformed one says it.
      */
     protected const GROUP_ID_DESCRIPTION = 'a 32-character lowercase hex group id';
-
-    /**
-     * A valid call, as a refusal shows it.
-     */
-    protected const EXAMPLE = 'compare(type: "request", split_at: "<now of an earlier answer>")';
-
-    /**
-     * A valid call by a deploy pair, as a refusal shows it.
-     */
-    protected const PAIR_EXAMPLE = 'compare(type: "request", deploy_before: "<deploy>", deploy_after: "<another deploy>")';
 
     /**
      * The boundaries a call accepts, as a refusal names them.
@@ -151,8 +138,6 @@ class Compare extends Tool
         $timezone = config()->string('app.timezone');
         $given = Window::read($request, $now, timezone: $timezone, tool: $this->name());
         $boundary = $this->boundary($request, $now, $timezone);
-        $anchored = ! $boundary instanceof DeployPair;
-        $pairNotes = $anchored ? [] : [__('firewatch::messages.compare_deploy_pair_note')];
 
         $epoch = Instant::of($now);
         $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
@@ -162,43 +147,43 @@ class Compare extends Tool
         } catch (StoreUnusable $unusable) {
             $types = $explicit === null ? [] : [$explicit];
             $window = Window::between($given->since(), $given->until() ?? $epoch, $timezone);
-            $blindSpots = [...BlindSpots::for($types, anchored: $anchored), ...$this->conditions->for(null, $types, $window)];
+            $blindSpots = [...BlindSpots::for($types, anchored: $boundary->isInstant()), ...$this->conditions->for(null, $types, $window)];
             $empty = Emptiness::of($unusable, $this->configuration->database);
             $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $pairNotes);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
         }
 
         $types = $type === null ? [] : [$type];
-        $blindSpots = [...BlindSpots::for($types, anchored: $anchored), ...$this->conditions->for($facts, $types, $window)];
+        $blindSpots = [...BlindSpots::for($types, anchored: $boundary->isInstant()), ...$this->conditions->for($facts, $types, $window)];
         $history = History::of($facts->meta, $types, ...$retention);
 
         if ($total === 0) {
             $empty = Emptiness::storeEmpty($this->configuration->database);
             $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $pairNotes);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total, straddling: $comparison?->straddling);
-        $filters = $this->filters($group, $explicit, $boundary);
+        $filters = [...$this->filters($group, $explicit), ...$boundary->filters()];
 
         if ($group !== null && $held === []) {
             $empty = Emptiness::noMatch($inWindow, $filters);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $pairNotes);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
         }
 
         if ($inWindow === 0) {
             $empty = Emptiness::windowEmpty($total);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $pairNotes);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
         }
 
         if ($comparison === null || $comparison->isEmpty()) {
             $empty = Emptiness::noMatch($inWindow, $filters);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $pairNotes);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
         }
 
         $shared = $explicit === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
@@ -208,25 +193,25 @@ class Compare extends Tool
             now: $epoch,
             timezone: $timezone,
             window: $window,
-            summary: $this->summary($comparison, $boundary),
+            summary: $this->summary($comparison),
             empty: null,
             result: $comparison->result(),
             coverage: $coverage,
             blindSpots: $blindSpots,
-            notes: $this->notes($request, $comparison, $oldest, $boundary, $shared ? $group : null),
+            notes: $this->notes($request, $comparison, $oldest, $shared ? $group : null),
             truncated: $this->truncated($comparison),
-            next: $this->next($comparison, $window, $boundary),
+            next: $this->next($comparison, $window),
             cuttable: ['groups'],
             recount: $comparison->recounted(...),
         );
     }
 
     /**
-     * Get the filters of the call as an empty answer names them: the group when one is given, then the type the call names, then a deploy pair.
+     * Get the filters of the call as an empty answer names them before the boundary's: the group when one is given, then the type the call names.
      *
      * @return list<string>
      */
-    protected function filters(?string $group, ?RecordType $type, float|DeployPair $boundary): array
+    protected function filters(?string $group, ?RecordType $type): array
     {
         $filters = [];
 
@@ -238,10 +223,6 @@ class Compare extends Tool
             $filters[] = "type: {$type->value}";
         }
 
-        if ($boundary instanceof DeployPair) {
-            $filters = [...$filters, ...$boundary->filters()];
-        }
-
         return $filters;
     }
 
@@ -250,7 +231,7 @@ class Compare extends Tool
      *
      * @return array{int, int, float|null, float|null, StoreFacts, RecordType|null, list<RecordType>, Window, Comparison|null}
      */
-    protected function load(SQLite3 $connection, Request $request, Window $given, float $epoch, float|DeployPair $boundary, ?RecordType $explicit, ?string $group, int $limit): array
+    protected function load(SQLite3 $connection, Request $request, Window $given, float $epoch, Boundary $boundary, ?RecordType $explicit, ?string $group, int $limit): array
     {
         $facts = StoreFacts::read($connection);
         $held = $group === null ? [] : Ranking::holders($connection, $group);
@@ -267,9 +248,7 @@ class Compare extends Tool
 
         $window = $this->window($given, $epoch, $coverageStart);
 
-        if (is_float($boundary) && ($boundary <= ($window->since() ?? -INF) || $boundary >= ($window->until() ?? $epoch))) {
-            throw Refusal::splitOutsideWindow(self::EXAMPLE);
-        }
+        $boundary->refuseOutside($window);
 
         [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
 
@@ -298,49 +277,32 @@ class Compare extends Tool
     /**
      * Get the summary of a comparison: the changes counted over every group, or why it could not run.
      */
-    protected function summary(Comparison $comparison, float|DeployPair $boundary): string
+    protected function summary(Comparison $comparison): string
     {
-        [$reason, $side] = $comparison->unevaluated() ?? [null, null];
+        $unevaluated = $comparison->unevaluated();
 
-        if ($reason === ComparisonReason::EMPTY_SIDE && $boundary instanceof DeployPair) {
-            return __('firewatch::messages.compare_empty_deploy_summary', [
-                'deploy' => $side === 'before' ? $boundary->before : $boundary->after,
-                'side' => $side,
-                'type' => $comparison->type->value,
-            ]);
+        if ($unevaluated === null) {
+            return $comparison->boundary->summary($comparison);
         }
 
-        if ($reason !== null) {
-            return __("firewatch::messages.compare_{$reason->value}_summary", [
-                'side' => $side,
-                'type' => $comparison->type->value,
-            ]);
+        [$reason, $side] = $unevaluated;
+
+        if ($reason === ComparisonReason::EMPTY_SIDE) {
+            return $comparison->boundary->emptySideSummary($comparison, $side);
         }
 
-        $counted = [
-            'groups' => $comparison->matched(),
+        return __("firewatch::messages.compare_{$reason->value}_summary", [
+            'side' => $side,
             'type' => $comparison->type->value,
-            'by' => $comparison->by->value,
-            'changes' => $comparison->counts(),
-        ];
-
-        if ($boundary instanceof DeployPair) {
-            return trans_choice('firewatch::messages.compare_pair_summary', $comparison->matched(), [
-                ...$counted,
-                'before' => $boundary->before,
-                'after' => $boundary->after,
-            ]);
-        }
-
-        return trans_choice('firewatch::messages.compare_summary', $comparison->matched(), $counted);
+        ]);
     }
 
     /**
-     * Get the notes of a comparison, in the fixed order: a deploy pair's ends with what a pair cannot separate.
+     * Get the notes of a comparison, in the fixed order: the shared job group, what a comparison that ran on nothing says, then the boundary's.
      *
      * @return list<string>
      */
-    protected function notes(Request $request, Comparison $comparison, ?float $oldest, float|DeployPair $boundary, ?string $shared): array
+    protected function notes(Request $request, Comparison $comparison, ?float $oldest, ?string $shared): array
     {
         $notes = [];
 
@@ -349,25 +311,10 @@ class Compare extends Tool
         }
 
         if ($comparison->unevaluated() !== null) {
-            $notes[] = $boundary instanceof DeployPair ? __('firewatch::messages.compare_pair_not_evaluated_note') : __('firewatch::messages.compare_not_evaluated_note');
+            $notes[] = $comparison->boundary->notEvaluatedNote();
         }
 
-        if ($boundary instanceof DeployPair) {
-            return [...$notes, __('firewatch::messages.compare_deploy_pair_note')];
-        }
-
-        if ($comparison->earlier !== null && $comparison->earlier['records'] > 0) {
-            $notes[] = trans_choice('firewatch::messages.'.($comparison->earlier['more'] ? 'compare_earlier_more_note' : 'compare_earlier_note'), $comparison->earlier['records'], [
-                'count' => $comparison->earlier['records'],
-                'type' => $comparison->type->value,
-            ]);
-        }
-
-        if ($request->get('since') === null && $oldest !== null && $oldest < $boundary - self::EARLIER_CHANGES_SECONDS) {
-            $notes[] = __('firewatch::messages.compare_move_since_note');
-        }
-
-        return $notes;
+        return [...$notes, ...$comparison->boundary->notes($comparison, $request->get('since') === null, $oldest)];
     }
 
     /**
@@ -384,11 +331,11 @@ class Compare extends Tool
     }
 
     /**
-     * Get the calls that list the records of the first group listed, of each deploy that holds some on a deploy pair, and break it down by deploy, over the same window.
+     * Get the calls that list the records of the first group listed, as the boundary divides them, and break it down by deploy, over the same window.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(Comparison $comparison, Window $window, float|DeployPair $boundary): array
+    protected function next(Comparison $comparison, Window $window): array
     {
         $group = $comparison->first();
 
@@ -397,18 +344,17 @@ class Compare extends Tool
         }
 
         $type = $comparison->type === RecordType::QUEUED_JOB ? ['type' => $comparison->type->value] : [];
-        $deploys = $boundary instanceof DeployPair ? $this->holding($comparison, $boundary) : [null];
 
-        $occurrences = array_map(fn (?string $deploy) => [
+        $occurrences = array_map(fn (array $call) => [
             'tool' => 'occurrences',
             'arguments' => [
                 'group' => $group,
                 ...$type,
-                ...($deploy === null ? [] : ['deploy' => $deploy]),
+                ...$call['arguments'],
                 ...$window->arguments(),
             ],
-            'why' => $deploy === null ? __('firewatch::messages.compare_next_occurrences') : __('firewatch::messages.compare_next_occurrences_deploy', ['deploy' => $deploy]),
-        ], $deploys);
+            'why' => $call['why'],
+        ], $comparison->boundary->occurrences($comparison));
 
         return [
             ...$occurrences,
@@ -425,27 +371,6 @@ class Compare extends Tool
     }
 
     /**
-     * Get the deploys of the pair under which the first group listed has records.
-     *
-     * @return list<string>
-     */
-    protected function holding(Comparison $comparison, DeployPair $pair): array
-    {
-        $row = $comparison->groups->rows[0];
-        $deploys = [];
-
-        if ($row['beforeRecords'] > 0) {
-            $deploys[] = $pair->before;
-        }
-
-        if ($row['afterRecords'] > 0) {
-            $deploys[] = $pair->after;
-        }
-
-        return $deploys;
-    }
-
-    /**
      * Read the type to compare.
      */
     protected function type(Request $request, bool $required): ?RecordType
@@ -454,7 +379,7 @@ class Compare extends Tool
         $value = $request->get('type');
 
         if ($value === null) {
-            return $required ? throw Refusal::missing(argument: 'type', accepted: $types, example: self::EXAMPLE) : null;
+            return $required ? throw Refusal::missing(argument: 'type', accepted: $types, example: SplitPoint::EXAMPLE) : null;
         }
 
         $type = is_string($value) ? RecordType::tryFrom($value) : null;
@@ -462,7 +387,7 @@ class Compare extends Tool
         if ($type === null || ! in_array($type, Measure::types(), true)) {
             $shown = json_encode($value, JSON_THROW_ON_ERROR);
 
-            throw Refusal::invalid(argument: 'type', expected: 'one of the types with groups', value: $shown, accepted: $types, example: self::EXAMPLE);
+            throw Refusal::invalid(argument: 'type', expected: 'one of the types with groups', value: $shown, accepted: $types, example: SplitPoint::EXAMPLE);
         }
 
         return $type;
@@ -538,64 +463,28 @@ class Compare extends Tool
     }
 
     /**
-     * Read the one boundary of the call: the instant the window is split at, or the deploy pair.
+     * Read the one boundary of the call: the split point of the window, or the deploy pair.
      */
-    protected function boundary(Request $request, CarbonImmutable $now, string $timezone): float|DeployPair
+    protected function boundary(Request $request, CarbonImmutable $now, string $timezone): Boundary
     {
         $split = $request->get('split_at');
         $before = $request->get('deploy_before');
         $after = $request->get('deploy_after');
 
         if ($split !== null && ($before !== null || $after !== null)) {
-            throw Refusal::conflicting(argument: $before !== null ? 'deploy_before' : 'deploy_after', with: 'split_at', accepted: self::BOUNDARIES, example: self::PAIR_EXAMPLE);
+            throw Refusal::conflicting(argument: $before !== null ? 'deploy_before' : 'deploy_after', with: 'split_at', accepted: self::BOUNDARIES, example: DeployPair::EXAMPLE);
         }
 
         if ($split !== null) {
-            return TimeGrammar::parse($split, $now, $timezone) ?? throw Refusal::time(argument: 'split_at', value: $split, tool: $this->name());
+            $instant = TimeGrammar::parse($split, $now, $timezone) ?? throw Refusal::time(argument: 'split_at', value: $split, tool: $this->name());
+
+            return new SplitPoint($instant);
         }
 
         if ($before === null && $after === null) {
-            throw Refusal::missing(argument: 'split_at', accepted: self::BOUNDARIES, example: self::EXAMPLE);
+            throw Refusal::missing(argument: 'split_at', accepted: self::BOUNDARIES, example: SplitPoint::EXAMPLE);
         }
 
-        return $this->pair($before, $after);
-    }
-
-    /**
-     * Read the deploy pair: two different, exact deploy strings.
-     */
-    protected function pair(mixed $before, mixed $after): DeployPair
-    {
-        if ($after === null) {
-            throw Refusal::missing(argument: 'deploy_after', accepted: 'an exact deploy string, with deploy_before', example: self::PAIR_EXAMPLE);
-        }
-
-        if ($before === null) {
-            throw Refusal::missing(argument: 'deploy_before', accepted: 'an exact deploy string, with deploy_after', example: self::PAIR_EXAMPLE);
-        }
-
-        $pair = new DeployPair($this->deploy('deploy_before', $before), $this->deploy('deploy_after', $after));
-
-        if ($pair->before !== $pair->after) {
-            return $pair;
-        }
-
-        $shown = json_encode($after, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'deploy_after', expected: 'a deploy other than deploy_before', value: $shown, accepted: 'a deploy other than deploy_before', example: self::PAIR_EXAMPLE);
-    }
-
-    /**
-     * Read one deploy of the pair: an exact deploy string, which is never empty, since an empty one marks a record with no deploy.
-     */
-    protected function deploy(string $argument, mixed $value): string
-    {
-        if (is_string($value) && $value !== '') {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: $argument, expected: 'an exact deploy string', value: $shown, accepted: 'an exact deploy string, which is not empty', example: self::PAIR_EXAMPLE);
+        return DeployPair::read($before, $after);
     }
 }

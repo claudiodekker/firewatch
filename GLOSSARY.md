@@ -268,6 +268,9 @@ _Avoid_: Server time, current time
 The half-open interval on records' start times over which a windowed answer is computed; an absent bound means unbounded, never recent, except on compare (coverage start and the store clock) and trend (a derived bound, named on the window).
 _Avoid_: Time range, period, default range
 
+**Boundary**:
+What divides a compared window into a before side and an after side: a split point or a deploy pair, exactly one per comparison.
+
 **Split point**:
 An instant strictly inside a window that divides it into a before side and an after side, the record exactly at it being after.
 _Avoid_: Anchor, checkpoint
