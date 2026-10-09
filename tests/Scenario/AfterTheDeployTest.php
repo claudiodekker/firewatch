@@ -72,7 +72,8 @@ it('compares the routes of two deploys, finds what the same question by time spl
     expect($result)->toMatchArray(['type' => 'request', 'by' => 'p95_duration', 'change' => null, 'reason' => null, 'side' => null, 'deploys' => null])
         ->and($result['before'])->toMatchArray(['deploy' => 'v1', 'since_at' => $pair['window']['since'], 'until_at' => $pair['now'], 'clipped' => false, 'records' => 5])
         ->and($result['after'])->toMatchArray(['deploy' => 'v2', 'since_at' => $pair['window']['since'], 'until_at' => $pair['now'], 'clipped' => false, 'records' => 5])
-        ->and($result['before'])->not->toHaveKeys(['earlier_records', 'earlier_more'])
+        ->and($result['before'])->toMatchArray(['earlier_records' => 1, 'earlier_more' => false])
+        ->and($result['after'])->toMatchArray(['earlier_records' => 0, 'earlier_more' => false])
         ->and($result['rollup'])->toMatchArray(['groups' => 3, 'new' => 1, 'gone' => 1, 'one_side_only' => 2, 'cut' => 0])
         ->and(array_keys($rows->all()))->toEqualCanonicalizing(['/orders', '/orders/export', '/legacy'])
         ->and($rows['/orders/export'])->toMatchArray(['before_records' => 0, 'after_records' => 2, 'change' => 'new'])
@@ -83,7 +84,7 @@ it('compares the routes of two deploys, finds what the same question by time spl
         ->and($pair['coverage']['straddling'])->toBeNull()
         ->and(array_column($pair['blind_spots'], 'id'))->toContain('console-requests')
         ->and(array_column($pair['blind_spots'], 'id'))->not->toContain('visible-at-completion')
-        ->and($pair['notes'])->toBe([__('firewatch::messages.compare_deploy_pair_note')]);
+        ->and($pair['notes'])->toBe([trans_choice('firewatch::messages.compare_earlier_deploy_note', 1, ['count' => 1, 'type' => 'request', 'deploy' => 'v1']), __('firewatch::messages.compare_deploy_pair_note')]);
 
     expect($bySplit['result']['groups'])->toBe($result['groups'])
         ->and($bySplit['result']['rollup'])->toBe($result['rollup'])

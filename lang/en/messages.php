@@ -291,6 +291,10 @@ return [
 
     'compare_earlier_more_note' => ':count or more :type records started before what the store covers for :type, so they are on neither side.',
 
+    'compare_earlier_deploy_note' => ':count :type record of deploy :deploy started before what the store covers for :type, so it is on neither side.|:count :type records of deploy :deploy started before what the store covers for :type, so they are on neither side.',
+
+    'compare_earlier_deploy_more_note' => ':count or more :type records of deploy :deploy started before what the store covers for :type, so they are on neither side.',
+
     'compare_move_since_note' => 'The before side reaches back more than an hour before the split, so it may hold earlier changes too: on a later round, pass the previous split as `since`.',
 
     'compare_truncated_how' => 'Pass a larger `limit`, up to 100, one `group`, or a narrower window.',

@@ -102,8 +102,8 @@ it('compares every record of each deploy in the window, interleaved in time, and
             'change' => null,
             'reason' => null,
             'side' => null,
-            'before' => ['deploy' => 'v1', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 20, 'observed_span_ms' => 38000.0],
-            'after' => ['deploy' => 'v2', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 20, 'observed_span_ms' => 38000.0],
+            'before' => ['deploy' => 'v1', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 20, 'observed_span_ms' => 38000.0, 'earlier_records' => 0, 'earlier_more' => false],
+            'after' => ['deploy' => 'v2', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 20, 'observed_span_ms' => 38000.0, 'earlier_records' => 0, 'earlier_more' => false],
             'rollup' => pairRollup(1, ['slower' => 1]),
             'groups' => [
                 [
@@ -261,8 +261,8 @@ it('evaluates nothing when a deploy has no records in the window, says which, an
             'change' => 'not_evaluated',
             'reason' => 'empty_side',
             'side' => $side,
-            'before' => ['deploy' => $before, 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => $side === 'before' ? 0 : 3, 'observed_span_ms' => $side === 'before' ? null : 2000.0],
-            'after' => ['deploy' => $after, 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => $side === 'after' ? 0 : 3, 'observed_span_ms' => $side === 'after' ? null : 2000.0],
+            'before' => ['deploy' => $before, 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => $side === 'before' ? 0 : 3, 'observed_span_ms' => $side === 'before' ? null : 2000.0, 'earlier_records' => 0, 'earlier_more' => false],
+            'after' => ['deploy' => $after, 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => $side === 'after' ? 0 : 3, 'observed_span_ms' => $side === 'after' ? null : 2000.0, 'earlier_records' => 0, 'earlier_more' => false],
             'rollup' => null,
             'groups' => [],
             'deploys' => [
@@ -394,6 +394,53 @@ it('reads an omitted since as the coverage start of the type and an omitted unti
         ->and($earlier['result']['after'])->toMatchArray(['since_at' => PAIR_CREATED, 'clipped' => true, 'records' => 3])
         ->and($earlier['notes'])->toBe([__('firewatch::messages.compare_deploy_pair_note')]);
 });
+
+it('says on each deploy how many of its records started before what the store covers, which are on neither side', function () {
+    pairIngest([
+        ...pairRecords('a', 'v1', PAIR_CREATED - PAIR_START - 30, [100]),
+        ...pairRecords('a', 'v2', PAIR_CREATED - PAIR_START - 20, [100, 100]),
+        ...pairRecords('a', 'v2', 0, [100, 100, 100]),
+        ...pairRecords('a', 'v3', PAIR_CREATED - PAIR_START - 10, [100]),
+    ]);
+
+    $envelope = pairAnswer();
+
+    expect($envelope['summary'])->toBe(__('firewatch::messages.compare_empty_deploy_summary', ['deploy' => 'v1', 'side' => 'before', 'type' => 'request']))
+        ->and($envelope['result'])->toMatchArray([
+            'change' => 'not_evaluated',
+            'reason' => 'empty_side',
+            'side' => 'before',
+            'before' => ['deploy' => 'v1', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 0, 'observed_span_ms' => null, 'earlier_records' => 1, 'earlier_more' => false],
+            'after' => ['deploy' => 'v2', 'since_at' => PAIR_CREATED, 'until_at' => PAIR_NOW, 'clipped' => false, 'records' => 3, 'observed_span_ms' => 2000.0, 'earlier_records' => 2, 'earlier_more' => false],
+            'deploys' => [
+                ['deploy' => 'v2', 'records' => 3, 'first_at' => PAIR_START],
+            ],
+        ])
+        ->and($envelope['notes'])->toBe([
+            __('firewatch::messages.compare_pair_not_evaluated_note'),
+            trans_choice('firewatch::messages.compare_earlier_deploy_note', 1, ['count' => 1, 'type' => 'request', 'deploy' => 'v1']),
+            trans_choice('firewatch::messages.compare_earlier_deploy_note', 2, ['count' => 2, 'type' => 'request', 'deploy' => 'v2']),
+            __('firewatch::messages.compare_deploy_pair_note'),
+        ]);
+});
+
+it('counts at most 100 records of a deploy before what the store covers, says when there are more, and nothing when since leaves them out anyway', function (int $stored, array $arguments, array $before, array $notes) {
+    pairIngest([
+        ...pairRecords('a', 'v1', PAIR_CREATED - PAIR_START - 600, array_fill(0, $stored, 100)),
+        ...pairRecords('a', 'v1', 0, [100, 100, 100]),
+        ...pairRecords('a', 'v2', 600, [100, 100, 100]),
+    ]);
+
+    $envelope = pairAnswer(['by' => 'p50_duration', ...$arguments]);
+
+    expect($envelope['result']['before'])->toMatchArray(['records' => 3, ...$before])
+        ->and($envelope['result']['after'])->toMatchArray(['records' => 3, 'earlier_records' => 0, 'earlier_more' => false])
+        ->and($envelope['notes'])->toBe([...array_map(fn (array $note) => trans_choice("firewatch::messages.{$note[0]}", $note[1], ['count' => $note[1], 'type' => 'request', 'deploy' => 'v1']), $notes), __('firewatch::messages.compare_deploy_pair_note')]);
+})->with([
+    '100 records' => [100, [], ['earlier_records' => 100, 'earlier_more' => false], [['compare_earlier_deploy_note', 100]]],
+    '101 records' => [101, [], ['earlier_records' => 100, 'earlier_more' => true], [['compare_earlier_deploy_more_note', 100]]],
+    'a since after the coverage start' => [5, ['since' => PAIR_CREATED + 1], ['since_at' => PAIR_CREATED + 1, 'earlier_records' => 0, 'earlier_more' => false], []],
+]);
 
 it('offers the records of a group that is new or gone only under the deploy that holds them', function (string $letter, string $deploy) {
     pairIngest([

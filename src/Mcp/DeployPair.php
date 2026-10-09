@@ -72,15 +72,15 @@ class DeployPair implements Boundary
     }
 
     /**
-     * Get every record of each deploy in the whole window.
+     * Get every record of each deploy in the whole window, each side counting the records of its deploy that started before the coverage start.
      *
      * @return array{Side, Side}
      */
     public function sides(Window $window, ?float $coverageStart): array
     {
         return [
-            Comparison::side(since: $window->since(), until: $window->until(), deploy: $this->before, coverageStart: $coverageStart, countsEarlier: false),
-            Comparison::side(since: $window->since(), until: $window->until(), deploy: $this->after, coverageStart: $coverageStart, countsEarlier: false),
+            Comparison::side(since: $window->since(), until: $window->until(), deploy: $this->before, coverageStart: $coverageStart, countsEarlier: true),
+            Comparison::side(since: $window->since(), until: $window->until(), deploy: $this->after, coverageStart: $coverageStart, countsEarlier: true),
         ];
     }
 
@@ -156,13 +156,27 @@ class DeployPair implements Boundary
     }
 
     /**
-     * Get the notes of the pair on a comparison: what it cannot separate.
+     * Get the notes of the pair on a comparison: the count of each deploy's records that started before the coverage start, then what a pair cannot separate.
      *
      * @return list<string>
      */
     public function notes(Comparison $comparison, bool $sinceOmitted, ?float $oldest): array
     {
-        return $this->fixedNotes();
+        $notes = [];
+
+        foreach ([$comparison->before, $comparison->after] as $side) {
+            $earlier = $side['earlier'];
+
+            if ($earlier !== null && $earlier['records'] > 0) {
+                $notes[] = trans_choice('firewatch::messages.'.($earlier['more'] ? 'compare_earlier_deploy_more_note' : 'compare_earlier_deploy_note'), $earlier['records'], [
+                    'count' => $earlier['records'],
+                    'type' => $comparison->type->value,
+                    'deploy' => $side['deploy'],
+                ]);
+            }
+        }
+
+        return [...$notes, ...$this->fixedNotes()];
     }
 
     /**

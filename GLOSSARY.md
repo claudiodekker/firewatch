@@ -418,7 +418,7 @@ A change for a group present on both sides whose before value is 0 and after val
 _Avoid_: New, infinite change
 
 **Side**:
-One of the two parts a compared window is divided into, before or after: either part of a split point, or the records of one deploy of a deploy pair. Each is clipped to the type's coverage start and states its records and observed span; the before side of a split that begins at the coverage start also counts the records that started before it, which are on neither side.
+One of the two parts a compared window is divided into, before or after: either part of a split point, or the records of one deploy of a deploy pair. Each is clipped to the type's coverage start and states its records and observed span; a side that begins at the coverage start, the before side of a split or either side of a deploy pair, also counts the records of the type, of its own deploy on a pair, that started before it, which are on neither side.
 _Avoid_: Half, bucket, period
 
 **Empty side**:
