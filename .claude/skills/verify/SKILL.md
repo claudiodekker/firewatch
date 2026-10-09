@@ -26,7 +26,7 @@ Once per checkout, run `composer install`. The helper also calls `sqlite3`, `jq`
 
 Every process `app.sh` starts for a run gets `FIREWATCH_DATABASE=.verify/runs/<run>/store/firewatch.sqlite`, `DB_DATABASE=.verify/runs/<run>/app.sqlite`, `QUEUE_CONNECTION=database`, `CACHE_STORE=array` and `MAIL_MAILER=array`. A fresh run has no store. The first captured batch creates it.
 
-Every other variable comes from the shell that calls `app.sh`. To run a process with other Firewatch configuration, set the variable in front of the subcommand, for example `FIREWATCH_ENABLED=false app.sh start` or `FIREWATCH_REDACT_HEADERS=user-agent app.sh start`. The server keeps what `start` was given. Later `artisan` and `mcp` calls are separate processes and need the variable again. Before a run that must use the defaults, check that `env | grep -E '^(FIREWATCH|NIGHTWATCH|DB|QUEUE)_'` prints nothing.
+Every other variable comes from the shell that calls `app.sh`. To run a process with other Firewatch configuration, set the variable in front of the subcommand, for example `FIREWATCH_ENABLED=false app.sh start` or `FIREWATCH_REDACT_HEADERS=user-agent app.sh start`. The server keeps what `start` was given. `app.sh restart <run>` serves the same run again, store and port kept, with the variables set in front of it, for example `NIGHTWATCH_DEPLOY=v2 app.sh restart <run>`. Later `artisan` and `mcp` calls are separate processes and need the variable again. Before a run that must use the defaults, check that `env | grep -E '^(FIREWATCH|NIGHTWATCH|DB|QUEUE)_'` prints nothing.
 
 ## Doctor
 
