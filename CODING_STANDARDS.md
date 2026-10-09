@@ -146,10 +146,10 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 18. SQL access
 
-#80 built the child, its authorizer and allow-lists, the deadline and the completeness rule; #81 added the memory, output and row-budget ceilings and partial rows. Planned, not built yet: the availability check and the Windows path (#82).
+#80 built the child, its authorizer and allow-lists, the deadline and the completeness rule; #81 added the memory, output and row-budget ceilings and partial rows; #82 added the availability check and the temp-file exchange that runs on Windows.
 
 - The assistant's SQL runs only in the short-lived child that boots no framework, opens the store read-only and installs a closed authorizer: read actions on a fixed set of objects and an allow-list of functions, never a deny-list. It runs one statement through `prepare()`, never `query()` or `exec()` (ADR 0008).
 - If the isolation can't be established the tool refuses with `unavailable`; there is no in-process or degraded mode. The tool stays registered.
 - Ceilings and allow-lists are constants, never settings. The deadline is a constructor argument that defaults to the fixed 10 seconds, so tests can shorten it.
 - The parent trusts a result as complete only when the final line arrives and its row count matches; rows already streamed are returned as partial, never as complete, and a partial result with no rows is the matching tool error.
-- The child script and its policy classes reference no `Illuminate` and no application class. On Windows the parent uses a mechanism that works there, with the same protocol and ceilings (ADR 0012).
+- The child script and its policy classes reference no `Illuminate` and no application class. The parent exchanges with the child through private temp files polled against the deadline, one mechanism on every platform, because `stream_select()` does not work on `proc_open` pipes on Windows (ADR 0012).

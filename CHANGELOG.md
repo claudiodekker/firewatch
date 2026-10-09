@@ -41,3 +41,5 @@
 - `rank` rows of execution groups carry a `budget` verdict, and `overview` counts groups `exceeded`, `within` and `not_evaluated` and lists up to ten exceeded ones, worst ratio first. A group is judged on its p95 from 20 executions that ran, else its maximum; a skipped task never counts as run.
 - The `query` tool runs one read-only SQL statement of the assistant in a framework-free PHP child: the store opened read-only under a closed authorizer and function allow-list, a 10-second deadline, raw values, and coverage and blind spots for the record types the authorizer saw it read.
 - The `query` tool also stops at 32 MiB of working memory, 1 MiB of output, 16,000 bytes of rows and 2,000 characters a cell. A statement that stops early after some rows returns them as partial with its stop; one that stops before any is an error, `row_too_large` when the first row is over the budget.
+- `query` names why it can't run: `proc_open` disabled, sqlite3 missing, `PHP_BINARY` not executable, or SQLite older than 3.38.0.
+- `query` runs its child on Windows.

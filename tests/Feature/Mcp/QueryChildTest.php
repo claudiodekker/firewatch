@@ -72,7 +72,9 @@ describe('isolation', function () {
         $directory = sys_get_temp_dir().'/firewatch-ini-'.bin2hex(random_bytes(4));
         mkdir($directory);
         file_put_contents("{$directory}/prepend.php", '<?php echo "stray output\n";');
-        file_put_contents("{$directory}/php.ini", "precision=3\nserialize_precision=5\nauto_prepend_file={$directory}/prepend.php\n");
+        // On top of the host's ini, which loads the extensions on Windows.
+        $host = php_ini_loaded_file() === false ? '' : file_get_contents(php_ini_loaded_file());
+        file_put_contents("{$directory}/php.ini", "{$host}\nprecision=3\nserialize_precision=5\nauto_prepend_file={$directory}/prepend.php\n");
         setEnvironmentVariable('PHPRC', $directory);
 
         $envelope = Envelope::assert(Query::class, ['sql' => 'SELECT 0.1 + 0.2 AS sum']);

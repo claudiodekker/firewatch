@@ -32,5 +32,5 @@ test('the SQL text is at most 16,384 bytes', function () {
 
 test('the closed words the child writes', function () {
     expect(array_column(Denied::cases(), 'value'))->toBe(['function', 'table', 'action', 'second_statement', 'no_columns', 'too_long', 'nul'])
-        ->and(array_column(Unavailable::cases(), 'value'))->toBe(['spawn_failed', 'authorizer', 'heap_limit']);
+        ->and(array_column(Unavailable::cases(), 'value'))->toBe(['proc_open_missing', 'sqlite3_missing', 'php_binary', 'sqlite_too_old', 'spawn_failed', 'authorizer', 'heap_limit']);
 });

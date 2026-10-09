@@ -64,7 +64,7 @@ if ($screened !== null) {
 
 clearstatcache(true, $request['store']);
 
-if (! is_file($request['store']) || filesize($request['store']) === 0) {
+if ($request['store'] !== ':memory:' && (! is_file($request['store']) || filesize($request['store']) === 0)) {
     $write($state('absent'));
 
     return;

@@ -147,3 +147,13 @@ it('leaves stray output on stdout in another firewatch: command', function () {
 
     expect($process->getOutput())->toStartWith("Stray output from a provider\n");
 })->group('process');
+
+it('answers query as unavailable when proc_open is disabled, while every other tool works', function () {
+    $session = [...serverSession(), ['jsonrpc' => '2.0', 'id' => 4, 'method' => 'tools/call', 'params' => ['name' => 'query', 'arguments' => ['sql' => 'SELECT 1']]]];
+
+    $replies = serverReplies(runServer($this->storeDirectory, $session, ini: ['-d', 'disable_functions=proc_open']));
+
+    expect($replies[3]['result']['isError'])->toBeFalse()
+        ->and($replies[4]['result']['isError'])->toBeTrue()
+        ->and($replies[4]['result']['content'][0]['text'])->toBe(__('firewatch::messages.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.proc_open_missing')]));
+})->group('process');
