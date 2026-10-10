@@ -22,11 +22,11 @@ use ClaudioDekker\Firewatch\Mcp\Outcome;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
+use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Mcp\WithheldReason;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Microseconds;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -482,7 +482,7 @@ class Occurrences extends Tool
                 'needed' => $baseline['needed'],
             ];
         } else {
-            $thresholdMilliseconds = $baseline['threshold'] / Microseconds::PER_MILLISECOND;
+            $thresholdMilliseconds = Stored::milliseconds($baseline['threshold']);
         }
 
         return [
