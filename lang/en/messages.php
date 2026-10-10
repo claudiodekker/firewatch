@@ -224,6 +224,74 @@ return [
 
     'doctor' => [
         'threw_fix' => 'This is a Firewatch bug: report it with the output of `php artisan firewatch:doctor --json`.',
+
+        'none' => 'none',
+
+        'on' => 'on',
+
+        'off' => 'off',
+
+        'mode' => [
+            'ok' => 'environment :environment is on the allowlist (:environments) and Firewatch is enabled; a request or job here runs :mode',
+            'production' => 'the allowlist (:environments) names :production, so Firewatch captures there when it is installed',
+            'production_fix' => 'remove production and prod from FIREWATCH_ENVIRONMENTS and install Firewatch with `composer install --no-dev` there',
+            'disabled' => 'FIREWATCH_ENABLED is false in :environment, so nothing is captured',
+            'disabled_fix' => 'set FIREWATCH_ENABLED=true, then restart queue workers and the assistant session',
+        ],
+
+        'php' => [
+            'ok' => 'PHP :version at :binary',
+            'too_old' => 'PHP :version at :binary is older than the :minimum Firewatch needs',
+            'too_old_fix' => 'run the application on PHP :minimum or newer',
+        ],
+
+        'sqlite' => [
+            'ok' => 'SQLite :version through ext-sqlite3',
+            'missing' => 'ext-sqlite3 is not loaded, so nothing is captured',
+            'missing_fix' => 'enable the sqlite3 extension for :binary',
+            'too_old' => 'SQLite :version is older than the :minimum Firewatch needs, so nothing is captured',
+            'too_old_fix' => 'link PHP against SQLite :minimum or newer',
+            'wal_reset' => 'SQLite :version is in the write-ahead log reset range; the risk is low and the write lock that avoids it is active',
+            'wal_reset_fix' => 'upgrade SQLite to a release outside the range when convenient',
+        ],
+
+        'nightwatch' => [
+            'ok' => 'Nightwatch :version, on the verified :line line',
+            'unverified' => 'Nightwatch :version is newer than the verified :line line, so captured shapes may drift',
+            'unverified_fix' => 'pin laravel/nightwatch to :line.* or upgrade Firewatch, and watch store-drift',
+            'api' => 'Nightwatch :version lacks IngestingEvents or its records property, so Firewatch can\'t guard its ingest',
+            'api_fix' => 'install laravel/nightwatch :line.*',
+        ],
+
+        'nightwatch-order' => [
+            'ok' => 'Firewatch registers before Nightwatch and no other listener sees what Nightwatch ingests',
+            'registered_first' => 'Nightwatch\'s provider registered before Firewatch\'s, so Nightwatch runs with its own defaults',
+            'registered_first_fix' => 'run `composer dump-autoload` or `php artisan package:discover`',
+            'listeners' => '{1} :count other listener can see or veto what Nightwatch ingests|[2,*] :count other listeners can see or veto what Nightwatch ingests',
+            'listeners_fix' => 'remove the application\'s own IngestingEvents listeners while Firewatch is installed',
+        ],
+
+        'config' => [
+            'ok' => 'the configuration is valid',
+            'issue_fix' => 'edit :key in config/firewatch.php or its environment variable',
+        ],
+
+        'budgets' => [
+            'ok' => '{0} no budgets configured|{1} :count budget entry|[2,*] :count budget entries',
+            'issue_fix' => 'edit :key in the budgets list of config/firewatch.php',
+            'shadowed' => 'budgets[:number] can never govern, because an earlier entry of the same type with no matcher does',
+        ],
+
+        'store-path' => [
+            'ok' => 'store at :path',
+            'refused' => ':issue; the store is at :path',
+            'refused_fix' => 'set FIREWATCH_DATABASE (or database in config/firewatch.php) to a path outside public/',
+        ],
+
+        'capture-posture' => [
+            'posture' => 'payload fields redacted: :fields; headers redacted: :headers; request payloads :payload; logs :logs',
+            'nightwatch_defaults' => 'Nightwatch\'s defaults are in effect, because Firewatch\'s capture settings were not applied',
+        ],
     ],
 
     'blind_spot' => 'Blind spot (:id): :message',
