@@ -208,6 +208,61 @@ describe('the verdict', function () {
     });
 });
 
+describe('the history', function () {
+    beforeEach(function () {
+        $this->travelTo(Date::createFromTimestamp(EXC_AT - 3600));
+    });
+
+    /**
+     * Clear the exceptions at an instant, the way a person does.
+     */
+    function excClear(float $clearedAt): void
+    {
+        test()->travelTo(Date::createFromTimestamp($clearedAt));
+        test()->artisan('firewatch:clear', ['--type' => 'exception', '--force' => true])->assertSuccessful();
+    }
+
+    it('leaves out the executions that started before the exceptions were last cleared', function (float $clearedAt, int $examined) {
+        ingest([excExecution('first', fields: ['timestamp' => EXC_AT]), excExecution('second', '/second', fields: ['timestamp' => EXC_AT + 60])]);
+        excClear($clearedAt);
+
+        expect(excAnswer()['result']['examined'])->toBe($examined);
+    })->with([
+        'before both started' => [EXC_AT - 1, 2],
+        'as the first started' => [EXC_AT, 2],
+        'after the first started' => [EXC_AT + 1, 1],
+        'as the second started' => [EXC_AT + 60, 1],
+        'after both started' => [EXC_AT + 61, 0],
+    ]);
+
+    it('is not evaluated, as outside the coverage, when history left out every execution of the window', function () {
+        ingest([excExecution('one', fields: ['timestamp' => EXC_AT])]);
+        excClear(EXC_AT + 600);
+
+        $envelope = excAnswer();
+
+        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'exception-clusters', 'reason' => 'outside_coverage']))
+            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('history-cleared');
+    });
+
+    it('still finds an exception stored after the clear, over none of the executions it left out', function () {
+        ingest([excExecution('one', fields: ['timestamp' => EXC_AT])]);
+        excClear(EXC_AT + 600);
+        ingest([excException('one', fields: ['timestamp' => EXC_AT + 700])]);
+
+        expect(excAnswer()['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 0, 'total' => 1]);
+    });
+
+    it('is clean over the executions of a window that starts after the clear', function () {
+        ingest([excExecution('before', fields: ['timestamp' => EXC_AT])]);
+        excClear(EXC_AT + 600);
+        ingest([excExecution('after', fields: ['timestamp' => EXC_AT + 700])]);
+
+        expect(excAnswer(['since' => (string) (EXC_AT + 600)])['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 1, 'total' => 0]);
+    });
+});
+
 describe('the finding', function () {
     it('states the group, how its occurrences ended, where they occurred and what the latest one says', function () {
         ingest([
