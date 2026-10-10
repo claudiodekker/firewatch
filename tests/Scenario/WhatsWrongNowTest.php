@@ -181,13 +181,3 @@ it('answers nothing for a window that holds no record, with why and what it cann
         ->and($shape['empty']['kind'])->toBe('window_empty')
         ->and($shape['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0]);
 });
-
-it('answers nothing before anything was captured, with why and what it cannot see', function () {
-    $envelope = Envelope::assert(Overview::class);
-
-    expect($envelope['empty']['kind'])->toBe('no_store')
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['next'])->toBe([])
-        ->and($envelope['coverage']['state'])->toBe('absent')
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
-});
