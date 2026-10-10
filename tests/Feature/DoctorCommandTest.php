@@ -16,11 +16,13 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Lang;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Nightwatch\Events\IngestingEvents;
+use Symfony\Component\Process\Process;
 
 // Outside the sql-access tests the probe is cut short before it spawns, so only tests tagged `process` start a process.
 beforeEach(function () {
@@ -987,6 +989,27 @@ describe('the report', function () {
         ]);
     });
 });
+
+it('runs as an Off process in a real application and creates nothing', function () {
+    $packagesCache = sys_get_temp_dir().'/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/testbench', 'firewatch:doctor', '--json'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite', 'APP_PACKAGES_CACHE' => $packagesCache],
+        timeout: 30,
+    );
+
+    $process->run();
+    (new Filesystem)->delete($packagesCache);
+
+    $report = json_decode($process->getOutput(), associative: true, flags: JSON_THROW_ON_ERROR);
+    $results = array_column($report['checks'], null, 'id');
+
+    expect($process->getExitCode())->toBe($report['status'] === 'fail' ? 1 : 0)
+        ->and($results['mode']['status'])->toBe('ok')
+        ->and($results['store-identity']['status'])->toBe('info')
+        ->and($this->storeDirectory)->not->toBeDirectory();
+})->group('process');
 
 describe('reading', function () {
     it('creates no store, directory or lock on an empty checkout', function () {

@@ -12,7 +12,7 @@
 - Failed batches are dropped, never retried, and logged to `failures.jsonl`. The writer survives forks, replaced or deleted files, SQLite's WAL-reset bug, schema mismatches and damaged files.
 - Retention by age and record count, plus a size backstop, with coverage markers so answers state how far their history reaches.
 - `php artisan firewatch:server` runs the MCP server over stdio (`--list` prints its tools), with the `overview` tool. Answers share one envelope in markdown or JSON, a strict time grammar, closed error codes, size bounds, coverage, and structural and condition blind spots.
-- `php artisan firewatch:doctor` says it is not implemented yet and exits with a failure, so it is never mistaken for a passed check.
+- `php artisan firewatch:doctor` runs 19 read-only checks on PHP, SQLite, Nightwatch, the configuration, the store and the server, and prints a line for each with a fix for every warning and failure. `--json` prints the report as JSON, and the command fails only when a check fails.
 - `php artisan firewatch:clear` removes all records, users and logged failures, or with `--type` one type's records, after a confirmation, and `--drop` rebuilds the store in place. A `--type` without a value is refused.
 - The `rank` tool lists the groups of one record type worst first by a measure (`p95_duration`, `occurrences`, `max_memory`, `queries` and others), over a window and an optional deploy. Percentiles are nearest rank and withheld below a sample floor.
 - `rank` can match a group by a substring of its label, break one group down by deploy with `group`, and continue a cut list with a `cursor`.
