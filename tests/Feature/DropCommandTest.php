@@ -182,6 +182,7 @@ describe('a store in another state', function () {
 
     it('moves a damaged store aside, keeping at most one earlier copy, and creates a new one', function () {
         dropPopulatedStore();
+        $this->endCapture();
         dropCorrupt();
         $damaged = md5_file(dropPath());
         file_put_contents(dropPath().'.corrupt', 'an earlier copy');
@@ -199,6 +200,7 @@ describe('a store in another state', function () {
 
     it('moves aside a store whose header is damaged, and creates a new one', function () {
         dropPopulatedStore();
+        $this->endCapture();
         $handle = fopen(dropPath(), 'r+b');
         fseek($handle, 16);
         fwrite($handle, "\x00\x07");
