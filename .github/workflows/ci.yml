@@ -27,6 +27,7 @@ jobs:
           - php: '8.6'
             laravel: '13.*'
             nightwatch: '~1.30.2'
+            composer-flags: --ignore-platform-req=php+
 
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +42,7 @@ jobs:
         env:
           # Composer 2.9 refuses to resolve releases that have security advisories, and the floor has some.
           COMPOSER_NO_SECURITY_BLOCKING: ${{ matrix.no-security-blocking }}
-        run: composer update --prefer-dist --no-interaction --no-progress --with "laravel/framework:${{ matrix.laravel }}" --with "laravel/nightwatch:${{ matrix.nightwatch }}"
+        run: composer update --prefer-dist --no-interaction --no-progress --with "laravel/framework:${{ matrix.laravel }}" --with "laravel/nightwatch:${{ matrix.nightwatch }}" ${{ matrix.composer-flags }}
 
       - name: Lint
         run: composer lint
@@ -67,7 +68,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: sqlite3, fileinfo
+          extensions: sqlite3, pdo_sqlite, intl, fileinfo
           coverage: none
 
       - name: Install dependencies
