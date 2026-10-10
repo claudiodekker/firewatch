@@ -76,7 +76,8 @@ class Detectors
      */
     public function judge(SQLite3 $connection, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
-        $judgement = $detector->judge($connection, $window, $threshold, $group, $limit);
+        $resolved = $threshold ?? $detector->threshold()?->default ?? 0;
+        $judgement = $detector->judge($connection, $window, $resolved, $group, $limit);
 
         return $judgement->afterRemoval(History::removedThrough(Markers::read($connection), $detector->types()), $window->since());
     }

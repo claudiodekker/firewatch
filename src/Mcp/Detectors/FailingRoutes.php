@@ -47,11 +47,10 @@ class FailingRoutes implements Detector
     /**
      * Judge the requests of the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $status = $threshold ?? $this->threshold()->default;
         $bindings = [
-            'status' => $status,
+            'status' => $threshold,
             'group' => $group ?? '',
         ];
         $where = $window->condition().' AND (:group = \'\' OR group_hash = :group)';

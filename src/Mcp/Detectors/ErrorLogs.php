@@ -42,9 +42,8 @@ class ErrorLogs implements Ungrouped
     /**
      * Judge the message shapes of the logs at error or worse that were written in the window, over the logs of every level.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $occurrences = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_log_capture')];
 
@@ -54,7 +53,7 @@ class ErrorLogs implements Ungrouped
             return Judgement::of($this->name(), $described, examined: 0, total: 0, findings: [], caveats: $caveats);
         }
 
-        $shapes = $this->shapes($connection, $window, $occurrences, $limit);
+        $shapes = $this->shapes($connection, $window, $threshold, $limit);
         $findings = array_map($this->finding(...), $shapes);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: $shapes[0]['total'] ?? 0, findings: $findings, caveats: $caveats);

@@ -60,13 +60,13 @@ class NPlusOne implements Detector
     /**
      * Judge the executions that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $this->refuseQueryGroup($connection, $group);
 
         $meta = Markers::read($connection);
         $bindings = [
-            'runs' => $threshold ?? $this->threshold()->default,
+            'runs' => $threshold,
             'group' => $group ?? '',
             'from' => History::removedThrough($meta, [RecordType::QUERY]),
         ];

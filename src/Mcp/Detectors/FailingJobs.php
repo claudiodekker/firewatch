@@ -42,9 +42,8 @@ class FailingJobs implements Detector
     /**
      * Judge the job attempts that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $attempts = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $bindings = [
             'group' => $group ?? '',
@@ -55,7 +54,7 @@ class FailingJobs implements Detector
         $groups = $this->groups($connection, $window, $bindings);
 
         $examined = array_sum(array_column($groups, 'attempts'));
-        $failing = array_values(array_filter($groups, fn (array $row) => $row['failing_attempts'] >= $attempts));
+        $failing = array_values(array_filter($groups, fn (array $row) => $row['failing_attempts'] >= $threshold));
 
         if ($failing === []) {
             return Judgement::of($this->name(), $described, examined: $examined, total: 0, findings: []);

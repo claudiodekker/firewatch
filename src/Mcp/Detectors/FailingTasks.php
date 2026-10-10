@@ -42,7 +42,7 @@ class FailingTasks implements Detector
     /**
      * Judge the scheduled tasks that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $caveats = [
             __('firewatch::messages.detect_caveat_skipped'),

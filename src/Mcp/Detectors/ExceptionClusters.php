@@ -50,9 +50,8 @@ class ExceptionClusters implements Detector
     /**
      * Judge the exception groups that occurred in the window, over the executions that started in it.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $occurrences = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
 
         $groups = $this->groups($connection, $window, $group);
@@ -62,7 +61,7 @@ class ExceptionClusters implements Detector
         }
 
         $examined = $this->examined($connection, $window);
-        $flagged = array_values(array_filter($groups, fn (array $row) => $row['occurrences'] >= $occurrences));
+        $flagged = array_values(array_filter($groups, fn (array $row) => $row['occurrences'] >= $threshold));
 
         if ($flagged === []) {
             return Judgement::of($this->name(), $described, examined: $examined, total: 0, findings: []);

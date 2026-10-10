@@ -44,15 +44,14 @@ class Memory implements Detector
     /**
      * Judge the executions that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $megabytes = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_memory')];
 
         $groups = $this->groups($connection, $window, [
             'group' => $group ?? '',
-            'bytes' => Stored::bytes($megabytes),
+            'bytes' => Stored::bytes($threshold),
         ]);
 
         $examined = array_sum(array_column($groups, 'executions'));

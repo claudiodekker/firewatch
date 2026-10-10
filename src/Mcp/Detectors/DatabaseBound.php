@@ -69,9 +69,8 @@ class DatabaseBound implements Detector
     /**
      * Judge the requests that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $percent = $threshold ?? $this->threshold()->default;
         $meta = Markers::read($connection);
         $bindings = [
             'group' => $group ?? '',
@@ -92,7 +91,7 @@ class DatabaseBound implements Detector
         $judged = array_sum(array_column($groups, 'requests'));
         $saw = $judged === $population['examined'] ? [] : ['without_duration' => $population['examined'] - $judged];
 
-        $bound = $this->bound($groups, $percent);
+        $bound = $this->bound($groups, $threshold);
         if ($bound === []) {
             return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], saw: $saw, caveats: $caveats);
         }

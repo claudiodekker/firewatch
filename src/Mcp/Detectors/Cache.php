@@ -71,9 +71,8 @@ class Cache implements Detector
     /**
      * Judge the keys of the cache events that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $percent = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_cache_keys')];
 
@@ -85,7 +84,7 @@ class Cache implements Detector
             return Judgement::of($this->name(), $described, examined: 0, total: 0, findings: [], saw: $saw, caveats: $caveats);
         }
 
-        $keys = $this->keys($connection, $window, $percent, $group, $limit);
+        $keys = $this->keys($connection, $window, $threshold, $group, $limit);
         $findings = array_map($this->finding(...), $keys);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: $keys[0]['total'] ?? 0, findings: $findings, saw: $saw, caveats: $caveats);

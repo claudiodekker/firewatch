@@ -31,7 +31,7 @@ interface Detector
     /**
      * Judge the records of the window, worst first, and list at most the limit of the findings.
      *
-     * @param  int|float|null  $threshold  the value asked for, or null for the default
+     * @param  int|float  $threshold  the value the call asked for, else the default of the threshold, and 0 for a detector that takes none
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement;
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement;
 }

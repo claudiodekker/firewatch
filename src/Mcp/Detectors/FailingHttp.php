@@ -51,9 +51,8 @@ class FailingHttp implements Detector
     /**
      * Judge the hosts of the outgoing requests that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $status = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_unanswered')];
 
@@ -63,7 +62,7 @@ class FailingHttp implements Detector
             return Judgement::of($this->name(), $described, examined: 0, total: 0, findings: [], caveats: $caveats);
         }
 
-        $hosts = $this->hosts($connection, $window, $status, $group, $limit);
+        $hosts = $this->hosts($connection, $window, $threshold, $group, $limit);
         $findings = array_map($this->finding(...), $hosts);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: $hosts[0]['total'] ?? 0, findings: $findings, caveats: $caveats);

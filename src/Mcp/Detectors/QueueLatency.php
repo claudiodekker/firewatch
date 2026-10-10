@@ -48,9 +48,8 @@ class QueueLatency implements Detector
     /**
      * Judge the dispatches that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $milliseconds = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $bindings = ['group' => $group ?? ''];
 
@@ -58,7 +57,7 @@ class QueueLatency implements Detector
             ...$bindings,
             'now' => Instant::now(),
             'per_second' => Microseconds::PER_SECOND,
-            'microseconds' => $milliseconds * Microseconds::PER_MILLISECOND,
+            'microseconds' => $threshold * Microseconds::PER_MILLISECOND,
         ]);
 
         $examined = array_sum(array_column($groups, 'jobs'));
