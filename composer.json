@@ -3,6 +3,7 @@
     "description": "Local Laravel Nightwatch telemetry for AI assistants over MCP.",
     "type": "library",
     "keywords": ["laravel", "nightwatch", "mcp", "telemetry"],
+    "license": "MIT",
     "require": {
         "php": "^8.3",
         "ext-sqlite3": "*",
