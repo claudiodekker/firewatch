@@ -284,9 +284,7 @@ class Pruner
      */
     protected function count(): int
     {
-        $count = $this->reader->snapshot(fn (SQLite3 $connection) => $connection->querySingle('SELECT count(*) FROM records'));
-
-        return is_int($count) ? $count : 0;
+        return Cell::integer($this->reader->snapshot(fn (SQLite3 $connection) => $connection->querySingle('SELECT count(*) FROM records')));
     }
 
     /**

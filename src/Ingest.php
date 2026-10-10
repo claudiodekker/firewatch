@@ -164,23 +164,23 @@ class Ingest implements IngestContract
         $this->storing = true;
 
         try {
-            $this->appendBatch->handle($records, $bindings);
-        } catch (Throwable $exception) {
-            $this->failures->record($exception, dropped: count($records));
+            try {
+                $this->appendBatch->handle($records, $bindings);
+            } catch (Throwable $exception) {
+                $this->failures->record($exception, dropped: count($records));
 
-            // A full store fails every batch until it is trimmed, so its pass can't wait for one to succeed.
-            if (FailureKind::of($exception) === FailureKind::FULL) {
-                $this->prune($this->pruner->runNow(...));
+                // A full store fails every batch until it is trimmed, so its pass can't wait for one to succeed.
+                if (FailureKind::of($exception) === FailureKind::FULL) {
+                    $this->prune($this->pruner->runNow(...));
+                }
+
+                return;
             }
 
+            $this->prune($this->pruner->run(...));
+        } finally {
             $this->storing = false;
-
-            return;
         }
-
-        $this->prune($this->pruner->run(...));
-
-        $this->storing = false;
     }
 
     /**
