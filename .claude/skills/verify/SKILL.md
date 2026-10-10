@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, occurrences, execution, trace, detect, actor, compare, trend, query, describe, fingerprint) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
+description: Serve the Firewatch testbench workbench on its own port, store, database and queue, send it real requests and queued jobs, then call the MCP tools (overview, rank, detect, occurrences, execution, trace, actor, compare, trend, query, describe, fingerprint) over a firewatch:server stdio session and run the firewatch:* commands, keeping the JSON-RPC transcripts, command output and a copy of the store as proof. Use to confirm a capture, tool, detector or command change works in a real application, to reproduce a wrong answer on the MCP surface, or before opening a PR that changes what a user runs or an assistant reads.
 ---
 
 # Verify Firewatch in the workbench
@@ -36,7 +36,7 @@ Run it first whenever anything looks off. It records nothing:
 .claude/skills/verify/scripts/app.sh doctor <run>
 # ok   server process 3470 is running
 # ok   port 8300 is served by our php -S (3519)
-# ok   firewatch:server dev-master lists: overview rank occurrences execution trace detect actor compare trend query
+# ok   firewatch:server dev-master lists: overview rank detect occurrences execution trace actor compare trend query
 # ok   the skeleton holds testbench.yaml, so the workbench routes are loaded
 # ok   the store at /…/.verify/runs/<run>/store/firewatch.sqlite holds 71 records
 ```
