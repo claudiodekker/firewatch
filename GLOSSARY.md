@@ -165,7 +165,7 @@ A request Octane serves is prepared by Nightwatch's listener, which starts the c
 _Avoid_: Cold start, warm request
 
 **Log outside an execution**:
-A log written while the application boots, before a request starts, or after it ends. Nightwatch still writes it, under the execution id of its process: in a process that serves one request it is the request's trace id, and the log's stage is `bootstrap` or `end`. A log before the request counts in the request's `logs`; one after it does not. Under Octane, `prepareForRequest` flushes the counters and issues a new trace id, so a log written between two requests carries the previous request's id and is counted in no request.
+A log written while the application boots, before a request starts, or after it ends. Nightwatch still writes it, under the execution id of its process: in a process that serves one request it is the request's trace id, and the log's stage is `bootstrap` or `end`. A log before the request counts in the request's `logs`; one after it does not. Under Octane, a log written between two requests carries the earlier request's trace id but the later request's execution id, because Nightwatch resolves the execution id only when it writes the record, and it is counted in neither request.
 _Avoid_: Orphan log, stray log
 
 **Not measured**:
