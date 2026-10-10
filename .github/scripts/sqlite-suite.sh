@@ -15,11 +15,10 @@ chmod -R a+rwX "$work"
 docker run --rm -v "$work:/app" -w /app -e COMPOSER_NO_INTERACTION=1 "$image" sh -ec '
   trap "chmod -R a+rwX /app" EXIT
   if command -v apk >/dev/null; then
-    apk add --no-cache git unzip shadow icu-dev $PHPIZE_DEPS >/dev/null
+    apk add --no-cache git unzip shadow >/dev/null
   else
-    apt-get update -qq >/dev/null && apt-get install -y -qq git unzip libicu-dev >/dev/null
+    apt-get update -qq >/dev/null && apt-get install -y -qq git unzip >/dev/null
   fi
-  docker-php-ext-install -j"$(nproc)" intl >/dev/null
   useradd -m ci
   su ci -s /bin/sh -c "
     set -e

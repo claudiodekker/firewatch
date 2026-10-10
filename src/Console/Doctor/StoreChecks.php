@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Console\Doctor;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Console\Concerns\FormatsFileSizes;
 use ClaudioDekker\Firewatch\Mcp\Holdings;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -16,7 +17,6 @@ use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Number;
 use SQLite3;
 
 /**
@@ -24,6 +24,8 @@ use SQLite3;
  */
 class StoreChecks
 {
+    use FormatsFileSizes;
+
     /**
      * The hours without a captured record after which a store that holds records is a warning.
      */
@@ -188,8 +190,8 @@ class StoreChecks
             'records' => $this->records($holdings->records),
             'oldest' => $this->moment($holdings->oldest),
             'newest' => $this->moment($holdings->newest),
-            'file' => Number::fileSize($fileBytes, precision: 1),
-            'live' => Number::fileSize($holdings->liveBytes, precision: 1),
+            'file' => $this->fileSize($fileBytes),
+            'live' => $this->fileSize($holdings->liveBytes),
             'prune' => $this->moment($markers->pruneClaimedAt),
             'coverage' => $coverage,
             ...$retention,
