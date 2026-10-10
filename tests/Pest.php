@@ -130,6 +130,14 @@ function runArtisan(array $input): void
     $kernel->terminate($arguments, $status);
 }
 
+/**
+ * Get a path relative to the package with the separators of the platform, as PHP reports a file.
+ */
+function nativePath(string $path): string
+{
+    return str_replace('/', DIRECTORY_SEPARATOR, $path);
+}
+
 function syntheticRecord(RecordType $type): RecordBuilder
 {
     return new RecordBuilder($type);

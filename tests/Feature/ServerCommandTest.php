@@ -15,7 +15,7 @@ it('lists the tools under a header, one line each', function () {
     $result = Artisan::call('firewatch:server', ['--list' => true]);
 
     expect($result)->toBe(0)
-        ->and(Artisan::output())->toBe(implode("\n", [
+        ->and(Artisan::output())->toBe(implode(PHP_EOL, [
             __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 12]),
             '  overview     Entry point: what is wrong now.',
             '  rank         Groups of one type (routes, queries, jobs...) worst first by a measure: what is slow, hea…',
@@ -49,7 +49,7 @@ it('lists a tool\'s first sentence, cut at 90 characters', function (string $des
 
     Artisan::call('firewatch:server', ['--list' => true]);
 
-    expect(explode("\n", Artisan::output())[1])->toBe("  overview     {$expected}");
+    expect(explode(PHP_EOL, Artisan::output())[1])->toBe("  overview     {$expected}");
 })->with([
     '90 characters' => ['description' => str_repeat('a', 89).'. Never listed.', 'expected' => str_repeat('a', 89).'.'],
     '91 characters' => ['description' => str_repeat('a', 90).'. Never listed.', 'expected' => str_repeat('a', 89).'…'],
