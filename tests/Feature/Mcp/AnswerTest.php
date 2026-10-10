@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\HistoryReason;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\UnusableReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -246,17 +247,17 @@ it('states the coverage in the store line', function (Coverage $coverage, string
         ['state' => 'unusable', 'reason' => 'foreign_file', 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => [], 'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => null, 'records' => null]], 'straddling' => null],
     ],
     'an empty store' => [
-        new Coverage(CoverageState::EMPTY, [RecordType::LOG, RecordType::QUERY], new History(1790776000.5, 'created', 3600, 500), records: 0),
+        new Coverage(CoverageState::EMPTY, [RecordType::LOG, RecordType::QUERY], new History(1790776000.5, HistoryReason::CREATED, 3600, 500), records: 0),
         'Store: empty, 0 records; history complete from 2026-09-30 13:46:40.500000 (created); retention 1h, 500 records',
         ['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0, 'types_read' => ['log', 'query'], 'history' => ['from' => 1790776000.5, 'reason' => 'created', 'retention' => ['age_seconds' => 3600, 'records' => 500]], 'straddling' => null],
     ],
     'a store with records' => [
-        new Coverage(CoverageState::OK, [RecordType::REQUEST], new History(1790776000.5, 'pruned-cap', 604800, 100000), oldest: 1790776000.5, newest: 1790776700.0, records: 1234567),
+        new Coverage(CoverageState::OK, [RecordType::REQUEST], new History(1790776000.5, HistoryReason::PRUNED_CAP, 604800, 100000), oldest: 1790776000.5, newest: 1790776700.0, records: 1234567),
         'Store: ok, 2026-09-30 13:46:40.500000 to 2026-09-30 13:58:20.000000, 1,234,567 records; history complete from 2026-09-30 13:46:40.500000 (pruned-cap); retention 7d, 100,000 records',
         ['state' => 'ok', 'reason' => null, 'oldest_at' => 1790776000.5, 'newest_at' => 1790776700.0, 'records' => 1234567, 'types_read' => ['request'], 'history' => ['from' => 1790776000.5, 'reason' => 'pruned-cap', 'retention' => ['age_seconds' => 604800, 'records' => 100000]], 'straddling' => null],
     ],
     'a store kept without limits' => [
-        new Coverage(CoverageState::OK, [], new History(1790776000.5, 'created', null, null), oldest: 1790776000.5, newest: 1790776700.0, records: 3),
+        new Coverage(CoverageState::OK, [], new History(1790776000.5, HistoryReason::CREATED, null, null), oldest: 1790776000.5, newest: 1790776700.0, records: 3),
         'Store: ok, 2026-09-30 13:46:40.500000 to 2026-09-30 13:58:20.000000, 3 records; history complete from 2026-09-30 13:46:40.500000 (created); retention unlimited, unlimited records',
         ['state' => 'ok', 'reason' => null, 'oldest_at' => 1790776000.5, 'newest_at' => 1790776700.0, 'records' => 3, 'types_read' => [], 'history' => ['from' => 1790776000.5, 'reason' => 'created', 'retention' => ['age_seconds' => null, 'records' => null]], 'straddling' => null],
     ],

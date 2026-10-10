@@ -200,6 +200,7 @@ class Markers
         $statement->bindValue(':key', self::PRUNE_CLAIMED_AT);
         $statement->bindValue(':before', $now - $intervalSeconds, SQLITE3_FLOAT);
         $statement->execute();
+        $statement->close();
 
         return $connection->changes() === 1;
     }
@@ -254,6 +255,7 @@ class Markers
         $statement->bindValue(':key', $key);
         $statement->bindValue(':value', $value);
         $statement->execute();
+        $statement->close();
     }
 
     /**
@@ -266,6 +268,7 @@ class Markers
         $statement->bindValue(':key', $key);
         $statement->bindValue(':value', self::format($instant));
         $statement->execute();
+        $statement->close();
 
         return $connection->changes() === 1;
     }

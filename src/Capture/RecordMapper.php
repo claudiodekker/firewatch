@@ -107,7 +107,7 @@ class RecordMapper
             $data['bindings'] = $bindings;
         }
 
-        // The round trip can turn a float into an integer, so the instant comes from the original array.
+        // A serialize_precision below 17 makes the round trip round a float, so the instant comes from the original array.
         $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, durationMicroseconds: $columns['duration']);
 
         if ($type !== null) {

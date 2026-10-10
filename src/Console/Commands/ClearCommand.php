@@ -15,6 +15,7 @@ use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Closure;
 use Illuminate\Console\Command;
+use InvalidArgumentException;
 use SQLite3Exception;
 
 /**
@@ -44,9 +45,11 @@ class ClearCommand extends Command
      */
     public function handle(ClearStore $clear, Configuration $configuration): int
     {
-        $type = $this->type();
+        try {
+            $type = $this->type();
+        } catch (InvalidArgumentException $exception) {
+            $this->error($exception->getMessage());
 
-        if ($type === false) {
             return self::FAILURE;
         }
 
@@ -96,7 +99,7 @@ class ClearCommand extends Command
                 ...$sizes,
             ]));
 
-        if ($result['truncated']) {
+        if ($result['logInUse']) {
             $this->line(__('firewatch::messages.clear.log_in_use'));
         }
 
@@ -122,7 +125,7 @@ class ClearCommand extends Command
                 'after' => $this->fileSize($result['after']),
             ]));
 
-        if ($result['truncated']) {
+        if ($result['logInUse']) {
             $this->line(__('firewatch::messages.clear.log_in_use'));
         }
 
@@ -153,9 +156,11 @@ class ClearCommand extends Command
     }
 
     /**
-     * Read the type to clear: null for none, false after refusing an empty one or one that is not among the twelve record types.
+     * Read the type to clear: null for none.
+     *
+     * @throws InvalidArgumentException when the type is empty or is not among the twelve record types
      */
-    protected function type(): RecordType|false|null
+    protected function type(): ?RecordType
     {
         $option = $this->option('type');
 
@@ -170,12 +175,10 @@ class ClearCommand extends Command
             return $type;
         }
 
-        $this->error(__('firewatch::messages.clear.unknown_type', [
+        throw new InvalidArgumentException(__('firewatch::messages.clear.unknown_type', [
             'type' => is_string($option) ? $option : '',
             'types' => implode(', ', array_map(fn (RecordType $type) => $type->value, RecordType::events())),
         ]));
-
-        return false;
     }
 
     /**

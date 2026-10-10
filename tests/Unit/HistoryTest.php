@@ -9,7 +9,7 @@ it('starts a type\'s history at the latest of the store\'s markers', function (M
     $history = History::of($markers, [RecordType::REQUEST]);
 
     expect($history->from)->toBe($from)
-        ->and($history->reason)->toBe($reason);
+        ->and($history->reason?->value)->toBe($reason);
 })->with([
     'no marker' => [new Markers, null, null],
     'creation' => [new Markers(createdAt: 100.5), 100.5, 'created'],
@@ -32,7 +32,7 @@ it('starts the history of several types at the latest start among them, with tha
     $history = History::of($markers, [RecordType::REQUEST, RecordType::LOG, RecordType::QUERY]);
 
     expect($history->from)->toBe(300.0)
-        ->and($history->reason)->toBe('cleared-type');
+        ->and($history->reason?->value)->toBe('cleared-type');
 });
 
 it('has no start for no type', function () {

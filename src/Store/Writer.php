@@ -341,10 +341,10 @@ class Writer
             throw new StoreFailure(FailureKind::IO, "Firewatch could not open [{$path}].");
         }
 
-        if ($created && ! @chmod($path, static::FILE_MODE)) {
+        if ($created && ! $this->makePrivate($path)) {
             fclose($handle);
 
-            throw new StoreFailure(FailureKind::IO, "Firewatch could not open [{$path}].");
+            throw new StoreFailure(FailureKind::IO, "Firewatch could not restrict the permissions of [{$path}].");
         }
 
         return $handle;
@@ -403,6 +403,14 @@ class Writer
     }
 
     /**
+     * Restrict a file to its owner, and determine if that worked.
+     */
+    protected function makePrivate(string $path): bool
+    {
+        return @chmod($path, static::FILE_MODE);
+    }
+
+    /**
      * Create the private store file.
      */
     protected function createFile(string $path): void
@@ -411,7 +419,7 @@ class Writer
             return;
         }
 
-        if (! @touch($path) || ! @chmod($path, static::FILE_MODE)) {
+        if (! @touch($path) || ! $this->makePrivate($path)) {
             throw new StoreFailure(FailureKind::IO, "Firewatch could not create the store file [{$path}].");
         }
     }

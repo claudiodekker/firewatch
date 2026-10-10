@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
@@ -251,7 +252,7 @@ describe('a store in another state', function () {
     it('says the store is busy after its fixed wait, and rebuilds nothing', function () {
         dropPopulatedStore();
         $this->endCapture();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class)) extends ClearStore
+        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
         {
             protected const BUSY_TIMEOUT_MILLISECONDS = 20;
         });

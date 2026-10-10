@@ -11,18 +11,11 @@ use ClaudioDekker\Firewatch\Store\Markers;
 class History
 {
     /**
-     * The reason of a start that is the creation of the store.
-     */
-    protected const CREATED = 'created';
-
-    /**
      * Create a new history instance.
-     *
-     * @param  string|null  $reason  created, cleared, cleared-type, pruned-age, pruned-cap or pruned-size
      */
     public function __construct(
         public readonly ?float $from,
-        public readonly ?string $reason,
+        public readonly ?HistoryReason $reason,
         public readonly ?int $retentionAge,
         public readonly ?int $retentionRecords,
     ) {
@@ -60,7 +53,7 @@ class History
 
         foreach ($types as $type) {
             foreach (self::starts($meta, $type) as [$from, $reason]) {
-                if ($reason !== self::CREATED && ($latest === null || $from > $latest)) {
+                if ($reason !== HistoryReason::CREATED && ($latest === null || $from > $latest)) {
                     $latest = $from;
                 }
             }
@@ -80,18 +73,18 @@ class History
     /**
      * Get the starts a type's markers give, in the order a tie is settled.
      *
-     * @return list<array{float, string}>
+     * @return list<array{float, HistoryReason}>
      */
     protected static function starts(Markers $meta, RecordType $type): array
     {
         $candidates = [
-            [$meta->clearedAt, 'cleared'],
-            [$meta->clearedAtOf($type), 'cleared-type'],
-            [$meta->prunedThrough, 'pruned-'.$meta->prunedReason?->value],
-            [$meta->createdAt, self::CREATED],
+            [$meta->clearedAt, HistoryReason::CLEARED],
+            [$meta->clearedAtOf($type), HistoryReason::CLEARED_TYPE],
+            [$meta->prunedThrough, $meta->prunedReason === null ? null : HistoryReason::pruned($meta->prunedReason)],
+            [$meta->createdAt, HistoryReason::CREATED],
         ];
 
-        return array_values(array_filter($candidates, fn (array $candidate) => $candidate[0] !== null));
+        return array_values(array_filter($candidates, fn (array $candidate) => $candidate[0] !== null && $candidate[1] !== null));
     }
 
     /**
@@ -103,7 +96,7 @@ class History
     {
         return [
             'from' => $this->from,
-            'reason' => $this->reason,
+            'reason' => $this->reason?->value,
             'retention' => [
                 'age_seconds' => $this->retentionAge,
                 'records' => $this->retentionRecords,
