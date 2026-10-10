@@ -167,7 +167,9 @@ class Writer
                     throw $this->foreign();
                 }
 
-                $this->moveAside($exception);
+                if (! $this->moveAside($exception)) {
+                    throw $this->unmoved(FailureKind::CORRUPT);
+                }
             }
 
             return $this->write($guarded);
@@ -504,7 +506,9 @@ class Writer
      */
     public function replaceDamaged(): void
     {
-        $this->moveAside(new SQLite3Exception('database disk image is malformed', FailureKind::SQLITE_CORRUPT));
+        if (! $this->moveAside(new SQLite3Exception('database disk image is malformed', FailureKind::SQLITE_CORRUPT))) {
+            throw $this->unmoved(FailureKind::BUSY);
+        }
 
         $this->transaction(fn () => null);
     }
@@ -535,27 +539,48 @@ class Writer
     }
 
     /**
-     * Move the damaged store, its write-ahead log and its shared memory aside, and record it.
+     * Move the damaged store, its write-ahead log and its shared memory aside, and record it, or move none of them and get false.
      */
-    protected function moveAside(SQLite3Exception $exception): void
+    protected function moveAside(SQLite3Exception $exception): bool
     {
         if ($this->connection !== null) {
             $this->release($this->connection);
         }
 
         $path = $this->configuration->database;
+        $files = array_filter(['', '-wal', '-shm'], fn (string $suffix) => is_file($path.$suffix));
+        $moved = [];
 
-        foreach (['', '-wal', '-shm'] as $suffix) {
-            if (is_file($path.$suffix)) {
-                @rename($path.$suffix, $path.$suffix.'.corrupt');
-            } else {
-                @unlink($path.$suffix.'.corrupt');
+        foreach ($files as $suffix) {
+            // Windows can't rename a file another process holds open, and a store rebuilt beside a log left in place replays the damage.
+            if (! @rename($path.$suffix, $path.$suffix.'.corrupt')) {
+                foreach ($moved as $back) {
+                    @rename($path.$back.'.corrupt', $path.$back);
+                }
+
+                return false;
             }
+
+            $moved[] = $suffix;
+        }
+
+        foreach (array_diff(['', '-wal', '-shm'], $files) as $suffix) {
+            @unlink($path.$suffix.'.corrupt');
         }
 
         $this->failures->recovered($exception);
 
         $this->rebuildReason = 'corrupt';
+
+        return true;
+    }
+
+    /**
+     * Get the failure for a damaged store that could not be moved aside.
+     */
+    protected function unmoved(FailureKind $kind): StoreFailure
+    {
+        return new StoreFailure($kind, 'The damaged store at ['.$this->configuration->database.'] could not be moved aside.');
     }
 
     /**
