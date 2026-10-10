@@ -185,10 +185,10 @@ it('loses a failure line rather than wait for a lock held elsewhere', function (
     $failures = dirname(app(Configuration::class)->database).'/failures.jsonl';
     $handle = fopen($failures, 'c+');
     flock($handle, LOCK_EX);
-    test()->beforeApplicationDestroyed(fn () => fclose($handle));
 
     Cache::get('dropped');
     Nightwatch::digest();
+    fclose($handle);
 
     expect(file_get_contents($failures))->toBe('');
     Exceptions::assertReportedCount(1);
