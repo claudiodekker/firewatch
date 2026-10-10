@@ -1,6 +1,6 @@
 <?php
 
-const README_MAX_LINES = 150;
+const README_MAX_LINES = 230;
 
 const DOCUMENT_MAX_LINE_LENGTH = 600;
 

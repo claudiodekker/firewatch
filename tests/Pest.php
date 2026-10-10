@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Sleep;
+use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -225,4 +227,14 @@ function windowArgument(string $bound, string $kind = 'unbounded'): string
 function limitArgument(string $tool, int $maximum, int $default): string
 {
     return __('firewatch::messages.limit_argument', ['items' => __("firewatch::messages.limit_items.{$tool}"), 'maximum' => $maximum, 'default' => $default]);
+}
+
+/**
+ * Get what `tools/list` answers, without a session.
+ *
+ * @return array<string, mixed>
+ */
+function toolListing(): array
+{
+    return app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
 }
