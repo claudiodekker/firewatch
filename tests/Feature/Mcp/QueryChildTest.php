@@ -93,10 +93,11 @@ describe('raw values', function () {
         expect($envelope['result']['rows'])->toBe([[PHP_INT_MAX, 'Infinity', '-Infinity', '<blob 3 bytes>', "\u{FFFD}a", null, 1.5]]);
     })->group('process');
 
-    it('returns text that holds a NUL byte cut at it, as the SQLite driver reads it', function () {
+    it('returns text that holds a NUL byte as the SQLite driver reads it', function () {
         $envelope = Envelope::assert(Query::class, ['sql' => "SELECT CAST(x'610062' AS TEXT) AS text"]);
 
-        expect($envelope['result']['rows'])->toBe([['a']]);
+        // PHP 8.6 reads the text whole; earlier releases cut it at the NUL byte.
+        expect($envelope['result']['rows'])->toBe([[PHP_VERSION_ID >= 80600 ? "a\0b" : 'a']]);
     })->group('process');
 });
 
