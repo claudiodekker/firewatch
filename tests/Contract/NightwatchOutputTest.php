@@ -14,14 +14,35 @@ use Workbench\App\Fixtures\WireFixture;
 const OBSERVED_CLOCK_START = 2000000000.0;
 
 /**
+ * Get a record as the wire carries it.
+ *
+ * @param  array<mixed>  $record
+ * @return array<string, mixed>
+ */
+function onTheWire(array $record): array
+{
+    return json_decode(json_encode($record, RecordMapper::JSON_FLAGS), associative: true, flags: JSON_THROW_ON_ERROR);
+}
+
+/**
+ * Get the first record of the producer's type the sensors write.
+ *
  * @param  (Closure(Core<*>): void)|null  $prepare
  * @return array<string, mixed>
  */
 function sensorRecord(Producer $producer, ?Closure $prepare = null): array
 {
-    $record = app(Sensors::class)->recordOf($producer, $prepare);
+    return onTheWire(app(Sensors::class)->recordOf($producer, $prepare));
+}
 
-    return json_decode(json_encode($record, RecordMapper::JSON_FLAGS), associative: true, flags: JSON_THROW_ON_ERROR);
+/**
+ * Get every record the sensors write while the producer runs, in order.
+ *
+ * @return list<array<string, mixed>>
+ */
+function sensorRecords(Producer $producer): array
+{
+    return array_map(onTheWire(...), app(Sensors::class)->record($producer));
 }
 
 /**
@@ -114,4 +135,37 @@ test('Nightwatch writes a fatal error without a trace or an execution id, and an
         ->and($written)->toBe($fixture, 'Run `composer fixtures`: the fatal error fixture is not what the sensors write now.')
         ->and($frames)->toBeArray($message)->not->toBeEmpty($message)
         ->and(array_is_list($frames))->toBeTrue($message);
+});
+
+test('Nightwatch keeps a log written while the application boots and one written after the request, under the request\'s trace', function () {
+    [$booting, $request, $after] = sensorRecords(Producer::LOG_OUTSIDE_EXECUTION);
+
+    expect([$booting['t'], $request['t'], $after['t']])->toBe(['log', 'request', 'log'])
+        ->and($booting['execution_stage'])->toBe('bootstrap')
+        ->and($after['execution_stage'])->toBe('end')
+        ->and($booting['execution_id'])->toBe($request['trace_id'])
+        ->and($after['execution_id'])->toBe($request['trace_id'])
+        ->and($booting['execution_source'])->toBe('request')
+        ->and($request['logs'])->toBe(1);
+});
+
+test('Nightwatch writes a request prepared the way Octane prepares one with a bootstrap of 0, and any other request with a bootstrap above 0', function () {
+    $octane = sensorRecord(Producer::OCTANE_REQUEST);
+    $served = sensorRecord(Producer::REQUEST);
+
+    expect($octane['bootstrap'])->toBe(0)
+        ->and($octane['before_middleware'])->toBeGreaterThan(0)
+        ->and($served['bootstrap'])->toBeGreaterThan(0);
+});
+
+test('Nightwatch gives every unrouted request one group, whatever its path and method, and a routed request another', function () {
+    [$first, $second] = sensorRecords(Producer::UNROUTED_REQUEST);
+    $routed = sensorRecord(Producer::REQUEST);
+
+    expect([$first['method'], $second['method']])->toBe(['GET', 'POST'])
+        ->and([$first['route_path'], $first['route_methods'], $first['route_domain']])->toBe(['', [], ''])
+        ->and([$first['status_code'], $second['status_code']])->toBe([404, 404])
+        ->and($first['_group'])->toBe(hash('xxh128', ',,'))
+        ->and($second['_group'])->toBe($first['_group'])
+        ->and($routed['_group'])->not->toBe($first['_group']);
 });

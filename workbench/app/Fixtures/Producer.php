@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use RuntimeException;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -42,6 +43,9 @@ enum Producer: string
     case OUTGOING_REQUEST = 'outgoing-request';
     case QUEUED_JOB = 'queued-job';
     case USER = 'user';
+    case LOG_OUTSIDE_EXECUTION = 'log.outside-execution';
+    case OCTANE_REQUEST = 'request.octane';
+    case UNROUTED_REQUEST = 'request.unrouted';
 
     /**
      * Get the wire type of the record the producer's fixture holds.
@@ -51,6 +55,8 @@ enum Producer: string
         return match ($this) {
             self::FATAL_ERROR => RecordType::EXCEPTION,
             self::QUERY_LIST => RecordType::QUERY,
+            self::LOG_OUTSIDE_EXECUTION => RecordType::LOG,
+            self::OCTANE_REQUEST, self::UNROUTED_REQUEST => RecordType::REQUEST,
             default => RecordType::from($this->value),
         };
     }
@@ -61,9 +67,17 @@ enum Producer: string
     public function recordsRequests(): bool
     {
         return match ($this) {
-            self::REQUEST, self::USER => true,
+            self::REQUEST, self::USER, self::LOG_OUTSIDE_EXECUTION, self::OCTANE_REQUEST, self::UNROUTED_REQUEST => true,
             default => false,
         };
+    }
+
+    /**
+     * Determine if the producer's application must write a log while it boots.
+     */
+    public function logsWhileBooting(): bool
+    {
+        return $this === self::LOG_OUTSIDE_EXECUTION;
     }
 
     /**
@@ -87,22 +101,56 @@ enum Producer: string
             self::OUTGOING_REQUEST => $this->outgoingRequest(),
             self::QUEUED_JOB => $this->queuedJob(),
             self::USER => $this->signedInRequest(),
+            self::LOG_OUTSIDE_EXECUTION => $this->logsAfterARequest(),
+            self::OCTANE_REQUEST => $this->octaneRequest(),
+            self::UNROUTED_REQUEST => $this->unroutedRequests(),
         };
     }
 
     /**
-     * Serve a request to the application's home route.
+     * Serve a request to the application.
      */
-    protected function request(): void
+    protected function request(string $uri = '/', string $method = 'GET', ?Request $request = null): void
     {
         config()->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
 
         $kernel = app(HttpKernel::class);
-        $request = Request::create('/');
+        $request ??= Request::create($uri, $method);
 
         $response = $kernel->handle($request);
 
         $kernel->terminate($request, $response);
+    }
+
+    /**
+     * Serve a request, then write a log after it has finished.
+     */
+    protected function logsAfterARequest(): void
+    {
+        $this->request();
+
+        Log::channel('nightwatch')->warning('The payment is late.');
+    }
+
+    /**
+     * Serve a request the way Octane's request listener prepares one, so the bootstrap stage never starts.
+     */
+    protected function octaneRequest(): void
+    {
+        $request = Request::create('/');
+
+        app(Core::class)->prepareForRequest($request);
+
+        $this->request(request: $request);
+    }
+
+    /**
+     * Serve requests of two methods to two paths no route answers.
+     */
+    protected function unroutedRequests(): void
+    {
+        $this->request('/missing-page');
+        $this->request('/another-missing-page', 'POST');
     }
 
     /**
