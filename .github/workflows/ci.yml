@@ -12,6 +12,8 @@ jobs:
   tests:
     name: PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, Nightwatch ${{ matrix.nightwatch }}
     runs-on: ubuntu-latest
+    # PHP 8.6 is unreleased and its dependencies cap PHP below it; it warns until it installs without the override.
+    continue-on-error: ${{ matrix.php == '8.6' }}
 
     strategy:
       fail-fast: false
