@@ -267,6 +267,41 @@ describe('a store in another state', function () {
             ->and($result['output'])->toBe(__('firewatch::messages.clear.busy'))
             ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
+
+    it('says the store is busy when its write-ahead log can\'t be moved aside, and moves the damaged store back', function () {
+        dropPopulatedStore();
+        $this->endCapture();
+        $holder = new SQLite3(dropPath());
+        $holder->querySingle('SELECT count(*) FROM records');
+        dropCorrupt();
+        $damaged = md5_file(dropPath());
+        mkdir(dropPath().'-wal.corrupt');
+
+        $result = dropResult();
+        $holder->close();
+
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.busy'))
+            ->and(md5_file(dropPath()))->toBe($damaged)
+            ->and(file_exists(dropPath().'.corrupt'))->toBeFalse();
+    });
+
+    it('says the store is busy while another connection holds the damaged store open, and leaves it as it is', function () {
+        dropPopulatedStore();
+        $this->endCapture();
+        $holder = new SQLite3(dropPath());
+        $holder->querySingle('SELECT count(*) FROM records');
+        dropCorrupt();
+        $damaged = md5_file(dropPath());
+
+        $result = dropResult();
+        $holder->close();
+
+        expect($result['exit'])->toBe(1)
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.busy'))
+            ->and(md5_file(dropPath()))->toBe($damaged)
+            ->and(file_exists(dropPath().'.corrupt'))->toBeFalse();
+    })->skip(PHP_OS_FAMILY !== 'Windows', 'only Windows refuses to rename a file another process holds open');
 });
 
 describe('the confirmation', function () {
