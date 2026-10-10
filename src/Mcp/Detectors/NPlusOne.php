@@ -119,7 +119,10 @@ class NPlusOne implements Detector
      */
     protected function population(SQLite3 $connection, Window $window, Fragment $executions, int|float|null $from): array
     {
-        $bindings = [...$executions->bindings, 'from' => $from];
+        $bindings = [
+            ...$executions->bindings,
+            'from' => $from,
+        ];
 
         $row = Stored::rows($connection, "{$executions->sql} SELECT count(*) FILTER (WHERE captured > 0) AS examined, count(*) FILTER (WHERE captured > 0 AND counted > captured) AS incomplete
             FROM (SELECT counted,
