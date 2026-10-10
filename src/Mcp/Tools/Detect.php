@@ -37,6 +37,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
+use LogicException;
 use SQLite3;
 
 /**
@@ -402,10 +403,7 @@ class Detect extends Tool
         }
 
         if ($shape === null) {
-            $examples = array_map(fn (Detector $detector) => ($threshold = $detector->threshold()) === null ? null : $this->example($detector, $threshold), $this->detectors->all());
-            $example = array_values(array_filter($examples))[0];
-
-            throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $example);
+            throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $this->thresholdedExample());
         }
 
         $threshold = $shape->threshold();
@@ -463,6 +461,22 @@ class Detect extends Tool
         $shown = json_encode($value, JSON_THROW_ON_ERROR);
 
         throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'detect(shape: "'.$this->detectors->names()[0].'", limit: '.self::DEFAULT_LIMIT.')');
+    }
+
+    /**
+     * Get a valid call of the first shape that has a threshold.
+     */
+    protected function thresholdedExample(): string
+    {
+        foreach ($this->detectors->all() as $detector) {
+            $threshold = $detector->threshold();
+
+            if ($threshold !== null) {
+                return $this->example($detector, $threshold);
+            }
+        }
+
+        throw new LogicException('No shipped shape has a threshold.');
     }
 
     /**
