@@ -1,0 +1,17 @@
+{
+    "v": 1,
+    "t": "log",
+    "timestamp": "{timestamp}",
+    "deploy": "{deploy}",
+    "server": "{server}",
+    "trace_id": "{uuid}",
+    "execution_source": "request",
+    "execution_id": "{uuid}",
+    "execution_preview": "GET /",
+    "execution_stage": "before_middleware",
+    "user": "",
+    "level": "warning",
+    "message": "The payment is slow.",
+    "context": "{\"order\":7}",
+    "extra": "{}"
+}
