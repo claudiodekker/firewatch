@@ -67,7 +67,7 @@ class Detectors
     public function count(SQLite3 $connection, Window $window, Deadline $deadline): array
     {
         return array_map(fn (Detector $detector) => $deadline->passed()
-            ? Judgement::notEvaluated($detector->name(), $detector->threshold()?->describe(), Reason::DEADLINE)
+            ? Judgement::notEvaluated($detector->name(), $detector instanceof Thresholded ? $detector->threshold()->describe() : null, Reason::DEADLINE)
             : $this->judge($connection, $detector, $window, threshold: null, group: null, limit: 1), $this->all());
     }
 
@@ -76,8 +76,12 @@ class Detectors
      */
     public function judge(SQLite3 $connection, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
-        $resolved = $threshold ?? $detector->threshold()->default ?? 0;
-        $judgement = $detector->judge($connection, $window, $resolved, $group, $limit);
+        if ($detector instanceof Thresholded) {
+            $resolved = $threshold ?? $detector->threshold()->default;
+            $judgement = $detector->judgeAt($connection, $window, $resolved, $group, $limit);
+        } else {
+            $judgement = $detector->judge($connection, $window, $group, $limit);
+        }
 
         return $judgement->afterRemoval(History::removedThrough(Markers::read($connection), $detector->types()), $window->since());
     }

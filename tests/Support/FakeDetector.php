@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
-use ClaudioDekker\Firewatch\Mcp\Detectors\Threshold;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use Closure;
@@ -24,7 +23,6 @@ class FakeDetector implements Detector
         protected int $examined = 0,
         protected int $total = 0,
         protected ?Closure $during = null,
-        protected ?Threshold $threshold = null,
         protected array $saw = [],
     ) {
         //
@@ -51,11 +49,6 @@ class FakeDetector implements Detector
         return $this->name;
     }
 
-    public function threshold(): ?Threshold
-    {
-        return $this->threshold;
-    }
-
     /**
      * @return list<RecordType>
      */
@@ -64,7 +57,7 @@ class FakeDetector implements Detector
         return [RecordType::REQUEST];
     }
 
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, ?string $group, int $limit): Judgement
     {
         if ($this->during !== null) {
             ($this->during)();
@@ -76,6 +69,6 @@ class FakeDetector implements Detector
             'count' => $this->total,
         ]];
 
-        return Judgement::of($this->name, $this->threshold?->describe($threshold), examined: $this->examined, total: $this->total, findings: $findings, saw: $this->saw);
+        return Judgement::of($this->name, null, examined: $this->examined, total: $this->total, findings: $findings, saw: $this->saw);
     }
 }

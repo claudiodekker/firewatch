@@ -22,14 +22,6 @@ class FailingTasks implements Detector
     }
 
     /**
-     * Get the threshold the detector takes: none.
-     */
-    public function threshold(): ?Threshold
-    {
-        return null;
-    }
-
-    /**
      * Get the record types the detector examines.
      *
      * @return list<RecordType>
@@ -42,7 +34,7 @@ class FailingTasks implements Detector
     /**
      * Judge the scheduled tasks that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, ?string $group, int $limit): Judgement
     {
         $caveats = [
             __('firewatch::messages.detect_caveat_skipped'),

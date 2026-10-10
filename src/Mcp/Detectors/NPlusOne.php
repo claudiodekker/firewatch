@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\ExecutionType;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -14,8 +15,10 @@ use SQLite3;
 /**
  * @internal
  */
-class NPlusOne implements Detector
+class NPlusOne implements Thresholded
 {
+    use JudgesAtItsDefault;
+
     /**
      * The decimals of a share in an answer.
      */
@@ -65,7 +68,7 @@ class NPlusOne implements Detector
     /**
      * Judge the executions that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $this->refuseQueryGroup($connection, $group);
 

@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -11,8 +12,10 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingRoutes implements Detector
+class FailingRoutes implements Thresholded
 {
+    use JudgesAtItsDefault;
+
     /**
      * The percent a share is of its whole.
      */
@@ -52,7 +55,7 @@ class FailingRoutes implements Detector
     /**
      * Judge the requests of the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $selected = Fragment::selecting($window, $group);
         $bindings = [

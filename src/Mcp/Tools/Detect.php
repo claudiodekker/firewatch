@@ -15,6 +15,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Reason;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Threshold;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Thresholded;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Ungrouped;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
@@ -139,7 +140,7 @@ class Detect extends Tool
                 array_map(fn (Detector $detector) => $this->detectors->judge($connection, $detector, $window, $threshold, $group, $limit), $detectors),
             ]);
         } catch (StoreUnusable $unusable) {
-            $judgements = array_map(fn (Detector $detector) => Judgement::notEvaluated($detector->name(), $detector->threshold()?->describe($threshold), Reason::STORE_UNAVAILABLE), $detectors);
+            $judgements = array_map(fn (Detector $detector) => Judgement::notEvaluated($detector->name(), $detector instanceof Thresholded ? $detector->threshold()->describe($threshold) : null, Reason::STORE_UNAVAILABLE), $detectors);
             $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for(null, $types, $window)];
             $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
 
@@ -406,11 +407,11 @@ class Detect extends Tool
             throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $this->thresholdedExample());
         }
 
-        $threshold = $shape->threshold();
-
-        if ($threshold === null) {
+        if (! $shape instanceof Thresholded) {
             throw Refusal::conflicting(argument: 'threshold', with: 'shape: '.$shape->name()->value, accepted: 'a call without `threshold`', example: "detect(shape: \"{$shape->name()->value}\")");
         }
+
+        $threshold = $shape->threshold();
 
         return $threshold->read($value, $this->example($shape, $threshold));
     }
@@ -469,10 +470,8 @@ class Detect extends Tool
     protected function thresholdedExample(): string
     {
         foreach ($this->detectors->all() as $detector) {
-            $threshold = $detector->threshold();
-
-            if ($threshold !== null) {
-                return $this->example($detector, $threshold);
+            if ($detector instanceof Thresholded) {
+                return $this->example($detector, $detector->threshold());
             }
         }
 

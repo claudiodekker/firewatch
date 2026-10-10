@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -10,8 +11,10 @@ use SQLite3;
 /**
  * @internal
  */
-class Cache implements Detector
+class Cache implements Thresholded
 {
+    use JudgesAtItsDefault;
+
     /**
      * The fewest reads of a key whose hit rate is judged, as one miss is a cold fill.
      */
@@ -71,7 +74,7 @@ class Cache implements Detector
     /**
      * Judge the keys of the cache events that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_cache_keys')];

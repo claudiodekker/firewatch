@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\ExecutionType;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -13,8 +14,10 @@ use SQLite3;
 /**
  * @internal
  */
-class Memory implements Detector
+class Memory implements Thresholded
 {
+    use JudgesAtItsDefault;
+
     /**
      * Get the name of the shape the detector judges.
      */
@@ -44,7 +47,7 @@ class Memory implements Detector
     /**
      * Judge the executions that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_memory')];
