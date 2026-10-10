@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
@@ -70,14 +71,17 @@ it('reports no record and no verdict, only that nothing was examined', function 
     }
 
     expect($answers['detect']['result'])->toMatchArray(['verdict' => 'not_evaluated', 'examined' => 0, 'total' => 0, 'findings' => []])
-        ->and($answers['detect']['summary'])->not->toContain('clean')
+        ->and($answers['detect']['summary'])->toContain('not evaluated')
+        ->and(array_column($answers['overview']['blind_spots'], 'id'))->toContain('actor-partial', 'console-requests', 'values-truncated')
         ->and($answers['describe']['summary'])->toBe(__('firewatch::messages.describe_summary_absent'))
         ->and($answers['fingerprint']['result']['held'])->toBe([])
         ->and($answers['fingerprint']['result']['recipe_check'][0]['check'])->toBe('not_evaluated');
 });
 
 it('gives every detector shape the verdict not evaluated, never clean', function () {
-    foreach (['failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'error-logs', 'failing-http', 'cache'] as $shape) {
+    foreach (DetectorName::cases() as $name) {
+        $shape = $name->value;
+
         $answer = Envelope::assert(Detect::class, ['shape' => $shape]);
 
         expect($answer['result']['verdict'])->toBe('not_evaluated', $shape)

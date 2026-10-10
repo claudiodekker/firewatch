@@ -135,7 +135,7 @@ it('states that Octane zeroes the bootstrap, and adds no note while the bootstra
         ->and($stages['notes'])->not->toContain(__('firewatch::messages.rank_stages_bootstrap_zero'));
 });
 
-it('walks from the ranking by p95, through the occurrences at or above it and one execution, to the dominant stage', function () {
+it('walks from the ranking by p95, through the occurrences at or above it and one execution, to the dominant stage of its group', function () {
     slowRouteTraffic([...array_fill(0, 19, '/slow'), '/slow?fail=1', ...array_fill(0, 5, '/quick')]);
 
     $ranked = slowRouteRanked();
@@ -147,12 +147,6 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
         ->and($quick)->toMatchArray(['label' => '/quick', 'failure_pct' => 0, 'p95_ms' => null])
         ->and($quick['withheld']['p95_ms'])->toMatchArray(['reason' => 'sample_too_small', 'have' => 5, 'needed' => 20]);
 
-    $stages = slowRouteStages($ranked)['result'];
-
-    expect($stages['group'])->toBe($slow['group'])
-        ->and($stages['dominant_stage'])->toBe('action')
-        ->and($stages['deploys'][0]['p95_ms'])->toBe($slow['p95_ms']);
-
     $tail = Envelope::assert(Occurrences::class, ['group' => $slow['group'], 'at_or_above' => 'p95']);
     $rows = $tail['result']['rows'];
 
@@ -160,15 +154,22 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
         ->and($tail['result']['baseline']['threshold_ms'])->toBeGreaterThanOrEqual(30.0)
         ->and(count($rows))->toBeGreaterThanOrEqual(1)->toBeLessThan(20)
         ->and(array_column($rows, 'group'))->each->toBe($slow['group'])
-        ->and(array_column($rows, 'duration_ms'))->each->toBeGreaterThanOrEqual($tail['result']['baseline']['threshold_ms'])
-        ->and(array_column($rows, 'execution_id'))->toContain($stages['slowest_execution_id']);
+        ->and(array_column($rows, 'duration_ms'))->each->toBeGreaterThanOrEqual(round($tail['result']['baseline']['threshold_ms'], 2))
+        ->and(array_column($rows, 'execution_id'))->toContain($slow['slowest_execution_id']);
 
     $opened = Envelope::assert(Execution::class, ['execution_id' => $rows[0]['execution_id']]);
     $header = $opened['result']['header'];
     $slowestStage = array_search(max($header['stages']), $header['stages'], true);
 
     expect($header)->toMatchArray(['type' => 'request', 'label' => '/slow', 'group' => $slow['group']])
-        ->and($slowestStage)->toBe($stages['dominant_stage'])
+        ->and($slowestStage)->toBe('action')
         ->and($header['stages']['action'])->toBeGreaterThanOrEqual(30.0)
         ->and(array_column($opened['next'], 'tool'))->toBe(['rank', 'trace']);
+
+    $stages = Envelope::follow($opened['next'][0])['result'];
+
+    expect($stages['group'])->toBe($slow['group'])
+        ->and($stages['dominant_stage'])->toBe($slowestStage)
+        ->and($stages['slowest_execution_id'])->toBe($slow['slowest_execution_id'])
+        ->and($stages['deploys'][0]['p95_ms'])->toBe($slow['p95_ms']);
 });
