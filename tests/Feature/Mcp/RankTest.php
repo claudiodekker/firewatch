@@ -665,7 +665,7 @@ it('breaks one group down by deploy, in the order the deploys were first seen', 
         ->and($rows[2])->toMatchArray(['occurrences' => 3, 'p50_ms' => 20.0, 'p95_ms' => null, 'max_ms' => 30.0, 'first_at' => RANK_AT + 100])
         ->and($rows[2]['withheld'])->toBe(['p95_ms' => ['reason' => 'sample_too_small', 'have' => 3, 'needed' => 20]])
         ->and($envelope['result'])->toMatchArray(['type' => 'request', 'group' => rankHash('a'), 'label' => '/', 'records' => 24])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 3, ['group' => rankHash('a'), 'count' => 3]));
+        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 3, ['group' => rankHash('a'), 'count' => 3]).__('firewatch::messages.rank_breakdown_dominant', ['stage' => 'bootstrap', 'share' => 14.3, 'avg' => 7.0]));
 });
 
 it('shows the most recent deploys the limit allows, still in the order they were first seen', function () {
@@ -841,7 +841,7 @@ it('breaks a request group into the mean of each stage in the order they run, it
         'slowest_execution_id' => 'e3',
         'slowest_duration_ms' => 44.0,
     ])
-        ->and($envelope['result']['stages'])->toBe([
+        ->and($envelope['result']['stages'])->toEqual([
             ['stage' => 'bootstrap', 'mean_ms' => 6.33, 'share_pct' => 15.1, 'slowest_ms' => 7.0],
             ['stage' => 'before_middleware', 'mean_ms' => 1.33, 'share_pct' => 3.2, 'slowest_ms' => 1.0],
             ['stage' => 'action', 'mean_ms' => 31.33, 'share_pct' => 74.6, 'slowest_ms' => 33.0],

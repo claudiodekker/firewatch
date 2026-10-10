@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Stage;
 use LogicException;
 use SQLite3;
 
@@ -101,9 +102,9 @@ class Ranking
     }
 
     /**
-     * Read the deploys one group was recorded under in the window, in the order they were first seen, and only the most recent ones when there are more than the limit.
+     * Read the deploys one group was recorded under in the window, in the order they were first seen, and only the most recent ones when there are more than the limit, with the group's stage view.
      *
-     * @return array{rows: list<array<string, mixed>>, matched: int, records: int, label: string}
+     * @return array{rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}
      */
     public function breakdown(SQLite3 $connection, int $limit): array
     {
@@ -121,12 +122,39 @@ class Ranking
 
         usort($shown, fn (array $a, array $b) => ($a['wfirst'] <=> $b['wfirst']) ?: strcmp($a['hash'], $b['hash']));
 
+        $stages = $this->stages($connection, $records);
+
         return [
             'rows' => array_map($this->deployRow(...), $shown),
             'matched' => count($deploys),
             'records' => $records,
             'label' => $label,
+            'stages' => $stages,
         ];
+    }
+
+    /**
+     * Read the stage view of the records, over the executions that have every stage of their type, or null for a type that records no stages.
+     */
+    protected function stages(SQLite3 $connection, int $records): ?StageView
+    {
+        $stages = Stage::of($this->type);
+
+        if ($stages === []) {
+            return null;
+        }
+
+        $names = array_map(fn (Stage $stage) => $stage->value, $stages);
+        $complete = implode(' AND ', array_map(fn (string $name) => "{$name} IS NOT NULL", $names));
+        $sumColumns = implode(', ', array_map(fn (string $name) => "sum({$name}) AS {$name}", $names));
+
+        $totals = $this->query($connection, "SELECT count(*) AS executions, {$sumColumns} FROM base WHERE {$complete}")[0];
+        $slowest = $this->query($connection, 'SELECT execution_id, d, '.implode(', ', $names)." FROM base WHERE {$complete} AND d IS NOT NULL ORDER BY d DESC, id DESC LIMIT 1")[0] ?? null;
+
+        $executions = $totals['executions'];
+        $sums = array_map(fn (string $name) => $totals[$name] ?? 0, array_combine($names, $names));
+
+        return new StageView($stages, $executions, $records - $executions, $sums, $slowest);
     }
 
     /**
@@ -649,6 +677,10 @@ class Ranking
 
             if ($this->hasMethod()) {
                 $columns[] = 'method';
+            }
+
+            foreach (Stage::of($this->type) as $stage) {
+                $columns[] = Stored::number($stage->value)." AS {$stage->value}";
             }
 
             if ($this->type->isExecution()) {

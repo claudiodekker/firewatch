@@ -477,6 +477,12 @@ return [
 
     'rank_breakdown_summary' => 'Broke group :group down into :count deploy, in the order it was first seen.|Broke group :group down into :count deploys, in the order they were first seen.',
 
+    'rank_breakdown_dominant' => ' Its dominant stage is :stage, :share% of a :avg ms average.',
+
+    'rank_stages_excluded' => ':count execution with a missing stage value is left out of the stages.|:count executions with a missing stage value are left out of the stages.',
+
+    'rank_stages_bootstrap_zero' => 'The mean bootstrap of this group is 0 ms, as under Octane, so its stage shares compare only with executions served the same way.',
+
     'rank_job_group' => 'Group :group is held by job-attempt and queued-job; showing job-attempt. Pass type: queued-job for the dispatches.',
 
     'rank_next_group' => 'Break the worst group down by deploy to see whether it changed.',
