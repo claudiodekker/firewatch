@@ -2,7 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Executions;
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
 use SQLite3;
 
@@ -170,7 +170,7 @@ class Attribution
      */
     protected static function linkOf(string $execution): string
     {
-        $withUser = self::parameters(array_filter(Executions::TYPES, fn (RecordType $type) => ! in_array($type, self::WITHOUT_USER, true)));
+        $withUser = self::parameters(array_filter(ExecutionType::records(), fn (RecordType $type) => ! in_array($type, self::WITHOUT_USER, true)));
         $withoutUser = self::parameters(self::WITHOUT_USER);
         $sources = implode(', ', array_map(fn (RecordType $type) => ':'.self::parameter($type).'_source', self::WITHOUT_USER));
 
@@ -194,7 +194,7 @@ class Attribution
     protected static function linked(Window $window): string
     {
         $link = self::linkOf('e');
-        $executions = self::parameters(Executions::TYPES);
+        $executions = self::parameters(ExecutionType::records());
 
         return "WITH linked AS (
             SELECT e.id, e.type, e.execution_id, e.started_at, e.group_hash, {$link} AS link
@@ -231,8 +231,8 @@ class Attribution
     protected static function recordsByLink(SQLite3 $connection, Window $window, array $bindings): array
     {
         $types = self::parameters(RecordType::events());
-        $executions = self::parameters(Executions::TYPES);
-        $children = self::parameters(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, Executions::TYPES, true)));
+        $executions = self::parameters(ExecutionType::records());
+        $children = self::parameters(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, ExecutionType::records(), true)));
         $inheriting = "type IN ({$children}) AND NULLIF(user_id, '') IS NULL AND execution_id IS NOT NULL";
         $ownLink = self::linkOf('r');
         $executionLink = self::linkOf('x');
@@ -275,7 +275,7 @@ class Attribution
     {
         $labels = implode(' ', array_map(
             fn (RecordType $type) => 'WHEN :'.self::parameter($type).' THEN (SELECT '.Ranking::labelField($type)." FROM {$type->view()} v WHERE v.id = linked.id)",
-            Executions::TYPES,
+            ExecutionType::records(),
         ));
 
         $links = implode(', ', array_map(fn (AttributionLink $link) => ":{$link->value}", AttributionLink::links()));

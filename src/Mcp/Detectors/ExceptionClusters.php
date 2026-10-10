@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -43,7 +44,7 @@ class ExceptionClusters implements Detector
      */
     public function types(): array
     {
-        return [RecordType::EXCEPTION, ...Executions::TYPES];
+        return [RecordType::EXCEPTION, ...ExecutionType::records()];
     }
 
     /**

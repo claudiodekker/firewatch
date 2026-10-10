@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 
@@ -21,13 +22,6 @@ enum Measure: string
     case MAX_MEMORY = 'max_memory';
     case LAST_SEEN = 'last_seen';
     case QUERIES = 'queries';
-
-    /**
-     * The four execution types.
-     *
-     * @var list<RecordType>
-     */
-    protected const EXECUTIONS = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
 
     /**
      * The noise floor of a memory measure in bytes, because the runtime reports peak memory in steps of 2 MiB.
@@ -103,7 +97,7 @@ enum Measure: string
     {
         return match ($this) {
             self::OCCURRENCES, self::LAST_SEEN => true,
-            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY, self::QUERIES => in_array($type, self::EXECUTIONS, true),
+            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY, self::QUERIES => in_array($type, ExecutionType::records(), true),
             default => $type !== RecordType::EXCEPTION,
         };
     }

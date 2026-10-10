@@ -62,13 +62,6 @@ class Ranking
     public const MEGABYTE = 1048576;
 
     /**
-     * The four execution types.
-     *
-     * @var list<RecordType>
-     */
-    protected const EXECUTIONS = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
-
-    /**
      * Create a new ranking instance.
      */
     public function __construct(
@@ -652,7 +645,7 @@ class Ranking
      */
     public static function isExecution(RecordType $type): bool
     {
-        return in_array($type, self::EXECUTIONS, true);
+        return in_array($type, ExecutionType::records(), true);
     }
 
     /**

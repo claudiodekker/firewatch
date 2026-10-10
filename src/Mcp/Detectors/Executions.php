@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -11,13 +12,6 @@ use ClaudioDekker\Firewatch\RecordType;
  */
 class Executions
 {
-    /**
-     * The four execution types.
-     *
-     * @var list<RecordType>
-     */
-    public const TYPES = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
-
     /**
      * Get the SQL of the executions that started in the window.
      */
@@ -33,7 +27,7 @@ class Executions
             self::labelField($type),
             $type->view(),
             $selected,
-        ), self::TYPES);
+        ), ExecutionType::records());
 
         return 'WITH executions AS ('.implode(' UNION ALL ', $branches).')';
     }
@@ -47,7 +41,7 @@ class Executions
             'SELECT id, execution_id, started_at, %s AS label FROM %s',
             self::labelField($type),
             $type->view(),
-        ), self::TYPES);
+        ), ExecutionType::records());
 
         return 'WITH labels AS ('.implode(' UNION ALL ', $branches).')';
     }

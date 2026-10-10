@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -53,7 +54,7 @@ class NPlusOne implements Detector
      */
     public function types(): array
     {
-        return [RecordType::QUERY, ...Executions::TYPES];
+        return [RecordType::QUERY, ...ExecutionType::records()];
     }
 
     /**

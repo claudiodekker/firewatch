@@ -2,7 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Executions;
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
 use SQLite3;
 
@@ -266,7 +266,7 @@ class FixedSections
     {
         $types = [];
 
-        foreach (Executions::TYPES as $position => $type) {
+        foreach (ExecutionType::records() as $position => $type) {
             $types["type{$position}"] = $type->value;
         }
 

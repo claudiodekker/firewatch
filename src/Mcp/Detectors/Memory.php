@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -37,7 +38,7 @@ class Memory implements Detector
      */
     public function types(): array
     {
-        return Executions::TYPES;
+        return ExecutionType::records();
     }
 
     /**
