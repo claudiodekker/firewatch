@@ -172,6 +172,24 @@ describe('after history was removed', function () {
 
         expect($before['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0])
             ->and($before['result']['saw']['attempts_without_dispatch'])->toBe(2)
+            ->and(Envelope::assert(Detect::class, ['shape' => 'queue-latency'])['result']['reason'])->toBe('outside_coverage')
             ->and($after['result']['reason'])->toBe('prerequisite_missing');
+    });
+
+    it('still blames the dispatcher when only attempts were removed', function () {
+        ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->inExecution('a-1')->with(['job_id' => 'a', 'attempt' => 1, 'timestamp' => HRM_AT])]);
+        hrmClear(['--type' => 'job-attempt']);
+        ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->inExecution('b-1')->with(['job_id' => 'b', 'attempt' => 1, 'timestamp' => HRM_REMOVED_AT + 60])]);
+
+        expect(Envelope::assert(Detect::class, ['shape' => 'queue-latency'])['result']['reason'])->toBe('prerequisite_missing');
+    });
+
+    it('changes every shape that reads a type several shapes share', function () {
+        ingest([syntheticRecord(RecordType::REQUEST)->inExecution('r-1')->with(['timestamp' => HRM_AT]), syntheticRecord(RecordType::QUERY)->inExecution('r-1')->with(['timestamp' => HRM_AT])]);
+        hrmClear(['--type' => 'query']);
+
+        $reasons = hrmReasons(hrmJudgements());
+
+        expect(array_keys(array_filter($reasons, fn (?string $reason) => $reason === 'outside_coverage')))->toBe(['n-plus-one', 'database-bound']);
     });
 });

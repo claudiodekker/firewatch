@@ -67,9 +67,7 @@ class Judgement
      */
     public function afterRemoval(?float $removedThrough, ?float $since): self
     {
-        $unevaluated = $this->verdict === Verdict::NOT_EVALUATED && in_array($this->reason, [Reason::NO_RECORDS, Reason::PREREQUISITE_MISSING], true);
-
-        if (! $unevaluated || $removedThrough === null || ($since !== null && $since >= $removedThrough)) {
+        if ($this->reason !== Reason::NO_RECORDS || $removedThrough === null || ($since !== null && $since >= $removedThrough)) {
             return $this;
         }
 

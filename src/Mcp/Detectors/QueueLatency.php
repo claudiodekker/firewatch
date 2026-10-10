@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Lineage;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
@@ -9,6 +10,7 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
 
@@ -76,7 +78,10 @@ class QueueLatency implements Detector
         ];
 
         if ($examined + $inline === 0 && $orphans > 0 && ! $this->hasDispatches($connection, $window)) {
-            return Judgement::notEvaluated($this->name(), $described, Reason::PREREQUISITE_MISSING, saw: $saw, caveats: $caveats);
+            $removed = History::removedThrough(Markers::read($connection), [RecordType::QUEUED_JOB]);
+            $reason = $removed !== null && ($window->since() === null || $window->since() < $removed) ? Reason::OUTSIDE_COVERAGE : Reason::PREREQUISITE_MISSING;
+
+            return Judgement::notEvaluated($this->name(), $described, $reason, saw: $saw, caveats: $caveats);
         }
 
         $late = array_values(array_filter($groups, fn (array $row) => $row['qualifying'] > 0));

@@ -75,9 +75,7 @@ class NPlusOne implements Detector
         $described = $this->threshold()->describe($threshold);
 
         if ($population['examined'] === 0) {
-            $reason = $population['eligible'] === 0 && $population['excluded'] > 0 ? Reason::OUTSIDE_COVERAGE : Reason::NO_RECORDS;
-
-            return Judgement::notEvaluated($this->name(), $described, $reason, caveats: $caveats);
+            return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS, caveats: $caveats);
         }
 
         $ranked = $this->ranked($executions);
@@ -121,19 +119,16 @@ class NPlusOne implements Detector
      * Get what the window holds.
      *
      * @param  array<string, int|float|string|null>  $bindings
-     * @return array{eligible: int, excluded: int, examined: int, incomplete: int}
+     * @return array{examined: int, incomplete: int}
      */
     protected function population(SQLite3 $connection, Window $window, string $executions, array $bindings): array
     {
-        $row = Stored::rows($connection, "{$executions} SELECT count(*) FILTER (WHERE eligible) AS eligible, count(*) FILTER (WHERE NOT eligible) AS excluded,
-            count(*) FILTER (WHERE captured > 0) AS examined, count(*) FILTER (WHERE captured > 0 AND counted > captured) AS incomplete
-            FROM (SELECT counted, (:from IS NULL OR started_at >= :from) AS eligible,
+        $row = Stored::rows($connection, "{$executions} SELECT count(*) FILTER (WHERE captured > 0) AS examined, count(*) FILTER (WHERE captured > 0 AND counted > captured) AS incomplete
+            FROM (SELECT counted,
                 CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = executions.execution_id) ELSE 0 END AS captured
                 FROM executions)", $bindings, $window)[0];
 
         return [
-            'eligible' => $row['eligible'],
-            'excluded' => $row['excluded'],
             'examined' => $row['examined'],
             'incomplete' => $row['incomplete'],
         ];

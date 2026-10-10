@@ -84,9 +84,7 @@ class DatabaseBound implements Detector
         $population = $this->population($connection, $window, $selected, $bindings);
 
         if ($population['examined'] === 0) {
-            $reason = $population['excluded'] > 0 ? Reason::OUTSIDE_COVERAGE : Reason::NO_RECORDS;
-
-            return Judgement::notEvaluated($this->name(), $described, $reason);
+            return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS);
         }
 
         $caveats = $this->caveats($population['incomplete']);
@@ -114,13 +112,13 @@ class DatabaseBound implements Detector
      * Get what the window holds.
      *
      * @param  array<string, int|float|string|null>  $bindings
-     * @return array{examined: int, excluded: int, incomplete: int}
+     * @return array{examined: int, incomplete: int}
      */
     protected function population(SQLite3 $connection, Window $window, string $selected, array $bindings): array
     {
         $counted = Stored::number('queries');
 
-        $row = Stored::rows($connection, "SELECT count(*) FILTER (WHERE eligible) AS examined, count(*) FILTER (WHERE NOT eligible) AS excluded,
+        $row = Stored::rows($connection, "SELECT count(*) FILTER (WHERE eligible) AS examined,
             count(*) FILTER (WHERE eligible AND counted > captured) AS incomplete
             FROM (SELECT counted, (:from IS NULL OR started_at >= :from) AS eligible,
                 CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = requests.execution_id) ELSE 0 END AS captured
@@ -128,7 +126,6 @@ class DatabaseBound implements Detector
 
         return [
             'examined' => $row['examined'],
-            'excluded' => $row['excluded'],
             'incomplete' => $row['incomplete'],
         ];
     }
