@@ -21,6 +21,7 @@ use ClaudioDekker\Firewatch\Mcp\RankedSnapshot;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
+use ClaudioDekker\Firewatch\Mcp\StageView;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\UnrankedSnapshot;
@@ -317,7 +318,7 @@ class Rank extends Tool
      * @param  list<array<string, mixed>>  $blindSpots
      * @param  list<string>  $filters
      * @param  list<RecordType>  $held
-     * @param  array{rows: list<array<string, mixed>>, matched: int, records: int, label: string}  $breakdown
+     * @param  array{rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}  $breakdown
      */
     protected function breakdown(Request $request, float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, array $filters, int $inWindow, RecordType $type, string $group, array $held, int $limit, array $breakdown): Answer
     {
@@ -335,29 +336,34 @@ class Rank extends Tool
             'reason' => TruncationReason::LIMIT->value,
             'how' => __('firewatch::messages.rank_truncated_how'),
         ]] : [];
+        $stages = $breakdown['stages'];
         $summary = trans_choice('firewatch::messages.rank_breakdown_summary', $breakdown['matched'], [
             'group' => $group,
             'count' => $breakdown['matched'],
         ]);
-        $notes = $shared ? [__('firewatch::messages.rank_job_group', ['group' => $group])] : [];
+        $stageSummary = $stages?->summary() ?? '';
+        $jobNotes = $shared ? [__('firewatch::messages.rank_job_group', ['group' => $group])] : [];
+        $stageNotes = $stages?->notes() ?? [];
+        $stageFields = $stages?->fields() ?? StageView::none();
 
         return new Answer(
             tool: $this->name(),
             now: $epoch,
             timezone: $timezone,
             window: $window,
-            summary: $summary,
+            summary: $summary.$stageSummary,
             empty: null,
             result: [
                 'type' => $type->value,
                 'group' => $group,
                 'label' => $breakdown['label'],
                 'records' => $breakdown['records'],
+                ...$stageFields,
                 'deploys' => $breakdown['rows'],
             ],
             coverage: $coverage,
             blindSpots: $blindSpots,
-            notes: $notes,
+            notes: [...$jobNotes, ...$stageNotes],
             truncated: $truncated,
         );
     }

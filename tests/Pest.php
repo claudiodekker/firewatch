@@ -106,6 +106,19 @@ function setArgv(array $argv): void
     });
 }
 
+/**
+ * Take at least the given milliseconds of monotonic time, as a slow route or call does.
+ */
+function takeAtLeast(int $milliseconds): void
+{
+    $until = hrtime(true) + $milliseconds * 1_000_000;
+
+    // usleep can return early on Windows, so a lower bound on the measured duration needs the clock checked.
+    while (hrtime(true) < $until) {
+        usleep(1_000);
+    }
+}
+
 function forceRequests(): void
 {
     setEnvironmentVariable(name: 'NIGHTWATCH_FORCE_REQUEST', value: '1');

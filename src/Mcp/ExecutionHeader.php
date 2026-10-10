@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Stage;
 
 /**
  * @internal
@@ -33,20 +34,6 @@ class ExecutionHeader
             'deploy' => Stored::blank($row['deploy']),
             'server' => Stored::blank($row['server']),
         ];
-    }
-
-    /**
-     * Get the stage names of the types that record them, in the order they run.
-     *
-     * @return list<string>
-     */
-    protected static function stageNames(RecordType $type): array
-    {
-        return match ($type) {
-            RecordType::REQUEST => ['bootstrap', 'before_middleware', 'action', 'render', 'after_middleware', 'sending', 'terminating'],
-            RecordType::COMMAND => ['bootstrap', 'action', 'terminating'],
-            default => [],
-        };
     }
 
     /**
@@ -85,12 +72,18 @@ class ExecutionHeader
      */
     protected static function stages(RecordType $type, array $row): ?array
     {
-        $names = self::stageNames($type);
+        $stages = Stage::of($type);
 
-        if ($names === []) {
+        if ($stages === []) {
             return null;
         }
 
-        return array_combine($names, array_map(fn (string $name) => Stored::milliseconds($row[$name] ?? null), $names));
+        $milliseconds = [];
+
+        foreach ($stages as $stage) {
+            $milliseconds[$stage->value] = Stored::milliseconds($row[$stage->value] ?? null);
+        }
+
+        return $milliseconds;
     }
 }

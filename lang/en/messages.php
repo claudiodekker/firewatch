@@ -36,7 +36,7 @@ return [
 
     'tools' => [
         'overview' => 'Entry point: what is wrong now. In order: the error rate (5xx and 4xx shares of requests), the slowest groups by total time (10, at most 3 per type), counts of all twelve types, the user directory (whole store), signed-in actors and executions without one, then the verdict of every problem shape at its default threshold, within five seconds. Nothing is wrong only when every shape ran and is clean; one that did not run says so. Windowed. Empty is not clean.',
-        'rank' => 'Groups of one type (routes, queries, jobs...) worst first by a measure: what is slow, heavy or frequent? Pass `type`, or `group` for one row per deploy, to see whether it changed. Percentiles are null with `withheld` when too few records support them; when no group has enough, the order falls back to the maximum, with a note. Rows carry first and last seen, deploys, the slowest execution and failure_pct. Windowed. Empty is not clean.',
+        'rank' => 'Groups of one type (routes, queries, jobs...) worst first by a measure: what is slow, heavy or frequent? Pass `type`, or `group` for one row per deploy, to see whether it changed; for a request or command group it adds the mean and share of each stage and the dominant stage. Percentiles are null with `withheld` when too few records support them; when no group has enough, the order falls back to the maximum, with a note. Rows carry first and last seen, deploys, the slowest execution and failure_pct. Windowed. Empty is not clean.',
         'execution' => 'One request, command, job attempt or scheduled task in full: outcome, stages, headers and payload as captured, counted-versus-captured accounting, up to five exceptions with source lines, and the child timeline. Only finished work is recorded. Every attempt of a job: `occurrences` with `job_id`. Not windowed.',
         'occurrences' => 'Individual records, newest first by default, for at least one selector: `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. A filter that does not fit the type is refused. Rows carry group, name, file:line, user and `detail`; a query group lists its call sites. Windowed. Empty is not clean.',
         'trace' => 'One trace\'s executions in start order and each queued job\'s lineage: dispatch, attempts, wait_ms, outcome (processed, failed, retrying, pending) or no_dispatch, no_attempts. Lineage joins on job id, across traces. A job on an inline connection (sync, deferred, background, null) records no dispatch; a dispatch on one shows no attempts. Give `trace_id` or `job_id`. Not windowed. Children and exceptions: `execution`.',
@@ -469,7 +469,7 @@ return [
 
     'rank_untimed' => ':count record without duration is counted in occurrences and left out of the duration statistics.|:count records without duration are counted in occurrences and left out of the duration statistics.',
 
-    'rank_group_argument' => 'A group id (32 hex): one row per deploy, first seen first. Excludes matching, deploy and cursor; by queries is refused.',
+    'rank_group_argument' => 'A group id (32 hex): one row per deploy, first seen first, plus stage means for a request or command. Excludes matching, deploy and cursor; by queries is refused.',
 
     'rank_matching_argument' => 'A case-insensitive substring of the group label, 1 to 200 characters. Excludes group.',
 
@@ -477,9 +477,15 @@ return [
 
     'rank_breakdown_summary' => 'Broke group :group down into :count deploy, in the order it was first seen.|Broke group :group down into :count deploys, in the order they were first seen.',
 
+    'rank_breakdown_dominant' => ' Its dominant stage is :stage, :share% of a :avg ms average.',
+
+    'rank_stages_excluded' => ':count execution with a missing stage value is left out, so the stage figures and the slowest execution cover only the :complete executions with every stage.|:count executions with a missing stage value are left out, so the stage figures and the slowest execution cover only the :complete executions with every stage.',
+
+    'rank_stages_bootstrap_zero' => 'The mean bootstrap of this group is 0 ms, as under Octane, so its stage shares compare only with executions served the same way.',
+
     'rank_job_group' => 'Group :group is held by job-attempt and queued-job; showing job-attempt. Pass type: queued-job for the dispatches.',
 
-    'rank_next_group' => 'Break the worst group down by deploy to see whether it changed.',
+    'rank_next_group' => 'Show the worst group per deploy with its stage means, to see whether it changed and where its time goes.',
 
     'rank_no_deploy' => 'no deploy identity',
 

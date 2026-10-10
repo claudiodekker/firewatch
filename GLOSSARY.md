@@ -478,8 +478,12 @@ The valued bucket with the highest value of a trend's measure, the earliest on a
 _Avoid_: Maximum, spike
 
 **Dominant stage**:
-The stage of an execution group with the highest mean duration.
+The stage with the highest mean in a group's stage view, the earlier stage on a tie; none when the stages took no time.
 _Avoid_: Bottleneck, slowest phase
+
+**Stage view**:
+The mean of each stage over the executions of a request or command group in the window that have every stage, with each stage's share of their sum, the dominant stage and the stages of the slowest such execution. `rank` with `group` carries it beside the per-deploy rows, because that answer already describes one group, while `occurrences` lists records.
+_Avoid_: Stage breakdown, waterfall
 
 **Slow filter**:
 The restriction of a group's records to those at or above the baseline of the selection (the group's own p50 or p95 when one group is selected), applied only when that baseline is above its floor.

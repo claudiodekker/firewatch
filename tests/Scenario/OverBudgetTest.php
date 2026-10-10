@@ -39,7 +39,7 @@ function overBudgetTraffic(): void
         config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
 
         Route::get('/slow', function () {
-            usleep(30_000);
+            takeAtLeast(30);
 
             return 'ok';
         });
