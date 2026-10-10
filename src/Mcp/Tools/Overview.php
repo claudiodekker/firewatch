@@ -121,7 +121,7 @@ class Overview extends Tool
 
             $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
 
-            return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $blindSpots = [...$structural, ...$this->conditions->for($facts, $types, $window)];
@@ -131,7 +131,7 @@ class Overview extends Tool
             $empty = Emptiness::storeEmpty($this->configuration->database);
             $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
 
-            return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
@@ -139,11 +139,11 @@ class Overview extends Tool
         if ($sections->records === 0) {
             $empty = Emptiness::windowEmpty($total);
 
-            return Answer::empty(tool: 'overview', now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
         }
 
         return new Answer(
-            tool: 'overview',
+            tool: $this->name(),
             now: $epoch,
             timezone: $timezone,
             window: $window,
