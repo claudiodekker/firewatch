@@ -1,8 +1,6 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
-use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
-use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Log;
@@ -122,13 +120,9 @@ it('opens what a finding points at, and lists the lines it counted', function ()
     expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'execution'])
         ->and($envelope['next'][1]['arguments'])->toBe(['type' => 'log', 'level' => 'error', 'matching' => 'was declined by gateway']);
 
-    foreach ($envelope['next'] as $call) {
-        $tool = ['execution' => Execution::class, 'occurrences' => Occurrences::class][$call['tool']];
+    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
 
-        expect(Envelope::assert($tool, $call['arguments'])['empty'])->toBeNull();
-    }
-
-    $lines = Envelope::assert(Occurrences::class, $envelope['next'][1]['arguments'])['result']['rows'];
+    $lines = Envelope::follow($envelope['next'][1])['result']['rows'];
 
     expect($lines)->toHaveCount(3);
 });

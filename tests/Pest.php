@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use ClaudioDekker\Firewatch\Tests\TestCase;
@@ -27,6 +28,10 @@ pest()->extend(TestCase::class)
         Exceptions::fake();
     })
     ->in('Scenario', 'Feature', 'Contract');
+
+pest()->beforeEach(fn () => Envelope::followNext(true))
+    ->afterEach(fn () => Envelope::followNext(false))
+    ->in('Scenario');
 
 pest()->group('scenario')->in('Scenario');
 pest()->group('feature')->in('Feature');

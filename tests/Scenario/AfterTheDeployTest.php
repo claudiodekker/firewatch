@@ -155,19 +155,6 @@ function afterTheDeployRollup(int $groups, array $counts): array
     ];
 }
 
-/**
- * Run a call an answer offers and get what it answers.
- *
- * @param  array{tool: string, arguments: array<string, mixed>, why: string}  $call
- * @return array<string, mixed>
- */
-function afterTheDeployFollow(array $call): array
-{
-    $tool = ['occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']];
-
-    return Envelope::assert($tool, $call['arguments']);
-}
-
 it('moves a count between two deploys only past both the 10% band and the noise floor, finds what the same question by time split finds, and every call it offers runs', function () {
     $created = afterTheDeployServeAll();
     $groups = afterTheDeployGroups();
@@ -250,7 +237,7 @@ it('moves a count between two deploys only past both the 10% band and the noise 
         // Each request ends on the real clock, after every start the test sets, so all of v1 straddles the split.
         ->and($bySplit['coverage']['straddling'])->toBe(52);
 
-    [$before, $after, $breakdown] = array_map(afterTheDeployFollow(...), $pair['next']);
+    [$before, $after, $breakdown] = array_map(Envelope::follow(...), $pair['next']);
 
     expect([$before['empty'], $after['empty'], $breakdown['empty']])->toBe([null, null, null])
         ->and([$before['window'], $after['window'], $breakdown['window']])->each->toMatchArray($window)
