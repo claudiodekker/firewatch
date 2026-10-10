@@ -161,7 +161,10 @@ describe('mode', function () {
 
         expect(doctorCheck('mode'))->toMatchArray([
             'status' => 'warn',
-            'message' => __('firewatch::messages.doctor.mode.disabled', ['environment' => 'testing']),
+            'message' => __('firewatch::messages.doctor.mode.disabled', [
+                'environment' => 'testing',
+                'environments' => 'local, testing',
+            ]),
             'fix' => __('firewatch::messages.doctor.mode.disabled_fix'),
         ]);
     });
@@ -709,7 +712,11 @@ describe('store-activity', function () {
 
         expect(doctorCheck('store-activity'))->toMatchArray([
             'status' => 'info',
-            'message' => __('firewatch::messages.doctor.store-activity.empty', ['age' => '36500d', 'limit' => '100,000']),
+            'message' => __('firewatch::messages.doctor.store-activity.empty', [
+                'age' => '36500d',
+                'limit' => '100,000',
+                'busy_timeout' => 300,
+            ]),
         ]);
     });
 
@@ -728,6 +735,7 @@ describe('store-activity', function () {
         expect($check['status'])->toBe('ok')
             ->and($check['message'])->toStartWith(trans_choice('firewatch::messages.doctor.store-activity.records', 1, ['count' => 1]).' from ')
             ->and($check['message'])->toContain('retention 36500d or 100,000 records')
+            ->and($check['message'])->toMatch('/ to \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC, /')
             ->and($check['fix'])->toBeNull();
     });
 
@@ -748,6 +756,20 @@ describe('store-activity', function () {
         'just under a day' => [23, 'ok'],
         'past a day' => [25, 'warn'],
     ]);
+
+    it('states the busy timeout in effect', function () {
+        doctorConfigure(['busy_timeout' => 750]);
+        doctorCapture();
+
+        expect(doctorCheck('store-activity')['message'])->toContain('busy timeout 750 ms');
+    });
+
+    it('keeps the retention facts on a quiet store', function () {
+        doctorCapture();
+        $this->travelTo(now()->addHours(25));
+
+        expect(doctorCheck('store-activity')['message'])->toContain('retention 36500d or 100,000 records')->toContain('busy timeout 300 ms');
+    });
 
     it('says what to do about a quiet store', function () {
         doctorCapture();

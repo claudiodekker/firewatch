@@ -235,7 +235,7 @@ return [
             'ok' => 'environment :environment is on the allowlist (:environments) and Firewatch is enabled; a request or job here runs :mode',
             'production' => 'the allowlist (:environments) names :production, so Firewatch captures there when it is installed',
             'production_fix' => 'remove production and prod from FIREWATCH_ENVIRONMENTS and install Firewatch with `composer install --no-dev` there',
-            'disabled' => 'FIREWATCH_ENABLED is false in :environment, so nothing is captured',
+            'disabled' => 'FIREWATCH_ENABLED is false in :environment (allowlist :environments), so nothing is captured',
             'disabled_fix' => 'set FIREWATCH_ENABLED=true, then restart queue workers and the assistant session',
         ],
 
@@ -329,10 +329,10 @@ return [
         ],
 
         'store-activity' => [
-            'ok' => ':records from :oldest to :newest, :file on disk and :live live; retention :age or :limit records; last prune :prune:coverage',
-            'quiet' => ':records, the newest at :newest; nothing was captured in the last 24 hours',
+            'ok' => ':records from :oldest to :newest, :file on disk and :live live; retention :age or :limit records; busy timeout :busy_timeout ms; last prune :prune:coverage',
+            'quiet' => 'nothing was captured in the last 24 hours; :records from :oldest to :newest, :file on disk and :live live; retention :age or :limit records; busy timeout :busy_timeout ms; last prune :prune:coverage',
             'quiet_fix' => 'exercise the application in an allowed environment, and see mode',
-            'empty' => 'the store holds no records; retention :age or :limit records',
+            'empty' => 'the store holds no records; retention :age or :limit records; busy timeout :busy_timeout ms',
             'records' => '{1} :count record|[2,*] :count records',
             'never' => 'never',
             'coverage' => '; :type complete from :from (:reason)',

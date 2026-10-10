@@ -182,6 +182,7 @@ class StoreChecks
         $retention = [
             'age' => $this->configuration->retentionAge,
             'limit' => number_format($this->configuration->retentionRecords),
+            'busy_timeout' => $this->configuration->busyTimeoutMilliseconds,
         ];
 
         if ($holdings->records === 0) {
@@ -385,7 +386,7 @@ class StoreChecks
     }
 
     /**
-     * Get an instant as local time, or "never" for none or for the zero a store that never pruned holds.
+     * Get an instant as local time with its zone, or "never" for none or for the zero a store that never pruned holds.
      */
     protected function moment(?float $epoch): string
     {
@@ -393,6 +394,6 @@ class StoreChecks
             return __('firewatch::messages.doctor.store-activity.never');
         }
 
-        return Carbon::createFromTimestamp($epoch, date_default_timezone_get())->toDateTimeString();
+        return Carbon::createFromTimestamp($epoch, date_default_timezone_get())->format('Y-m-d H:i:s T');
     }
 }

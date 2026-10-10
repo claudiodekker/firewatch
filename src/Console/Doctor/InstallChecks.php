@@ -79,7 +79,10 @@ class InstallChecks
 
         if (! $this->configuration->enabled) {
             return CheckResult::warn(
-                __('firewatch::messages.doctor.mode.disabled', ['environment' => $environment]),
+                __('firewatch::messages.doctor.mode.disabled', [
+                    'environment' => $environment,
+                    'environments' => $environments,
+                ]),
                 __('firewatch::messages.doctor.mode.disabled_fix'),
             );
         }
