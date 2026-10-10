@@ -15,7 +15,6 @@ use Illuminate\JsonSchema\Types\StringType;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
-use Laravel\Mcp\Server\Transport\FakeTransporter;
 use SQLite3;
 use SQLite3Result;
 use SQLite3Stmt;
@@ -115,7 +114,7 @@ trait AnswersInEnvelope
      */
     protected function knownArguments(): array
     {
-        return app()->make(FirewatchServer::class, ['transport' => new FakeTransporter])->arguments();
+        return FirewatchServer::arguments();
     }
 
     /**

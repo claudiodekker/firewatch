@@ -15,6 +15,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trend;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Name;
 
@@ -40,7 +41,7 @@ class FirewatchServer extends Server
      *
      * @var list<class-string<Server\Tool>>
      */
-    protected array $tools = [
+    public const TOOLS = [
         Overview::class,
         Rank::class,
         Detect::class,
@@ -54,6 +55,13 @@ class FirewatchServer extends Server
         Describe::class,
         Fingerprint::class,
     ];
+
+    /**
+     * The tools the server lists.
+     *
+     * @var list<class-string<Server\Tool>>
+     */
+    protected array $tools = self::TOOLS;
 
     /**
      * The tool fields the listing shows.
@@ -86,15 +94,14 @@ class FirewatchServer extends Server
      *
      * @return list<string>
      */
-    public function arguments(): array
+    public static function arguments(): array
     {
         $arguments = [];
 
-        foreach ($this->listing()['tools'] as $tool) {
-            array_push($arguments, ...array_keys($tool['inputSchema']['properties'] ?? []));
+        foreach (self::TOOLS as $tool) {
+            array_push($arguments, ...array_keys(app($tool)->schema(new JsonSchemaTypeFactory)));
         }
 
-        /** @var list<string> */
         return array_values(array_unique($arguments));
     }
 
