@@ -52,7 +52,7 @@ describe('the static reasons', function () {
         'the sqlite3 extension is not loaded' => [fn () => new Availability(sqliteVersion: fn () => null), 'sqlite3_missing'],
         'PHP_BINARY does not exist' => [fn () => new Availability(phpBinary: sys_get_temp_dir().'/firewatch-missing-php-'.bin2hex(random_bytes(4))), 'php_binary'],
         'PHP_BINARY is a directory' => [fn () => new Availability(phpBinary: sys_get_temp_dir()), 'php_binary'],
-        'SQLite is 3.37.2' => [fn () => new Availability(sqliteVersion: fn () => '3.37.2'), 'sqlite_too_old'],
+        'SQLite is 3.40.1' => [fn () => new Availability(sqliteVersion: fn () => '3.40.1'), 'sqlite_too_old'],
     ])->group('process');
 
     it('names the first reason in check order when two facts fail', function (Closure $availability, string $reason) {
@@ -73,8 +73,8 @@ describe('the static reasons', function () {
         expect((fn () => $this->content())->call($response)[0])->toBe(qaUnavailable('sqlite3_missing'));
     });
 
-    it('runs at exactly SQLite 3.38.0', function () {
-        app()->instance(Availability::class, new Availability(sqliteVersion: fn () => '3.38.0'));
+    it('runs at exactly SQLite 3.41.0', function () {
+        app()->instance(Availability::class, new Availability(sqliteVersion: fn () => '3.41.0'));
 
         expect(Envelope::assert(Query::class, ['sql' => 'SELECT 1 AS n'])['result']['rows'])->toBe([[1]]);
     })->group('process');

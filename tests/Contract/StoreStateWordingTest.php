@@ -27,8 +27,8 @@ test('each store state has its pinned wording', function (string $key, array $re
     ],
     'a SQLite below the floor' => [
         'store_unusable.sqlite_too_old',
-        ['path' => '/srv/app/storage/firewatch/firewatch.sqlite', 'version' => '3.37.2', 'minimum' => '3.38.0'],
-        'SQLite 3.37.2 is older than the 3.38.0 Firewatch needs, so nothing is captured and the store at /srv/app/storage/firewatch/firewatch.sqlite can not be read.',
+        ['path' => '/srv/app/storage/firewatch/firewatch.sqlite', 'version' => '3.40.1', 'minimum' => '3.41.0'],
+        'SQLite 3.40.1 is older than the 3.41.0 Firewatch needs, so nothing is captured and the store at /srv/app/storage/firewatch/firewatch.sqlite can not be read.',
     ],
     'corrupt' => [
         'store_unusable.unreadable',

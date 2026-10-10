@@ -216,7 +216,7 @@ it('answers that SQLite is too old to read the store', function () {
 
     $envelope = Envelope::assert(Overview::class);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => '3.37.2', 'minimum' => '3.38.0'])])
+    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => '3.37.2', 'minimum' => '3.41.0'])])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'sqlite_too_old']);
 });
 
