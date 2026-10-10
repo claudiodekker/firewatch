@@ -19,12 +19,12 @@ class Writer
     /**
      * The mode of the store's directory.
      */
-    protected const DIRECTORY_MODE = 0700;
+    public const DIRECTORY_MODE = 0700;
 
     /**
      * The mode of the store file.
      */
-    protected const FILE_MODE = 0600;
+    public const FILE_MODE = 0600;
 
     /**
      * The contents of the directory's VCS ignore file.

@@ -108,9 +108,11 @@ Capture never slows down or breaks your application. A batch that can't be writt
 | `firewatch:server` | Runs the MCP server over stdio. `--list` prints its tools. |
 | `firewatch:clear` | Removes every record, the users and `failures.jsonl`, or with `--type=<type>` only that type's records, after a confirmation. `--force` skips the confirmation. |
 | `firewatch:clear --drop` | Rebuilds the store from scratch, including its diagnostics. Use it when the store is damaged or from another version. |
-| `firewatch:doctor` | Not implemented yet. It checks nothing and exits with a failure. |
+| `firewatch:doctor` | Checks the installation, the configuration and the store without changing anything, and prints a line for each check with a fix for every warning or failure. `--json` prints the report as JSON. It exits with a failure only when a check fails. |
 
 ## Troubleshooting
+
+**Something is wrong and you don't know what.** Run `php artisan firewatch:doctor`. It names the check and the fix.
 
 **The assistant can't connect.** Something printed to stdout before Firewatch loaded, from `bootstrap/app.php`, a config file or an earlier package provider. Run `php artisan firewatch:server` by hand to find it, and end with Ctrl-D.
 

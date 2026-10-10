@@ -211,7 +211,181 @@ return [
         'sqlite' => 'SQLite :version is older than the :minimum Firewatch needs; nothing was changed.',
     ],
 
-    'doctor_not_implemented' => 'The doctor is not implemented yet: it checked nothing.',
+    /*
+    |--------------------------------------------------------------------------
+    | Doctor Command
+    |--------------------------------------------------------------------------
+    |
+    | What `firewatch:doctor` prints for each check. A key is the
+    | check id, then the case it reports, and a warning or a
+    | failure has a second key with `_fix` for its fix line.
+    |
+    */
+
+    'doctor' => [
+        'threw_fix' => 'This is a Firewatch bug: report it with the output of `php artisan firewatch:doctor --json`.',
+
+        'none' => 'none',
+
+        'on' => 'on',
+
+        'off' => 'off',
+
+        'mode' => [
+            'ok' => 'environment :environment is on the allowlist (:environments) and Firewatch is enabled; a request or job here runs :mode',
+            'production' => 'the allowlist (:environments) names :production, so Firewatch captures there when it is installed',
+            'production_fix' => 'remove production and prod from FIREWATCH_ENVIRONMENTS and install Firewatch with `composer install --no-dev` there',
+            'disabled' => 'FIREWATCH_ENABLED is false in :environment (allowlist :environments), so nothing is captured',
+            'disabled_fix' => 'set FIREWATCH_ENABLED=true, then restart queue workers and the assistant session',
+        ],
+
+        'php' => [
+            'ok' => 'PHP :version at :binary',
+            'too_old' => 'PHP :version at :binary is older than the :minimum Firewatch needs',
+            'too_old_fix' => 'run the application on PHP :minimum or newer',
+        ],
+
+        'sqlite' => [
+            'ok' => 'SQLite :version through ext-sqlite3',
+            'missing' => 'ext-sqlite3 is not loaded, so nothing is captured',
+            'missing_fix' => 'enable the sqlite3 extension for :binary',
+            'too_old' => 'SQLite :version is older than the :minimum Firewatch needs, so nothing is captured',
+            'too_old_fix' => 'link PHP against SQLite :minimum or newer',
+            'wal_reset' => 'SQLite :version is in the write-ahead log reset range; the risk is low and the write lock that avoids it is active',
+            'wal_reset_fix' => 'upgrade SQLite to a release outside the range when convenient',
+        ],
+
+        'nightwatch' => [
+            'ok' => 'Nightwatch :version, on the verified :line line',
+            'unverified' => 'Nightwatch :version is newer than the verified :line line, so captured shapes may drift',
+            'unverified_fix' => 'pin laravel/nightwatch to :line.* or upgrade Firewatch, and watch store-drift',
+            'api' => 'Nightwatch :version lacks IngestingEvents or its records property, so Firewatch can\'t guard its ingest',
+            'api_fix' => 'install laravel/nightwatch :line.*',
+        ],
+
+        'nightwatch-order' => [
+            'ok' => 'Firewatch registers before Nightwatch and no other listener sees what Nightwatch ingests',
+            'registered_first' => 'Nightwatch\'s provider registered before Firewatch\'s, so Nightwatch runs with its own defaults',
+            'registered_first_fix' => 'run `composer dump-autoload` or `php artisan package:discover`',
+            'listeners' => '{1} :count other listener can see or veto what Nightwatch ingests|[2,*] :count other listeners can see or veto what Nightwatch ingests',
+            'listeners_fix' => 'remove the application\'s own IngestingEvents listeners while Firewatch is installed',
+        ],
+
+        'config' => [
+            'ok' => 'the configuration is valid',
+            'issue_fix' => 'edit :key in config/firewatch.php or its environment variable',
+        ],
+
+        'budgets' => [
+            'ok' => '{0} no budgets configured|{1} :count budget entry|[2,*] :count budget entries',
+            'issue_fix' => 'edit :key in the budgets list of config/firewatch.php',
+            'shadowed' => 'budgets[:number] can never govern, because an earlier entry of the same type with no matcher does',
+        ],
+
+        'store-path' => [
+            'ok' => 'store at :path',
+            'refused' => ':issue; the store is at :path',
+            'refused_fix' => 'set FIREWATCH_DATABASE (or database in config/firewatch.php) to a path outside public/',
+        ],
+
+        'capture-posture' => [
+            'posture' => 'payload fields redacted: :fields; headers redacted: :headers; request payloads :payload; logs :logs',
+            'nightwatch_defaults' => 'Nightwatch\'s defaults are in effect, because Firewatch\'s capture settings were not applied',
+        ],
+
+        'store-permissions' => [
+            'ok' => 'directory 0700, file 0600',
+            'absent' => 'no store directory yet',
+            'windows' => 'not applicable on Windows',
+            'looser' => 'directory :directory_mode and file :file_mode are looser than 0700 and 0600',
+            'looser_fix' => 'run `chmod 700 :directory` and `chmod 600 :path`',
+        ],
+
+        'store-gitignore' => [
+            'ok' => ':directory has its own .gitignore',
+            'absent' => 'no store directory yet',
+            'missing' => ':directory has no .gitignore, so the store can be committed',
+            'missing_fix' => 'create :directory/.gitignore containing *',
+        ],
+
+        'store-identity' => [
+            'ok' => 'Firewatch store at :path, schema :version',
+            'absent' => 'no store yet at :path; the first captured request or job creates it',
+            'foreign' => ':path is not a Firewatch store, so Firewatch never touches it and captures nothing',
+            'foreign_fix' => 'set FIREWATCH_DATABASE to another path, or move the file away',
+            'older' => 'the store is schema :found and this release writes :expected; the next captured batch rebuilds it',
+            'older_fix' => 'exercise the application, or run `php artisan firewatch:clear --drop` to rebuild it now',
+            'newer' => 'the store is schema :found from a newer Firewatch and this release reads :expected; capture drops its batches',
+            'newer_fix' => 'upgrade Firewatch, or run `php artisan firewatch:clear --drop` to discard the store',
+            'damaged' => 'a Firewatch store whose schema can\'t be read; see store-integrity',
+        ],
+
+        'store-integrity' => [
+            'ok' => 'quick_check found no problem',
+            'problems' => 'quick_check found :problems, the first being: :first',
+            'problem_count' => '{1} :count problem|[2,*] :count problems',
+            'damaged' => 'the store file is damaged',
+            'damaged_fix' => 'run `php artisan firewatch:clear --drop`, or let the next captured batch move it aside',
+        ],
+
+        'store-activity' => [
+            'ok' => ':records from :oldest to :newest, :file on disk and :live live; retention :age or :limit records; busy timeout :busy_timeout ms; last prune :prune:coverage',
+            'quiet' => 'nothing was captured in the last 24 hours; :records from :oldest to :newest, :file on disk and :live live; retention :age or :limit records; busy timeout :busy_timeout ms; last prune :prune:coverage',
+            'quiet_fix' => 'exercise the application in an allowed environment, and see mode',
+            'empty' => 'the store holds no records; retention :age or :limit records; busy timeout :busy_timeout ms',
+            'records' => '{1} :count record|[2,*] :count records',
+            'never' => 'never',
+            'coverage' => '; :type complete from :from (:reason)',
+        ],
+
+        'store-losses' => [
+            'ok' => 'no dropped batches',
+            'dropped' => ':batches dropped, holding :records in all; the newest at :at (:kind): :message',
+            'batches' => '{1} :count batch|[2,*] :count batches',
+            'busy_fix' => 'raise FIREWATCH_BUSY_TIMEOUT above :milliseconds ms, or close what holds the store',
+            'full_fix' => 'free disk space or lower FIREWATCH_RETENTION_RECORDS',
+            'other_fix' => 'act on the message, then run `php artisan firewatch:clear` to empty the log',
+        ],
+
+        'store-drift' => [
+            'ok' => 'no drift',
+            'found' => 'drift seen: :rows',
+            'store' => 'store',
+            'found_fix' => 'pin laravel/nightwatch to :line.* or upgrade Firewatch',
+        ],
+
+        'server' => [
+            'ok' => 'the server (:version) boots and lists :count tools, with instructions',
+            'tools' => 'the server lists no tools, or a tool without a name or a description',
+            'instructions' => 'the server has no instructions',
+            'fix' => 'run `composer install` and `php artisan optimize:clear`, then `php artisan firewatch:server --list`',
+        ],
+
+        'sql-access' => [
+            'ok' => 'the SQL tool can run; its child started on a read-only connection',
+            'unavailable' => 'the SQL tool is unavailable (:reason); every other tool works',
+            'proc_open_missing_fix' => 'remove proc_open from disable_functions for :binary',
+            'sqlite3_missing_fix' => 'enable the sqlite3 extension for :binary',
+            'php_binary_fix' => 'run the server with a PHP binary that is an executable file',
+            'sqlite_too_old_fix' => 'link PHP against SQLite :minimum or newer',
+            'spawn_failed_fix' => 'run `:binary -r "echo 1;"` to see why a PHP process can\'t start',
+            'authorizer_fix' => 'link PHP against a SQLite built with the authorizer',
+            'heap_limit_fix' => 'link PHP against a SQLite that accepts a soft heap limit',
+        ],
+
+        'client' => [
+            'launch' => 'launch command: :command (run from the project root)',
+        ],
+
+        'store' => [
+            'absent' => 'no store yet',
+            'busy' => 'the store stayed busy, so it was not checked',
+            'busy_fix' => 'run the doctor again',
+            'unavailable' => 'not checked, because SQLite is below the floor (see sqlite)',
+            'see_identity' => 'not checked; see store-identity',
+            'see_integrity' => 'not checked; see store-integrity',
+        ],
+    ],
 
     'blind_spot' => 'Blind spot (:id): :message',
 
