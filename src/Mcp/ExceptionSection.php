@@ -136,6 +136,9 @@ class ExceptionSection
             return false;
         }
 
+        // Nightwatch writes a file with the separator of the platform it ran on.
+        $file = str_replace('\\', '/', $file);
+
         return ! str_starts_with($file, 'vendor/') && ! str_contains($file, '/vendor/');
     }
 
