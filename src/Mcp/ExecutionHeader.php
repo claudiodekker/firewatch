@@ -72,12 +72,18 @@ class ExecutionHeader
      */
     protected static function stages(RecordType $type, array $row): ?array
     {
-        $names = array_map(fn (Stage $stage) => $stage->value, Stage::of($type));
+        $stages = Stage::of($type);
 
-        if ($names === []) {
+        if ($stages === []) {
             return null;
         }
 
-        return array_combine($names, array_map(fn (string $name) => Stored::milliseconds($row[$name] ?? null), $names));
+        $milliseconds = [];
+
+        foreach ($stages as $stage) {
+            $milliseconds[$stage->value] = Stored::milliseconds($row[$stage->value] ?? null);
+        }
+
+        return $milliseconds;
     }
 }
