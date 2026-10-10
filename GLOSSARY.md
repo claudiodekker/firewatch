@@ -157,15 +157,15 @@ The human-readable name of a group: a fixed display field per record type, read 
 _Avoid_: Group name, title
 
 **Unrouted request**:
-A request no route answers; Nightwatch writes empty route fields for it and one group hash for every path and method, so they all rank as one "(no route matched)" row. Pinned by a contract test.
+A request no route answers; Nightwatch writes empty route fields for it and one group hash for every path and method, so they all rank as one "(no route matched)" row.
 _Avoid_: 404 group, unmatched route
 
 **Octane bootstrap**:
-A request Octane serves is prepared by Nightwatch's listener, which starts the clock at `before_middleware`, so Nightwatch writes its `bootstrap` as 0; a request served by the HTTP kernel has a `bootstrap` above 0. Pinned by a contract test.
+A request Octane serves is prepared by Nightwatch's listener, which starts the clock at `before_middleware`, so Nightwatch writes its `bootstrap` as 0; a request served by the HTTP kernel has a `bootstrap` above 0.
 _Avoid_: Cold start, warm request
 
 **Log outside an execution**:
-A log written before a request starts or after it ends. Nightwatch still writes it, joined to the execution of its process: before a request it carries the request's trace id as `execution_id` and counts in the request's `logs`; after the request it carries the same id at stage `end` and is not counted. Pinned by a contract test.
+A log written while the application boots, before a request starts, or after it ends. Nightwatch still writes it, under the execution id of its process: in a process that serves one request it is the request's trace id, and the log's stage is `bootstrap` or `end`. A log before the request counts in the request's `logs`; one after it does not. Under Octane, `prepareForRequest` flushes the counters and issues a new trace id, so a log written between two requests carries the previous request's id and is counted in no request.
 _Avoid_: Orphan log, stray log
 
 **Not measured**:
