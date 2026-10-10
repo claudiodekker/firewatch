@@ -27,7 +27,6 @@ use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -403,8 +402,8 @@ class Detect extends Tool
         }
 
         if ($shape === null) {
-            $thresholded = Arr::first($this->detectors->all(), fn (Detector $detector) => $detector->threshold() !== null);
-            $example = $this->example($thresholded, $thresholded->threshold());
+            $examples = array_map(fn (Detector $detector) => ($threshold = $detector->threshold()) === null ? null : $this->example($detector, $threshold), $this->detectors->all());
+            $example = array_values(array_filter($examples))[0];
 
             throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $example);
         }
