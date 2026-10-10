@@ -62,6 +62,16 @@ enum Measure: string
     }
 
     /**
+     * Get the measures the breakdown of one group of a type is ranked by, which has no query counter.
+     *
+     * @return list<self>
+     */
+    public static function forBreakdown(RecordType $type): array
+    {
+        return array_values(array_filter(self::for($type), fn (self $measure) => $measure !== self::QUERIES));
+    }
+
+    /**
      * Get the measures a type is compared by, in the order they are listed.
      *
      * @return list<self>
