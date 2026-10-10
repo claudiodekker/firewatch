@@ -876,7 +876,7 @@ it('leaves an execution with a missing stage out of the stages and counts it in 
 
     expect($envelope['result'])->toMatchArray(['records' => 3, 'stage_executions' => 2, 'stage_avg_ms' => 15.0])
         ->and($action)->toMatchArray(['mean_ms' => 15.0, 'share_pct' => 100.0])
-        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1]));
+        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1, 'complete' => 2]));
 });
 
 it('answers every stage field but the count null when no execution has all its stages', function () {
@@ -892,7 +892,7 @@ it('answers every stage field but the count null when no execution has all its s
         'slowest_duration_ms' => null,
         'stages' => null,
     ])
-        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1]));
+        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1, 'complete' => 0]));
 });
 
 it('answers no stages for a type that records none', function (RecordType $type) {
@@ -926,6 +926,39 @@ it('says shares compare only between executions served the same way when the mea
     'bootstrap 0' => [0, true],
     'bootstrap 1 ms' => [1, false],
 ]);
+
+it('says nothing of Octane for a command whose mean bootstrap is 0, since Octane serves only requests', function () {
+    ingest([rankStaged(RecordType::COMMAND, 'a', ['action' => 5], ['name' => 'inspire'])]);
+
+    $notes = Envelope::assert(Rank::class, ['group' => rankHash('a')])['notes'];
+
+    expect($notes)->not->toContain(__('firewatch::messages.rank_stages_bootstrap_zero'));
+});
+
+it('reads the stages of every deploy in the window, also those past the limit of deploy rows', function () {
+    ingest([
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 10], ['deploy' => 'v1', 'timestamp' => RANK_AT]),
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 20], ['deploy' => 'v2', 'timestamp' => RANK_AT + 10]),
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 30], ['deploy' => 'v3', 'timestamp' => RANK_AT + 20]),
+    ]);
+
+    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a'), 'limit' => 1]);
+    $action = collect($envelope['result']['stages'])->firstWhere('stage', 'action');
+
+    expect($envelope['result']['deploys'])->toHaveCount(1)
+        ->and($envelope['result']['stage_executions'])->toBe(3)
+        ->and($action['mean_ms'])->toEqual(20.0);
+});
+
+it('counts an execution with every stage but no duration in the means, and never takes it as the slowest', function () {
+    ingest([rankStaged(RecordType::REQUEST, 'a', ['action' => 50], ['duration' => null])->inExecution('untimed')]);
+
+    $result = Envelope::assert(Rank::class, ['group' => rankHash('a')])['result'];
+    $action = collect($result['stages'])->firstWhere('stage', 'action');
+
+    expect($result)->toMatchArray(['stage_executions' => 1, 'stage_avg_ms' => 50.0, 'slowest_execution_id' => null, 'slowest_duration_ms' => null])
+        ->and($action)->toMatchArray(['mean_ms' => 50.0, 'slowest_ms' => null]);
+});
 
 it('names no dominant stage and no shares when the stages took no time', function () {
     ingest([rankStaged(RecordType::COMMAND, 'a', [], ['name' => 'inspire'])]);
