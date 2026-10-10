@@ -64,6 +64,11 @@ class Markers
     protected const NIGHTWATCH_VERIFIED = 'nightwatch_verified';
 
     /**
+     * The key of the Firewatch release that created the store.
+     */
+    protected const FIREWATCH_VERSION = 'firewatch_version';
+
+    /**
      * The reason a prune is assumed to have when the store names none.
      */
     protected const DEFAULT_PRUNED_REASON = PruneReason::AGE;
@@ -84,6 +89,7 @@ class Markers
         public readonly ?float $pruneClaimedAt = null,
         public readonly ?string $nightwatchVersion = null,
         public readonly ?bool $nightwatchVerified = null,
+        public readonly ?string $firewatchVersion = null,
     ) {
         //
     }
@@ -118,6 +124,7 @@ class Markers
                 '0' => false,
                 default => null,
             },
+            firewatchVersion: $meta[self::FIREWATCH_VERSION] ?? null,
         );
     }
 
@@ -130,11 +137,12 @@ class Markers
     }
 
     /**
-     * Record when a new store was created.
+     * Record when a new store was created, and by which release of Firewatch.
      */
-    public static function markCreated(SQLite3 $connection, CarbonInterface $at): void
+    public static function markCreated(SQLite3 $connection, CarbonInterface $at, string $firewatchVersion): void
     {
         self::put($connection, key: self::CREATED_AT, value: self::text($at));
+        self::put($connection, key: self::FIREWATCH_VERSION, value: $firewatchVersion);
     }
 
     /**

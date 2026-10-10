@@ -694,7 +694,7 @@ return [
         'records' => 'Every record of every type: the twelve views above read from it, and fields beyond the common columns sit in data.',
         'users' => 'The user directory: one row per signed-in person the sensors recorded.',
         'drift' => 'Where Nightwatch\'s output departed from the contract, counted by kind, type, version and detail.',
-        'meta' => 'The store\'s markers: when it was created, pruned and cleared, and the Nightwatch release last seen.',
+        'meta' => 'The store\'s markers: when it was created, pruned and cleared, and the Firewatch release that created it, and the Nightwatch release last seen.',
     ],
 
     'column_meanings' => [
