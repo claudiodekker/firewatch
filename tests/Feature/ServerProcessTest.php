@@ -12,8 +12,8 @@ function runServer(string $storeDirectory, array $messages, array $env = [], arr
 {
     $input = implode('', array_map(fn (array $message) => json_encode($message, JSON_THROW_ON_ERROR)."\n", $messages));
 
-    // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers.
-    $packagesCache = sys_get_temp_dir().'/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+    // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers. Laravel reads a path with a drive letter as relative, so it is given as one.
+    $packagesCache = 'bootstrap/cache/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
 
     $process = new Process(
         [PHP_BINARY, ...$ini, 'vendor/bin/testbench', $command],
@@ -25,7 +25,7 @@ function runServer(string $storeDirectory, array $messages, array $env = [], arr
 
     $process->run();
 
-    (new Filesystem)->delete($packagesCache);
+    (new Filesystem)->delete(base_path($packagesCache));
 
     return $process;
 }

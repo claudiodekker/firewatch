@@ -1018,7 +1018,7 @@ describe('the report', function () {
 });
 
 it('runs as an Off process in a real application and creates nothing', function () {
-    $packagesCache = sys_get_temp_dir().'/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+    $packagesCache = 'bootstrap/cache/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
     $process = new Process(
         [PHP_BINARY, 'vendor/bin/testbench', 'firewatch:doctor', '--json'],
         cwd: dirname(__DIR__, 2),
@@ -1027,7 +1027,7 @@ it('runs as an Off process in a real application and creates nothing', function 
     );
 
     $process->run();
-    (new Filesystem)->delete($packagesCache);
+    (new Filesystem)->delete(base_path($packagesCache));
 
     $report = json_decode($process->getOutput(), associative: true, flags: JSON_THROW_ON_ERROR);
     $results = array_column($report['checks'], null, 'id');
