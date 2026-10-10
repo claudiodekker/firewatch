@@ -23,6 +23,11 @@ class FailingHttp implements Detector
     protected const PERCENT_DECIMALS = 1;
 
     /**
+     * The percent a share is of its whole.
+     */
+    protected const PERCENT = 100;
+
+    /**
      * Get the name of the shape the detector judges.
      */
     public function name(): DetectorName
@@ -168,7 +173,7 @@ class FailingHttp implements Detector
                 'host' => $row['host'],
                 'calls' => $row['calls'],
                 'failures' => $row['failures'],
-                'failure_pct' => round(100 * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
+                'failure_pct' => round(self::PERCENT * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
                 'status_counts' => Stored::json($row['status_counts']),
                 'top_urls' => Stored::json($row['top_urls']),
                 'ran_in' => array_map($this->unit(...), Stored::json($row['ran_in'])),
