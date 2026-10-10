@@ -3,9 +3,11 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
+use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
 /**
@@ -113,11 +115,17 @@ class ExceptionClusters implements Detector
     }
 
     /**
-     * Count the executions that started in the window, whatever their group.
+     * Count the executions that started in the window after a clear or a prune last removed exceptions, whatever their group.
      */
     protected function examined(SQLite3 $connection, Window $window): int
     {
-        [$row] = Stored::rows($connection, Executions::table($window).' SELECT count(*) AS examined FROM executions', ['group' => ''], $window);
+        $meta = Markers::read($connection);
+        $bindings = [
+            'group' => '',
+            'from' => History::removedThrough($meta, [RecordType::EXCEPTION]),
+        ];
+
+        [$row] = Stored::rows($connection, Executions::table($window).' SELECT count(*) AS examined FROM executions WHERE :from IS NULL OR started_at >= :from', $bindings, $window);
 
         return $row['examined'];
     }
