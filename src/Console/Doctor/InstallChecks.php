@@ -53,15 +53,18 @@ class InstallChecks
 
     /**
      * Report the environment, the allowlist, the enabled flag and the mode a host process resolves to.
+     *
+     * @return list<CheckResult>
      */
-    public function mode(): CheckResult
+    public function mode(): array
     {
         $environment = $this->app->environment();
         $environments = implode(', ', $this->configuration->environments);
         $production = array_intersect(static::PRODUCTION_ENVIRONMENTS, $this->configuration->environments);
+        $results = [];
 
         if ($production !== []) {
-            return CheckResult::warn(
+            $results[] = CheckResult::warn(
                 __('firewatch::messages.doctor.mode.production', [
                     'environments' => $environments,
                     'production' => implode(', ', $production),
@@ -71,7 +74,7 @@ class InstallChecks
         }
 
         if (! $this->configuration->enabled) {
-            return CheckResult::warn(
+            $results[] = CheckResult::warn(
                 __('firewatch::messages.doctor.mode.disabled', [
                     'environment' => $environment,
                     'environments' => $environments,
@@ -80,13 +83,18 @@ class InstallChecks
             );
         }
 
-        $requestMode = (new ModeResolver)->resolve($this->configuration, $environment, argv: [], sqliteVersion: ($this->sqliteVersion)());
+        if ($results !== []) {
+            return $results;
+        }
 
-        return CheckResult::ok(__('firewatch::messages.doctor.mode.ok', [
+        $sqliteVersion = ($this->sqliteVersion)();
+        $requestMode = (new ModeResolver)->resolve($this->configuration, $environment, argv: [], sqliteVersion: $sqliteVersion);
+
+        return [CheckResult::ok(__('firewatch::messages.doctor.mode.ok', [
             'environment' => $environment,
             'environments' => $environments,
             'mode' => $requestMode->value,
-        ]));
+        ]))];
     }
 
     /**

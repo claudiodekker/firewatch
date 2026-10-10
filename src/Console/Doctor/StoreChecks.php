@@ -149,9 +149,11 @@ class StoreChecks
             return CheckResult::ok(__('firewatch::messages.doctor.store-integrity.ok'));
         }
 
+        $problems = trans_choice('firewatch::messages.doctor.store-integrity.problem_count', count($messages), ['count' => count($messages)]);
+
         return CheckResult::fail(
             __('firewatch::messages.doctor.store-integrity.problems', [
-                'problems' => trans_choice('firewatch::messages.doctor.store-integrity.problem_count', count($messages), ['count' => count($messages)]),
+                'problems' => $problems,
                 'first' => $messages[0] ?? '',
             ]),
             __('firewatch::messages.doctor.store-integrity.damaged_fix'),
@@ -179,14 +181,17 @@ class StoreChecks
             return CheckResult::info(__('firewatch::messages.doctor.store-activity.empty', $retention));
         }
 
+        $fileBytes = (int) @filesize($this->configuration->database);
+        $coverage = $this->coverage($holdings, $markers);
+
         $facts = [
             'records' => $this->records($holdings->records),
             'oldest' => $this->moment($holdings->oldest),
             'newest' => $this->moment($holdings->newest),
-            'file' => Number::fileSize((int) @filesize($this->configuration->database), precision: 1),
+            'file' => Number::fileSize($fileBytes, precision: 1),
             'live' => Number::fileSize($holdings->liveBytes, precision: 1),
             'prune' => $this->moment($markers->pruneClaimedAt),
-            'coverage' => $this->coverage($holdings, $markers),
+            'coverage' => $coverage,
             ...$retention,
         ];
 
@@ -212,20 +217,23 @@ class StoreChecks
         }
 
         $newest = $dropped[count($dropped) - 1];
+        $records = $this->records(array_sum(array_column($dropped, 'dropped')));
+
+        $fix = match (FailureKind::tryFrom($newest['kind'])) {
+            FailureKind::BUSY => __('firewatch::messages.doctor.store-losses.busy_fix', ['milliseconds' => $this->configuration->busyTimeoutMilliseconds]),
+            FailureKind::FULL => __('firewatch::messages.doctor.store-losses.full_fix'),
+            default => __('firewatch::messages.doctor.store-losses.other_fix'),
+        };
 
         return CheckResult::warn(
             __('firewatch::messages.doctor.store-losses.dropped', [
                 'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', count($dropped), ['count' => count($dropped)]),
-                'records' => $this->records(array_sum(array_column($dropped, 'dropped'))),
+                'records' => $records,
                 'at' => $this->moment($newest['at']),
                 'kind' => $newest['kind'],
                 'message' => $newest['message'],
             ]),
-            match (FailureKind::tryFrom($newest['kind'])) {
-                FailureKind::BUSY => __('firewatch::messages.doctor.store-losses.busy_fix', ['milliseconds' => $this->configuration->busyTimeoutMilliseconds]),
-                FailureKind::FULL => __('firewatch::messages.doctor.store-losses.full_fix'),
-                default => __('firewatch::messages.doctor.store-losses.other_fix'),
-            },
+            $fix,
         );
     }
 

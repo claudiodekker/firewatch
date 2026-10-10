@@ -367,7 +367,7 @@ return [
             'proc_open_missing_fix' => 'remove proc_open from disable_functions for :binary',
             'sqlite3_missing_fix' => 'enable the sqlite3 extension for :binary',
             'php_binary_fix' => 'run the server with a PHP binary that is an executable file',
-            'sqlite_too_old_fix' => 'link PHP against SQLite 3.38.0 or newer',
+            'sqlite_too_old_fix' => 'link PHP against SQLite :minimum or newer',
             'spawn_failed_fix' => 'run `:binary -r "echo 1;"` to see why a PHP process can\'t start',
             'authorizer_fix' => 'link PHP against a SQLite built with the authorizer',
             'heap_limit_fix' => 'link PHP against a SQLite that accepts a soft heap limit',
