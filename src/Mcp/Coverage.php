@@ -106,7 +106,7 @@ class Coverage
     {
         return __('firewatch::messages.store_history', [
             'from' => Instant::format((float) $this->history->from, $timezone),
-            'reason' => $this->history->reason,
+            'reason' => $this->history->reason?->value,
             'age' => $this->history->retentionAge === null ? __('firewatch::messages.store_unlimited') : Markdown::duration($this->history->retentionAge),
             'records' => $this->history->retentionRecords === null ? __('firewatch::messages.store_unlimited') : number_format($this->history->retentionRecords),
         ]);

@@ -111,7 +111,7 @@ class Holdings
                 'oldest_at' => $this->types[$type->value]['oldest'] ?? null,
                 'newest_at' => $this->types[$type->value]['newest'] ?? null,
                 'complete_from_at' => $history->from,
-                'complete_reason' => $history->reason,
+                'complete_reason' => $history->reason?->value,
             ];
         }, RecordType::events());
 

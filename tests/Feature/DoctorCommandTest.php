@@ -762,6 +762,12 @@ describe('store-activity', function () {
         expect(doctorCheck('store-activity')['message'])->toContain('request')->toContain('cleared');
     });
 
+    it('names no history start on a store that was never cleared or pruned', function () {
+        doctorCapture();
+
+        expect(doctorCheck('store-activity')['message'])->not->toContain('complete from');
+    });
+
     it('warns when nothing was captured for a day', function (int $hours, string $status) {
         doctorCapture();
         $this->travelTo(now()->addHours($hours));

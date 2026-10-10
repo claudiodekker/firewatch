@@ -60,18 +60,18 @@ class Conditions
     {
         $history = History::of($facts->meta, $types);
 
-        if ($history->from === null || $history->reason === null || $history->reason === 'created' || ! $this->startsBefore($window, $history->from)) {
+        if ($history->from === null || $history->reason === null || $history->reason === HistoryReason::CREATED || ! $this->startsBefore($window, $history->from)) {
             return [];
         }
 
-        $id = str_starts_with($history->reason, 'pruned-') ? 'history-pruned' : 'history-cleared';
+        $id = $history->reason->isPrune() ? 'history-pruned' : 'history-cleared';
 
         return [$this->condition($id, [
             'from' => Instant::format($history->from, $timezone),
-            'reason' => $history->reason,
+            'reason' => $history->reason->value,
         ], [
             'from_at' => $history->from,
-            'reason' => $history->reason,
+            'reason' => $history->reason->value,
         ])];
     }
 
