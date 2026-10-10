@@ -143,7 +143,7 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
 
     expect($ranked['result']['by'])->toBe('p95_duration')
         ->and($slow)->toMatchArray(['label' => '/slow', 'occurrences' => 20, 'failure_pct' => 5, 'withheld' => null])
-        ->and($slow['p95_ms'])->toBeGreaterThanOrEqual(30.0)
+        ->and($slow['p95_ms'])->toBeGreaterThanOrEqual((float) SLOW_ROUTE_MS)
         ->and($quick)->toMatchArray(['label' => '/quick', 'failure_pct' => 0, 'p95_ms' => null])
         ->and($quick['withheld']['p95_ms'])->toMatchArray(['reason' => 'sample_too_small', 'have' => 5, 'needed' => 20]);
 
@@ -151,7 +151,7 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
     $rows = $tail['result']['rows'];
 
     expect($tail['result']['baseline'])->toMatchArray(['percentile' => 'p95', 'samples' => 20, 'withheld' => null])
-        ->and($tail['result']['baseline']['threshold_ms'])->toBeGreaterThanOrEqual(30.0)
+        ->and($tail['result']['baseline']['threshold_ms'])->toBeGreaterThanOrEqual((float) SLOW_ROUTE_MS)
         ->and(count($rows))->toBeGreaterThanOrEqual(1)->toBeLessThan(20)
         ->and(array_column($rows, 'group'))->each->toBe($slow['group'])
         ->and(array_column($rows, 'duration_ms'))->each->toBeGreaterThanOrEqual(round($tail['result']['baseline']['threshold_ms'], 2))
@@ -163,7 +163,7 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
 
     expect($header)->toMatchArray(['type' => 'request', 'label' => '/slow', 'group' => $slow['group']])
         ->and($slowestStage)->toBe('action')
-        ->and($header['stages']['action'])->toBeGreaterThanOrEqual(30.0)
+        ->and($header['stages']['action'])->toBeGreaterThanOrEqual((float) SLOW_ROUTE_MS)
         ->and(array_column($opened['next'], 'tool'))->toBe(['rank', 'trace']);
 
     $stages = Envelope::follow($opened['next'][0])['result'];

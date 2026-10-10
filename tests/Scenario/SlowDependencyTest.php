@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 
 /**
- * Serve the requests in a fresh application whose report route calls a host that answers after 30 ms and whose stock route calls one that answers at once.
+ * Serve the requests in a fresh application whose report route calls a host that answers after at least 30 ms and whose stock route calls one that answers at once.
  *
  * @param  list<string>  $uris
  */
@@ -18,7 +18,7 @@ function slowDependencyRequests(array $uris): void
 
     Http::fake([
         'https://reports.example.com/*' => function () {
-            usleep(30_000);
+            takeAtLeast(30);
 
             return Http::response('ok');
         },
