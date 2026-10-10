@@ -26,7 +26,7 @@ it('reads the creation and the rebuild with their microseconds', function () {
     $connection = markerStore();
     $at = CarbonImmutable::createFromFormat('U.u', '1790776800.250000');
 
-    Markers::markCreated($connection, $at);
+    Markers::markCreated($connection, $at, '1.0.0');
     Markers::markRebuilt($connection, $at->addSeconds(5), 'corrupt');
     $markers = Markers::read($connection);
 

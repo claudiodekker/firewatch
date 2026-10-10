@@ -50,5 +50,6 @@
 - Firewatch needs SQLite 3.41.0 or newer and is Off below it, so on an older release, such as Debian 12's 3.40.1, it records nothing and `firewatch:doctor` says why.
 - `firewatch:clear` and `firewatch:doctor` run without the `intl` extension, which Firewatch does not require.
 - On Windows, `firewatch:clear --drop` says the store is busy and leaves a damaged store as it is while another process holds it open, instead of failing with "database disk image is malformed".
+- A new or rebuilt store records the version of Firewatch that created it as `firewatch_version` in `meta`.
 - A README covering the quick start, install, a configuration snippet for each assistant client, the dev-only warning, what is stored and never redacted, the tools, the blind spots, configuration, retention, commands and troubleshooting. A contract test fails when its configuration, tool, detector or command tables disagree with the code.
 - Firewatch is released under the MIT license.

@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\FirewatchVersion;
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\Mcp\Tools\Compare;
 use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
@@ -14,7 +15,6 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trend;
-use Composer\InstalledVersions;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Name;
 
@@ -86,7 +86,7 @@ class FirewatchServer extends Server
      */
     protected function boot(): void
     {
-        $this->version = InstalledVersions::getPrettyVersion('claudiodekker/firewatch') ?? 'dev';
+        $this->version = FirewatchVersion::installed();
         $this->instructions = __('firewatch::messages.instructions');
     }
 }

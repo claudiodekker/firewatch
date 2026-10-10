@@ -10,6 +10,7 @@ use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use ClaudioDekker\Firewatch\Tests\TestCase;
+use Composer\InstalledVersions;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Exceptions;
@@ -152,6 +153,14 @@ function ingest(array $records): void
     }
 
     Nightwatch::digest();
+}
+
+/**
+ * Get the installed version of Firewatch as Composer reports it, apart from the code under test.
+ */
+function firewatchVersion(): string
+{
+    return InstalledVersions::getPrettyVersion('claudiodekker/firewatch') ?? 'dev';
 }
 
 /**

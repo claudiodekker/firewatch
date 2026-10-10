@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\FirewatchVersion;
 use Closure;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Sleep;
@@ -474,7 +475,9 @@ class Writer
 
         $now = Date::now();
 
-        Markers::markCreated($connection, $now);
+        $version = FirewatchVersion::installed();
+
+        Markers::markCreated($connection, $now, $version);
 
         if ($why !== null) {
             Markers::markRebuilt($connection, $now, $why);

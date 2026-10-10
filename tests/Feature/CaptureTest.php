@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Events\QueryExecuted;
@@ -127,6 +128,15 @@ it('stamps a new store with Firewatch\'s application id and schema version', fun
     ]);
 
     expect($stamps)->toBe([0x46575443, 1]);
+});
+
+it('records the release of Firewatch that created a new store', function () {
+    Cache::get('first');
+
+    Nightwatch::digest();
+
+    expect(app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->firewatchVersion))
+        ->toBe(firewatchVersion());
 });
 
 it('stores a batch without running a query through Laravel\'s database layer', function () {
