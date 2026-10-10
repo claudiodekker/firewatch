@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -10,7 +11,7 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingHttp implements Detector
+class FailingHttp implements Thresholded
 {
     /**
      * The most URLs and the most execution groups a finding lists.
@@ -51,9 +52,8 @@ class FailingHttp implements Detector
     /**
      * Judge the hosts of the outgoing requests that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $status = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_unanswered')];
 
@@ -63,7 +63,7 @@ class FailingHttp implements Detector
             return Judgement::of($this->name(), $described, examined: 0, total: 0, findings: [], caveats: $caveats);
         }
 
-        $hosts = $this->hosts($connection, $window, $status, $group, $limit);
+        $hosts = $this->hosts($connection, $window, $threshold, $group, $limit);
         $findings = array_map($this->finding(...), $hosts);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: $hosts[0]['total'] ?? 0, findings: $findings, caveats: $caveats);
@@ -74,7 +74,9 @@ class FailingHttp implements Detector
      */
     protected function examined(SQLite3 $connection, Window $window, ?string $group): int
     {
-        [$row] = Stored::rows($connection, "SELECT count(*) AS examined FROM outgoing_requests WHERE {$this->selected($window)}", ['group' => $group ?? ''], $window);
+        $selected = Fragment::selecting($window, $group);
+
+        [$row] = Stored::rows($connection, "SELECT count(*) AS examined FROM outgoing_requests WHERE {$selected->sql}", $selected->bindings, $window);
 
         return $row['examined'];
     }
@@ -86,6 +88,7 @@ class FailingHttp implements Detector
      */
     protected function hosts(SQLite3 $connection, Window $window, int|float $status, ?string $group, int $limit): array
     {
+        $selected = Fragment::selecting($window, $group);
         $labels = Executions::labels();
         $code = Stored::number('status_code');
         $listed = self::LISTED;
@@ -97,7 +100,7 @@ class FailingHttp implements Detector
                 CASE WHEN instr(url, '?') > 0 THEN substr(url, 1, instr(url, '?') - 1) ELSE url END AS url,
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
                 {$code} AS status, {$code} >= :status AS failed
-            FROM outgoing_requests WHERE {$this->selected($window)}
+            FROM outgoing_requests WHERE {$selected->sql}
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY failed DESC, started_at DESC, id DESC) AS by_latest FROM calls
         ), hosts AS (
@@ -137,18 +140,10 @@ class FailingHttp implements Detector
                 SELECT source, label, calls FROM units WHERE units.group_hash IS ranked.group_hash AND position <= {$listed} ORDER BY position
             )) AS ran_in
         FROM ranked ORDER BY {$worstFirst}", [
+            ...$selected->bindings,
             'status' => $status,
-            'group' => $group ?? '',
             'limit' => $limit,
         ], $window);
-    }
-
-    /**
-     * Get the SQL condition of the outgoing requests that started in the window, of one group when the call names it.
-     */
-    protected function selected(Window $window): string
-    {
-        return $window->condition().' AND (:group = \'\' OR group_hash = :group)';
     }
 
     /**
@@ -174,7 +169,7 @@ class FailingHttp implements Detector
                 'host' => $row['host'],
                 'calls' => $row['calls'],
                 'failures' => $row['failures'],
-                'failure_pct' => round(100 * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
+                'failure_pct' => round(Ranking::PERCENT * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
                 'status_counts' => Stored::json($row['status_counts']),
                 'top_urls' => Stored::json($row['top_urls']),
                 'ran_in' => array_map($this->unit(...), Stored::json($row['ran_in'])),

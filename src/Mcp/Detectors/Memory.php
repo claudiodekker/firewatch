@@ -13,7 +13,7 @@ use SQLite3;
 /**
  * @internal
  */
-class Memory implements Detector
+class Memory implements Thresholded
 {
     /**
      * Get the name of the shape the detector judges.
@@ -44,38 +44,32 @@ class Memory implements Detector
     /**
      * Judge the executions that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $megabytes = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_memory')];
 
-        $groups = $this->groups($connection, $window, [
-            'group' => $group ?? '',
-            'bytes' => Stored::bytes($megabytes),
-        ]);
+        $executions = Executions::table($window, $group);
+        $groups = $this->groups($connection, $window, $executions, $threshold);
 
         $examined = array_sum(array_column($groups, 'executions'));
         $heavy = array_values(array_filter($groups, fn (array $row) => $row['executions_over'] > 0));
-        $findings = array_map($this->finding(...), $heavy);
+        $shown = Judgement::worst($heavy, fn (array $a, array $b) => [Stored::megabytes($b['peak']), $b['executions_over'], $a['group_hash']] <=> [Stored::megabytes($a['peak']), $a['executions_over'], $b['group_hash']], $limit);
+        $findings = array_map($this->finding(...), $shown);
 
-        usort($findings, fn (array $a, array $b) => [$b['count'], $b['evidence']['executions_over'], $a['group']] <=> [$a['count'], $a['evidence']['executions_over'], $b['group']]);
-
-        return Judgement::of($this->name(), $described, examined: $examined, total: count($findings), findings: array_slice($findings, 0, $limit), caveats: $caveats);
+        return Judgement::of($this->name(), $described, examined: $examined, total: count($heavy), findings: $findings, caveats: $caveats);
     }
 
     /**
      * Get what the executions that have a peak say of each group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $executions, int|float $megabytes): array
     {
-        $executions = Executions::table($window);
         $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
 
-        return Stored::rows($connection, "{$executions}, measured AS (
+        return Stored::rows($connection, "{$executions->sql}, measured AS (
             SELECT *, peak >= :bytes AS reached FROM executions WHERE peak IS NOT NULL
         ), ranked AS (
             SELECT *, count(*) OVER (PARTITION BY group_hash) AS n,
@@ -92,7 +86,10 @@ class Memory implements Detector
             min(started_at) FILTER (WHERE reached) AS first_seen, max(started_at) FILTER (WHERE reached) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE reached) AS actors,
             count(*) FILTER (WHERE reached AND NULLIF(user_id, '') IS NULL) AS anonymous
-        FROM ranked GROUP BY group_hash", $bindings, $window);
+        FROM ranked GROUP BY group_hash", [
+            ...$executions->bindings,
+            'bytes' => Stored::bytes($megabytes),
+        ], $window);
     }
 
     /**

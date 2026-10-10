@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -14,7 +15,7 @@ use SQLite3;
 /**
  * @internal
  */
-class NPlusOne implements Detector
+class NPlusOne implements Thresholded
 {
     /**
      * The decimals of a share in an answer.
@@ -60,18 +61,14 @@ class NPlusOne implements Detector
     /**
      * Judge the executions that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $this->refuseQueryGroup($connection, $group);
 
         $meta = Markers::read($connection);
-        $bindings = [
-            'runs' => $threshold ?? $this->threshold()->default,
-            'group' => $group ?? '',
-            'from' => History::removedThrough($meta, [RecordType::QUERY]),
-        ];
-        $executions = Executions::table($window);
-        $population = $this->population($connection, $window, $executions, $bindings);
+        $from = History::removedThrough($meta, [RecordType::QUERY]);
+        $executions = Executions::table($window, $group);
+        $population = $this->population($connection, $window, $executions, $from);
         $caveats = $this->caveats($population['incomplete']);
         $described = $this->threshold()->describe($threshold);
 
@@ -79,20 +76,18 @@ class NPlusOne implements Detector
             return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS, caveats: $caveats);
         }
 
-        $ranked = $this->ranked($executions);
-        $groups = Stored::rows($connection, "{$ranked} SELECT eg, qg, max(runs) AS worst_runs, count(*) AS affected, sum(runs) AS total_runs, total(micros) AS total_micros,
+        $ranked = $this->ranked($executions, $threshold, $from);
+        $groups = Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, max(runs) AS worst_runs, count(*) AS affected, sum(runs) AS total_runs, total(micros) AS total_micros,
             min(started_at) AS first_seen, max(started_at) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) AS actors, count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS anonymous
-            FROM ranked GROUP BY eg, qg", $bindings, $window);
+            FROM ranked GROUP BY eg, qg", $ranked->bindings, $window);
 
         if ($groups === []) {
             return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], caveats: $caveats);
         }
 
-        usort($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']]);
-
-        $shown = array_slice($groups, 0, $limit);
-        $details = $this->details($connection, $window, $ranked, $bindings);
+        $shown = Judgement::worst($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']], $limit);
+        $details = $this->details($connection, $window, $ranked);
         $findings = array_map(fn (array $row) => $this->finding($row, $details), $shown);
 
         return Judgement::of($this->name(), $described, examined: $population['examined'], total: count($groups), findings: $findings, caveats: $caveats);
@@ -119,12 +114,16 @@ class NPlusOne implements Detector
     /**
      * Get what the window holds.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return array{examined: int, incomplete: int}
      */
-    protected function population(SQLite3 $connection, Window $window, string $executions, array $bindings): array
+    protected function population(SQLite3 $connection, Window $window, Fragment $executions, int|float|null $from): array
     {
-        $row = Stored::rows($connection, "{$executions} SELECT count(*) FILTER (WHERE captured > 0) AS examined, count(*) FILTER (WHERE captured > 0 AND counted > captured) AS incomplete
+        $bindings = [
+            ...$executions->bindings,
+            'from' => $from,
+        ];
+
+        $row = Stored::rows($connection, "{$executions->sql} SELECT count(*) FILTER (WHERE captured > 0) AS examined, count(*) FILTER (WHERE captured > 0 AND counted > captured) AS incomplete
             FROM (SELECT counted,
                 CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = executions.execution_id) ELSE 0 END AS captured
                 FROM executions)", $bindings, $window)[0];
@@ -138,11 +137,11 @@ class NPlusOne implements Detector
     /**
      * Get the SQL of the runs that qualify.
      */
-    protected function ranked(string $executions): string
+    protected function ranked(Fragment $executions, int|float $runs, int|float|null $from): Fragment
     {
         $trimmed = 'lower(ltrim(queries.sql, '.self::LEADING_WHITESPACE.'))';
 
-        return "{$executions}, runs AS (
+        $sql = "{$executions->sql}, runs AS (
             SELECT executions.execution_id, executions.group_hash AS eg, queries.group_hash AS qg, executions.id, executions.started_at, executions.user_id,
                 executions.duration, executions.source, executions.label, count(*) AS runs, total(queries.duration) AS micros
             FROM executions JOIN queries ON queries.execution_id = executions.execution_id
@@ -153,21 +152,26 @@ class NPlusOne implements Detector
                 ROW_NUMBER() OVER (PARTITION BY eg, qg ORDER BY started_at DESC, id DESC) AS latest_position
             FROM runs
         )";
+
+        return new Fragment($sql, [
+            ...$executions->bindings,
+            'runs' => $runs,
+            'from' => $from,
+        ]);
     }
 
     /**
      * Get the details of the findings, by the pair of groups.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>}
      */
-    protected function details(SQLite3 $connection, Window $window, string $ranked, array $bindings): array
+    protected function details(SQLite3 $connection, Window $window, Fragment $ranked): array
     {
         $executions = [];
         $sites = [];
         $queries = [];
 
-        foreach (Stored::rows($connection, "{$ranked} SELECT eg, qg, execution_id, runs, micros, duration, source, label, worst_position, latest_position FROM ranked WHERE worst_position = 1 OR latest_position = 1", $bindings, $window) as $row) {
+        foreach (Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, execution_id, runs, micros, duration, source, label, worst_position, latest_position FROM ranked WHERE worst_position = 1 OR latest_position = 1", $ranked->bindings, $window) as $row) {
             $executions[$this->key($row)][$row['worst_position'] === 1 ? 'worst' : 'latest'] = $row;
 
             if ($row['worst_position'] === 1 && $row['latest_position'] === 1) {
@@ -175,11 +179,11 @@ class NPlusOne implements Detector
             }
         }
 
-        foreach (Stored::rows($connection, "{$ranked} SELECT eg, qg, file, line, runs FROM (
+        foreach (Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, file, line, runs FROM (
             SELECT ranked.eg, ranked.qg, queries.file, queries.line, count(*) AS runs,
                 ROW_NUMBER() OVER (PARTITION BY ranked.eg, ranked.qg ORDER BY count(*) DESC, queries.file, queries.line) AS position
             FROM ranked JOIN queries ON queries.execution_id = ranked.execution_id AND queries.group_hash = ranked.qg
-            GROUP BY ranked.eg, ranked.qg, queries.file, queries.line) WHERE position <= ".self::CALL_SITES, $bindings, $window) as $row) {
+            GROUP BY ranked.eg, ranked.qg, queries.file, queries.line) WHERE position <= ".self::CALL_SITES, $ranked->bindings, $window) as $row) {
             $sites[$this->key($row)][] = [
                 'file' => $row['file'],
                 'line' => $row['line'],
@@ -187,9 +191,9 @@ class NPlusOne implements Detector
             ];
         }
 
-        foreach (Stored::rows($connection, "{$ranked} SELECT ranked.eg, ranked.qg, count(DISTINCT queries.bindings) AS distinct_bindings, count(*) FILTER (WHERE queries.bindings IS NULL) AS unpaired, min(queries.sql) AS sql
+        foreach (Stored::rows($connection, "{$ranked->sql} SELECT ranked.eg, ranked.qg, count(DISTINCT queries.bindings) AS distinct_bindings, count(*) FILTER (WHERE queries.bindings IS NULL) AS unpaired, min(queries.sql) AS sql
             FROM ranked JOIN queries ON queries.execution_id = ranked.execution_id AND queries.group_hash = ranked.qg
-            WHERE ranked.worst_position = 1 GROUP BY ranked.eg, ranked.qg", $bindings, $window) as $row) {
+            WHERE ranked.worst_position = 1 GROUP BY ranked.eg, ranked.qg", $ranked->bindings, $window) as $row) {
             $queries[$this->key($row)] = $row;
         }
 
@@ -214,7 +218,7 @@ class NPlusOne implements Detector
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
         $label = Stored::blank($worst['label']) ?? __('firewatch::messages.rank_no_route');
-        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(100 * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
+        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(Ranking::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
 
         return [
             'group' => $row['eg'],

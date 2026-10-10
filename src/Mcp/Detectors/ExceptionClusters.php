@@ -14,7 +14,7 @@ use SQLite3;
 /**
  * @internal
  */
-class ExceptionClusters implements Detector
+class ExceptionClusters implements Thresholded
 {
     /**
      * The most units a finding lists.
@@ -50,9 +50,8 @@ class ExceptionClusters implements Detector
     /**
      * Judge the exception groups that occurred in the window, over the executions that started in it.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $occurrences = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
 
         $groups = $this->groups($connection, $window, $group);
@@ -62,15 +61,13 @@ class ExceptionClusters implements Detector
         }
 
         $examined = $this->examined($connection, $window);
-        $flagged = array_values(array_filter($groups, fn (array $row) => $row['occurrences'] >= $occurrences));
+        $flagged = array_values(array_filter($groups, fn (array $row) => $row['occurrences'] >= $threshold));
 
         if ($flagged === []) {
             return Judgement::of($this->name(), $described, examined: $examined, total: 0, findings: []);
         }
 
-        usort($flagged, fn (array $a, array $b) => [$b['escaped'] > 0, $b['occurrences'], $b['last_seen']] <=> [$a['escaped'] > 0, $a['occurrences'], $a['last_seen']] ?: strcmp($a['group_hash'], $b['group_hash']));
-
-        $shown = array_slice($flagged, 0, $limit);
+        $shown = Judgement::worst($flagged, fn (array $a, array $b) => [$b['escaped'] > 0, $b['occurrences'], $b['last_seen']] <=> [$a['escaped'] > 0, $a['occurrences'], $a['last_seen']] ?: strcmp($a['group_hash'], $b['group_hash']), $limit);
         $hashes = array_column($shown, 'group_hash');
         $traces = $this->traces($connection, $window, $hashes);
         $units = $this->units($connection, $window, $hashes);
@@ -96,9 +93,11 @@ class ExceptionClusters implements Detector
      */
     protected function groups(SQLite3 $connection, Window $window, ?string $group): array
     {
+        $selected = Fragment::selecting($window, $group);
+
         return Stored::rows($connection, "WITH occurrences AS (
             SELECT id, execution_id, started_at, group_hash, user_id, class, message, file, line, handled, trace IS NULL AS fatal
-            FROM exceptions WHERE {$window->condition()} AND (:group = '' OR group_hash = :group)
+            FROM exceptions WHERE {$selected->sql}
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS by_latest FROM occurrences
         )
@@ -112,7 +111,7 @@ class ExceptionClusters implements Detector
             min(started_at) AS first_seen, max(started_at) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) AS actors,
             count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS anonymous
-        FROM placed GROUP BY group_hash", ['group' => $group ?? ''], $window);
+        FROM placed GROUP BY group_hash", $selected->bindings, $window);
     }
 
     /**
@@ -121,12 +120,13 @@ class ExceptionClusters implements Detector
     protected function examined(SQLite3 $connection, Window $window): int
     {
         $meta = Markers::read($connection);
+        $executions = Executions::table($window, group: null);
         $bindings = [
-            'group' => '',
+            ...$executions->bindings,
             'from' => History::removedThrough($meta, [RecordType::EXCEPTION]),
         ];
 
-        [$row] = Stored::rows($connection, Executions::table($window).' SELECT count(*) AS examined FROM executions WHERE :from IS NULL OR started_at >= :from', $bindings, $window);
+        [$row] = Stored::rows($connection, $executions->sql.' SELECT count(*) AS examined FROM executions WHERE :from IS NULL OR started_at >= :from', $bindings, $window);
 
         return $row['examined'];
     }

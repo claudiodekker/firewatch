@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use Closure;
 use stdClass;
 
 /**
@@ -48,6 +49,22 @@ class Judgement
         };
 
         return new self($detector, $threshold, $verdict, $reason, examined: $examined, total: $total, findings: $findings, saw: $saw, caveats: $caveats);
+    }
+
+    /**
+     * Get the rows a detector lists: the first of them by its own order, at most the limit.
+     *
+     * @template T of array<string, mixed>
+     *
+     * @param  list<T>  $rows
+     * @param  Closure(T, T): int  $order
+     * @return list<T>
+     */
+    public static function worst(array $rows, Closure $order, int $limit): array
+    {
+        usort($rows, $order);
+
+        return array_slice($rows, 0, $limit);
     }
 
     /**

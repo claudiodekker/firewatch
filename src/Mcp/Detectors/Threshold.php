@@ -25,6 +25,8 @@ class Threshold
 
     /**
      * Read the value a call passes.
+     *
+     * @throws Refusal when the value is not a number the threshold accepts
      */
     public function read(mixed $value, string $example): int|float
     {

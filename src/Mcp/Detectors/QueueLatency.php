@@ -17,7 +17,7 @@ use SQLite3;
 /**
  * @internal
  */
-class QueueLatency implements Detector
+class QueueLatency implements Thresholded
 {
     /**
      * Get the name of the shape the detector judges.
@@ -48,23 +48,17 @@ class QueueLatency implements Detector
     /**
      * Judge the dispatches that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $milliseconds = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
-        $bindings = ['group' => $group ?? ''];
 
-        $groups = $this->groups($connection, $window, [
-            ...$bindings,
-            'now' => Instant::now(),
-            'per_second' => Microseconds::PER_SECOND,
-            'microseconds' => $milliseconds * Microseconds::PER_MILLISECOND,
-        ]);
+        $dispatches = $this->dispatches($window, $group);
+        $groups = $this->groups($connection, $window, $dispatches, $threshold);
 
         $examined = array_sum(array_column($groups, 'jobs'));
         $inline = array_sum(array_column($groups, 'inline'));
         $pending = array_sum(array_column($groups, 'pending'));
-        $orphans = $this->attemptsWithoutDispatch($connection, $window, $bindings);
+        $orphans = $this->attemptsWithoutDispatch($connection, $window, $group);
 
         $saw = [
             'inline_excluded' => $inline,
@@ -86,9 +80,8 @@ class QueueLatency implements Detector
 
         $late = array_values(array_filter($groups, fn (array $row) => $row['qualifying'] > 0));
 
-        usort($late, fn (array $a, array $b) => [$b['worst'], $a['group_hash']] <=> [$a['worst'], $b['group_hash']]);
-
-        $findings = array_map($this->finding(...), array_slice($late, 0, $limit));
+        $shown = Judgement::worst($late, fn (array $a, array $b) => [$b['worst'], $a['group_hash']] <=> [$a['worst'], $b['group_hash']], $limit);
+        $findings = array_map($this->finding(...), $shown);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: count($late), findings: $findings, saw: $saw, caveats: $caveats);
     }
@@ -96,15 +89,13 @@ class QueueLatency implements Detector
     /**
      * Get what the dispatches say of each group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $dispatches, int|float $milliseconds): array
     {
-        $dispatches = $this->dispatches($window);
         $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
 
-        return Stored::rows($connection, "{$dispatches}, judged AS (
+        return Stored::rows($connection, "{$dispatches->sql}, judged AS (
             SELECT *, coalesce(wait >= :microseconds, 0) AS waited_long, coalesce(wait >= :microseconds OR age >= :microseconds, 0) AS late FROM dispatches
         ), ranked AS (
             SELECT *, count(wait) OVER (PARTITION BY group_hash) AS n,
@@ -125,19 +116,22 @@ class QueueLatency implements Detector
             min(started_at) FILTER (WHERE late) AS first_seen, max(started_at) FILTER (WHERE late) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE late) AS actors,
             count(*) FILTER (WHERE late AND NULLIF(user_id, '') IS NULL) AS anonymous
-        FROM ranked GROUP BY group_hash", $bindings, $window);
+        FROM ranked GROUP BY group_hash", [
+            ...$dispatches->bindings,
+            'microseconds' => $milliseconds * Microseconds::PER_MILLISECOND,
+        ], $window);
     }
 
     /**
      * Get the SQL of the dispatches that started in the window.
      */
-    protected function dispatches(Window $window): string
+    protected function dispatches(Window $window, ?string $group): Fragment
     {
+        $selected = Fragment::selecting($window, $group);
         $inline = Lineage::inlineCondition('queued.connection');
-
-        return "WITH queued AS (
+        $sql = "WITH queued AS (
             SELECT id, execution_id, started_at, coalesce(ended_at, started_at) AS queued_at, group_hash, user_id, name, connection, queue, NULLIF(job_id, '') AS job
-            FROM queued_jobs WHERE {$window->condition()} AND (:group = '' OR group_hash = :group)
+            FROM queued_jobs WHERE {$selected->sql}
         ), firsts AS (
             SELECT job_id AS job, execution_id, started_at, attempt,
                 ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY attempt = 1 DESC, started_at, id) AS position
@@ -158,18 +152,24 @@ class QueueLatency implements Detector
                 CASE WHEN state = 'pending' THEN max(0, CAST(round((:now - queued_at) * :per_second) AS INTEGER)) END AS age
             FROM placed
         )";
+
+        return new Fragment($sql, [
+            ...$selected->bindings,
+            'now' => Instant::now(),
+            'per_second' => Microseconds::PER_SECOND,
+        ]);
     }
 
     /**
      * Count the attempts that started in the window whose job has no stored dispatch.
-     *
-     * @param  array<string, int|float|string|null>  $bindings
      */
-    protected function attemptsWithoutDispatch(SQLite3 $connection, Window $window, array $bindings): int
+    protected function attemptsWithoutDispatch(SQLite3 $connection, Window $window, ?string $group): int
     {
+        $selected = Fragment::selecting($window, $group);
+
         [$row] = Stored::rows($connection, "SELECT count(*) AS attempts FROM job_attempts
-            WHERE {$window->condition()} AND (:group = '' OR group_hash = :group)
-            AND NOT EXISTS (SELECT 1 FROM queued_jobs WHERE queued_jobs.job_id = NULLIF(job_attempts.job_id, ''))", $bindings, $window);
+            WHERE {$selected->sql}
+            AND NOT EXISTS (SELECT 1 FROM queued_jobs WHERE queued_jobs.job_id = NULLIF(job_attempts.job_id, ''))", $selected->bindings, $window);
 
         return $row['attempts'];
     }

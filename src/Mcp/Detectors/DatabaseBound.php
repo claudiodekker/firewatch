@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -13,7 +14,7 @@ use SQLite3;
 /**
  * @internal
  */
-class DatabaseBound implements Detector
+class DatabaseBound implements Thresholded
 {
     /**
      * The fewest microseconds of typical duration a group needs, so that a fast request that is mostly one query is not called bound.
@@ -29,11 +30,6 @@ class DatabaseBound implements Detector
      * The basis of a typical share taken over all the requests of a group.
      */
     protected const AGGREGATE = 'aggregate';
-
-    /**
-     * The percent a share is of its whole.
-     */
-    protected const PERCENT = 100;
 
     /**
      * The decimals of a share in an answer.
@@ -53,7 +49,7 @@ class DatabaseBound implements Detector
      */
     public function threshold(): Threshold
     {
-        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: 100, whole: false);
+        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: Ranking::PERCENT, whole: false);
     }
 
     /**
@@ -69,37 +65,35 @@ class DatabaseBound implements Detector
     /**
      * Judge the requests that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $percent = $threshold ?? $this->threshold()->default;
         $meta = Markers::read($connection);
-        $bindings = [
-            'group' => $group ?? '',
+        $selected = Fragment::selecting($window, $group);
+        $requests = new Fragment($selected->sql, [
+            ...$selected->bindings,
             'from' => History::removedThrough($meta, [RecordType::QUERY]),
-            'share' => Percentile::MEDIAN->share(),
-        ];
+        ]);
 
-        $selected = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
         $described = $this->threshold()->describe($threshold);
-        $population = $this->population($connection, $window, $selected, $bindings);
+        $population = $this->population($connection, $window, $requests);
 
         if ($population['examined'] === 0) {
             return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS);
         }
 
         $caveats = $this->caveats($population['incomplete']);
-        $groups = $this->groups($connection, $window, $selected, $bindings);
+        $groups = $this->groups($connection, $window, $requests);
         $judged = array_sum(array_column($groups, 'requests'));
         $saw = $judged === $population['examined'] ? [] : ['without_duration' => $population['examined'] - $judged];
 
-        $bound = $this->bound($groups, $percent);
+        $bound = $this->bound($groups, $threshold);
         if ($bound === []) {
             return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], saw: $saw, caveats: $caveats);
         }
 
-        $shown = array_slice($bound, 0, $limit);
+        $shown = Judgement::worst($bound, $this->worse(...), $limit);
         $shownGroups = array_column($shown, 'group');
-        $queries = $this->topQueries($connection, $window, $selected, $bindings, array_column($shownGroups, 'group_hash'));
+        $queries = $this->topQueries($connection, $window, $requests, array_column($shownGroups, 'group_hash'));
         $findings = array_map(
             fn (array $entry) => $this->finding($entry['group'], $entry['typical'], $queries[$entry['group']['group_hash']] ?? []),
             $shown,
@@ -111,10 +105,9 @@ class DatabaseBound implements Detector
     /**
      * Get what the window holds.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return array{examined: int, incomplete: int}
      */
-    protected function population(SQLite3 $connection, Window $window, string $selected, array $bindings): array
+    protected function population(SQLite3 $connection, Window $window, Fragment $selected): array
     {
         $counted = Stored::number('queries');
 
@@ -122,7 +115,7 @@ class DatabaseBound implements Detector
             count(*) FILTER (WHERE eligible AND counted > captured) AS incomplete
             FROM (SELECT counted, (:from IS NULL OR started_at >= :from) AS eligible,
                 CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = requests.execution_id) ELSE 0 END AS captured
-                FROM (SELECT started_at, execution_id, {$counted} AS counted FROM requests WHERE {$selected}) AS requests)", $bindings, $window)[0];
+                FROM (SELECT started_at, execution_id, {$counted} AS counted FROM requests WHERE {$selected->sql}) AS requests)", $selected->bindings, $window)[0];
 
         return [
             'examined' => $row['examined'],
@@ -133,19 +126,18 @@ class DatabaseBound implements Detector
     /**
      * Get what the requests that have a duration say of each group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, string $selected, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $selected): array
     {
-        $rank = 'max(1, (n * :share + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
+        $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
         $durationMicros = Stored::number('duration');
 
         return Stored::rows($connection, "WITH judged AS (
             SELECT group_hash, id, started_at, execution_id, route_path, NULLIF(user_id, '') AS user_id, duration_micros, query_micros FROM (
                 SELECT group_hash, id, started_at, execution_id, route_path, user_id, {$durationMicros} AS duration_micros,
                     (SELECT total(queries.duration) FROM queries WHERE queries.execution_id = requests.execution_id) AS query_micros
-                FROM requests WHERE {$selected} AND (:from IS NULL OR started_at >= :from)) WHERE duration_micros > 0
+                FROM requests WHERE {$selected->sql} AND (:from IS NULL OR started_at >= :from)) WHERE duration_micros > 0
         ), ranked AS (
             SELECT *, count(*) OVER (PARTITION BY group_hash) AS n,
                 ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY query_micros * 1.0 / duration_micros, id) AS by_share,
@@ -161,7 +153,7 @@ class DatabaseBound implements Detector
             max(CASE WHEN by_latest = 1 THEN route_path END) AS route_path,
             min(started_at) AS first_seen, max(started_at) AS last_seen,
             count(DISTINCT user_id) AS actors, count(*) FILTER (WHERE user_id IS NULL) AS anonymous
-        FROM ranked GROUP BY group_hash", $bindings, $window);
+        FROM ranked GROUP BY group_hash", $selected->bindings, $window);
     }
 
     /**
@@ -177,13 +169,20 @@ class DatabaseBound implements Detector
             'typical' => $this->typical($group),
         ], $groups);
 
-        $bound = array_values(array_filter($entries, fn (array $entry) => $this->isBound($entry['typical'], $percent)));
+        return array_values(array_filter($entries, fn (array $entry) => $this->isBound($entry['typical'], $percent)));
+    }
 
+    /**
+     * Compare two bound groups, the one with the greater share and then the greater typical duration first.
+     *
+     * @param  array{group: array<string, mixed>, typical: array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}}  $a
+     * @param  array{group: array<string, mixed>, typical: array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}}  $b
+     */
+    protected function worse(array $a, array $b): int
+    {
         $worst = fn (array $entry) => [$this->share($entry['typical']), Stored::milliseconds($entry['typical']['microseconds'])];
 
-        usort($bound, fn (array $a, array $b) => [...$worst($b), $a['group']['group_hash']] <=> [...$worst($a), $b['group']['group_hash']]);
-
-        return $bound;
+        return [...$worst($b), $a['group']['group_hash']] <=> [...$worst($a), $b['group']['group_hash']];
     }
 
     /**
@@ -197,7 +196,7 @@ class DatabaseBound implements Detector
             return false;
         }
 
-        return $percent * $typical['duration_micros'] <= $typical['query_micros'] * self::PERCENT;
+        return $percent * $typical['duration_micros'] <= $typical['query_micros'] * Ranking::PERCENT;
     }
 
     /**
@@ -232,7 +231,7 @@ class DatabaseBound implements Detector
      */
     protected function share(array $typical): float
     {
-        return round(self::PERCENT * $typical['query_micros'] / $typical['duration_micros'], self::PERCENT_DECIMALS);
+        return round(Ranking::PERCENT * $typical['query_micros'] / $typical['duration_micros'], self::PERCENT_DECIMALS);
     }
 
     /**
@@ -246,7 +245,7 @@ class DatabaseBound implements Detector
     protected function finding(array $group, array $typical, array $queries): array
     {
         $share = $this->share($typical);
-        $aggregate = round(self::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
+        $aggregate = round(Ranking::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
         $route = Stored::blank($group['route_path']);
 
         return [
@@ -274,22 +273,21 @@ class DatabaseBound implements Detector
     /**
      * Get the queries that took longest in the requests of each group, by the group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @param  list<string>  $groups
      * @return array<string, list<array<string, mixed>>>
      */
-    protected function topQueries(SQLite3 $connection, Window $window, string $selected, array $bindings, array $groups): array
+    protected function topQueries(SQLite3 $connection, Window $window, Fragment $selected, array $groups): array
     {
         $names = array_map(fn (int $index) => "member{$index}", array_keys($groups));
         $members = implode(', ', array_map(fn (string $name) => ":{$name}", $names));
-        $bindings = [...$bindings, ...array_combine($names, $groups)];
+        $bindings = [...$selected->bindings, ...array_combine($names, $groups)];
         $top = self::TOP_QUERIES;
         $durationMicros = Stored::number('duration');
 
         $rows = Stored::rows($connection, "SELECT eg, qg, sql, calls, micros FROM (
             SELECT judged.group_hash AS eg, queries.group_hash AS qg, min(queries.sql) AS sql, count(*) AS calls, total(queries.duration) AS micros,
                 ROW_NUMBER() OVER (PARTITION BY judged.group_hash ORDER BY total(queries.duration) DESC, queries.group_hash) AS position
-            FROM (SELECT group_hash, execution_id FROM requests WHERE {$selected} AND (:from IS NULL OR started_at >= :from) AND {$durationMicros} > 0 AND group_hash IN ({$members})) AS judged
+            FROM (SELECT group_hash, execution_id FROM requests WHERE {$selected->sql} AND (:from IS NULL OR started_at >= :from) AND {$durationMicros} > 0 AND group_hash IN ({$members})) AS judged
             JOIN queries ON queries.execution_id = judged.execution_id
             GROUP BY judged.group_hash, queries.group_hash) WHERE position <= {$top}", $bindings, $window);
 

@@ -11,7 +11,7 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingTasks implements Detector
+class FailingTasks implements Thresholdless
 {
     /**
      * Get the name of the shape the detector judges.
@@ -19,14 +19,6 @@ class FailingTasks implements Detector
     public function name(): DetectorName
     {
         return DetectorName::FAILING_TASKS;
-    }
-
-    /**
-     * Get the threshold the detector takes: none.
-     */
-    public function threshold(): ?Threshold
-    {
-        return null;
     }
 
     /**
@@ -42,7 +34,7 @@ class FailingTasks implements Detector
     /**
      * Judge the scheduled tasks that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, ?string $group, int $limit): Judgement
     {
         $caveats = [
             __('firewatch::messages.detect_caveat_skipped'),
@@ -55,9 +47,8 @@ class FailingTasks implements Detector
         $failing = array_values(array_filter($groups, fn (array $row) => $row['failed'] + $row['skipped'] > 0));
 
         // Only a group of the failed kind has a failure, so the failures order the kinds as well.
-        usort($failing, fn (array $a, array $b) => [$b['failed'], $b['skipped']] <=> [$a['failed'], $a['skipped']] ?: strcmp($a['group_hash'], $b['group_hash']));
-
-        $findings = array_map($this->finding(...), array_slice($failing, 0, $limit));
+        $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['failed'], $b['skipped']] <=> [$a['failed'], $a['skipped']] ?: strcmp($a['group_hash'], $b['group_hash']), $limit);
+        $findings = array_map($this->finding(...), $shown);
 
         return Judgement::of($this->name(), null, examined: $examined, total: count($failing), findings: $findings, caveats: $caveats);
     }
@@ -69,10 +60,12 @@ class FailingTasks implements Detector
      */
     protected function groups(SQLite3 $connection, Window $window, ?string $group): array
     {
+        $selected = Fragment::selecting($window, $group);
+
         return Stored::rows($connection, "WITH tasks AS (
             SELECT id, execution_id, started_at, group_hash, user_id, name,
                 status = :failed AS failed, status = :skipped AS skipped, status IN (:failed, :skipped) AS failing
-            FROM scheduled_tasks WHERE {$window->condition()} AND (:group = '' OR group_hash = :group)
+            FROM scheduled_tasks WHERE {$selected->sql}
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY failing DESC, started_at DESC, id DESC) AS by_latest FROM tasks
         )
@@ -83,7 +76,7 @@ class FailingTasks implements Detector
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE failing) AS actors,
             count(*) FILTER (WHERE failing AND NULLIF(user_id, '') IS NULL) AS anonymous
         FROM placed GROUP BY group_hash", [
-            'group' => $group ?? '',
+            ...$selected->bindings,
             'failed' => Outcome::FAILED->value,
             'skipped' => Outcome::SKIPPED->value,
         ], $window);

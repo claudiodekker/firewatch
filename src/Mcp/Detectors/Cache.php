@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -10,17 +11,12 @@ use SQLite3;
 /**
  * @internal
  */
-class Cache implements Detector
+class Cache implements Thresholded
 {
     /**
      * The fewest reads of a key whose hit rate is judged, as one miss is a cold fill.
      */
     protected const READS_FLOOR = 3;
-
-    /**
-     * The percent a share is of its whole.
-     */
-    protected const PERCENT = 100;
 
     /**
      * The decimals of a share in an answer.
@@ -55,7 +51,7 @@ class Cache implements Detector
      */
     public function threshold(): Threshold
     {
-        return new Threshold(name: 'percent', unit: 'percent', default: 50, minimum: 1, maximum: self::PERCENT, whole: false);
+        return new Threshold(name: 'percent', unit: 'percent', default: 50, minimum: 1, maximum: Ranking::PERCENT, whole: false);
     }
 
     /**
@@ -71,9 +67,8 @@ class Cache implements Detector
     /**
      * Judge the keys of the cache events that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $percent = $threshold ?? $this->threshold()->default;
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_cache_keys')];
 
@@ -85,7 +80,7 @@ class Cache implements Detector
             return Judgement::of($this->name(), $described, examined: 0, total: 0, findings: [], saw: $saw, caveats: $caveats);
         }
 
-        $keys = $this->keys($connection, $window, $percent, $group, $limit);
+        $keys = $this->keys($connection, $window, $threshold, $group, $limit);
         $findings = array_map($this->finding(...), $keys);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: $keys[0]['total'] ?? 0, findings: $findings, saw: $saw, caveats: $caveats);
@@ -98,6 +93,8 @@ class Cache implements Detector
      */
     protected function stores(SQLite3 $connection, Window $window, ?string $group): array
     {
+        $selected = Fragment::selecting($window, $group);
+
         return Stored::rows($connection, "SELECT store, count(*) AS events,
                 count(*) FILTER (WHERE event = 'hit') AS hits,
                 count(*) FILTER (WHERE event = 'miss') AS misses,
@@ -105,8 +102,8 @@ class Cache implements Detector
                 count(*) FILTER (WHERE event = 'write-failure') AS write_failures,
                 count(*) FILTER (WHERE event = 'delete') AS deletes,
                 count(*) FILTER (WHERE event = 'delete-failure') AS delete_failures
-            FROM cache_events WHERE {$this->selected($window)}
-            GROUP BY store ORDER BY store", ['group' => $group ?? ''], $window);
+            FROM cache_events WHERE {$selected->sql}
+            GROUP BY store ORDER BY store", $selected->bindings, $window);
     }
 
     /**
@@ -116,7 +113,8 @@ class Cache implements Detector
      */
     protected function keys(SQLite3 $connection, Window $window, int|float $percent, ?string $group, int $limit): array
     {
-        $whole = self::PERCENT;
+        $selected = Fragment::selecting($window, $group);
+        $whole = Ranking::PERCENT;
         $worstFirst = 'failures DESC, hit_rate IS NULL, hit_rate ASC, group_hash ASC';
 
         return Stored::rows($connection, "WITH events AS (
@@ -124,7 +122,7 @@ class Cache implements Detector
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
                 event IN ('hit', 'miss') AS read,
                 event IN ('write-failure', 'delete-failure') AS failed
-            FROM cache_events WHERE {$this->selected($window)}
+            FROM cache_events WHERE {$selected->sql}
         ), placed AS (
             SELECT *, count(*) FILTER (WHERE failed) OVER (PARTITION BY group_hash) > 0 AS failing FROM events
         ), judged AS (
@@ -156,19 +154,11 @@ class Cache implements Detector
             ORDER BY {$worstFirst} LIMIT :limit
         )
         SELECT * FROM cut ORDER BY {$worstFirst}", [
+            ...$selected->bindings,
             'floor' => self::READS_FLOOR,
             'percent' => $percent,
-            'group' => $group ?? '',
             'limit' => $limit,
         ], $window);
-    }
-
-    /**
-     * Get the SQL condition of the cache events that started in the window, of one group when the call names it.
-     */
-    protected function selected(Window $window): string
-    {
-        return $window->condition().' AND (:group = \'\' OR group_hash = :group)';
     }
 
     /**
@@ -224,7 +214,7 @@ class Cache implements Detector
             'write_failures' => $row['write_failures'],
             'deletes' => $row['deletes'],
             'delete_failures' => $row['delete_failures'],
-            'hit_rate_pct' => $reads > 0 ? round(self::PERCENT * $row['hits'] / $reads, self::PERCENT_DECIMALS) : null,
+            'hit_rate_pct' => $reads > 0 ? round(Ranking::PERCENT * $row['hits'] / $reads, self::PERCENT_DECIMALS) : null,
         ];
     }
 
