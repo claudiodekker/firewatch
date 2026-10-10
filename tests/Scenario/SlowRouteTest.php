@@ -6,10 +6,13 @@ use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Route;
 
+// A cold application boot on the Windows runner can take more than 30 ms, and the slow route must still dominate it.
+const SLOW_ROUTE_MS = 150;
+
 /**
  * Let the scheduler run a task, then serve the slow route three times and the quick route once.
  *
- * The slow route sleeps 30 ms in its action, which dwarfs every other stage however fast the machine is.
+ * The slow route takes SLOW_ROUTE_MS in its action.
  */
 function slowRouteTraffic(): void
 {
@@ -27,7 +30,7 @@ function slowRouteTraffic(): void
         config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
 
         Route::get('/slow', function () {
-            usleep(30_000);
+            takeAtLeast(SLOW_ROUTE_MS);
 
             return 'ok';
         });
@@ -89,7 +92,7 @@ it('finds the time of the slow route in its action, with means that sum to its a
 
     expect($result['dominant_stage'])->toBe('action')
         ->and(array_keys($rows))->toBe(['bootstrap', 'before_middleware', 'action', 'render', 'after_middleware', 'sending', 'terminating'])
-        ->and($rows['action']['mean_ms'])->toBeGreaterThanOrEqual(30.0)
+        ->and($rows['action']['mean_ms'])->toBeGreaterThanOrEqual((float) SLOW_ROUTE_MS)
         ->and($rows['action']['share_pct'])->toBe(max($shares))
         ->and($result['stage_executions'])->toBe(3)
         ->and($result['stage_avg_ms'])->toBe($ranked['result']['groups'][0]['avg_ms'])
