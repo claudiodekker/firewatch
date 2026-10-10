@@ -92,3 +92,22 @@ jobs:
 
       - name: Test
         run: php vendor/bin/pest ${{ matrix.exclude-group }}
+
+  sqlite:
+    name: SQLite, ${{ matrix.role }} (${{ matrix.image }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: old
+            image: php:8.3-cli-alpine3.18
+          - role: new
+            image: php:8.5-cli-alpine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: bash .github/scripts/sqlite-suite.sh . ${{ matrix.image }} ${{ matrix.role }}
