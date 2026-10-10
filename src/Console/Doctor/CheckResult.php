@@ -5,10 +5,6 @@ namespace ClaudioDekker\Firewatch\Console\Doctor;
 use Throwable;
 
 /**
- * What one check found. It carries no id: the doctor pairs it with the check that ran, so a check can't report under another id.
- *
- * Built only through the named constructors, so a fix exists exactly on warn and fail.
- *
  * @internal
  *
  * @phpstan-consistent-constructor

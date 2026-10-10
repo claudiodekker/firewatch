@@ -20,15 +20,6 @@ use Illuminate\Support\Number;
 use SQLite3;
 
 /**
- * The checks on the store and the files beside it: store-permissions, store-gitignore, store-identity,
- * store-integrity, store-activity, store-losses and store-drift.
- *
- * Read-only by construction: the store is reached only through `Reader::snapshot()` (a read-only connection
- * that refuses an absent file before opening anything) and the failure file only through `FailureLog::dropped()`.
- * Every other fact is a stat. Nothing here can create a file, a directory or a lock.
- *
- * Each check that reads the store opens its own snapshot; none shares a connection or a read with another.
- *
  * @internal
  */
 class StoreChecks

@@ -6,16 +6,6 @@ use Illuminate\Contracts\Container\Container;
 use Throwable;
 
 /**
- * Runs every check of `firewatch:doctor` and reports what each found. Read-only: it writes nothing anywhere.
- *
- * Independence is structural, not a convention the checks keep:
- * - each check resolves its group fresh from the container, so no state (an open connection, a memoised read,
- *   a half-built object) outlives the check that made it;
- * - resolving the group happens inside the per-check try, so a collaborator that can't even be built
- *   (a Reader without ext-sqlite3, a server whose tools fail to resolve) fails that one check, not the run.
- *
- * Not an Action: Actions change state (CODING_STANDARDS section 2); this is the one query the command calls.
- *
  * @internal
  */
 class Doctor

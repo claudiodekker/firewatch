@@ -3,11 +3,6 @@
 namespace ClaudioDekker\Firewatch\Console\Doctor;
 
 /**
- * The doctor's checks: a closed set of ids, run and printed in the order of the cases.
- *
- * The case order is the contract order (#9 item 23). Adding, removing or moving a case changes the contract,
- * and `Doctor::check()` stops compiling under PHPStan (non-exhaustive match) until the case has a check.
- *
  * @internal
  */
 enum Check: string

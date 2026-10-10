@@ -10,11 +10,6 @@ use Illuminate\Contracts\Foundation\Application;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 
 /**
- * The checks on what an assistant connects to: server, sql-access and client.
- *
- * The server is built exactly as `firewatch:server --list` builds it, so it touches no store.
- * The SQL probe runs the child once on `:memory:`, never on the store.
- *
  * @internal
  */
 class ServerChecks

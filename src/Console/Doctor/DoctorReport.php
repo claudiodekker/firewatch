@@ -5,10 +5,6 @@ namespace ClaudioDekker\Firewatch\Console\Doctor;
 use Closure;
 
 /**
- * What every check found, once each and in the order of the ids.
- *
- * Only `collect()` builds one, and it walks `Check::cases()`, so a report can't miss, repeat or reorder an id.
- *
  * @internal
  *
  * @phpstan-consistent-constructor

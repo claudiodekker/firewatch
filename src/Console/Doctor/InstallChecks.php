@@ -13,13 +13,6 @@ use Illuminate\Events\Dispatcher;
 use SQLite3;
 
 /**
- * The checks on the PHP process, Nightwatch and the configuration: mode, php, sqlite, nightwatch,
- * nightwatch-order, config, budgets, store-path and capture-posture. None of them opens the store.
- *
- * The runtime facts (PHP version and binary, the SQLite release) are constructor arguments with the real
- * values as defaults, as `Sql\Availability` takes them, so a test arranges a version by binding an instance:
- * `$this->app->instance(InstallChecks::class, $this->app->make(InstallChecks::class, ['phpVersion' => '8.2.0']))`.
- *
  * @internal
  */
 class InstallChecks
