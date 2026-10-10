@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
@@ -190,7 +191,7 @@ describe('a store in every state', function () {
     it('says the store is busy after its fixed wait, and deletes nothing', function () {
         clearPopulatedStore();
         $this->endCapture();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class)) extends ClearStore
+        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
         {
             protected const BUSY_TIMEOUT_MILLISECONDS = 20;
         });
@@ -265,7 +266,7 @@ describe('clearing everything', function () {
     it('keeps a batch that arrives while it clears', function () {
         clearPopulatedStore();
         $last = max(clearIds());
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class)) extends ClearStore
+        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
         {
             protected bool $arrived = false;
 
@@ -289,7 +290,7 @@ describe('clearing everything', function () {
 
     it('deletes in chunks until none are left up to the newest id it saw', function () {
         clearPopulatedStore();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class)) extends ClearStore
+        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
         {
             protected const CHUNK_ROWS = 2;
         });

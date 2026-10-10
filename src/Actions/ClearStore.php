@@ -46,6 +46,7 @@ class ClearStore
     public function __construct(
         protected Reader $reader,
         protected Configuration $configuration,
+        protected FailureLog $failures,
     ) {
         //
     }
@@ -68,7 +69,7 @@ class ClearStore
     /**
      * Clear the store of every record, user and failure line, or of the records of one type.
      *
-     * @return array{records: int, users: int, before: int, after: int, truncated: bool}
+     * @return array{records: int, users: int, before: int, after: int, logInUse: bool}
      */
     public function clear(?RecordType $type): array
     {
@@ -89,17 +90,19 @@ class ClearStore
         if ($type === null) {
             $users = $this->deleteUsers($instant);
 
-            (new FailureLog($this->configuration))->clear();
+            $this->failures->clear();
         }
 
-        $truncated = $this->reclaim();
+        $this->giveBackFreePages();
+
+        $truncated = $this->truncateLog();
 
         return [
             'records' => $records,
             'users' => $users,
             'before' => $before,
             'after' => $this->size(),
-            'truncated' => $truncated,
+            'logInUse' => ! $truncated,
         ];
     }
 
@@ -107,7 +110,7 @@ class ClearStore
      * Rebuild the store in place as a fresh one.
      *
      * @param  StoreState|null  $state  why the store was unusable, or null when it was healthy
-     * @return array{damaged: bool, before: int, after: int, truncated: bool}
+     * @return array{damaged: bool, before: int, after: int, logInUse: bool}
      */
     public function drop(?StoreState $state): array
     {
@@ -122,15 +125,17 @@ class ClearStore
 
         $writer->maintain(fn (SQLite3 $connection) => $connection->exec('VACUUM'));
 
-        (new FailureLog($this->configuration))->clear();
+        $this->failures->clear();
 
-        $truncated = $this->reclaim();
+        $this->giveBackFreePages();
+
+        $truncated = $this->truncateLog();
 
         return [
             'damaged' => $state === StoreState::CORRUPT,
             'before' => $before,
             'after' => $this->size(),
-            'truncated' => $truncated,
+            'logInUse' => ! $truncated,
         ];
     }
 
@@ -187,9 +192,9 @@ class ClearStore
     }
 
     /**
-     * Give every freed page back to the file, then truncate the log: true when a reader kept the log from being truncated.
+     * Give every freed page back to the file.
      */
-    protected function reclaim(): bool
+    protected function giveBackFreePages(): void
     {
         $writer = $this->writer();
 
@@ -199,10 +204,16 @@ class ClearStore
         for ($steps = intdiv($freePages + static::RECLAIM_PAGES - 1, static::RECLAIM_PAGES); $steps > 0; $steps--) {
             $writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.static::RECLAIM_PAGES.')'));
         }
+    }
 
-        $checkpoint = $writer->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA wal_checkpoint(TRUNCATE)', entireRow: true));
+    /**
+     * Truncate the write-ahead log, and determine if it was: a reader that still uses the log keeps it from being truncated.
+     */
+    protected function truncateLog(): bool
+    {
+        $checkpoint = $this->writer()->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA wal_checkpoint(TRUNCATE)', entireRow: true));
 
-        return is_array($checkpoint) && Cell::integer($checkpoint['busy']) === 1;
+        return ! (is_array($checkpoint) && Cell::integer($checkpoint['busy']) === 1);
     }
 
     /**
