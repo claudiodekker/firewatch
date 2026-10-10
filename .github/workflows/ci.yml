@@ -111,3 +111,22 @@ jobs:
 
       - name: Test
         run: bash .github/scripts/sqlite-suite.sh . ${{ matrix.image }} ${{ matrix.role }}
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: sqlite3, intl
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress --with "laravel/framework:13.*" --with "laravel/nightwatch:~1.30.2"
+
+      - name: Test with coverage
+        run: php -d memory_limit=-1 vendor/bin/pest --coverage --min=90
