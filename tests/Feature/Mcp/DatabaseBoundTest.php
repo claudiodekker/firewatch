@@ -484,11 +484,11 @@ describe('the history', function () {
             ->and(array_column($envelope['blind_spots'], 'id'))->toContain('history-cleared');
     });
 
-    it('is not evaluated for want of records, when no request is left out and none was recorded', function () {
+    it('is not evaluated for want of records, when no request is left out and none was recorded since the clear', function () {
         ingest([syntheticRecord(RecordType::COMMAND)]);
         dbbClearAt(DBB_AT + 600);
 
-        expect(dbbAnswer()['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records']);
+        expect(dbbAnswer(['since' => (string) (DBB_AT + 600)])['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records']);
     });
 
     it('judges a request that started before the store was created, as the creation removed none of its queries', function () {
