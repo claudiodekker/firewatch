@@ -214,7 +214,6 @@ To upgrade, run `composer update`, then restart the assistant session. A release
 
 - Run the suite with `vendor/bin/pest`.
 - The scenario tests drive the real Nightwatch sensors.
-- Pull requests are reviewed against `CODING_STANDARDS.md`. The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`.
 - A pull request that changes behavior updates the README and the changelog.
 
 ## Changelog and license
