@@ -180,3 +180,20 @@ it('records a lock file it can\'t open as a filesystem failure', function () {
     expect(lockFailureLines())->toHaveCount(1)
         ->and(lockFailureLines()[0])->toMatchArray(['kind' => 'io', 'code' => null, 'message' => 'Firewatch could not open ['.lockPath().'].', 'dropped' => 1]);
 });
+
+it('records a lock file it can\'t restrict to its owner as a filesystem failure', function () {
+    app()->bind(Writer::class, fn () => new class(app(Configuration::class), sqliteVersion: '3.45.0') extends Writer
+    {
+        protected function makePrivate(string $path): bool
+        {
+            return false;
+        }
+    });
+    registerFirewatch();
+
+    Cache::get('first');
+    Nightwatch::digest();
+
+    expect(lockFailureLines())->toHaveCount(1)
+        ->and(lockFailureLines()[0])->toMatchArray(['kind' => 'io', 'message' => 'Firewatch could not restrict the permissions of ['.lockPath().'].', 'dropped' => 1]);
+});
