@@ -3,10 +3,13 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Console\Doctor\InstallChecks;
 use ClaudioDekker\Firewatch\Console\Doctor\StoreChecks;
+use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Availability;
+use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
+use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -15,6 +18,8 @@ use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Lang;
+use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Nightwatch\Events\IngestingEvents;
 
 // Outside the sql-access tests the probe is cut short before it spawns, so only tests tagged `process` start a process.
@@ -811,6 +816,175 @@ describe('store-drift', function () {
 
     it('informs when there is no store', function () {
         expect(doctorCheck('store-drift')['message'])->toBe(__('firewatch::messages.doctor.store.absent'));
+    });
+});
+
+describe('server', function () {
+    it('boots and lists its tools', function () {
+        $listing = app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
+
+        expect(doctorCheck('server'))->toBe([
+            'id' => 'server',
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.server.ok', ['version' => $listing['server']['version'], 'count' => 12]),
+            'fix' => null,
+        ]);
+    });
+
+    it('fails with the message of a server that cannot be built', function () {
+        $this->app->bind(FirewatchServer::class, fn () => throw new RuntimeException('The server could not boot.'));
+
+        expect(doctorCheck('server'))->toBe([
+            'id' => 'server',
+            'status' => 'fail',
+            'message' => 'The server could not boot.',
+            'fix' => __('firewatch::messages.doctor.threw_fix'),
+        ]);
+    });
+
+    it('fails a server that lists no tools', function () {
+        $this->app->bind(FirewatchServer::class, fn ($app, array $parameters) => new class($parameters['transport']) extends FirewatchServer
+        {
+            protected array $tools = [];
+        });
+
+        expect(doctorCheck('server'))->toMatchArray([
+            'status' => 'fail',
+            'message' => __('firewatch::messages.doctor.server.tools'),
+            'fix' => __('firewatch::messages.doctor.server.fix'),
+        ]);
+    });
+
+    it('fails a server without instructions', function () {
+        app('translator')->addLines(['messages.instructions' => ''], app()->getLocale(), 'firewatch');
+
+        expect(doctorCheck('server'))->toMatchArray([
+            'status' => 'fail',
+            'message' => __('firewatch::messages.doctor.server.instructions'),
+        ]);
+    });
+});
+
+describe('sql-access', function () {
+    it('warns with the reason the SQL tool cannot run', function () {
+        expect(doctorCheck('sql-access'))->toBe([
+            'id' => 'sql-access',
+            'status' => 'warn',
+            'message' => __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.php_binary')]),
+            'fix' => __('firewatch::messages.doctor.sql-access.php_binary_fix'),
+        ]);
+    });
+
+    it('has a fix for every reason the SQL tool can be unavailable', function (Unavailable $reason) {
+        expect(Lang::has("firewatch::messages.doctor.sql-access.{$reason->value}_fix"))->toBeTrue();
+    })->with(Unavailable::cases());
+
+    it('passes when the child starts', function () {
+        $this->app->instance(Availability::class, new Availability);
+
+        expect(doctorCheck('sql-access'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.sql-access.ok'),
+        ]);
+    })->group('process');
+
+    it('names the reason the child reports', function () {
+        $this->app->instance(Availability::class, new Availability);
+        $this->app->instance(ChildRunner::class, new ChildRunner(app(Configuration::class), script: dirname(__DIR__).'/Fixtures/Sql/unavailable.php'));
+
+        expect(doctorCheck('sql-access'))->toMatchArray([
+            'status' => 'warn',
+            'message' => __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.heap_limit')]),
+            'fix' => __('firewatch::messages.doctor.sql-access.heap_limit_fix'),
+        ]);
+    })->group('process');
+});
+
+describe('client', function () {
+    it('prints the absolute launch command', function () {
+        expect(doctorCheck('client'))->toBe([
+            'id' => 'client',
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.client.launch', ['command' => PHP_BINARY.' '.base_path('artisan').' firewatch:server']),
+            'fix' => null,
+        ]);
+    });
+});
+
+describe('the report', function () {
+    it('prints a line for each result and the fix beneath a warning', function () {
+        doctorInstall(['sqliteVersion' => fn () => '3.44.0']);
+
+        $this->artisan('firewatch:doctor')
+            ->expectsOutputToContain('[warn] sqlite '.__('firewatch::messages.doctor.sqlite.wal_reset', ['version' => '3.44.0']))
+            ->expectsOutputToContain('  fix: '.__('firewatch::messages.doctor.sqlite.wal_reset_fix'))
+            ->expectsOutputToContain('[info] client ')
+            ->assertSuccessful();
+    });
+
+    it('is ok when every check is ok or informs, and the command succeeds', function () {
+        doctorNightwatch('1.30.2');
+        doctorInstall(['sqliteVersion' => fn () => '3.50.8']);
+        doctorWithoutVeto();
+        $this->app->instance(Availability::class, new Availability);
+
+        $report = doctorRun();
+
+        expect($report['status'])->toBe('ok')
+            ->and($report['exit'])->toBe(0);
+    })->group('process');
+
+    it('is a warning when a check warns, and the command still succeeds', function () {
+        $report = doctorRun();
+
+        expect($report['status'])->toBe('warn')
+            ->and($report['exit'])->toBe(0);
+    });
+
+    it('is a failure when a check fails even beside warnings, and the command fails', function () {
+        doctorInstall(['phpVersion' => '8.2.29']);
+
+        $report = doctorRun();
+
+        expect(array_column($report['checks'], 'status'))->toContain('warn', 'fail')
+            ->and($report['status'])->toBe('fail')
+            ->and($report['exit'])->toBe(1);
+    });
+
+    it('prints the whole document with --json', function () {
+        doctorNightwatch('1.30.2');
+        doctorInstall(['sqliteVersion' => fn () => '3.50.8']);
+        doctorWithoutVeto();
+        $listing = app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
+        $directory = $this->storeDirectory;
+
+        $report = doctorRun();
+
+        expect($report)->toBe([
+            'status' => 'warn',
+            'checks' => [
+                ['id' => 'mode', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.mode.ok', ['environment' => 'testing', 'environments' => 'local, testing', 'mode' => 'active']), 'fix' => null],
+                ['id' => 'php', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.php.ok', ['version' => PHP_VERSION, 'binary' => PHP_BINARY]), 'fix' => null],
+                ['id' => 'sqlite', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.sqlite.ok', ['version' => '3.50.8']), 'fix' => null],
+                ['id' => 'nightwatch', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.nightwatch.ok', ['version' => '1.30.2', 'line' => '1.30']), 'fix' => null],
+                ['id' => 'nightwatch-order', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.nightwatch-order.ok'), 'fix' => null],
+                ['id' => 'config', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.config.ok'), 'fix' => null],
+                ['id' => 'budgets', 'status' => 'ok', 'message' => trans_choice('firewatch::messages.doctor.budgets.ok', 0, ['count' => 0]), 'fix' => null],
+                ['id' => 'store-path', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.store-path.ok', ['path' => $directory.'/firewatch.sqlite']), 'fix' => null],
+                ['id' => 'store-permissions', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store-permissions.absent'), 'fix' => null],
+                ['id' => 'store-gitignore', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store-gitignore.absent'), 'fix' => null],
+                ['id' => 'store-identity', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store-identity.absent', ['path' => $directory.'/firewatch.sqlite']), 'fix' => null],
+                ['id' => 'store-integrity', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store.absent'), 'fix' => null],
+                ['id' => 'store-activity', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store.absent'), 'fix' => null],
+                ['id' => 'store-losses', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.store-losses.ok'), 'fix' => null],
+                ['id' => 'store-drift', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store.absent'), 'fix' => null],
+                ['id' => 'capture-posture', 'status' => 'info', 'message' => __('firewatch::messages.doctor.capture-posture.posture', ['fields' => __('firewatch::messages.doctor.none'), 'headers' => __('firewatch::messages.doctor.none'), 'payload' => __('firewatch::messages.doctor.on'), 'logs' => __('firewatch::messages.doctor.on')]), 'fix' => null],
+                ['id' => 'server', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.server.ok', ['version' => $listing['server']['version'], 'count' => 12]), 'fix' => null],
+                ['id' => 'sql-access', 'status' => 'warn', 'message' => __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.php_binary')]), 'fix' => __('firewatch::messages.doctor.sql-access.php_binary_fix')],
+                ['id' => 'client', 'status' => 'info', 'message' => __('firewatch::messages.doctor.client.launch', ['command' => PHP_BINARY.' '.base_path('artisan').' firewatch:server']), 'fix' => null],
+            ],
+            'exit' => 0,
+        ]);
     });
 });
 
