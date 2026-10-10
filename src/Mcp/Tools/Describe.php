@@ -282,7 +282,7 @@ class Describe extends Tool
                     'cell_characters' => Policy::CELL_CHARACTERS,
                 ],
                 'readable' => Policy::READABLE,
-                'functions' => Policy::FUNCTIONS,
+                'functions' => Policy::availableFunctions(),
             ],
             'examples' => $catalogue->examples(),
         ];

@@ -3,10 +3,14 @@
 namespace ClaudioDekker\Firewatch\Tests;
 
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\Notices;
+use ClaudioDekker\Firewatch\NullIngest;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Facade;
 use Laravel\Mcp\Server\McpServiceProvider;
+use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -40,12 +44,17 @@ abstract class TestCase extends Orchestra
 
     protected function tearDown(): void
     {
+        $this->endCapture();
+
         parent::tearDown();
 
         $this->setStorePath(null);
 
         unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
         putenv('FIREWATCH_RETENTION_AGE');
+
+        // A reported exception holds the store's connections in its trace until the next test resolves the facade again.
+        Facade::clearResolvedInstances();
 
         (new Filesystem)->deleteDirectory($this->storeDirectory);
 
@@ -59,9 +68,23 @@ abstract class TestCase extends Orchestra
      */
     protected function refreshApplication()
     {
+        $this->endCapture();
+
         NightwatchServiceProvider::flushState();
 
         parent::refreshApplication();
+    }
+
+    /**
+     * Laravel's static state keeps an application alive past its test, and Windows can't delete a store that is still open.
+     */
+    public function endCapture(): void
+    {
+        $core = $this->app?->resolved(Core::class) ? $this->app->make(Core::class) : null;
+
+        if ($core instanceof Core && $core->ingest instanceof Ingest) {
+            $core->ingest = new NullIngest;
+        }
     }
 
     /**

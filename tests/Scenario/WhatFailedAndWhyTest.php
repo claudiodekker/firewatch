@@ -243,7 +243,7 @@ it('flags the route, the job, the task and the dependency that failed, with the 
             'saw' => [],
             'caveats' => [],
         ])
-        ->and($jobs['findings'][0]['evidence']['last_exception']['location'])->toContain('workbench/app/Jobs/ChargeCard.php:')
+        ->and($jobs['findings'][0]['evidence']['last_exception']['location'])->toContain(nativePath('workbench/app/Jobs/ChargeCard.php:'))
         ->and(whatFailedResult($tasks))->toBe([
             'detector' => 'failing-tasks',
             'threshold' => null,
@@ -352,9 +352,9 @@ it('flags the exceptions behind those failures and the error lines the handler w
         'saw' => [],
         'caveats' => [],
     ])
-        ->and($thrown[0]['app_frame'])->toEndWith("workbench/routes/web.php:{$thrown[0]['line']}")
-        ->and($thrown[1]['app_frame'])->toEndWith("workbench/app/Jobs/ChargeCard.php:{$thrown[1]['line']}")
-        ->and($thrown[2]['app_frame'])->toEndWith("tests/Scenario/WhatFailedAndWhyTest.php:{$thrown[2]['line']}")
+        ->and($thrown[0]['app_frame'])->toEndWith(nativePath("workbench/routes/web.php:{$thrown[0]['line']}"))
+        ->and($thrown[1]['app_frame'])->toEndWith(nativePath("workbench/app/Jobs/ChargeCard.php:{$thrown[1]['line']}"))
+        ->and($thrown[2]['app_frame'])->toEndWith(nativePath("tests/Scenario/WhatFailedAndWhyTest.php:{$thrown[2]['line']}"))
         ->and(array_column($logs['findings'], 'group'))->toBe([null, null])
         ->and(whatFailedResult($logs))->toBe([
             'detector' => 'error-logs',

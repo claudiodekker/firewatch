@@ -342,6 +342,8 @@ describe('the application frame', function () {
         'the frame that threw' => [['app/Models/Order.php:12', 'app/Http/Controllers/OrderController.php:30'], 'app/Models/Order.php:12'],
         'below vendor frames' => [['vendor/laravel/framework/src/Illuminate/Database/Connection.php:838', 'vendor/laravel/framework/src/Illuminate/Database/Connection.php:794', 'app/Models/Order.php:12'], 'app/Models/Order.php:12'],
         'below an absolute vendor path' => [['/srv/app/vendor/laravel/framework/src/Illuminate/Routing/Router.php:10', '/srv/app/routes/web.php:27'], '/srv/app/routes/web.php:27'],
+        'below vendor frames written on Windows' => [['vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php:10', 'routes\\web.php:27'], 'routes\\web.php:27'],
+        'below an absolute vendor path written on Windows' => [['C:\\app\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php:10', 'C:\\app\\routes\\web.php:27'], 'C:\\app\\routes\\web.php:27'],
         'below an internal function' => [['[internal function]', 'app/Models/Order.php:12'], 'app/Models/Order.php:12'],
         'below an unknown file' => [['[unknown file]', 'app/Models/Order.php:12'], 'app/Models/Order.php:12'],
         'below a frame without a file' => [[null, '', 'app/Models/Order.php:12'], 'app/Models/Order.php:12'],

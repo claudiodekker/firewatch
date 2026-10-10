@@ -130,6 +130,11 @@ function runArtisan(array $input): void
     $kernel->terminate($arguments, $status);
 }
 
+function nativePath(string $path): string
+{
+    return str_replace('/', DIRECTORY_SEPARATOR, $path);
+}
+
 function syntheticRecord(RecordType $type): RecordBuilder
 {
     return new RecordBuilder($type);

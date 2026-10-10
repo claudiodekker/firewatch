@@ -20,7 +20,7 @@ class PackageSource
 
     protected const ROOT = __DIR__.'/../../src';
 
-    protected const NAMESPACE = 'ClaudioDekker\\Firewatch\\';
+    protected const ROOT_NAMESPACE = 'ClaudioDekker\\Firewatch\\';
 
     protected const CONSOLE_OUTPUT_METHODS = ['info', 'line', 'comment', 'question', 'warn', 'error', 'alert', 'newLine', 'table', 'write', 'writeln'];
 
@@ -55,7 +55,7 @@ class PackageSource
      */
     public static function classesWithoutTag(array $namespaces, string $tag): array
     {
-        $prefixes = array_map(fn (string $namespace) => static::NAMESPACE.$namespace.'\\', $namespaces);
+        $prefixes = array_map(fn (string $namespace) => static::ROOT_NAMESPACE.$namespace.'\\', $namespaces);
 
         $classes = array_filter(
             static::classes(),
@@ -337,7 +337,7 @@ class PackageSource
                 continue;
             }
 
-            $class = static::NAMESPACE.str_replace(['/', '.php'], ['\\', ''], $relativePath);
+            $class = static::ROOT_NAMESPACE.str_replace(['/', '.php'], ['\\', ''], $relativePath);
 
             if (class_exists($class)) {
                 $classes[] = $class;

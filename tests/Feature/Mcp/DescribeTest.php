@@ -133,7 +133,7 @@ it('answers what the store holds, then the schema and the SQL tool, in full', fu
             'reason' => null,
             'ceilings' => ['statement_bytes' => 16384, 'deadline_ms' => 10000, 'row_limit' => 500, 'row_budget_bytes' => 16000, 'output_bytes' => 1048576, 'sqlite_heap_mb' => 32, 'php_memory_mb' => 64, 'cell_characters' => 2000],
             'readable' => Policy::READABLE,
-            'functions' => Policy::FUNCTIONS,
+            'functions' => Policy::availableFunctions(),
         ])
         ->and(array_column($result['examples'], 'example'))->toBe([
             __('firewatch::messages.describe_examples.slowest_routes'),

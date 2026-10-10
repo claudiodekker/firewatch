@@ -141,6 +141,7 @@ describe('a store in every state', function () {
 
     it('refuses a damaged store', function () {
         clearPopulatedStore();
+        $this->endCapture();
         $handle = fopen(clearStorePath(), 'r+b');
         fseek($handle, 4096);
         fwrite($handle, str_repeat("\xff", 8192));
@@ -188,6 +189,7 @@ describe('a store in every state', function () {
 
     it('says the store is busy after its fixed wait, and deletes nothing', function () {
         clearPopulatedStore();
+        $this->endCapture();
         app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class)) extends ClearStore
         {
             protected const BUSY_TIMEOUT_MILLISECONDS = 20;
@@ -301,6 +303,7 @@ describe('clearing everything', function () {
 
     it('returns the freed pages to the file', function () {
         ingest(array_map(fn (int $i) => syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0 + $i]), range(1, 300)));
+        $this->endCapture();
         $before = filesize(clearStorePath());
 
         runClear()->run();

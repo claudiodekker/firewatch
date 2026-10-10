@@ -309,7 +309,7 @@ describe('a damaged Firewatch store', function () {
             ->and(file_get_contents($path.'-shm.corrupt'))->not->toBe('an earlier memory')
             ->and(file_get_contents($path.'.corrupt'))->not->toBe('an earlier copy')
             ->and(recoveryKeys())->toBe(['new']);
-    });
+    })->group('posix');
 
     it('leaves no copy of a log that the damaged store did not have', function () {
         $path = recoveryPath();

@@ -29,7 +29,12 @@ function overBudgetTraffic(): void
 
     runArtisan(['command' => 'schedule:run']);
 
+    $started = $_SERVER['REQUEST_TIME_FLOAT'];
+    test()->beforeApplicationDestroyed(fn () => $_SERVER['REQUEST_TIME_FLOAT'] = $started);
+
     foreach (['/slow', '/quick'] as $uri) {
+        // Nightwatch reads a request's start when its provider registers; the process's own start would count every earlier test into the request's duration.
+        $_SERVER['REQUEST_TIME_FLOAT'] = microtime(true);
         forceRequests();
         config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
 

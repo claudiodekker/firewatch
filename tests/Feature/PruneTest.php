@@ -315,6 +315,7 @@ describe('the pass', function () {
         config()->set('firewatch.busy_timeout', 20);
         registerFirewatch();
         requestsStartedAt([PRUNE_CUTOFF + 1]);
+        $this->endCapture();
         $this->travelTo('2026-09-30 14:03:00');
         $connection = new SQLite3(app(Configuration::class)->database);
         $connection->busyTimeout(20);
@@ -409,6 +410,13 @@ function storeWithRequests(int $count): int
     requestsStartedAt(range(1790776001, 1790776000 + $count));
     test()->travelTo('2026-09-30 14:03:00');
 
+    return livePagesCountingStatistics();
+}
+
+function livePagesCountingStatistics(): int
+{
+    app(Writer::class)->maintain(fn (SQLite3 $connection) => $connection->exec('ANALYZE'));
+
     return storePages()['live'];
 }
 
@@ -455,7 +463,7 @@ describe('the size backstop', function () {
     it('trims records of unknown start by arrival once none of known start are left', function () {
         ingest(array_fill(0, 200, syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 'unknown'])));
         $this->travelTo('2026-09-30 14:03:00');
-        $live = storePages()['live'];
+        $live = livePagesCountingStatistics();
 
         withBackstop($live - 1, chunk: 10);
         app(Pruner::class)->run();

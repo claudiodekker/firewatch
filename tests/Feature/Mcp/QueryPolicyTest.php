@@ -2,9 +2,11 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
+use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Child\Policy;
+use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 
 const QP_ALL_TYPES = ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'];
 
@@ -219,12 +221,21 @@ it('explains every allowed form, reading the same record types', function (strin
         ->and($answer['coverage']['types_read'])->toBe($types);
 })->with('explanations', 'allowed statements')->group('process');
 
-it('calls every function of the allow-list', function (string $sql) {
+it('calls a function of the allow-list where the linked SQLite has it, and describe lists exactly those', function (string $function, string $sql) {
     $answer = qpCall($sql);
+    $listed = in_array($function, Envelope::assert(Describe::class)['result']['sql']['functions'], true);
 
-    expect($answer)->toBeArray()
-        ->and($answer['result']['rows'])->not->toBe([]);
-})->with(QP_FUNCTION_CALLS)->group('process');
+    // Math functions are a compile-time option of SQLite, which the Windows build of PHP leaves out.
+    if (is_string($answer)) {
+        expect(array_slice(explode("\n", $answer), 0, 2))->toBe(['error: invalid_sql', "no such function: {$function}"])
+            ->and($listed)->toBeFalse();
+
+        return;
+    }
+
+    expect($answer['result']['rows'])->not->toBe([])
+        ->and($listed)->toBeTrue();
+})->with(array_combine(array_keys(QP_FUNCTION_CALLS), array_map(fn (string $function, string $sql) => [$function, $sql], array_keys(QP_FUNCTION_CALLS), QP_FUNCTION_CALLS)))->group('process');
 
 it('pins a call for every function of the allow-list', function () {
     expect(array_keys(QP_FUNCTION_CALLS))->toBe(Policy::FUNCTIONS);
