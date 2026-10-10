@@ -34,10 +34,10 @@ test('every tool the assistant-facing text names in backticks is registered, or 
         ->and(array_values(array_unique(array_diff($words, $tools, $arguments, $answerFields, $otherWords, $shapes))))->toBe([]);
 });
 
-test('the tool listing is under 7,200 tokens at three characters a token', function () {
+test('the tool listing is under 6,000 tokens at three characters a token', function () {
     $characters = strlen(json_encode(toolListing()['tools'], JSON_THROW_ON_ERROR));
 
-    expect(intdiv($characters, 3))->toBeLessThan(7200);
+    expect(intdiv($characters, 3))->toBeLessThan(6000);
 });
 
 test('every argument description is at most 30 words', function () {
