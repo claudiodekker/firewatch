@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\LogLevel;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -14,8 +13,6 @@ use SQLite3;
  */
 class ErrorLogs implements Thresholded, Ungrouped
 {
-    use JudgesAtItsDefault;
-
     /**
      * Get the name of the shape the detector judges.
      */
@@ -45,7 +42,7 @@ class ErrorLogs implements Thresholded, Ungrouped
     /**
      * Judge the message shapes of the logs at error or worse that were written in the window, over the logs of every level.
      */
-    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_log_capture')];

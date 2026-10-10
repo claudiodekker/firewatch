@@ -11,7 +11,7 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingTasks implements Detector
+class FailingTasks implements Thresholdless
 {
     /**
      * Get the name of the shape the detector judges.

@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -14,8 +13,6 @@ use SQLite3;
  */
 class FailingHttp implements Thresholded
 {
-    use JudgesAtItsDefault;
-
     /**
      * The most URLs and the most execution groups a finding lists.
      */
@@ -55,7 +52,7 @@ class FailingHttp implements Thresholded
     /**
      * Judge the hosts of the outgoing requests that started in the window.
      */
-    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_unanswered')];

@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\Outcome;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -14,8 +13,6 @@ use SQLite3;
  */
 class FailingJobs implements Thresholded
 {
-    use JudgesAtItsDefault;
-
     /**
      * Get the name of the shape the detector judges.
      */
@@ -45,7 +42,7 @@ class FailingJobs implements Thresholded
     /**
      * Judge the job attempts that started in the window.
      */
-    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
         $attempts = $this->attempts($window, $group);

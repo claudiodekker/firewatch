@@ -20,5 +20,5 @@ interface Thresholded extends Detector
      *
      * @param  int|float  $threshold  the value the call asked for, else the default of the threshold
      */
-    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement;
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement;
 }

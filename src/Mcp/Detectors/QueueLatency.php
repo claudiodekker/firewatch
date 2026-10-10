@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Lineage;
@@ -20,8 +19,6 @@ use SQLite3;
  */
 class QueueLatency implements Thresholded
 {
-    use JudgesAtItsDefault;
-
     /**
      * Get the name of the shape the detector judges.
      */
@@ -51,7 +48,7 @@ class QueueLatency implements Thresholded
     /**
      * Judge the dispatches that started in the window.
      */
-    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
 

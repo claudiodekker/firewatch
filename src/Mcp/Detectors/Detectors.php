@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\Markers;
 use Illuminate\Contracts\Container\Container;
+use LogicException;
 use SQLite3;
 
 /**
@@ -76,12 +77,11 @@ class Detectors
      */
     public function judge(SQLite3 $connection, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
-        if ($detector instanceof Thresholded) {
-            $resolved = $threshold ?? $detector->threshold()->default;
-            $judgement = $detector->judgeAt($connection, $window, $resolved, $group, $limit);
-        } else {
-            $judgement = $detector->judge($connection, $window, $group, $limit);
-        }
+        $judgement = match (true) {
+            $detector instanceof Thresholded => $detector->judge($connection, $window, $threshold ?? $detector->threshold()->default, $group, $limit),
+            $detector instanceof Thresholdless => $detector->judge($connection, $window, $group, $limit),
+            default => throw new LogicException('A detector is either thresholded or thresholdless.'),
+        };
 
         return $judgement->afterRemoval(History::removedThrough(Markers::read($connection), $detector->types()), $window->since());
     }

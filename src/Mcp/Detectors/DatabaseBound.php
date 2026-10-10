@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
@@ -17,8 +16,6 @@ use SQLite3;
  */
 class DatabaseBound implements Thresholded
 {
-    use JudgesAtItsDefault;
-
     /**
      * The fewest microseconds of typical duration a group needs, so that a fast request that is mostly one query is not called bound.
      */
@@ -68,7 +65,7 @@ class DatabaseBound implements Thresholded
     /**
      * Judge the requests that started in the window.
      */
-    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $meta = Markers::read($connection);
         $selected = Fragment::selecting($window, $group);

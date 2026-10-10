@@ -2,16 +2,16 @@
 
 namespace ClaudioDekker\Firewatch\Tests\Support;
 
-use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Thresholdless;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use Closure;
 use SQLite3;
 
-class FakeDetector implements Detector
+class FakeDetector implements Thresholdless
 {
     /**
      * Create a new fake detector instance.

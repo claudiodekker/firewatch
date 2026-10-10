@@ -3,7 +3,6 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\ExecutionType;
-use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -17,8 +16,6 @@ use SQLite3;
  */
 class ExceptionClusters implements Thresholded
 {
-    use JudgesAtItsDefault;
-
     /**
      * The most units a finding lists.
      */
@@ -53,7 +50,7 @@ class ExceptionClusters implements Thresholded
     /**
      * Judge the exception groups that occurred in the window, over the executions that started in it.
      */
-    public function judgeAt(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
 
