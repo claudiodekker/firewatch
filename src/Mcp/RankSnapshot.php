@@ -7,14 +7,12 @@ use ClaudioDekker\Firewatch\RecordType;
 /**
  * @internal
  */
-readonly class RankSnapshot
+abstract readonly class RankSnapshot
 {
     /**
      * Create a new rank snapshot instance.
      *
-     * @param  list<RecordType>  $held
-     * @param  array{rows: list<array<string, mixed>>, keys: list<array{value: int|float|null, occurrences: int, hash: string}>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}|null  $ranking
-     * @param  array{rows: list<array<string, mixed>>, matched: int, records: int, label: string}|null  $breakdown
+     * @param  list<RecordType>  $types
      */
     public function __construct(
         public int $total,
@@ -22,10 +20,7 @@ readonly class RankSnapshot
         public ?float $oldest,
         public ?float $newest,
         public StoreFacts $facts,
-        public ?RecordType $type,
-        public array $held,
-        public ?array $ranking = null,
-        public ?array $breakdown = null,
+        public array $types,
     ) {
         //
     }

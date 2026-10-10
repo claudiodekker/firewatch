@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\BrokenDownSnapshot;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
@@ -16,12 +17,13 @@ use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\RankedSnapshot;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
-use ClaudioDekker\Firewatch\Mcp\RankSnapshot;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TruncationReason;
+use ClaudioDekker\Firewatch\Mcp\UnrankedSnapshot;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -158,19 +160,28 @@ class Rank extends Tool
 
                 $type = $explicit ?? ($group === null ? null : Ranking::preferred($held));
 
+                $types = $type === null ? [] : [$type];
+
                 if ($type === null || ($group !== null && $held === [])) {
-                    return new RankSnapshot($total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $held);
+                    return new UnrankedSnapshot($total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $types, $held);
                 }
 
-                $by ??= $this->measure($request, $type, $group);
-                $ranking = new Ranking($type, $by, $window, $deploy, $matching, $group, $this->configuration);
+                $measure = $by ?? $this->measure($request, $type, $group);
+                $ranking = new Ranking($type, $measure, $window, $deploy, $matching, $group, $this->configuration);
 
-                $read = $inWindow !== 0;
-                $facts = StoreFacts::read($connection);
-                $ranked = $read && $group === null ? $ranking->read($connection) : null;
-                $broken = $read && $group !== null ? $ranking->breakdown($connection, $limit) : null;
+                if ($inWindow === 0) {
+                    return new UnrankedSnapshot($total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $types, $held);
+                }
 
-                return new RankSnapshot($total, $inWindow, $oldest, $newest, $facts, $type, $held, $ranked, $broken);
+                if ($group === null) {
+                    $ranked = $ranking->read($connection);
+
+                    return new RankedSnapshot($total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $measure, $ranked);
+                }
+
+                $broken = $ranking->breakdown($connection, $limit);
+
+                return new BrokenDownSnapshot($total, $inWindow, $oldest, $newest, StoreFacts::read($connection), $type, $group, $held, $broken);
             });
         } catch (StoreUnusable $unusable) {
             $types = $explicit === null ? [] : [$explicit];
@@ -184,7 +195,7 @@ class Rank extends Tool
 
         $cursor?->belongsTo($snapshot->facts->meta->createdAt, $this->name());
 
-        $types = $snapshot->type === null ? [] : [$snapshot->type];
+        $types = $snapshot->types;
         $blindSpots = [...BlindSpots::for($types), ...$this->conditions->for($snapshot->facts, $types, $window)];
         $history = History::of($snapshot->facts->meta, $types, ...$retention);
 
@@ -197,25 +208,28 @@ class Rank extends Tool
 
         $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $snapshot->oldest, newest: $snapshot->newest, records: $snapshot->total);
 
-        if ($snapshot->ranking === null && $snapshot->breakdown === null && ($group === null || $snapshot->held !== [])) {
-            $empty = Emptiness::windowEmpty($snapshot->total);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
-        }
-
         $filters = $group === null
-            ? ["type: {$snapshot->type?->value}", ...($matching === null ? [] : ["matching: {$matching}"]), ...($deploy === null ? [] : ["deploy: {$deploy}"])]
+            ? ["type: {$explicit?->value}", ...($matching === null ? [] : ["matching: {$matching}"]), ...($deploy === null ? [] : ["deploy: {$deploy}"])]
             : ["group: {$group}", ...($explicit === null ? [] : ["type: {$explicit->value}"])];
 
-        if ($snapshot->type !== null && $by !== null && $snapshot->ranking !== null) {
-            return $this->ranking($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, filters: $filters, inWindow: $snapshot->inWindow, type: $snapshot->type, by: $by, cursor: $cursor, createdAt: $snapshot->facts->meta->createdAt, limit: $limit, ranked: $snapshot->ranking);
-        }
+        return match (true) {
+            $snapshot instanceof RankedSnapshot => $this->ranking($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, filters: $filters, inWindow: $snapshot->inWindow, type: $snapshot->type, by: $snapshot->by, cursor: $cursor, createdAt: $snapshot->facts->meta->createdAt, limit: $limit, ranked: $snapshot->ranking),
+            $snapshot instanceof BrokenDownSnapshot => $this->breakdown($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, filters: $filters, inWindow: $snapshot->inWindow, type: $snapshot->type, group: $snapshot->group, held: $snapshot->held, limit: $limit, breakdown: $snapshot->breakdown),
+            $snapshot instanceof UnrankedSnapshot => $this->unranked($snapshot, $coverage, $blindSpots, $filters, $epoch, $timezone, $window, $group),
+        };
+    }
 
-        if ($snapshot->type !== null && $group !== null && $snapshot->breakdown !== null) {
-            return $this->breakdown($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, filters: $filters, inWindow: $snapshot->inWindow, type: $snapshot->type, group: $group, held: $snapshot->held, limit: $limit, breakdown: $snapshot->breakdown);
-        }
-
-        $empty = Emptiness::noMatch($snapshot->inWindow, $filters);
+    /**
+     * Say why nothing was ranked.
+     *
+     * @param  list<array<string, mixed>>  $blindSpots
+     * @param  list<string>  $filters
+     */
+    protected function unranked(UnrankedSnapshot $snapshot, Coverage $coverage, array $blindSpots, array $filters, float $epoch, string $timezone, Window $window, ?string $group): Answer
+    {
+        $empty = $group === null || $snapshot->held !== []
+            ? Emptiness::windowEmpty($snapshot->total)
+            : Emptiness::noMatch($snapshot->inWindow, $filters);
 
         return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
     }
