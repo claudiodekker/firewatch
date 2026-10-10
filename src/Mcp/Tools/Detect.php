@@ -14,6 +14,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Reason;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Threshold;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Ungrouped;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
@@ -36,6 +37,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
+use LogicException;
 use SQLite3;
 
 /**
@@ -400,10 +402,8 @@ class Detect extends Tool
             return null;
         }
 
-        $example = $this->example($shape ?? $this->detectors->all()[0], 'threshold');
-
         if ($shape === null) {
-            throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $example);
+            throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $this->thresholdedExample());
         }
 
         $threshold = $shape->threshold();
@@ -412,7 +412,7 @@ class Detect extends Tool
             throw Refusal::conflicting(argument: 'threshold', with: 'shape: '.$shape->name()->value, accepted: 'a call without `threshold`', example: "detect(shape: \"{$shape->name()->value}\")");
         }
 
-        return $threshold->read($value, $example);
+        return $threshold->read($value, $this->example($shape, $threshold));
     }
 
     /**
@@ -464,12 +464,26 @@ class Detect extends Tool
     }
 
     /**
-     * Get a valid call of a shape that passes one of its arguments at the default.
+     * Get a valid call of the first shape that has a threshold.
      */
-    protected function example(Detector $shape, string $argument): string
+    protected function thresholdedExample(): string
     {
-        $default = $shape->threshold()->default ?? 0;
+        foreach ($this->detectors->all() as $detector) {
+            $threshold = $detector->threshold();
 
-        return "detect(shape: \"{$shape->name()->value}\", {$argument}: {$default})";
+            if ($threshold !== null) {
+                return $this->example($detector, $threshold);
+            }
+        }
+
+        throw new LogicException('No shipped shape has a threshold.');
+    }
+
+    /**
+     * Get a valid call of a shape that passes its threshold at the default.
+     */
+    protected function example(Detector $shape, Threshold $threshold): string
+    {
+        return "detect(shape: \"{$shape->name()->value}\", threshold: {$threshold->default})";
     }
 }
