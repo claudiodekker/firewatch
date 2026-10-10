@@ -2,7 +2,9 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\Store\Markers;
 use Illuminate\Contracts\Container\Container;
 use SQLite3;
 
@@ -66,6 +68,16 @@ class Detectors
     {
         return array_map(fn (Detector $detector) => $deadline->passed()
             ? Judgement::notEvaluated($detector->name(), $detector->threshold()?->describe(), Reason::DEADLINE)
-            : $detector->judge($connection, $window, threshold: null, group: null, limit: 1), $this->all());
+            : $this->judge($connection, $detector, $window, threshold: null, group: null, limit: 1), $this->all());
+    }
+
+    /**
+     * Judge the records of the window with a detector, and say so when history removed what it would have judged.
+     */
+    public function judge(SQLite3 $connection, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    {
+        $judgement = $detector->judge($connection, $window, $threshold, $group, $limit);
+
+        return $judgement->afterRemoval(History::removedThrough(Markers::read($connection), $detector->types()), $window->since());
     }
 }

@@ -63,6 +63,18 @@ class Judgement
     }
 
     /**
+     * Get the judgement with its reason set to outside the coverage, when history removed what a window that reaches back before it would have judged.
+     */
+    public function afterRemoval(?float $removedThrough, ?float $since): self
+    {
+        if ($this->reason !== Reason::NO_RECORDS || $removedThrough === null || ($since !== null && $since >= $removedThrough)) {
+            return $this;
+        }
+
+        return new self($this->detector, $this->threshold, $this->verdict, Reason::OUTSIDE_COVERAGE, $this->examined, $this->total, $this->findings, $this->saw, $this->caveats);
+    }
+
+    /**
      * Determine if the detector found no record of its own.
      */
     public function matchedNothing(): bool

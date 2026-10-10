@@ -134,7 +134,7 @@ class Detect extends Tool
             [[$total, $inWindow, $oldest, $newest], $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
                 $this->count($connection, $window),
                 StoreFacts::read($connection),
-                array_map(fn (Detector $detector) => $detector->judge($connection, $window, $threshold, $group, $limit), $detectors),
+                array_map(fn (Detector $detector) => $this->detectors->judge($connection, $detector, $window, $threshold, $group, $limit), $detectors),
             ]);
         } catch (StoreUnusable $unusable) {
             $judgements = array_map(fn (Detector $detector) => Judgement::notEvaluated($detector->name(), $detector->threshold()?->describe($threshold), Reason::STORE_UNAVAILABLE), $detectors);

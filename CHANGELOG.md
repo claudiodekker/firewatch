@@ -45,5 +45,6 @@
 - `query` runs its child on Windows.
 - The `describe` tool states what the store holds (records per type, deploys, drift, size) and what `query` can read: every object and column with its type, unit, meaning and recent values, the ceilings, and example statements. It answers before a store exists, and `query`'s refusals point to it.
 - The `fingerprint` tool turns facts read in source (a route's methods and path, a job, command or task name, a query's connection and SQL, a cache key, a host, a mail or notification class) into Nightwatch's group id, says which record types hold it, and checks the recipe against the newest whole stored record. A query without a driver gets one candidate per normalisation.
+- A `detect` shape, or an `overview` count row, that finds no records now answers `not_evaluated` with `outside_coverage`, not `no_records` or `prerequisite_missing`, when a clear or prune removed history of a type it reads and the window starts before it.
 - A README covering the quick start, install, a configuration snippet for each assistant client, the dev-only warning, what is stored and never redacted, the tools, the blind spots, configuration, retention, commands and troubleshooting. A contract test fails when its configuration, tool, detector or command tables disagree with the code.
 - Firewatch is released under the MIT license.

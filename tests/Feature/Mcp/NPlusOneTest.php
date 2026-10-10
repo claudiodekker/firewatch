@@ -522,7 +522,7 @@ describe('the history', function () {
         npoClearThenRun(NPO_AT + 600, ['before']);
         ingest([npoExecution('after', fields: ['timestamp' => NPO_AT + 700])]);
 
-        expect(npoAnswer()['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records']);
+        expect(npoAnswer(['since' => (string) (NPO_AT + 600)])['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records']);
     });
 });
 
