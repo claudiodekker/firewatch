@@ -249,7 +249,7 @@ class Pruner
         }
 
         $this->writer->maintain(function (SQLite3 $connection) {
-            foreach (['PRAGMA wal_checkpoint(PASSIVE)', 'PRAGMA optimize'] as $statement) {
+            foreach (['PRAGMA optimize', 'PRAGMA wal_checkpoint(PASSIVE)'] as $statement) {
                 try {
                     $connection->exec($statement);
                 } catch (SQLite3Exception) {
