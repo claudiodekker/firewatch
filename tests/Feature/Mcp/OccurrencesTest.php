@@ -543,6 +543,17 @@ it('keeps the records at or above the median or the 95th percentile of the selec
     'the 95th percentile of 20' => ['p95', 20, [19, 20], 19.0],
 ]);
 
+it('states the baseline to the hundredth of a millisecond, as the durations it keeps', function () {
+    ingest(array_map(fn (int $microseconds) => occRecord(RecordType::REQUEST, ['duration' => $microseconds, 'timestamp' => OCC_AT + $microseconds / 1000]), [47_000, 47_951, 48_000]));
+
+    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'median', 'limit' => 100]);
+    $durations = array_column($envelope['result']['rows'], 'duration_ms');
+
+    expect($envelope['result']['baseline']['threshold_ms'])->toBe(47.95)
+        ->and($durations)->toEqualCanonicalizing([47.95, 48.0])
+        ->and(min($durations))->toBe($envelope['result']['baseline']['threshold_ms']);
+});
+
 it('withholds the baseline below its floor, and lists everything with a note', function (string $percentile, int $records, int $needed) {
     ingest(array_map(fn (int $milliseconds) => occRecord(RecordType::REQUEST, ['duration' => $milliseconds * 1000, 'timestamp' => OCC_AT + $milliseconds]), range(1, $records)));
 
