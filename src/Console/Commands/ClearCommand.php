@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Console\Commands;
 
 use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Console\Concerns\FormatsFileSizes;
 use ClaudioDekker\Firewatch\Console\Concerns\ReadsFlags;
 use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
@@ -14,7 +15,6 @@ use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Closure;
 use Illuminate\Console\Command;
-use Illuminate\Support\Number;
 use SQLite3Exception;
 
 /**
@@ -22,6 +22,7 @@ use SQLite3Exception;
  */
 class ClearCommand extends Command
 {
+    use FormatsFileSizes;
     use ReadsFlags;
 
     /**
@@ -79,8 +80,8 @@ class ClearCommand extends Command
         }
 
         $sizes = [
-            'before' => Number::fileSize($result['before'], precision: 1),
-            'after' => Number::fileSize($result['after'], precision: 1),
+            'before' => $this->fileSize($result['before']),
+            'after' => $this->fileSize($result['after']),
         ];
 
         $this->line($type === null
@@ -117,8 +118,8 @@ class ClearCommand extends Command
             ? __('firewatch::messages.clear.replaced_damaged', ['file' => basename($path).'.corrupt'])
             : __('firewatch::messages.clear.rebuilt', [
                 'path' => $path,
-                'before' => Number::fileSize($result['before'], precision: 1),
-                'after' => Number::fileSize($result['after'], precision: 1),
+                'before' => $this->fileSize($result['before']),
+                'after' => $this->fileSize($result['after']),
             ]));
 
         if ($result['truncated']) {
