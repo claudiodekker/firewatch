@@ -150,7 +150,7 @@ _Avoid_: Parent, triggered by
 
 **Group hash**:
 Nightwatch's own grouping hash for a record, stored verbatim so a group here is the group Nightwatch shows; one hash can be held by a job's dispatches and its attempts.
-_Avoid_: Fingerprint, group key
+_Avoid_: Fingerprint (the tool that computes one from source), group key
 
 **Group label**:
 The human-readable name of a group: a fixed display field per record type, read from the group's latest record in the window.
@@ -508,7 +508,7 @@ The per-counter comparison of an execution's counted total with the rows capture
 _Avoid_: Reconciliation, audit
 
 **Recipe check**:
-A fingerprint's statement whether recomputing a group's recipe from a stored record reproduces that record's stored group hash: agrees, disagrees or not evaluated.
+A fingerprint's statement whether recomputing a group's recipe from a stored record reproduces that record's stored group hash: agrees, disagrees or not evaluated. The `fingerprint` tool recomputes the recipe for this check and skips a record whose recipe fields were cut.
 _Avoid_: Validation, hash test
 
 **Job outcome**:

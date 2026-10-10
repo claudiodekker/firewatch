@@ -23,6 +23,21 @@ class Truncator
     public const OVERSIZE_FIELD_LIMIT_BYTES = 4_096;
 
     /**
+     * The truncation marker a cut string ends with, by the bytes it had.
+     */
+    protected const MARKER = '... [truncated, %d bytes total]';
+
+    /**
+     * Determine if a string ends with the truncation marker.
+     */
+    public static function wasCut(string $value): bool
+    {
+        $pattern = str_replace('%d', '\d+', preg_quote(self::MARKER, '/'));
+
+        return preg_match("/{$pattern}$/", $value) === 1;
+    }
+
+    /**
      * Cut a string longer than the limit on a UTF-8 character boundary, ending it with the truncation marker.
      */
     public function cut(string $value, int $limitBytes = self::FIELD_LIMIT_BYTES): string
@@ -33,7 +48,7 @@ class Truncator
             return $value;
         }
 
-        $marker = "... [truncated, {$bytes} bytes total]";
+        $marker = sprintf(self::MARKER, $bytes);
 
         return mb_strcut($value, 0, $limitBytes - strlen($marker), 'UTF-8').$marker;
     }

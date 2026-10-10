@@ -16,7 +16,7 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did while it was developed: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and Firewatch itself sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time), `query` (your own read-only SQL, last resort), `describe` (store facts, deploys, units and every column `query` reads with example statements; `type` gives one object's columns and recent values). Every answer ends with `next`: calls you can run as written.
+        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time), `query` (your own read-only SQL, last resort), `describe` (store facts, deploys, units and every column `query` reads with example statements; `type` gives one object's columns and recent values), `fingerprint` (the group id of a route, command, job, task, query, cache key, host or mail class you read in source, and whether the store holds it). Every answer ends with `next`: calls you can run as written.
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used.
         TEXT,
@@ -44,6 +44,7 @@ return [
         'trend' => 'Cuts the window into equal buckets and reports a measure per bucket, to see whether something rose, fell or held, and where it peaked. Pass `type` or `group`. `by`: occurrences (default), max_duration, avg_duration, total_duration, max_memory (execution types only). Missing since/until are derived from the selected records, and the window says which. Empty bucket: 0 for occurrences, null for other measures. Buckets that start before coverage are partial. Bucket edges can be passed back as since/until. Windowed.',
         'query' => 'Last resort: runs your own read-only SQL on Firewatch\'s store. One SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the twelve record views (requests, commands, job_attempts, scheduled_tasks, queries, exceptions, logs, cache_events, mail, notifications, outgoing_requests, queued_jobs), records, users, drift, meta, json_each and json_tree; anything else, and a function off the allow-list, is refused. Values are raw: times epoch seconds, durations microseconds, memory bytes. `limit` 1 to 500 (default 50). Blind spots follow the record types read. Prefer `rank`, `occurrences` and `detect`, which convert units. Not windowed.',
         'describe' => 'Schema, units, deploys and examples for `query`.',
+        'fingerprint' => 'The group id of something read in source, and whether the store holds it. Not windowed.',
     ],
 
     /*
@@ -471,6 +472,61 @@ return [
     'describe_next_rank' => 'Rank the groups of this type, worst first.',
 
     'describe_next_query' => 'Run the first example statement.',
+
+    'fingerprint_arguments' => [
+        'type' => 'A record type; not exception, log or user.',
+        'methods' => 'request: all its methods, such as GET and HEAD.',
+        'path' => 'request: the full route path.',
+        'domain' => 'request, optional.',
+        'name' => 'command, job-attempt, queued-job, scheduled-task.',
+        'cron' => 'scheduled-task.',
+        'timezone' => 'scheduled-task, optional.',
+        'repeat_seconds' => 'scheduled-task, optional.',
+        'connection' => 'query: the connection name.',
+        'sql' => 'query: the SQL as run, with ? placeholders.',
+        'driver' => 'query, optional, such as mysql.',
+        'store' => 'cache-event.',
+        'key' => 'cache-event.',
+        'host' => 'outgoing-request.',
+        'class' => 'mail, notification.',
+    ],
+
+    'no_recipe' => "error: invalid_argument\n`type` cannot be :type: :reason\nargument: type\naccepted: :accepted\nexample: :example",
+
+    'no_recipe_reasons' => [
+        'exception' => 'an exception is grouped by where it was thrown, which source does not give. Use `rank(type: "exception", matching: "<class>")`.',
+        'log' => 'logs have no group.',
+        'user' => 'users have no group.',
+    ],
+
+    'fingerprint_window_reason' => 'a group id is looked up in the whole store',
+
+    'fingerprint_check' => [
+        'agrees' => 'agrees',
+        'disagrees' => 'disagrees',
+        'not_evaluated' => 'was not evaluated',
+    ],
+
+    'fingerprint_summary_held' => ':group is held by :records record of :types; the recipe check :check.|:group is held by :records records of :types; the recipe check :check.',
+
+    'fingerprint_summary_missed' => [
+        'agrees' => 'No :types record holds :group and the recipe check agrees: it has not run since coverage starts.',
+        'disagrees' => 'No :types record holds :group, but the recipe check disagrees: do not conclude it has not run.',
+        'not_evaluated' => 'No :types record holds :group, and the recipe check was not evaluated: do not conclude it has not run.',
+    ],
+
+    'fingerprint_driver_note' => 'The store holds this query under the other reading, group :group, so the connection\'s driver is likely not the one given.',
+    'fingerprint_head_note' => 'HEAD was added beside GET, as Laravel registers every GET route.',
+
+    'fingerprint_timezone_note' => 'No timezone was given, so the schedule timezone :timezone is assumed.',
+
+    'fingerprint_next_occurrences' => "Read this group's records.",
+
+    'fingerprint_next_rank' => "Rank this group's records by deploy.",
+
+    'fingerprint_assumption_normalised' => 'the driver is one Nightwatch normalises: mariadb, mysql, pgsql, sqlite, sqlsrv or singlestore',
+
+    'fingerprint_assumption_written' => 'the driver is any other, so the SQL is hashed as written',
 
     'objects' => [
         'requests' => 'One row per HTTP request the application served.',

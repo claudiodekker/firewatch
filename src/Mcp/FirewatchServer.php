@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Compare;
 use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
+use ClaudioDekker\Firewatch\Mcp\Tools\Fingerprint;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
@@ -51,6 +52,7 @@ class FirewatchServer extends Server
         Trend::class,
         Query::class,
         Describe::class,
+        Fingerprint::class,
     ];
 
     /**
