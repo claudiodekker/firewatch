@@ -123,7 +123,7 @@ class Policy
         $connection->enableExceptions(true);
 
         /** @var SQLite3Result $result */
-        $result = $connection->query('SELECT name FROM pragma_function_list UNION SELECT name FROM pragma_module_list');
+        $result = $connection->query('SELECT DISTINCT name FROM pragma_function_list');
         $known = [];
 
         while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
@@ -132,7 +132,8 @@ class Policy
 
         $connection->close();
 
-        return array_values(array_intersect(self::FUNCTIONS, $known));
+        // The JSON table-valued functions are read like tables, and later releases leave them out of every list.
+        return array_values(array_filter(self::FUNCTIONS, fn (string $function) => in_array($function, $known, true) || in_array($function, self::READABLE, true)));
     }
 
     /**
