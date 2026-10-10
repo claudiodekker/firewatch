@@ -37,7 +37,7 @@ The mode in which Firewatch captures: it enables Nightwatch, forces the capture 
 _Avoid_: On, enabled
 
 **Off**:
-The mode in which Firewatch disables Nightwatch and captures nothing; every Firewatch process is Off.
+The mode in which Firewatch disables Nightwatch and captures nothing; every Firewatch process is Off, as is every process when Firewatch is disabled or its SQLite is missing or older than 3.41.0.
 _Avoid_: Disabled, paused
 
 **Stepped aside**:

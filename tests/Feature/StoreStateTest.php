@@ -104,8 +104,8 @@ it('reports a store below the SQLite floor as unavailable, without opening it', 
 
     expect($path)->toBeFile();
 })->with([
-    'just below the floor' => ['3.37.2', true],
-    'at the floor' => ['3.38.0', false],
+    'just below the floor' => ['3.40.1', true],
+    'at the floor' => ['3.41.0', false],
 ]);
 
 it('reports a store that stays locked past the busy timeout as busy', function () {

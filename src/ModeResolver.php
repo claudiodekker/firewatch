@@ -12,7 +12,7 @@ class ModeResolver
     /**
      * The oldest SQLite version the store can run on.
      */
-    public const MINIMUM_SQLITE_VERSION = '3.38.0';
+    public const MINIMUM_SQLITE_VERSION = '3.41.0';
 
     /**
      * Resolve the mode of this process.

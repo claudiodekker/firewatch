@@ -232,8 +232,8 @@ describe('sqlite', function () {
 
         expect(doctorCheck('sqlite')['status'])->toBe($status);
     })->with([
-        'a release before the floor' => ['3.37.2', 'fail'],
-        'the floor itself, which is in the reset range' => ['3.38.0', 'warn'],
+        'the last release before the floor' => ['3.40.1', 'fail'],
+        'the floor itself, which is in the reset range' => ['3.41.0', 'warn'],
     ]);
 
     it('warns in the write-ahead log reset range', function () {

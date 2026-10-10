@@ -158,7 +158,7 @@ test('every SQL error code has pinned text', function (SqlFailure $failure, Erro
     'unavailable on an old SQLite' => [
         SqlFailure::unavailable(Unavailable::SQLITE_TOO_OLD),
         ErrorCode::UNAVAILABLE,
-        "error: unavailable\nThe SQL tool is unavailable: SQLite is older than 3.38.0. Every other Firewatch tool works.",
+        "error: unavailable\nThe SQL tool is unavailable: SQLite is older than 3.41.0. Every other Firewatch tool works.",
     ],
     'unavailable when the process can not be started' => [
         SqlFailure::unavailable(Unavailable::SPAWN_FAILED),

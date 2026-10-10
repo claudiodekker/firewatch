@@ -32,7 +32,7 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 - PHP 8.3 or newer
 - Laravel 12.41.1 or newer, or Laravel 13
 - `laravel/nightwatch` `^1.30.2`
-- `ext-sqlite3` with SQLite 3.38.0 or newer
+- `ext-sqlite3` with SQLite 3.41.0 or newer
 
 ## Install
 
