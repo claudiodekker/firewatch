@@ -14,6 +14,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Reason;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Threshold;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Ungrouped;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
@@ -26,6 +27,7 @@ use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -400,9 +402,10 @@ class Detect extends Tool
             return null;
         }
 
-        $example = $this->example($shape ?? $this->detectors->all()[0], 'threshold');
-
         if ($shape === null) {
+            $thresholded = Arr::first($this->detectors->all(), fn (Detector $detector) => $detector->threshold() !== null);
+            $example = $this->example($thresholded, $thresholded->threshold());
+
             throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $example);
         }
 
@@ -412,7 +415,7 @@ class Detect extends Tool
             throw Refusal::conflicting(argument: 'threshold', with: 'shape: '.$shape->name()->value, accepted: 'a call without `threshold`', example: "detect(shape: \"{$shape->name()->value}\")");
         }
 
-        return $threshold->read($value, $example);
+        return $threshold->read($value, $this->example($shape, $threshold));
     }
 
     /**
@@ -464,12 +467,10 @@ class Detect extends Tool
     }
 
     /**
-     * Get a valid call of a shape that passes one of its arguments at the default.
+     * Get a valid call of a shape that passes its threshold at the default.
      */
-    protected function example(Detector $shape, string $argument): string
+    protected function example(Detector $shape, Threshold $threshold): string
     {
-        $default = $shape->threshold()->default ?? 0;
-
-        return "detect(shape: \"{$shape->name()->value}\", {$argument}: {$default})";
+        return "detect(shape: \"{$shape->name()->value}\", threshold: {$threshold->default})";
     }
 }
