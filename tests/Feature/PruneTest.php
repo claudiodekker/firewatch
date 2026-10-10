@@ -315,6 +315,7 @@ describe('the pass', function () {
         config()->set('firewatch.busy_timeout', 20);
         registerFirewatch();
         requestsStartedAt([PRUNE_CUTOFF + 1]);
+        $this->endCapture();
         $this->travelTo('2026-09-30 14:03:00');
         $connection = new SQLite3(app(Configuration::class)->database);
         $connection->busyTimeout(20);

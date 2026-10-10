@@ -494,6 +494,7 @@ function doctorDamagedStore(int $offset): void
 function doctorBusyStore(): Closure
 {
     doctorCapture();
+    test()->endCapture();
 
     $connection = new SQLite3(app(Configuration::class)->database);
     $connection->exec('PRAGMA journal_mode = DELETE');

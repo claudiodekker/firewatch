@@ -124,6 +124,7 @@ describe('a healthy store', function () {
 
     it('returns every freed page to the file', function () {
         ingest(array_map(fn (int $i) => syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0 + $i]), range(1, 300)));
+        $this->endCapture();
         $before = filesize(dropPath());
 
         runDrop()->run();
@@ -247,6 +248,7 @@ describe('a store in another state', function () {
 
     it('says the store is busy after its fixed wait, and rebuilds nothing', function () {
         dropPopulatedStore();
+        $this->endCapture();
         app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class)) extends ClearStore
         {
             protected const BUSY_TIMEOUT_MILLISECONDS = 20;
