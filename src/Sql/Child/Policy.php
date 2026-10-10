@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Sql\Child;
 
 use SQLite3;
+use SQLite3Result;
 
 /**
  * The closed policy of the SQL child: what a statement may be, read and call.
@@ -110,6 +111,29 @@ class Policy
         'row_number', 'rank', 'dense_rank', 'percent_rank', 'cume_dist', 'ntile', 'lag', 'lead', 'first_value', 'last_value', 'nth_value',
         'date', 'time', 'datetime', 'julianday', 'unixepoch', 'strftime',
     ];
+
+    /**
+     * Get the functions of the allow-list the linked SQLite has, as math functions are a compile-time option and later releases add functions.
+     *
+     * @return list<string>
+     */
+    public static function availableFunctions(): array
+    {
+        $connection = new SQLite3(':memory:');
+        $connection->enableExceptions(true);
+
+        /** @var SQLite3Result $result */
+        $result = $connection->query('SELECT name FROM pragma_function_list UNION SELECT name FROM pragma_module_list');
+        $known = [];
+
+        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
+            $known[] = strtolower($row[0]);
+        }
+
+        $connection->close();
+
+        return array_values(array_intersect(self::FUNCTIONS, $known));
+    }
 
     /**
      * Get why the SQL text is refused before anything compiles it, or null when it holds one statement of an acceptable size.
