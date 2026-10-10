@@ -3,6 +3,7 @@
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\RecordType;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -82,6 +83,13 @@ it('replaces a value that is not UTF-8 with its size, before any cut', function 
 ]);
 
 it('stores a float that JSON can\'t hold as its string', function (float $value, string $stored) {
+    // PHP 8.5's PDO refuses to bind NAN, so no query reaches the sensor with one.
+    if (is_nan($value) && PHP_VERSION_ID >= 80500) {
+        expect(fn () => selectProbe([$value]))->toThrow(QueryException::class);
+
+        return;
+    }
+
     selectProbe([$value]);
     Nightwatch::digest();
 
