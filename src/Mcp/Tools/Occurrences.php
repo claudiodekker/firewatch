@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
@@ -830,7 +831,7 @@ class Occurrences extends Tool
     protected function refuseMisfits(array $filters, Order $order, ?RecordType $type, string $selector, bool $resolvable): void
     {
         $timed = array_values(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, [RecordType::EXCEPTION, RecordType::LOG], true)));
-        $executions = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
+        $executions = ExecutionType::records();
         $requests = [RecordType::REQUEST, RecordType::OUTGOING_REQUEST];
 
         $rules = [

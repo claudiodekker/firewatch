@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Concerns;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
 use ClaudioDekker\Firewatch\Mcp\Call;
+use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -24,18 +25,6 @@ use Throwable;
  */
 trait AnswersInEnvelope
 {
-    /**
-     * The arguments the twelve tools of the design take among them.
-     *
-     * @var list<string>
-     */
-    protected const KNOWN_ARGUMENTS = [
-        'type', 'group', 'matching', 'by', 'since', 'until', 'deploy', 'limit', 'cursor', 'shape', 'threshold', 'order', 'method', 'status', 'outcome',
-        'level', 'slower_than_ms', 'at_or_above', 'execution_id', 'trace_id', 'job_id', 'user_id', 'who', 'split_at', 'deploy_before', 'deploy_after',
-        'buckets', 'sql', 'methods', 'path', 'domain', 'name', 'cron', 'timezone', 'repeat_seconds', 'connection', 'driver', 'store', 'key', 'host', 'class',
-        'format',
-    ];
-
     /**
      * Get the argument every tool takes.
      *
@@ -112,10 +101,20 @@ trait AnswersInEnvelope
                 continue;
             }
 
-            throw in_array($argument, self::KNOWN_ARGUMENTS, true)
+            throw in_array($argument, $this->knownArguments(), true)
                 ? Refusal::inapplicable(argument: $argument, tool: $this->name(), accepted: $accepted)
                 : Refusal::unknown(argument: $argument, tool: $this->name(), accepted: $accepted);
         }
+    }
+
+    /**
+     * Get the arguments any tool of the server takes.
+     *
+     * @return list<string>
+     */
+    protected function knownArguments(): array
+    {
+        return FirewatchServer::arguments();
     }
 
     /**

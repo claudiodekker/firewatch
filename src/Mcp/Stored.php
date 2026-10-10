@@ -17,7 +17,7 @@ class Stored
     /**
      * The bytes in a megabyte.
      */
-    protected const MEGABYTE = 1048576;
+    public const MEGABYTE = 1048576;
 
     /**
      * The decimals of a millisecond in an answer.

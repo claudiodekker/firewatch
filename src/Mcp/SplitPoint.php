@@ -74,7 +74,7 @@ class SplitPoint implements Boundary
      */
     public function straddling(SQLite3 $connection, RecordType $type, array $before, ?string $group): ?int
     {
-        if (! Ranking::isExecution($type)) {
+        if (! $type->isExecution()) {
             return null;
         }
 

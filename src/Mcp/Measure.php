@@ -23,16 +23,9 @@ enum Measure: string
     case QUERIES = 'queries';
 
     /**
-     * The four execution types.
-     *
-     * @var list<RecordType>
-     */
-    protected const EXECUTIONS = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
-
-    /**
      * The noise floor of a memory measure in bytes, because the runtime reports peak memory in steps of 2 MiB.
      */
-    protected const MEMORY_NOISE_FLOOR = 2 * Ranking::MEGABYTE;
+    protected const MEMORY_NOISE_FLOOR = 2 * Stored::MEGABYTE;
 
     /**
      * The measures only a trend states, which neither a ranking nor a comparison takes.
@@ -103,7 +96,7 @@ enum Measure: string
     {
         return match ($this) {
             self::OCCURRENCES, self::LAST_SEEN => true,
-            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY, self::QUERIES => in_array($type, self::EXECUTIONS, true),
+            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY, self::QUERIES => $type->isExecution(),
             default => $type !== RecordType::EXCEPTION,
         };
     }

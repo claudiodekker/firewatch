@@ -5,11 +5,8 @@ namespace ClaudioDekker\Firewatch\Mcp;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Microseconds;
 use LogicException;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @internal
@@ -47,26 +44,9 @@ class Ranking
     protected const PERCENT_DECIMALS = 1;
 
     /**
-     * The decimals a duration in milliseconds is rounded to.
-     */
-    public const MILLISECOND_DECIMALS = 2;
-
-    /**
      * The key a record without a deploy has among the deploys of a breakdown, which no deploy string is.
      */
     protected const NO_DEPLOY = "\x01";
-
-    /**
-     * The bytes in a megabyte of peak memory.
-     */
-    public const MEGABYTE = 1048576;
-
-    /**
-     * The four execution types.
-     *
-     * @var list<RecordType>
-     */
-    protected const EXECUTIONS = [RecordType::REQUEST, RecordType::COMMAND, RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK];
 
     /**
      * Create a new ranking instance.
@@ -292,7 +272,7 @@ class Ranking
             }
         }
 
-        if ($this->configuration !== null && self::isExecution($this->type)) {
+        if ($this->configuration !== null && $this->type->isExecution()) {
             $type = ExecutionType::from($this->type->value);
 
             foreach ($this->budgets($connection) as $hash => $budget) {
@@ -310,7 +290,7 @@ class Ranking
      */
     public function statistics(SQLite3 $connection): array
     {
-        $executions = self::isExecution($this->type);
+        $executions = $this->type->isExecution();
         $failure = Failure::expression($this->type) !== null;
 
         $aggregates = $this->query($connection, 'SELECT group_hash, count(*) AS occurrences, count(d) AS timed, min(d) AS min, avg(d) AS avg, max(d) AS max, sum(d) AS total, max(started_at) AS last, min(started_at) AS wfirst, count(DISTINCT deploy) AS deploys'
@@ -413,14 +393,6 @@ class Ranking
     }
 
     /**
-     * Get microseconds as milliseconds rounded for an answer, or null for none.
-     */
-    protected static function milliseconds(int|float|null $microseconds): ?float
-    {
-        return $microseconds === null ? null : round($microseconds / Microseconds::PER_MILLISECOND, self::MILLISECOND_DECIMALS);
-    }
-
-    /**
      * Get the unrounded value of a measure for a group, or null when too few of its records have the quantity.
      *
      * @param  array<string, mixed>  $group
@@ -518,22 +490,21 @@ class Ranking
             $p95 = $this->floored($group, 'p95_ms', $group['timed'], self::P95_FLOOR, $withheld);
 
             $row += [
-                'min_ms' => self::milliseconds($group['min']),
-                'p50_ms' => self::milliseconds($p50),
-                'avg_ms' => self::milliseconds($group['avg']),
-                'p95_ms' => self::milliseconds($p95),
-                'max_ms' => self::milliseconds($group['max']),
-                'total_ms' => self::milliseconds($group['total']),
+                'min_ms' => Stored::milliseconds($group['min']),
+                'p50_ms' => Stored::milliseconds($p50),
+                'avg_ms' => Stored::milliseconds($group['avg']),
+                'p95_ms' => Stored::milliseconds($p95),
+                'max_ms' => Stored::milliseconds($group['max']),
+                'total_ms' => Stored::milliseconds($group['total']),
             ];
         }
 
-        if (self::isExecution($this->type)) {
-            $mb = fn (int|float|null $value) => $value === null ? null : round($value / self::MEGABYTE, 1);
+        if ($this->type->isExecution()) {
             $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
 
             $row += [
-                'p95_memory_mb' => $mb($memory),
-                'max_memory_mb' => $mb($group['mem_max']),
+                'p95_memory_mb' => Stored::megabytes($memory),
+                'max_memory_mb' => Stored::megabytes($group['mem_max']),
                 'queries' => $group['queries'] ?? null,
             ];
         }
@@ -551,7 +522,7 @@ class Ranking
             $row += [
                 'slowest_execution_id' => $group['slowest'],
                 'withheld' => $withheld === [] ? null : $withheld,
-                'values_ms' => $group['raw'] === null ? null : array_map(self::milliseconds(...), $group['raw']),
+                'values_ms' => $group['raw'] === null ? null : array_map(Stored::milliseconds(...), $group['raw']),
             ];
         }
 
@@ -581,9 +552,9 @@ class Ranking
             $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], self::P95_FLOOR, $withheld);
 
             $row += [
-                'p50_ms' => self::milliseconds($p50),
-                'p95_ms' => self::milliseconds($p95),
-                'max_ms' => self::milliseconds($deploy['max']),
+                'p50_ms' => Stored::milliseconds($p50),
+                'p95_ms' => Stored::milliseconds($p95),
+                'max_ms' => Stored::milliseconds($deploy['max']),
             ];
         }
 
@@ -595,7 +566,7 @@ class Ranking
         if ($this->hasDuration()) {
             $row += [
                 'withheld' => $withheld === [] ? null : $withheld,
-                'values_ms' => $deploy['raw'] === null ? null : array_map(self::milliseconds(...), $deploy['raw']),
+                'values_ms' => $deploy['raw'] === null ? null : array_map(Stored::milliseconds(...), $deploy['raw']),
             ];
         }
 
@@ -648,14 +619,6 @@ class Ranking
     }
 
     /**
-     * Determine if a type is one of the four executions.
-     */
-    public static function isExecution(RecordType $type): bool
-    {
-        return in_array($type, self::EXECUTIONS, true);
-    }
-
-    /**
      * Get the field a group of the type is labelled by.
      */
     public static function labelField(RecordType $type): string
@@ -688,7 +651,7 @@ class Ranking
                 $columns[] = 'method';
             }
 
-            if (self::isExecution($this->type)) {
+            if ($this->type->isExecution()) {
                 array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q', $this->type === RecordType::SCHEDULED_TASK ? "COALESCE(status = '".Outcome::SKIPPED->value."', 0) AS skipped" : '0 AS skipped');
                 array_push($columns, ...($this->type === RecordType::REQUEST ? ['route_methods', 'route_path'] : ['name']));
             }
@@ -702,27 +665,15 @@ class Ranking
             $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->type->view().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
         }
 
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare($sql);
-
-        if ($filtered) {
-            $this->window->bind($statement);
-            $statement->bindValue(':deploy', $this->deploy, $this->deploy === null ? SQLITE3_NULL : SQLITE3_TEXT);
-            $statement->bindValue(':group', $this->group, $this->group === null ? SQLITE3_NULL : SQLITE3_TEXT);
+        if (! $filtered) {
+            return Stored::rows($connection, $sql, $bindings);
         }
 
-        foreach ($bindings as $name => $value) {
-            $statement->bindValue(":{$name}", $value);
-        }
+        $filters = [
+            'deploy' => $this->deploy,
+            'group' => $this->group,
+        ];
 
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-        $rows = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_ASSOC))) {
-            $rows[] = $row;
-        }
-
-        return $rows;
+        return Stored::rows($connection, $sql, [...$filters, ...$bindings], $this->window);
     }
 }
