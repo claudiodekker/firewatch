@@ -1,30 +1,18 @@
 # Firewatch
 
-Firewatch is local telemetry for AI debugging. It stores what Laravel Nightwatch's sensors record in a SQLite file on your machine, and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and Firewatch itself sends nothing anywhere.
+[![CI](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml/badge.svg)](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml)
+[![Packagist Version](https://img.shields.io/packagist/v/claudiodekker/firewatch)](https://packagist.org/packages/claudiodekker/firewatch)
 
-## Install
+Firewatch is local telemetry for AI debugging. It captures what Laravel Nightwatch's sensors collect into a local SQLite file and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and nothing leaves your machine.
+
+## Quick start
 
 ```bash
 composer require --dev claudiodekker/firewatch
-```
-
-Firewatch registers Nightwatch for you. It needs `ext-sqlite3` with SQLite 3.38.0 or later.
-
-## Connect an assistant
-
-Your assistant starts the server itself, from the project root:
-
-```bash
-php artisan firewatch:server
-```
-
-In Claude Code:
-
-```bash
 claude mcp add firewatch -- php artisan firewatch:server
 ```
 
-The server speaks MCP over stdio. Use only this command to start it, never `mcp:start` or `mcp:inspector`. To see the tools an assistant would get, run `php artisan firewatch:server --list`.
+Use the app in `local`, then ask the assistant what happened. Nothing exists to ask until the app has handled a request, command, job or task. Requests driven from a test suite are not recorded, so exercise the app over HTTP (serve, Herd, Sail, a browser).
 
 ## Ask your assistant
 
@@ -38,6 +26,89 @@ The server speaks MCP over stdio. Use only this command to start it, never `mcp:
 | Did my change make it slower? | `compare` |
 | Is this job getting slower over the week? | `trend` |
 | Which queries run most often? | `query` |
+
+## Requirements
+
+- PHP 8.3 or newer
+- Laravel 12.41.1 or newer, or Laravel 13
+- `laravel/nightwatch` `^1.30.2`
+- `ext-sqlite3` with SQLite 3.38.0 or newer
+
+## Install
+
+Install with `composer require --dev claudiodekker/firewatch`. Nothing else is needed: no install command, migration, publish or `.env` line. The provider is auto-discovered and registers Nightwatch itself.
+
+Nightwatch arrives as a dependency of Firewatch, so it is dev-only unless your application requires `laravel/nightwatch` itself. An application that reports to the hosted service in production already does, and is unaffected. If your own `laravel/nightwatch` constraint excludes `^1.30.2`, the install fails: raise it.
+
+Publishing the configuration is optional: `php artisan vendor:publish --tag=firewatch-config`.
+
+## Connect an assistant
+
+Every client runs `php artisan firewatch:server` in the application's environment, with the project root as working directory. Where a client does not guarantee the working directory, use the absolute form: `<php> /absolute/path/artisan firewatch:server`.
+
+| Client | Configuration | Note |
+|---|---|---|
+| Claude Code | `.mcp.json` or `~/.claude.json` | `--scope project` writes a committable `.mcp.json` |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` | absolute paths only; quit and reopen fully after editing |
+| Cursor | `.cursor/mcp.json` or `~/.cursor/mcp.json` | `mcpServers` with `type: "stdio"`; no documented `cwd`, so an absolute path |
+| VS Code | `.vscode/mcp.json` | top-level `servers`, not `mcpServers`, with `cwd` |
+| Codex | `~/.codex/config.toml`, or `.codex/config.toml` in a trusted project | `[mcp_servers.firewatch]` with `command`, `args`, `cwd` |
+| Sail / Docker | the client's own file | command `vendor/bin/sail`, args `artisan firewatch:server` |
+| Herd, Valet, local PHP | the client's own file | use the project's PHP binary, so `ext-sqlite3` and the SQLite version match the application |
+
+Claude Code:
+
+```bash
+claude mcp add firewatch -- php artisan firewatch:server
+```
+
+Claude Desktop:
+
+```json
+{"mcpServers": {"firewatch": {"command": "/absolute/path/to/php", "args": ["/absolute/path/to/project/artisan", "firewatch:server"]}}}
+```
+
+Cursor:
+
+```json
+{"mcpServers": {"firewatch": {"type": "stdio", "command": "php", "args": ["/absolute/path/to/project/artisan", "firewatch:server"]}}}
+```
+
+VS Code:
+
+```json
+{"servers": {"firewatch": {"type": "stdio", "command": "php", "args": ["artisan", "firewatch:server"], "cwd": "${workspaceFolder}"}}}
+```
+
+Codex:
+
+```toml
+[mcp_servers.firewatch]
+command = "php"
+args = ["artisan", "firewatch:server"]
+cwd = "/absolute/path/to/project"
+```
+
+The server must share a kernel and filesystem with the application. A server on the host reading a bind-mounted store file from a container is unsupported. Restart the assistant session after `composer update` or `.env` changes. Queue workers, Octane and Horizon processes read configuration once at boot and need a restart after a configuration change. Run by hand in a terminal, the server waits for a protocol message on stdin (end with Ctrl-D). That is how to look for stray output before the first message.
+
+## Local development only
+
+- Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local,testing`). Elsewhere it registers nothing and Nightwatch is untouched.
+- `composer install --no-dev` leaves it absent.
+- Never list `production` or `prod`. The doctor warns.
+- It vetoes every Nightwatch transmit, so no hosted reporting happens from a capture environment.
+
+## What is captured and stored
+
+- Every execution (request, command, job, scheduled task) is recorded in the capture environments. Nightwatch's sampling and filtering cost controls are overridden. In-code opt-outs (`Nightwatch::ignore()`, `pause()`, `dontSample()` and `reject*` callbacks) are honored.
+- Nothing is transmitted. Every Nightwatch transmit is cancelled.
+- **Firewatch never redacts URL query strings, SQL, query bindings, log messages, context and extra, exception messages, the Laravel Context or outgoing-request query strings.** For redaction, use Nightwatch's `redact*` callbacks, which always apply, and the opt-in `capture.redact_payload_fields` and `capture.redact_headers`, which are empty by default.
+- A request's payload is recorded only for a 500 response by default (`capture.request_payload`). Request headers are recorded for every request. Response headers and bodies are never recorded.
+- The store is `storage/firewatch/firewatch.sqlite`, mode `0600` inside a `0700` directory that carries its own VCS ignore file.
+- Test runs share the store. `testing` is a capture environment, so a test suite's commands and jobs write beside your browsing. `php artisan firewatch:clear` separates them.
+- Do not commit, share or attach the store file.
+
+Locally, the value that redaction would hide is usually the answer the assistant needs.
 
 ## Tools
 
@@ -58,21 +129,20 @@ The server speaks MCP over stdio. Use only this command to start it, never `mcp:
 
 Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `queue-latency`, `failing-tasks`, `exception-clusters`, `error-logs`, `failing-http`, `cache`, `memory`.
 
-## What gets captured
+## When an empty answer means blind, not clean
 
-In the `local` and `testing` environments, Firewatch captures every request, command, job and scheduled task, with their queries, logs, exceptions, cache events, mail, notifications and outgoing requests. It overrides Nightwatch's sampling and filters so nothing is skipped, but anything you opt out of in code (`Nightwatch::ignore()`, `pause()`, `dontSample()`, `reject*` callbacks) still stays out. Query records also get their bindings, which Nightwatch itself never records.
+- Test-suite and other console processes record no request records.
+- An outgoing HTTP call that received no response (timeout, connection failure) leaves no record.
+- A request's payload is stored only for a 500 response.
+- `lazy_loads`, `hydrated_models`, `files_read` and `files_written` are always 0, and mail and notification `failed` is always false. Zero does not mean none: use the `n-plus-one` detector.
+- Jobs on the sync connection have no attempt record.
+- Logs written straight to a named channel are not captured.
+- Work still running is absent. An execution is recorded when it finishes.
+- Anything the application opted out of (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.
+- Under Octane the request bootstrap stage is zero, so do not compare durations across Octane and PHP-FPM.
+- A memory peak is the whole process's peak. In a long-lived worker every execution inherits what the process already held, so compare executions to each other, not to an absolute number.
 
-Nothing is redacted by default, because the store stays on your machine and the redacted value is often the answer. Passwords, `Authorization` headers and cookies are kept as sent, and the tools return them, so they reach your assistant's model provider. Treat the store as sensitive. To redact, list payload fields in `FIREWATCH_REDACT_PAYLOAD_FIELDS` and headers in `FIREWATCH_REDACT_HEADERS`.
-
-Nightwatch's own settings for enabling, tokens, sampling, filtering and redaction have no effect while Firewatch runs. Restart queue workers, Octane and Horizon after changing Firewatch's configuration.
-
-## Modes
-
-Firewatch decides once per process how it runs:
-
-- **Active** captures. Nightwatch is enabled, but its batches go to the store and never to Nightwatch's servers.
-- **Off** captures nothing. A `firewatch:` command is always Off, as is any process where `FIREWATCH_ENABLED` is false or SQLite is missing or too old.
-- **Stepped aside** applies outside `FIREWATCH_ENVIRONMENTS`. Firewatch registers nothing, so Nightwatch behaves as if Firewatch were absent. If a `firewatch:` command is "not defined", this is why.
+Answers state these themselves, and `clean` means "none among what was captured".
 
 ## Configuration
 
@@ -84,12 +154,12 @@ Firewatch decides once per process how it runs:
 | `busy_timeout` | `FIREWATCH_BUSY_TIMEOUT` | `300` | milliseconds a write waits for a lock, 0 to 5000 |
 | `retention.age` | `FIREWATCH_RETENTION_AGE` | `7d` | maximum record age (`30m`, `12h`, `7d`, `2w`) |
 | `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | maximum record count |
-| `deploy` | `FIREWATCH_DEPLOY` | `unset` | deploy label when Nightwatch has none |
+| `deploy` | `FIREWATCH_DEPLOY` | unset | deploy label when Nightwatch has none |
 | `capture.logs` | `FIREWATCH_CAPTURE_LOGS` | `true` | capture logs |
 | `capture.request_payload` | `FIREWATCH_CAPTURE_REQUEST_PAYLOAD` | `true` | payload for 500 responses |
-| `capture.redact_payload_fields` | `FIREWATCH_REDACT_PAYLOAD_FIELDS` | `empty` | payload fields to redact |
-| `capture.redact_headers` | `FIREWATCH_REDACT_HEADERS` | `empty` | headers to redact |
-| `budgets` | `none` | `empty` | performance budgets |
+| `capture.redact_payload_fields` | `FIREWATCH_REDACT_PAYLOAD_FIELDS` | empty | payload fields to redact |
+| `capture.redact_headers` | `FIREWATCH_REDACT_HEADERS` | empty | headers to redact |
+| `budgets` | none | empty | performance budgets |
 
 The environment variable beats the published file, which beats the default. The published file reads each variable, and a literal you write there replaces it. An invalid value falls back to its default and never stops capture. Issues are reported once per console process and by `firewatch:doctor`.
 
@@ -104,13 +174,11 @@ A specific budget beats a global one. Durations are in milliseconds and memory i
 
 Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded and the doctor reports them. Two stores must not share a directory.
 
-## The store
+## Retention and clearing
 
-The store is a plain SQLite file, created by the first captured batch in a directory only you can read, with a `.gitignore` that keeps it out of commits. Give each store its own directory.
+Records are kept for 7 days and 100,000 records, with a 512 MiB size backstop. The oldest go first, and only the capturing process prunes. Nothing clears automatically or from the assistant.
 
-Records older than `retention.age` are pruned, and the store is trimmed when it holds more than `retention.records`. A hard size limit of 512 MiB sits behind both. Answers say from when their history is complete, so a pruned or cleared period never reads as quiet.
-
-Capture never slows down or breaks your application. A batch that can't be written within `busy_timeout` is dropped, and the drop is noted in `failures.jsonl` beside the store, which answers then report. A store from an earlier Firewatch version is rebuilt, one from a later version is left alone, and a damaged one is moved aside as `firewatch.sqlite.corrupt`. A file that isn't Firewatch's is never touched.
+`php artisan firewatch:clear` clears everything. `--type=<type>` clears one record type, `--drop` drops and rebuilds the store, and `--force` skips the confirmation. Answers tell the assistant what was pruned or cleared, so a shortened history is never mistaken for a quiet one.
 
 ## Commands and diagnostics
 
@@ -124,18 +192,31 @@ The doctor prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-l
 
 | Symptom | Fix |
 |---|---|
-| `Command "firewatch:doctor"` (or any `firewatch:` command) is not defined | The environment is not in `FIREWATCH_ENVIRONMENTS` |
+| `Command "firewatch:doctor" is not defined` (or any `firewatch:` command) | The environment is not in `FIREWATCH_ENVIRONMENTS` |
 | The client shows the server as failed | Run `php artisan firewatch:doctor` |
 | The assistant sees no data | Run the doctor and read `store-activity` and `mode` |
 | Garbled or failed handshake | Application providers print output at boot: run the launch command by hand and look for output before the first message |
 | Behavior changed after upgrading | Restart the assistant session |
 
-## Troubleshooting
+## Compatibility
 
-**Something is wrong and you don't know what.** Run `php artisan firewatch:doctor`. It names the check and the fix.
+PHP, Laravel, Nightwatch and SQLite are as in Requirements. The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. The doctor warns about a SQLite release with a known write-ahead-log reset bug and says the mitigation is active. Linux, macOS and Windows are supported. On Windows the doctor reports file modes as "not applicable". The server must run on the same host and kernel as the application.
 
-**The assistant can't connect.** Something printed to stdout before Firewatch loaded, from `bootstrap/app.php`, a config file or an earlier package provider. Run `php artisan firewatch:server` by hand to find it, and end with Ctrl-D.
+In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal. For production monitoring, use Nightwatch itself.
 
-**Firewatch reports that Nightwatch's provider registered first.** Remove Nightwatch's provider from your providers and run `php artisan package:discover`.
+## Uninstall and upgrade
 
-**Firewatch reports an unverified Nightwatch release.** Firewatch is verified against Nightwatch 1.30. Later releases still work, but answers flag them.
+To uninstall, run `composer remove --dev claudiodekker/firewatch`. Then delete the store directory (`storage/firewatch/` by default: the store, its lock file and its ignore file) and any client entry. Nightwatch is removed too unless the application requires it directly.
+
+To upgrade, run `composer update`, then restart the assistant session. A release that changes the store schema rebuilds the store in place on the next write and history is not carried over, so there is nothing to migrate.
+
+## Contributing and testing
+
+- Run the suite with `vendor/bin/pest`.
+- The scenario tests drive the real Nightwatch sensors.
+- `CODING_STANDARDS.md` holds the rules.
+- A pull request that changes behavior updates the README and the changelog.
+
+## Changelog and license
+
+The changelog and the license live in `CHANGELOG.md` and `LICENSE.md`.
