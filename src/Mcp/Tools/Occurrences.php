@@ -116,11 +116,10 @@ class Occurrences extends Tool
             'slower_than_ms' => $schema->number()->description(__('firewatch::messages.occurrences_slower_than_ms_argument')),
             'at_or_above' => $schema->string()->description(__('firewatch::messages.occurrences_at_or_above_argument')),
             'matching' => $schema->string()->description(__('firewatch::messages.occurrences_matching_argument')),
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
-            'deploy' => $schema->string()->description(__('firewatch::messages.rank_deploy_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.occurrences_limit_argument')),
-            'cursor' => $schema->string()->description(__('firewatch::messages.occurrences_cursor_argument')),
+            ...$this->windowSchema($schema),
+            'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
+            'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),
             ...$this->formatSchema($schema),
         ];
     }

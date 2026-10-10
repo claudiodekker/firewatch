@@ -678,9 +678,9 @@ test('the tool is listed, with its description, arguments and annotations', func
         ->and($tool['inputSchema'])->toBe([
             'properties' => [
                 'who' => ['description' => __('firewatch::messages.actor_who_argument'), 'type' => 'string'],
-                'since' => ['description' => __('firewatch::messages.since_argument'), 'type' => 'string'],
-                'until' => ['description' => __('firewatch::messages.until_argument'), 'type' => 'string'],
-                'limit' => ['description' => __('firewatch::messages.actor_limit_argument'), 'type' => 'integer'],
+                'since' => ['description' => windowArgument('since'), 'type' => 'string'],
+                'until' => ['description' => windowArgument('until'), 'type' => 'string'],
+                'limit' => ['description' => limitArgument('actor', 100, 20), 'type' => 'integer'],
                 'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
             ],
             'type' => 'object',

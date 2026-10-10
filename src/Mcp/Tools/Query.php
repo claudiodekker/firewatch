@@ -103,7 +103,7 @@ class Query extends Tool
     {
         return [
             'sql' => $schema->string()->description(__('firewatch::messages.query_sql_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.query_limit_argument')),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
     }

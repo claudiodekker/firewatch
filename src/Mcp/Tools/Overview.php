@@ -81,8 +81,7 @@ class Overview extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
+            ...$this->windowSchema($schema),
             ...$this->formatSchema($schema),
         ];
     }

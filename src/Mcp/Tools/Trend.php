@@ -103,13 +103,12 @@ class Trend extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->description(__('firewatch::messages.trend_type_argument')),
+            'type' => $schema->string()->description(__('firewatch::messages.grouped_type_argument')),
             'group' => $schema->string()->description(__('firewatch::messages.trend_group_argument')),
             'by' => $schema->string()->description(__('firewatch::messages.trend_by_argument')),
             'buckets' => $schema->integer()->description(__('firewatch::messages.trend_buckets_argument')),
-            'since' => $schema->string()->description(__('firewatch::messages.trend_since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.trend_until_argument')),
-            'deploy' => $schema->string()->description(__('firewatch::messages.trend_deploy_argument')),
+            ...$this->windowSchema($schema, 'trend'),
+            'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             ...$this->formatSchema($schema),
         ];
     }

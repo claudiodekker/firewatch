@@ -210,3 +210,19 @@ function attributedActivity(array $counts = []): array
         'can_carry_actor' => ! in_array($type, [RecordType::COMMAND, RecordType::SCHEDULED_TASK], true),
     ], RecordType::events());
 }
+
+/**
+ * Get the description of the since or until argument, for what an absent bound means for the kind of tool.
+ */
+function windowArgument(string $bound, string $kind = 'unbounded'): string
+{
+    return __("firewatch::messages.{$bound}_argument", ['absent' => __("firewatch::messages.window_absent.{$kind}.{$bound}")]);
+}
+
+/**
+ * Get the description of the limit argument of a tool.
+ */
+function limitArgument(string $tool, int $maximum, int $default): string
+{
+    return __('firewatch::messages.limit_argument', ['items' => __("firewatch::messages.limit_items.{$tool}"), 'maximum' => $maximum, 'default' => $default]);
+}

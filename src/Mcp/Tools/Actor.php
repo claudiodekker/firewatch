@@ -113,9 +113,8 @@ class Actor extends Tool
     {
         return [
             'who' => $schema->string()->description(__('firewatch::messages.actor_who_argument'))->required(),
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.actor_limit_argument')),
+            ...$this->windowSchema($schema),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
     }

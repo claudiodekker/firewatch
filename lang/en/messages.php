@@ -459,13 +459,7 @@ return [
 
     'failed' => "error: failed\nThe SQL tool failed unexpectedly; the failure was reported to the application's exception handler. Run `php artisan firewatch:doctor`.",
 
-    'rank_type_argument' => 'The type to rank, required unless group: request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request or queued-job.',
-
     'rank_by_argument' => 'The measure: p95_duration (default; occurrences for exceptions), p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen or queries.',
-
-    'rank_deploy_argument' => 'An exact deploy string: only its records count.',
-
-    'rank_limit_argument' => 'The most groups to list, 1 to 100. Default 20.',
 
     'rank_summary' => 'Ranked :count :type group by :by, worst first.|Ranked :count :type groups by :by, worst first.',
 
@@ -473,11 +467,9 @@ return [
 
     'rank_untimed' => ':count record without duration is counted in occurrences and left out of the duration statistics.|:count records without duration are counted in occurrences and left out of the duration statistics.',
 
-    'rank_group_argument' => 'One group id (32 hex): one row per deploy in first-seen order. Excludes matching and deploy; by queries is refused.',
+    'rank_group_argument' => 'One group id (32 hex): one row per deploy in first-seen order. Excludes matching, deploy and cursor; by queries is refused.',
 
     'rank_matching_argument' => 'A case-insensitive substring of the group label, 1 to 200 characters. Excludes group.',
-
-    'rank_cursor_argument' => 'The cursor of a cut answer, from its truncated entry, with the same arguments. Not with group.',
 
     'rank_cursor_how' => 'Call rank again with this cursor to see the rest: :call',
 
@@ -493,8 +485,6 @@ return [
 
     'rank_no_route' => '(no route matched)',
 
-    'compare_type_argument' => 'A type with groups, as rank takes it. Required unless group.',
-
     'compare_group_argument' => 'One group id (32 hex). Excludes limit.',
 
     'compare_split_at_argument' => 'Where after begins, in the forms of since; a record at it is after. Strictly inside the window.',
@@ -504,12 +494,6 @@ return [
     'compare_deploy_after_argument' => 'The deploy of the after side, matched exactly, not deploy_before. Needs deploy_before.',
 
     'compare_by_argument' => 'p95_duration (default; occurrences for exceptions), p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory or queries.',
-
-    'compare_limit_argument' => 'The most groups to list, 1 to 100. Default 20.',
-
-    'compare_since_argument' => 'Start of the window, included, in the forms every tool takes. Absent: the start of what the store covers for the type.',
-
-    'compare_until_argument' => 'End of the window, excluded, in the same forms. Absent: the store clock, now.',
 
     'compare_summary' => 'Compared :groups :type group by :by before and after the split: :changes.|Compared :groups :type groups by :by before and after the split: :changes.',
 
@@ -549,19 +533,11 @@ return [
 
     'compare_next_rank' => 'Break the first group listed down by deploy.',
 
-    'trend_type_argument' => 'A type with groups. Required unless group.',
-
     'trend_group_argument' => 'One group id (32 hex).',
 
     'trend_by_argument' => 'The measure, default occurrences; no percentiles.',
 
     'trend_buckets_argument' => '2 to 60. Default 12.',
-
-    'trend_since_argument' => 'Start, included; the forms every tool takes.',
-
-    'trend_until_argument' => 'End; the same forms. Derived: included.',
-
-    'trend_deploy_argument' => 'An exact deploy string.',
 
     'trend_summary' => ':type :by :direction over :buckets buckets; the peak is bucket :peak.',
 
@@ -580,8 +556,6 @@ return [
     'trend_next_occurrences' => 'List the records of the peak bucket.',
 
     'query_sql_argument' => 'One SELECT, WITH ... SELECT, VALUES or EXPLAIN statement, up to 16,384 bytes.',
-
-    'query_limit_argument' => 'The most rows to return, 1 to 500. Default 50. A LIMIT of your own applies inside it.',
 
     'query_window_reason' => 'The statement owns its bounds.',
 
@@ -906,8 +880,6 @@ return [
 
     'execution_type_argument' => 'request, command, job-attempt or scheduled-task: the latest finished execution of that kind. Not with execution_id.',
 
-    'execution_limit_argument' => 'The most timeline entries, 1 to 100. Default 50. Counted after repeated identical queries collapse.',
-
     'execution_window_reason' => 'one execution, found by its id or as the latest one that finished',
 
     'execution_any_type' => 'type: any execution type',
@@ -938,8 +910,6 @@ return [
 
     'trace_job_id_argument' => 'A job id: the lineage of that job and the executions of the trace it was dispatched in. Give this or trace_id, not both.',
 
-    'trace_limit_argument' => 'The most executions to list, 1 to 100. Default 50. It does not cap the jobs, whose list is cut only to fit the answer.',
-
     'trace_window_reason' => 'a trace is read whole, whenever it ran',
 
     'trace_summary' => 'Trace :id: :executions, :jobs.',
@@ -965,8 +935,6 @@ return [
     'trace_next_occurrences' => 'List the records that carry this id, since the execution they belong to is not in the store.',
 
     'actor_who_argument' => 'A user id, a username or a name, 1 to 255 characters once trimmed. Tried in that order, then as a part of a name or username.',
-
-    'actor_limit_argument' => 'The most executions to list, 1 to 100. Default 20.',
 
     'actor_summary' => ':person: :attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributable cannot be attributed.',
 
@@ -1023,7 +991,6 @@ return [
     'detect_shape_argument' => 'The shape to run: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, failing-http, cache or memory. Absent: every shape that ships.',
     'detect_threshold_argument' => 'Overrides the shape\'s default, named in the tool description. Whole numbers, except percent and megabytes. An answer states the unit, range and default; out of range is refused. Needs `shape`.',
     'detect_group_argument' => 'One group id (32 hex) restricting the shape; for n-plus-one an execution\'s group, not a query group; refused for error-logs. A group holding no records is an empty answer. Needs `shape`.',
-    'detect_limit_argument' => 'The most findings to list, 1 to 100. Default 20.',
     'detect_input' => [
         'n-plus-one' => 'executions',
         'database-bound' => 'requests',
@@ -1108,10 +1075,6 @@ return [
 
     'occurrences_matching_argument' => 'A plain substring, 1 to 200 characters, ignoring ASCII case, looked for in the type\'s own fields. Needs a type.',
 
-    'occurrences_limit_argument' => 'The most rows to list, 1 to 100. Default 20.',
-
-    'occurrences_cursor_argument' => 'The cursor of a cut answer, from its truncated entry, with the same arguments.',
-
     'occurrences_summary' => 'Listed :count record, ordered by :order.|Listed :count records, ordered by :order.',
 
     'occurrences_cursor_how' => 'Call occurrences again with this cursor to see the rest: :call',
@@ -1122,9 +1085,34 @@ return [
 
     'occurrences_next_group' => 'The group of the first row: how it compares with its peers.',
 
-    'since_argument' => 'Start of the window, included: epoch seconds, ISO 8601, a local date or date-time, a relative time such as -1d, or now. Absent: unbounded.',
+    'since_argument' => 'Start of the window, included: epoch seconds, ISO 8601, a local date or date-time, a relative time such as -1d, or now. Absent: :absent.',
 
-    'until_argument' => 'End of the window, excluded: the same forms as since. Absent: unbounded.',
+    'until_argument' => 'End of the window, excluded: the same forms as since. Absent: :absent.',
+
+    'window_absent' => [
+        'unbounded' => ['since' => 'unbounded', 'until' => 'unbounded'],
+        'compare' => ['since' => 'the start of the type\'s coverage', 'until' => 'the store clock'],
+        'trend' => ['since' => 'derived from the records', 'until' => 'derived from the records, then included'],
+    ],
+
+    'limit_argument' => 'The most :items, 1 to :maximum. Default :default.',
+
+    'limit_items' => [
+        'rank' => 'groups',
+        'occurrences' => 'rows',
+        'execution' => 'timeline entries, counted after repeated identical queries collapse',
+        'trace' => 'executions; it does not cap the jobs, whose list is cut only to fit the answer',
+        'detect' => 'findings',
+        'actor' => 'executions',
+        'compare' => 'groups',
+        'query' => 'rows; a LIMIT of your own applies inside it',
+    ],
+
+    'grouped_type_argument' => 'The type, required unless group: request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request or queued-job.',
+
+    'deploy_argument' => 'An exact deploy string: only its records count.',
+
+    'cursor_argument' => 'The cursor of a cut answer, from its truncated entry, with the same arguments.',
 
     'cell_null' => 'n/a',
 
