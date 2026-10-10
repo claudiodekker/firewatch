@@ -98,9 +98,8 @@ class Detect extends Tool
             'shape' => $schema->string()->enum($this->detectors->names())->description(__('firewatch::messages.detect_shape_argument')),
             'threshold' => $schema->number()->description(__('firewatch::messages.detect_threshold_argument')),
             'group' => $schema->string()->description(__('firewatch::messages.detect_group_argument')),
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.detect_limit_argument')),
+            ...$this->windowSchema($schema),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
     }

@@ -9,6 +9,8 @@ use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
+use Illuminate\JsonSchema\Types\IntegerType;
+use Illuminate\JsonSchema\Types\StringType;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -46,6 +48,31 @@ trait AnswersInEnvelope
                 ->enum(array_column(AnswerFormat::cases(), 'value'))
                 ->description(__('firewatch::messages.format_argument')),
         ];
+    }
+
+    /**
+     * Get the window arguments, with the sentence that says what an absent bound means for the tool.
+     *
+     * @return array{since: StringType, until: StringType}
+     */
+    protected function windowSchema(JsonSchema $schema, string $absent = 'unbounded'): array
+    {
+        return [
+            'since' => $schema->string()->description(__('firewatch::messages.since_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.since")])),
+            'until' => $schema->string()->description(__('firewatch::messages.until_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.until")])),
+        ];
+    }
+
+    /**
+     * Get the limit argument, from the bounds of the tool and what it lists.
+     */
+    protected function limitArgument(JsonSchema $schema, int $maximum, int $default): IntegerType
+    {
+        return $schema->integer()->description(__('firewatch::messages.limit_argument', [
+            'items' => __("firewatch::messages.limit_items.{$this->name()}"),
+            'maximum' => $maximum,
+            'default' => $default,
+        ]));
     }
 
     /**

@@ -2,9 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
-use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -60,11 +58,7 @@ it('opens what a finding points at', function () {
 
     $envelope = Envelope::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
 
-    foreach ($envelope['next'] as $call) {
-        $tool = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']];
-
-        expect(Envelope::assert($tool, $call['arguments'])['empty'])->toBeNull();
-    }
+    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
 });
 
 it('examines the request in the overview, at the default threshold', function () {

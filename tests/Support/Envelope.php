@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Server\Tool;
+use Laravel\Mcp\Server\Transport\FakeTransporter;
 use PHPUnit\Framework\Assert;
 
 class Envelope
@@ -16,7 +17,58 @@ class Envelope
     public const KEYS = ['tool', 'now', 'window', 'summary', 'empty', 'result', 'coverage', 'blind_spots', 'notes', 'truncated', 'next'];
 
     /**
+     * Whether every call an answer offers is run right after the answer is asserted.
+     */
+    protected static bool $following = false;
+
+    /**
+     * Turn the following of offered calls on or off.
+     */
+    public static function followNext(bool $following): void
+    {
+        self::$following = $following;
+    }
+
+    /**
+     * Run a call an answer offers and get what it answers.
+     *
+     * @param  array{tool: string, arguments: array<string, mixed>}  $call
+     * @return array<string, mixed>
+     */
+    public static function follow(array $call): array
+    {
+        $following = self::$following;
+        self::$following = false;
+
+        try {
+            return self::assert(self::registered($call['tool']), $call['arguments']);
+        } finally {
+            self::$following = $following;
+        }
+    }
+
+    /**
+     * Get the class the server registers under a tool name.
+     *
+     * @return class-string<Tool>
+     */
+    protected static function registered(string $name): string
+    {
+        $tools = (fn () => $this->tools)->call(app(FirewatchServer::class, ['transport' => new FakeTransporter]));
+
+        foreach ($tools as $class) {
+            if (app($class)->name() === $name) {
+                return $class;
+            }
+        }
+
+        Assert::fail("The server registers no tool named {$name}.");
+    }
+
+    /**
      * Call the tool in JSON and in markdown, assert that both carry the same answer in the fixed shape, and get the envelope.
+     *
+     * While following is on, every call the answer offers is run and asserted the same way.
      *
      * @param  class-string<Tool>  $tool
      * @param  array<string, mixed>  $arguments
@@ -29,7 +81,15 @@ class Envelope
         Date::setTestNow($mocked ? Date::getTestNow() : Date::now());
 
         try {
-            return self::calls($tool, $arguments);
+            $envelope = self::calls($tool, $arguments);
+
+            if (self::$following) {
+                foreach ($envelope['next'] as $call) {
+                    self::follow($call);
+                }
+            }
+
+            return $envelope;
         } finally {
             Date::setTestNow($mocked ? Date::getTestNow() : null);
         }

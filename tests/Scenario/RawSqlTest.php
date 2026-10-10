@@ -109,7 +109,7 @@ it('learns the recipe from describe, then finds the route it read in source by i
     $described = Envelope::assert(Describe::class, ['type' => 'request']);
     $envelope = Envelope::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['GET', 'HEAD'], 'path' => 'checkout']);
     $held = $envelope['result']['held'];
-    $occurrences = Envelope::assert(Occurrences::class, $envelope['next'][0]['arguments']);
+    $occurrences = Envelope::follow($envelope['next'][0]);
 
     expect($described['result']['group_recipe'])->not->toBeNull()
         ->and($envelope['result']['candidates'])->toHaveCount(1)

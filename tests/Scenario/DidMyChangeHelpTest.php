@@ -1,9 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Compare;
-use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -52,19 +50,6 @@ function didMyChangeHelpAfter(): void
     didMyChangeHelpServe(changed: true, uris: ['/orders', '/orders', '/orders', '/orders/export', '/orders/export']);
 }
 
-/**
- * Run a call an answer offers and get what it answers.
- *
- * @param  array{tool: string, arguments: array<string, mixed>, why: string}  $call
- * @return array<string, mixed>
- */
-function didMyChangeHelpFollow(array $call): array
-{
-    $tool = ['occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']];
-
-    return Envelope::assert($tool, $call['arguments']);
-}
-
 it('compares the routes before and after the change at the now of an earlier answer, and every call it offers runs', function () {
     didMyChangeHelpBefore();
     $split = Envelope::assert(Overview::class)['now'];
@@ -93,15 +78,15 @@ it('compares the routes before and after the change at the now of an earlier ans
     $first = collect($result['groups'])->firstWhere('group', $envelope['next'][0]['arguments']['group']);
 
     foreach ($envelope['next'] as $call) {
-        $answer = didMyChangeHelpFollow($call);
+        $answer = Envelope::follow($call);
 
         expect($answer['empty'])->toBeNull()
             ->and($answer['window'])->toMatchArray(['since' => $envelope['window']['since'], 'until' => $envelope['window']['until']]);
     }
 
     expect($first)->toBe($result['groups'][0])
-        ->and(didMyChangeHelpFollow($envelope['next'][0])['result']['rows'])->toHaveCount($first['before_records'] + $first['after_records'])
-        ->and(didMyChangeHelpFollow($envelope['next'][1])['result']['records'])->toBe($first['before_records'] + $first['after_records']);
+        ->and(Envelope::follow($envelope['next'][0])['result']['rows'])->toHaveCount($first['before_records'] + $first['after_records'])
+        ->and(Envelope::follow($envelope['next'][1])['result']['records'])->toBe($first['before_records'] + $first['after_records']);
 });
 
 it('evaluates nothing at the latest clock, where the after side is empty, and never says no regression', function () {

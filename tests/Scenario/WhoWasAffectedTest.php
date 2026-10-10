@@ -2,7 +2,6 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
-use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Arr;
@@ -92,19 +91,6 @@ function whoWasAffectedTraffic(string $queue): void
     ]);
 }
 
-/**
- * Run a call an answer offers and get what it answers.
- *
- * @param  array{tool: string, arguments: array<string, mixed>, why: string}  $call
- * @return array<string, mixed>
- */
-function whoWasAffectedFollow(array $call): array
-{
-    $tool = ['actor' => Actor::class, 'execution' => Execution::class, 'occurrences' => Occurrences::class][$call['tool']];
-
-    return Envelope::assert($tool, $call['arguments']);
-}
-
 it('says who was affected: the person meant, the work tied to them by each link, and what no link reaches', function () {
     whoWasAffectedTraffic($this->queue);
 
@@ -113,7 +99,7 @@ it('says who was affected: the person meant, the work tied to them by each link,
     $result = $envelope['result'];
     $executions = $result['executions'];
     $activity = array_column($result['activity'], null, 'type');
-    $followed = array_map(whoWasAffectedFollow(...), $envelope['next']);
+    $followed = array_map(Envelope::follow(...), $envelope['next']);
 
     expect($ambiguous['result']['matched_by'])->toBe('contains')
         ->and(array_column($ambiguous['result']['candidates'], 'id'))->toBe(['7', '8'])

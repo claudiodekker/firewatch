@@ -16,9 +16,11 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did while it was developed: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and Firewatch itself sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what the store holds), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a trace's executions and the lineage of its queued jobs), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over equal buckets of time), `query` (your own read-only SQL, last resort), `describe` (store facts, deploys, units and every column `query` reads with example statements; `type` gives one object's columns and recent values), `fingerprint` (the group id of a route, command, job, task, query, cache key, host or mail class you read in source, and whether the store holds it). Every answer ends with `next`: calls you can run as written.
+        Start with `overview`, then drill down: `overview` (what is wrong), `detect` (named problem shapes and their evidence), `rank` (worst routes, queries, jobs), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a request and the jobs it caused), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over time), `query` (your own read-only SQL, last resort), `describe` (schema, deploys, store facts and example statements), `fingerprint` (the group id of something you just read in source, and whether it ran). Every answer ends with `next`: calls you can run as written.
 
-        Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used.
+        Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Clean means nothing was found among the records captured, over the stated examined count; clean over few records is weak. A not_evaluated verdict is never a pass. Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used. Listed argument values are matched exactly, and a refusal names the accepted ones. Prefer `rank`, `occurrences` and `detect` to `query`: they convert units, it does not.
+
+        Did my change help? Note `now` from an answer, change the code, exercise the application, then call `compare` with `split_at` set to that value; on a later round also pass the previous split as `since`. Did it ever run? A search that finds nothing is no proof: `fingerprint` it first.
         TEXT,
 
     /*
@@ -33,18 +35,18 @@ return [
     */
 
     'tools' => [
-        'overview' => 'Entry point. Answers "what is wrong in this application?" in a fixed order: the error rate (server errors 500 and above and client errors 400 to 499 among the window\'s requests, with their shares of the requests that have a status), the slowest groups by total time (up to 10, at most 3 per type), the records of all twelve types, the user directory (the whole store, never windowed), the actors (distinct signed-in actors and executions with no user, never summed), then the verdict of every problem shape, each checked at its default threshold within five seconds. Nothing is wrong only when every shape ran and is clean; a shape that did not run says so. Use it first, then `detect` for one shape, `rank` for the worst groups of a type, `occurrences` for individual records and `execution` for one in full. Windowed by since/until; without them everything stored counts. Empty is not clean.',
-        'rank' => 'Ranks the groups of one type (routes, queries, jobs, exceptions and so on) by a measure, worst first, to answer "what is slow, heavy or frequent?". Pass `type`, or `group` to break one group down by deploy (rows in first-seen order) to see whether it changed. `matching` finds a group by a substring of its label. `by` picks the measure, p95_duration by default and occurrences for exceptions. Percentiles are null with a `withheld` object when too few records support them; when no group has enough for the percentile, the order falls back to the maximum and a note says so. Rows carry when the group was first and last seen, its deploys and its slowest execution, and failure_pct where the type has a notion of failure. Windowed by since/until; `deploy` restricts the records; a cursor continues a cut list. Empty is not clean.',
-        'execution' => 'One execution in full: a request, command, job attempt or scheduled task. Without arguments it returns the latest one that finished (greatest end time); `type` picks the latest of one kind; `execution_id` picks a specific one (a request\'s trace id is also its execution id). Shows outcome, stages, request headers and payload as captured, counted-versus-captured accounting for eight counters, up to five exceptions with application frames and source lines, and the child timeline. Not windowed. For every attempt of a job use `occurrences` with `job_id`. Recorded when finished: running work is absent.',
-        'occurrences' => 'Lists individual records, newest first by default, for the selectors you give (at least one): `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. Order by recent, slowest, memory or queries. Filters (a filter that does not fit the type is refused): method, status, outcome, level, slower_than_ms, at_or_above (median or p95 of the selection), matching (substring). Rows carry group, name, location (file:line), user and a `detail` object; a query group also lists its distinct call sites. Windowed; cursor for more. Empty is not clean.',
-        'trace' => 'Follows one trace: its executions in start order and the lineage of every queued job. A lineage shows the dispatch, attempts in order, wait before each attempt (wait_ms), outcome (processed, failed, retrying, pending) and partial states (no_dispatch, no_attempts). Give exactly one of `trace_id` or `job_id`. Lineage joins on job id, so it is complete even when attempts carry other traces. A job on an inline connection (sync, deferred, background, null) runs in the dispatching process and the sensors record no dispatch for it; a dispatch recorded on one shows no attempts and no outcome. Not windowed. Use `execution` for children, exceptions and source lines.',
-        'detect' => 'Runs named problem shapes and returns evidence, worst first. `n-plus-one`: read query one execution ran 3+ times, in runs. `database-bound`: request groups typically spending 60+ percent in queries. `failing-routes`: request groups answering 400+. `failing-jobs`: job groups with 1+ failed or released attempts. `queue-latency`: job groups with first-attempt wait or pending age of 5000+ milliseconds. `failing-tasks`: scheduled-task groups with failed or skipped tasks (no threshold). `exception-clusters`: exception groups with 1+ occurrences, escaped first. `error-logs`: error-level logs by message shape, 1+ occurrences (no `group`). `failing-http`: outgoing-request hosts answering 400+. `cache`: cache keys with a hit rate below 50 percent over 3+ reads, or a failed write or delete. `memory`: execution groups peaking at 64+ megabytes. Without `shape` all run; `threshold` and `group` need one. Each returns a verdict (findings, clean, not_evaluated) over what it examined, its threshold, unit and range, exact total, up to `limit` findings (1 to 100, default 20) and caveats. Clean: none among what was captured, weak over few records. Windowed.',
-        'compare' => 'Compares each group across a split or a deploy pair: "did my change help?". Give exactly one boundary. split_at is a time, such as the now of an earlier answer; before is since to split_at, after is split_at to until. Or deploy_before and deploy_after, exact deploy strings: each side is every record of its deploy in the window. A deploy pair cannot separate an uncommitted edit; a time split can. Without since: the type\'s coverage start; without until: now. Pass `type`, or `group` for one group. Rows are ordered by absolute change, so the largest change in either direction survives the limit; a rollup counts every group, cut or not. Too few records is not evaluated, never guessed; an empty side is never "no regression". Work spanning `split_at` counts as before.',
-        'actor' => 'Identifies one signed-in person and the work of the window tied to them. `who` is a user id, a username or a name, tried in that order, then as a part of a name or username: the first stage that finds anyone decides. An id must be exact; elsewhere case is ignored, for ASCII letters only. An email works only where the username is the email. Several matches are listed as candidates, never guessed: repeat with an id. An actor exists only once recorded acting. An execution is theirs by its own user, its job\'s dispatch, or a child inside a command or task. Attribution is partial: what no link reaches is counted, never guessed. Windowed by since/until; identity is read over the whole store.',
-        'trend' => 'Cuts the window into equal buckets and reports a measure per bucket, to see whether something rose, fell or held, and where it peaked. Pass `type` or `group`. `by`: occurrences (default), max_duration, avg_duration, total_duration, max_memory (execution types only). Missing since/until are derived from the selected records, and the window says which. Empty bucket: 0 for occurrences, null for other measures. Buckets that start before coverage are partial. Bucket edges can be passed back as since/until. Windowed.',
-        'query' => 'Last resort: runs your own read-only SQL on Firewatch\'s store. One SELECT, WITH ... SELECT, VALUES or EXPLAIN statement over the twelve record views (requests, commands, job_attempts, scheduled_tasks, queries, exceptions, logs, cache_events, mail, notifications, outgoing_requests, queued_jobs), records, users, drift, meta, json_each and json_tree; anything else, and a function off the allow-list, is refused. Values are raw: times epoch seconds, durations microseconds, memory bytes. `limit` 1 to 500 (default 50). Blind spots follow the record types read. Prefer `rank`, `occurrences` and `detect`, which convert units. Not windowed.',
-        'describe' => 'Schema, units, deploys and examples for `query`.',
-        'fingerprint' => 'The group id of something read in source, and whether the store holds it. Not windowed.',
+        'overview' => 'Entry point: what is wrong now. In order: the error rate (5xx and 4xx shares of requests), the slowest groups by total time (10, at most 3 per type), counts of all twelve types, the user directory (whole store), signed-in actors and executions without one, then the verdict of every problem shape at its default threshold, within five seconds. Nothing is wrong only when every shape ran and is clean; one that did not run says so. Windowed. Empty is not clean.',
+        'rank' => 'Groups of one type (routes, queries, jobs...) worst first by a measure: what is slow, heavy or frequent? Pass `type`, or `group` for one row per deploy, to see whether it changed. Percentiles are null with `withheld` when too few records support them; when no group has enough, the order falls back to the maximum, with a note. Rows carry first and last seen, deploys, the slowest execution and failure_pct. Windowed. Empty is not clean.',
+        'execution' => 'One request, command, job attempt or scheduled task in full: outcome, stages, headers and payload as captured, counted-versus-captured accounting, up to five exceptions with source lines, and the child timeline. Only finished work is recorded. Every attempt of a job: `occurrences` with `job_id`. Not windowed.',
+        'occurrences' => 'Individual records, newest first by default, for at least one selector: `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. A filter that does not fit the type is refused. Rows carry group, name, file:line, user and `detail`; a query group lists its call sites. Windowed. Empty is not clean.',
+        'trace' => 'One trace\'s executions in start order and each queued job\'s lineage: dispatch, attempts, wait_ms, outcome (processed, failed, retrying, pending) or no_dispatch, no_attempts. Lineage joins on job id, across traces. A job on an inline connection (sync, deferred, background, null) records no dispatch; a dispatch on one shows no attempts. Give `trace_id` or `job_id`. Not windowed. Children and exceptions: `execution`.',
+        'detect' => 'Problem shapes, worst evidence first, with default thresholds: `n-plus-one`, a read query run 3+ times in one execution; `database-bound`, requests 60+ percent in queries; `failing-routes`, requests answering 400+; `failing-jobs`, 1+ failed or released attempts; `queue-latency`, wait or pending 5000+ ms; `failing-tasks`, failed or skipped tasks, no threshold; `exception-clusters`, 1+ occurrences; `error-logs`, error logs by message, 1+, no `group`; `failing-http`, hosts answering 400+; `cache`, hit rate under 50 percent over 3+ reads, or a failed write; `memory`, 64+ MB peaks. Each states a verdict (findings, clean, not_evaluated) over what it examined, with threshold, total and caveats. Clean over few records is weak. Windowed.',
+        'compare' => 'Each group before against after: did my change help? One boundary: `split_at`, such as an earlier answer\'s now (work spanning it is before), or `deploy_before` with `deploy_after`, each side that deploy\'s records. Only a time split separates an uncommitted edit. Rows order by absolute change; a rollup counts every group. Too few records is not_evaluated; an empty side is never "no regression". Windowed.',
+        'actor' => 'One signed-in person and the window\'s work tied to them. `who` is tried as user id (exact), username, name, then part of a name or username; the first stage that finds anyone decides. ASCII case is ignored; an email works only where it is the username. Several matches come back as candidates: repeat with an id. An actor exists once recorded acting. Work counts by its own user, its job\'s dispatch or inside a command or task; what no link reaches is counted, never guessed. Windowed; identity reads the whole store.',
+        'trend' => 'A measure over equal time buckets: did it rise, fall or hold, and where did it peak? An empty bucket is 0 for occurrences, null otherwise; buckets before coverage are partial. Bucket edges pass back as since/until. Windowed.',
+        'query' => 'Last resort: your own read-only SQL. One SELECT, WITH, VALUES or EXPLAIN over the record views, records, users, drift, meta, json_each and json_tree; other statements and functions off the allow-list are refused. Values are raw: epoch seconds, microseconds, bytes. `describe` lists columns. Prefer `rank`, `occurrences`, `detect`. Not windowed.',
+        'describe' => 'What Firewatch holds and how to query it. Without `type`: store state, counts, drift, retention, coverage, whether `query` runs and why not, deploys newest first, units, objects, the SQL allow-list and ceilings, examples. With `type`: its columns with units and recent values, group recipe, examples and blind spots. Not windowed.',
+        'fingerprint' => 'The group id of something read in source, and whether the store holds it, so a miss is not read as "never ran". Pass `type` and its source facts, as each argument says; others are refused. Exceptions: `rank` with `matching`. recipe_check: a miss with agrees has not run; with disagrees, do not conclude. Not windowed.',
     ],
 
     /*
@@ -391,7 +393,7 @@ return [
 
     'next' => 'Next:',
 
-    'format_argument' => 'markdown (default) or json: the same answer either way.',
+    'format_argument' => 'markdown (default) or json.',
 
     'missing_argument' => "error: missing_argument\n`:argument` is required.\nargument: :argument\naccepted: :accepted\nexample: :example",
 
@@ -459,13 +461,7 @@ return [
 
     'failed' => "error: failed\nThe SQL tool failed unexpectedly; the failure was reported to the application's exception handler. Run `php artisan firewatch:doctor`.",
 
-    'rank_type_argument' => 'The type to rank, required unless group: request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request or queued-job.',
-
-    'rank_by_argument' => 'The measure: p95_duration (default; occurrences for exceptions), p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen or queries.',
-
-    'rank_deploy_argument' => 'An exact deploy string: only its records count.',
-
-    'rank_limit_argument' => 'The most groups to list, 1 to 100. Default 20.',
+    'rank_by_argument' => 'p95_duration (default; occurrences for exception), p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen or queries. Memory and queries: execution types.',
 
     'rank_summary' => 'Ranked :count :type group by :by, worst first.|Ranked :count :type groups by :by, worst first.',
 
@@ -473,11 +469,9 @@ return [
 
     'rank_untimed' => ':count record without duration is counted in occurrences and left out of the duration statistics.|:count records without duration are counted in occurrences and left out of the duration statistics.',
 
-    'rank_group_argument' => 'One group id (32 hex): one row per deploy in first-seen order. Excludes matching and deploy; by queries is refused.',
+    'rank_group_argument' => 'A group id (32 hex): one row per deploy, first seen first. Excludes matching, deploy and cursor; by queries is refused.',
 
     'rank_matching_argument' => 'A case-insensitive substring of the group label, 1 to 200 characters. Excludes group.',
-
-    'rank_cursor_argument' => 'The cursor of a cut answer, from its truncated entry, with the same arguments. Not with group.',
 
     'rank_cursor_how' => 'Call rank again with this cursor to see the rest: :call',
 
@@ -493,23 +487,15 @@ return [
 
     'rank_no_route' => '(no route matched)',
 
-    'compare_type_argument' => 'A type with groups, as rank takes it. Required unless group.',
-
-    'compare_group_argument' => 'One group id (32 hex). Excludes limit.',
+    'compare_group_argument' => 'A group id (32 hex). Excludes limit.',
 
     'compare_split_at_argument' => 'Where after begins, in the forms of since; a record at it is after. Strictly inside the window.',
 
-    'compare_deploy_before_argument' => 'The deploy of the before side, matched exactly. Needs deploy_after.',
+    'compare_deploy_before_argument' => 'The before deploy, matched exactly. Needs deploy_after.',
 
-    'compare_deploy_after_argument' => 'The deploy of the after side, matched exactly, not deploy_before. Needs deploy_before.',
+    'compare_deploy_after_argument' => 'The after deploy, matched exactly, not deploy_before. Needs deploy_before.',
 
-    'compare_by_argument' => 'p95_duration (default; occurrences for exceptions), p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory or queries.',
-
-    'compare_limit_argument' => 'The most groups to list, 1 to 100. Default 20.',
-
-    'compare_since_argument' => 'Start of the window, included, in the forms every tool takes. Absent: the start of what the store covers for the type.',
-
-    'compare_until_argument' => 'End of the window, excluded, in the same forms. Absent: the store clock, now.',
+    'compare_by_argument' => 'p95_duration (default; occurrences for exception), p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory or queries.',
 
     'compare_summary' => 'Compared :groups :type group by :by before and after the split: :changes.|Compared :groups :type groups by :by before and after the split: :changes.',
 
@@ -549,19 +535,11 @@ return [
 
     'compare_next_rank' => 'Break the first group listed down by deploy.',
 
-    'trend_type_argument' => 'A type with groups. Required unless group.',
+    'trend_group_argument' => 'A group id (32 hex).',
 
-    'trend_group_argument' => 'One group id (32 hex).',
-
-    'trend_by_argument' => 'The measure, default occurrences; no percentiles.',
+    'trend_by_argument' => 'occurrences (default), max_duration, avg_duration, total_duration or max_memory (execution types only).',
 
     'trend_buckets_argument' => '2 to 60. Default 12.',
-
-    'trend_since_argument' => 'Start, included; the forms every tool takes.',
-
-    'trend_until_argument' => 'End; the same forms. Derived: included.',
-
-    'trend_deploy_argument' => 'An exact deploy string.',
 
     'trend_summary' => ':type :by :direction over :buckets buckets; the peak is bucket :peak.',
 
@@ -580,8 +558,6 @@ return [
     'trend_next_occurrences' => 'List the records of the peak bucket.',
 
     'query_sql_argument' => 'One SELECT, WITH ... SELECT, VALUES or EXPLAIN statement, up to 16,384 bytes.',
-
-    'query_limit_argument' => 'The most rows to return, 1 to 500. Default 50. A LIMIT of your own applies inside it.',
 
     'query_window_reason' => 'The statement owns its bounds.',
 
@@ -611,7 +587,7 @@ return [
 
     'query_next_more' => 'The same statement with the most rows an answer holds.',
 
-    'describe_type_argument' => 'A record type or user.',
+    'describe_type_argument' => 'request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request, queued-job or user.',
 
     'describe_window_reason' => 'the schema and the store facts are not bounded by time',
 
@@ -648,7 +624,7 @@ return [
     'describe_next_query' => 'Run the first example statement.',
 
     'fingerprint_arguments' => [
-        'type' => 'A record type; not exception, log or user.',
+        'type' => 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail or notification.',
         'methods' => 'request: all its methods, such as GET and HEAD.',
         'path' => 'request: the full route path.',
         'domain' => 'request, optional.',
@@ -657,7 +633,7 @@ return [
         'timezone' => 'scheduled-task, optional.',
         'repeat_seconds' => 'scheduled-task, optional.',
         'connection' => 'query: the connection name.',
-        'sql' => 'query: the SQL as run, with ? placeholders.',
+        'sql' => 'query: as run, with ? placeholders.',
         'driver' => 'query, optional, such as mysql.',
         'store' => 'cache-event.',
         'key' => 'cache-event.',
@@ -902,11 +878,9 @@ return [
         'user_span' => 'How long each person has been seen.',
     ],
 
-    'execution_id_argument' => 'The execution id to open (a request\'s trace id is its execution id). Omit for the latest finished execution. Excludes type.',
+    'execution_id_argument' => 'A request\'s trace id is its execution id. Absent: the latest finished. Excludes type.',
 
-    'execution_type_argument' => 'request, command, job-attempt or scheduled-task: the latest finished execution of that kind. Not with execution_id.',
-
-    'execution_limit_argument' => 'The most timeline entries, 1 to 100. Default 50. Counted after repeated identical queries collapse.',
+    'execution_type_argument' => 'request, command, job-attempt or scheduled-task: the latest finished of that kind. Not with execution_id.',
 
     'execution_window_reason' => 'one execution, found by its id or as the latest one that finished',
 
@@ -934,11 +908,9 @@ return [
 
     'execution_frames_limit_not_reached' => 'Nightwatch\'s limit of 10 frames with source lines was not reached: the lines were not available when the exception was captured, or were dropped to fit the record.',
 
-    'trace_id_argument' => 'A trace id: its executions in start order and the queued jobs they dispatched or ran. Give this or job_id, not both.',
+    'trace_id_argument' => 'A trace id: its executions and the jobs they dispatched or ran. Give this or job_id, not both.',
 
-    'trace_job_id_argument' => 'A job id: the lineage of that job and the executions of the trace it was dispatched in. Give this or trace_id, not both.',
-
-    'trace_limit_argument' => 'The most executions to list, 1 to 100. Default 50. It does not cap the jobs, whose list is cut only to fit the answer.',
+    'trace_job_id_argument' => 'A job id: its lineage and the trace that dispatched it. Give this or trace_id, not both.',
 
     'trace_window_reason' => 'a trace is read whole, whenever it ran',
 
@@ -964,9 +936,7 @@ return [
 
     'trace_next_occurrences' => 'List the records that carry this id, since the execution they belong to is not in the store.',
 
-    'actor_who_argument' => 'A user id, a username or a name, 1 to 255 characters once trimmed. Tried in that order, then as a part of a name or username.',
-
-    'actor_limit_argument' => 'The most executions to list, 1 to 100. Default 20.',
+    'actor_who_argument' => 'A user id, username or name, 1 to 255 characters once trimmed.',
 
     'actor_summary' => ':person: :attributed of :total executions in the window attributed (:direct direct, :dispatch dispatch, :inside inside); :unattributable cannot be attributed.',
 
@@ -1020,10 +990,9 @@ return [
 
     'actor_unknown_note' => 'An actor exists only once recorded acting; the directory holds users seen within retention.',
 
-    'detect_shape_argument' => 'The shape to run: n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, failing-http, cache or memory. Absent: every shape that ships.',
-    'detect_threshold_argument' => 'Overrides the shape\'s default, named in the tool description. Whole numbers, except percent and megabytes. An answer states the unit, range and default; out of range is refused. Needs `shape`.',
-    'detect_group_argument' => 'One group id (32 hex) restricting the shape; for n-plus-one an execution\'s group, not a query group; refused for error-logs. A group holding no records is an empty answer. Needs `shape`.',
-    'detect_limit_argument' => 'The most findings to list, 1 to 100. Default 20.',
+    'detect_shape_argument' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, failing-http, cache or memory. Absent: every shape.',
+    'detect_threshold_argument' => 'In the shape\'s unit; whole except percent and MB. Out of range is refused. Needs shape.',
+    'detect_group_argument' => 'A group id (32 hex) restricting the shape; for n-plus-one an execution group. Refused for error-logs. Needs shape.',
     'detect_input' => [
         'n-plus-one' => 'executions',
         'database-bound' => 'requests',
@@ -1080,37 +1049,33 @@ return [
         'outgoing_requests' => 'outgoing requests',
         'jobs_queued' => 'jobs queued',
     ],
-    'occurrences_group_argument' => 'A group id from `rank` or from a row: only its records. A job group lists its dispatches and attempts together.',
+    'occurrences_group_argument' => 'A group id. A job group lists dispatches and attempts together.',
 
-    'occurrences_type_argument' => 'A record type: request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request or queued-job.',
+    'occurrences_type_argument' => 'request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request or queued-job.',
 
-    'occurrences_execution_id_argument' => 'An execution id: the execution\'s own record and everything recorded inside it.',
+    'occurrences_execution_id_argument' => 'An execution id: its record and everything inside it.',
 
-    'occurrences_trace_id_argument' => 'A trace id: the records of a request and of the jobs and commands it caused.',
+    'occurrences_trace_id_argument' => 'A trace id: a request\'s records and the jobs and commands it caused.',
 
     'occurrences_job_id_argument' => 'A job id: its dispatch and every attempt.',
 
-    'occurrences_user_id_argument' => 'A user id: the records that carry that user, as recorded.',
+    'occurrences_user_id_argument' => 'A user id: records carrying that user, as recorded.',
 
-    'occurrences_order_argument' => 'recent (default), slowest, memory or queries. Records without the measure come last; memory and queries need an execution type.',
+    'occurrences_order_argument' => 'recent (default), slowest, memory or queries. Records without the measure last; memory and queries need an execution type.',
 
-    'occurrences_method_argument' => 'An HTTP method, any case. Only for request and outgoing-request.',
+    'occurrences_method_argument' => 'An HTTP method, any case. Only request and outgoing-request.',
 
-    'occurrences_status_argument' => 'A status code: 500, a class such as 5xx, or a range such as 400-499. Only for request and outgoing-request.',
+    'occurrences_status_argument' => 'A code (500), class (5xx) or range (400-499). Only request and outgoing-request.',
 
-    'occurrences_outcome_argument' => 'processed, failed or released for job-attempt; processed, failed or skipped for scheduled-task.',
+    'occurrences_outcome_argument' => 'processed, failed, released or skipped; released only job-attempt, skipped only scheduled-task.',
 
-    'occurrences_level_argument' => 'A log level: that level and every worse one. Only for log.',
+    'occurrences_level_argument' => 'debug, info, notice, warning, error, critical, alert or emergency: that level and worse. log only.',
 
-    'occurrences_slower_than_ms_argument' => 'Only records strictly slower than this many milliseconds. Records without a duration are left out.',
+    'occurrences_slower_than_ms_argument' => 'Milliseconds; only records strictly slower. Records without a duration are left out.',
 
-    'occurrences_at_or_above_argument' => 'median or p95: only records at or above that duration of the selection. Withheld with a note when the selection is too small.',
+    'occurrences_at_or_above_argument' => 'median or p95 of the selection\'s durations. Too few records: not applied, every row returns, with a note.',
 
-    'occurrences_matching_argument' => 'A plain substring, 1 to 200 characters, ignoring ASCII case, looked for in the type\'s own fields. Needs a type.',
-
-    'occurrences_limit_argument' => 'The most rows to list, 1 to 100. Default 20.',
-
-    'occurrences_cursor_argument' => 'The cursor of a cut answer, from its truncated entry, with the same arguments.',
+    'occurrences_matching_argument' => 'A substring, 1 to 200 characters, ASCII case ignored, in the type\'s fields. Needs type.',
 
     'occurrences_summary' => 'Listed :count record, ordered by :order.|Listed :count records, ordered by :order.',
 
@@ -1122,9 +1087,34 @@ return [
 
     'occurrences_next_group' => 'The group of the first row: how it compares with its peers.',
 
-    'since_argument' => 'Start of the window, included: epoch seconds, ISO 8601, a local date or date-time, a relative time such as -1d, or now. Absent: unbounded.',
+    'since_argument' => 'Start, included: epoch seconds, ISO 8601, local date or date-time, relative such as -1d, or now. Absent: :absent.',
 
-    'until_argument' => 'End of the window, excluded: the same forms as since. Absent: unbounded.',
+    'until_argument' => 'End, excluded, as since. Absent: :absent.',
+
+    'window_absent' => [
+        'unbounded' => ['since' => 'unbounded', 'until' => 'unbounded'],
+        'compare' => ['since' => 'the type\'s coverage start', 'until' => 'now'],
+        'trend' => ['since' => 'derived from the records', 'until' => 'derived, then included'],
+    ],
+
+    'limit_argument' => '1 to :maximum :items. Default :default.',
+
+    'limit_items' => [
+        'rank' => 'groups',
+        'occurrences' => 'rows',
+        'execution' => 'timeline entries; identical queries collapse first',
+        'trace' => 'executions; jobs are not capped',
+        'detect' => 'findings per shape',
+        'actor' => 'executions',
+        'compare' => 'groups',
+        'query' => 'rows; your own LIMIT applies inside it',
+    ],
+
+    'grouped_type_argument' => 'Required unless group: request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request or queued-job.',
+
+    'deploy_argument' => 'An exact deploy string: only its records count.',
+
+    'cursor_argument' => 'From a cut answer, same arguments.',
 
     'cell_null' => 'n/a',
 

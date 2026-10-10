@@ -1,7 +1,6 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
-use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\DB;
@@ -54,7 +53,7 @@ it('offers a next call that runs', function () {
 
     $envelope = Envelope::assert(Execution::class);
     $call = $envelope['next'][0];
-    $answer = Envelope::assert(Rank::class, $call['arguments']);
+    $answer = Envelope::follow($call);
 
     expect($call['tool'])->toBe('rank')
         ->and($call['arguments'])->toBe(['group' => $envelope['result']['header']['group']])
@@ -195,14 +194,11 @@ it('finds no job for a request that ran its job on the sync connection, and says
         ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
 });
 
-it('offers next calls that run', function () {
+it('offers next calls', function () {
     oneExecutionShipment('database');
     Nightwatch::digest();
     [$request] = storeRows('SELECT trace_id FROM requests');
 
     $envelope = Envelope::assert(Trace::class, ['trace_id' => $request['trace_id']]);
-    $opened = array_map(fn (array $call) => Envelope::assert(Execution::class, $call['arguments']), $envelope['next']);
-
-    expect($envelope['next'])->not->toBe([])
-        ->and($opened)->toHaveCount(count($envelope['next']));
+    expect(array_column($envelope['next'], 'tool'))->not->toBe([])->each->toBe('execution');
 });

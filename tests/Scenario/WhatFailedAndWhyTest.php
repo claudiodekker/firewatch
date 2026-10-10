@@ -2,8 +2,6 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
-use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
-use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Auth\GenericUser;
@@ -157,7 +155,6 @@ function whatFailedTraffic(): void
  */
 function whatFailedAssertOfferedCalls(array $envelope): array
 {
-    $tools = ['detect' => Detect::class, 'execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class, 'trace' => Trace::class];
     $answers = [];
     $offered = $envelope['next'];
 
@@ -169,7 +166,7 @@ function whatFailedAssertOfferedCalls(array $envelope): array
             continue;
         }
 
-        $answers[$key] = Envelope::assert($tools[$call['tool']], $call['arguments']);
+        $answers[$key] = Envelope::follow($call);
 
         array_push($offered, ...$answers[$key]['next']);
     }

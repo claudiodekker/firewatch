@@ -99,15 +99,14 @@ class Rank extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->description(__('firewatch::messages.rank_type_argument')),
+            'type' => $schema->string()->description(__('firewatch::messages.grouped_type_argument')),
             'group' => $schema->string()->description(__('firewatch::messages.rank_group_argument')),
             'matching' => $schema->string()->description(__('firewatch::messages.rank_matching_argument')),
             'by' => $schema->string()->description(__('firewatch::messages.rank_by_argument')),
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.until_argument')),
-            'deploy' => $schema->string()->description(__('firewatch::messages.rank_deploy_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.rank_limit_argument')),
-            'cursor' => $schema->string()->description(__('firewatch::messages.rank_cursor_argument')),
+            ...$this->windowSchema($schema),
+            'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
+            'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),
             ...$this->formatSchema($schema),
         ];
     }

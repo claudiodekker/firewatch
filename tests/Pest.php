@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use ClaudioDekker\Firewatch\Tests\TestCase;
@@ -27,6 +28,10 @@ pest()->extend(TestCase::class)
         Exceptions::fake();
     })
     ->in('Scenario', 'Feature', 'Contract');
+
+pest()->beforeEach(fn () => Envelope::followNext(true))
+    ->afterEach(fn () => Envelope::followNext(false))
+    ->in('Scenario');
 
 pest()->group('scenario')->in('Scenario');
 pest()->group('feature')->in('Feature');
@@ -204,4 +209,20 @@ function attributedActivity(array $counts = []): array
         'dispatch' => $counts[$type->value][1] ?? 0,
         'can_carry_actor' => ! in_array($type, [RecordType::COMMAND, RecordType::SCHEDULED_TASK], true),
     ], RecordType::events());
+}
+
+/**
+ * Get the description of the since or until argument, for what an absent bound means for the kind of tool.
+ */
+function windowArgument(string $bound, string $kind = 'unbounded'): string
+{
+    return __("firewatch::messages.{$bound}_argument", ['absent' => __("firewatch::messages.window_absent.{$kind}.{$bound}")]);
+}
+
+/**
+ * Get the description of the limit argument of a tool.
+ */
+function limitArgument(string $tool, int $maximum, int $default): string
+{
+    return __('firewatch::messages.limit_argument', ['items' => __("firewatch::messages.limit_items.{$tool}"), 'maximum' => $maximum, 'default' => $default]);
 }

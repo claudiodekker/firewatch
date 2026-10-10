@@ -94,7 +94,7 @@ class Trace extends Tool
         return [
             'trace_id' => $schema->string()->description(__('firewatch::messages.trace_id_argument')),
             'job_id' => $schema->string()->description(__('firewatch::messages.trace_job_id_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.trace_limit_argument')),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
     }

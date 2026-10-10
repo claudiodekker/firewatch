@@ -1,6 +1,5 @@
 <?php
 
-use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trend;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Date;
@@ -41,19 +40,6 @@ function gettingWorseServe(float $created, array $slices): void
     }
 }
 
-/**
- * Run the call an answer offers and get what it answers.
- *
- * @param  array{tool: string, arguments: array<string, mixed>, why: string}  $call
- * @return array<string, mixed>
- */
-function gettingWorseFollow(array $call): array
-{
-    $tool = ['occurrences' => Occurrences::class][$call['tool']];
-
-    return Envelope::assert($tool, $call['arguments']);
-}
-
 it('says the order list is requested more and more, derives the window from the requests, and lists the busiest bucket', function () {
     $created = gettingWorseCreate();
     gettingWorseServe($created, [10 => 1, 70 => 1, 130 => 2, 190 => 2, 250 => 4, 310 => 5, 370 => 7, 430 => 8]);
@@ -61,7 +47,7 @@ it('says the order list is requested more and more, derives the window from the 
 
     $envelope = Envelope::assert(Trend::class, ['type' => 'request', 'buckets' => 8]);
     $result = $envelope['result'];
-    $peak = gettingWorseFollow($envelope['next'][0]);
+    $peak = Envelope::follow($envelope['next'][0]);
 
     expect($envelope['window']['derived'])->toBe(['since', 'until'])
         ->and($envelope['window']['since'])->toBeLessThan($envelope['window']['until'])
@@ -99,7 +85,7 @@ it('leaves the buckets before a clear of the requests out of the direction, says
 
     $envelope = Envelope::assert(Trend::class, ['type' => 'request', 'since' => $created, 'until' => $created + 800, 'buckets' => 8]);
     $result = $envelope['result'];
-    $peak = gettingWorseFollow($envelope['next'][0]);
+    $peak = Envelope::follow($envelope['next'][0]);
 
     expect($envelope['window']['derived'])->toBe([])
         ->and(array_column($result['buckets'], 'partial'))->toBe([true, true, true, false, false, false, false, false])

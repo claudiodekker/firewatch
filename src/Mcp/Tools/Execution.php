@@ -96,7 +96,7 @@ class Execution extends Tool
         return [
             'execution_id' => $schema->string()->description(__('firewatch::messages.execution_id_argument')),
             'type' => $schema->string()->description(__('firewatch::messages.execution_type_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.execution_limit_argument')),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
     }

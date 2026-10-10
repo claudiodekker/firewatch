@@ -101,15 +101,14 @@ class Compare extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->description(__('firewatch::messages.compare_type_argument')),
+            'type' => $schema->string()->description(__('firewatch::messages.grouped_type_argument')),
             'group' => $schema->string()->description(__('firewatch::messages.compare_group_argument')),
             'split_at' => $schema->string()->description(__('firewatch::messages.compare_split_at_argument')),
             'deploy_before' => $schema->string()->description(__('firewatch::messages.compare_deploy_before_argument')),
             'deploy_after' => $schema->string()->description(__('firewatch::messages.compare_deploy_after_argument')),
             'by' => $schema->string()->description(__('firewatch::messages.compare_by_argument')),
-            'since' => $schema->string()->description(__('firewatch::messages.compare_since_argument')),
-            'until' => $schema->string()->description(__('firewatch::messages.compare_until_argument')),
-            'limit' => $schema->integer()->description(__('firewatch::messages.compare_limit_argument')),
+            ...$this->windowSchema($schema, 'compare'),
+            'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
     }

@@ -1,9 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
-use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
@@ -43,19 +41,6 @@ function whatsWrongRequests(array $uris): void
     foreach ($uris as $uri) {
         test()->get($uri);
     }
-}
-
-/**
- * Run a call an answer offers and get what it answers.
- *
- * @param  array{tool: string, arguments: array<string, mixed>, why: string}  $call
- * @return array<string, mixed>
- */
-function whatsWrongFollow(array $call): array
-{
-    $tool = ['detect' => Detect::class, 'rank' => Rank::class, 'execution' => Execution::class][$call['tool']];
-
-    return Envelope::assert($tool, $call['arguments']);
 }
 
 it('says what is wrong now: the error rate, the slowest groups, every count and the actors, then the shapes with findings first', function () {
@@ -113,7 +98,7 @@ it('offers a call for each shape with findings first, and every call it offers r
         ->and(array_slice(array_column($envelope['next'], 'tool'), count($shapes)))->toBe(array_slice(['rank', 'execution'], 0, 5 - count($shapes)));
 
     foreach ($envelope['next'] as $call) {
-        $answer = whatsWrongFollow($call);
+        $answer = Envelope::follow($call);
 
         expect($answer['empty'])->toBeNull()
             ->and($answer['result']['verdict'] ?? 'findings')->toBe('findings');
@@ -136,7 +121,7 @@ it('offers calls that read the same window when they run later, and every one of
         ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), __('firewatch::messages.overview_directory_unwindowed')]);
 
     foreach ($envelope['next'] as $call) {
-        $answer = whatsWrongFollow($call);
+        $answer = Envelope::follow($call);
 
         expect($answer['empty'])->toBeNull();
 
@@ -146,9 +131,9 @@ it('offers calls that read the same window when they run later, and every one of
         }
     }
 
-    $shape = whatsWrongFollow($envelope['next'][array_search('detect', $tools, true)]);
-    $ranked = whatsWrongFollow($envelope['next'][array_search('rank', $tools, true)]);
-    $opened = whatsWrongFollow($envelope['next'][array_search('execution', $tools, true)]);
+    $shape = Envelope::follow($envelope['next'][array_search('detect', $tools, true)]);
+    $ranked = Envelope::follow($envelope['next'][array_search('rank', $tools, true)]);
+    $opened = Envelope::follow($envelope['next'][array_search('execution', $tools, true)]);
 
     expect($shape['result']['verdict'])->toBe('findings')
         ->and(array_sum(array_column($ranked['result']['groups'], 'occurrences')))->toBeGreaterThanOrEqual(1)
@@ -174,7 +159,7 @@ it('is clean only over what a shape examined, and never says no findings while a
         ->and($jobs['result'])->toMatchArray(['verdict' => 'not_evaluated', 'examined' => 0]);
 
     foreach ($envelope['next'] as $call) {
-        expect(whatsWrongFollow($call)['empty'])->toBeNull();
+        expect(Envelope::follow($call)['empty'])->toBeNull();
     }
 
     expect(array_slice(array_column($envelope['next'], 'tool'), -2))->toBe(['rank', 'execution']);

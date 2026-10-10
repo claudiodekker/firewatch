@@ -1,10 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
-use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
-use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Route;
@@ -128,11 +125,7 @@ it('opens what a finding points at', function (Closure $shipment, array $argumen
 
     expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank']);
 
-    foreach ($envelope['next'] as $call) {
-        $tool = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']];
-
-        expect(Envelope::assert($tool, $call['arguments'])['empty'])->toBeNull();
-    }
+    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
 })->with([
     'the request that queued a pending job' => [fn () => queueLatencyShipment(), []],
     'the first attempt of a job that waited' => [fn () => queueLatencyWorkedShipment(), ['threshold' => 1]],
