@@ -80,13 +80,12 @@ class InstallChecks
             );
         }
 
-        // The doctor is a firewatch: process and always Off; a host process has no such command.
-        $mode = (new ModeResolver)->resolve($this->configuration, $environment, ['artisan'], ($this->sqliteVersion)());
+        $requestMode = (new ModeResolver)->resolve($this->configuration, $environment, argv: [], sqliteVersion: ($this->sqliteVersion)());
 
         return CheckResult::ok(__('firewatch::messages.doctor.mode.ok', [
             'environment' => $environment,
             'environments' => $environments,
-            'mode' => $mode->value,
+            'mode' => $requestMode->value,
         ]));
     }
 
@@ -186,12 +185,11 @@ class InstallChecks
             );
         }
 
-        // The doctor is Off, so none of these listeners is Firewatch's own veto.
-        $listeners = count($this->events->getListeners($this->install->vetoEvent()));
+        $otherListeners = count($this->events->getListeners($this->install->vetoEvent()));
 
-        if ($listeners > 0) {
+        if ($otherListeners > 0) {
             return CheckResult::warn(
-                trans_choice('firewatch::messages.doctor.nightwatch-order.listeners', $listeners, ['count' => $listeners]),
+                trans_choice('firewatch::messages.doctor.nightwatch-order.listeners', $otherListeners, ['count' => $otherListeners]),
                 __('firewatch::messages.doctor.nightwatch-order.listeners_fix'),
             );
         }

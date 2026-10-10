@@ -123,7 +123,6 @@ class StoreChecks
                     __('firewatch::messages.doctor.store-identity.foreign_fix'),
                 ),
                 StoreState::SCHEMA_MISMATCH => $this->mismatch((int) $unusable->found),
-                // The file is Firewatch's, so store-integrity owns the failure.
                 StoreState::CORRUPT => CheckResult::info(__('firewatch::messages.doctor.store-identity.damaged')),
                 StoreState::BUSY, StoreState::UNAVAILABLE => $this->notRead($unusable),
             };
@@ -327,7 +326,6 @@ class StoreChecks
                 __('firewatch::messages.doctor.store.busy'),
                 __('firewatch::messages.doctor.store.busy_fix'),
             ),
-            // The sqlite check owns the failure.
             StoreState::UNAVAILABLE => CheckResult::info(__('firewatch::messages.doctor.store.unavailable')),
             StoreState::FOREIGN, StoreState::SCHEMA_MISMATCH => CheckResult::info(__('firewatch::messages.doctor.store.see_identity')),
             StoreState::CORRUPT => CheckResult::info(__('firewatch::messages.doctor.store.see_integrity')),

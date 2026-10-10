@@ -24,9 +24,10 @@ use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Nightwatch\Events\IngestingEvents;
 use Symfony\Component\Process\Process;
 
-// Outside the sql-access tests the probe is cut short before it spawns, so only tests tagged `process` start a process.
 beforeEach(function () {
-    $this->app->instance(Availability::class, new Availability(phpBinary: $this->storeDirectory.'/no-php'));
+    $phpThatStopsTheProbeBeforeItSpawns = $this->storeDirectory.'/no-php';
+
+    $this->app->instance(Availability::class, new Availability(phpBinary: $phpThatStopsTheProbeBeforeItSpawns));
 });
 
 /**

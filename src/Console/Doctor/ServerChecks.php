@@ -75,7 +75,6 @@ class ServerChecks
      */
     public function client(): CheckResult
     {
-        // The doctor runs on the PHP the client should launch.
         $command = PHP_BINARY.' '.$this->app->basePath('artisan').' '.ServerCommand::NAME;
 
         return CheckResult::info(__('firewatch::messages.doctor.client.launch', ['command' => $command]));
