@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -53,7 +54,7 @@ class DatabaseBound implements Detector
      */
     public function threshold(): Threshold
     {
-        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: 100, whole: false);
+        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: self::PERCENT, whole: false);
     }
 
     /**
@@ -76,7 +77,6 @@ class DatabaseBound implements Detector
         $bindings = [
             ...$selected->bindings,
             'from' => History::removedThrough($meta, [RecordType::QUERY]),
-            'share' => Percentile::MEDIAN->share(),
         ];
 
         $described = $this->threshold()->describe($threshold);
@@ -96,7 +96,7 @@ class DatabaseBound implements Detector
             return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], saw: $saw, caveats: $caveats);
         }
 
-        $shown = array_slice($bound, 0, $limit);
+        $shown = Judgement::worst($bound, $this->worse(...), $limit);
         $shownGroups = array_column($shown, 'group');
         $queries = $this->topQueries($connection, $window, $selected, $bindings, array_column($shownGroups, 'group_hash'));
         $findings = array_map(
@@ -137,7 +137,7 @@ class DatabaseBound implements Detector
      */
     protected function groups(SQLite3 $connection, Window $window, Fragment $selected, array $bindings): array
     {
-        $rank = 'max(1, (n * :share + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
+        $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
         $durationMicros = Stored::number('duration');
 
         return Stored::rows($connection, "WITH judged AS (
@@ -176,13 +176,20 @@ class DatabaseBound implements Detector
             'typical' => $this->typical($group),
         ], $groups);
 
-        $bound = array_values(array_filter($entries, fn (array $entry) => $this->isBound($entry['typical'], $percent)));
+        return array_values(array_filter($entries, fn (array $entry) => $this->isBound($entry['typical'], $percent)));
+    }
 
+    /**
+     * Compare two bound groups, the one with the greater share and then the greater typical duration first.
+     *
+     * @param  array{group: array<string, mixed>, typical: array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}}  $a
+     * @param  array{group: array<string, mixed>, typical: array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}}  $b
+     */
+    protected function worse(array $a, array $b): int
+    {
         $worst = fn (array $entry) => [$this->share($entry['typical']), Stored::milliseconds($entry['typical']['microseconds'])];
 
-        usort($bound, fn (array $a, array $b) => [...$worst($b), $a['group']['group_hash']] <=> [...$worst($a), $b['group']['group_hash']]);
-
-        return $bound;
+        return [...$worst($b), $a['group']['group_hash']] <=> [...$worst($a), $b['group']['group_hash']];
     }
 
     /**

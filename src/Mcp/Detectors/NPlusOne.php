@@ -22,6 +22,11 @@ class NPlusOne implements Detector
     protected const PERCENT_DECIMALS = 1;
 
     /**
+     * The percent a share is of its whole.
+     */
+    protected const PERCENT = 100;
+
+    /**
      * The most call sites a finding lists.
      */
     protected const CALL_SITES = 3;
@@ -85,9 +90,7 @@ class NPlusOne implements Detector
             return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], caveats: $caveats);
         }
 
-        usort($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']]);
-
-        $shown = array_slice($groups, 0, $limit);
+        $shown = Judgement::worst($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']], $limit);
         $details = $this->details($connection, $window, $ranked);
         $findings = array_map(fn (array $row) => $this->finding($row, $details), $shown);
 
@@ -219,7 +222,7 @@ class NPlusOne implements Detector
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
         $label = Stored::blank($worst['label']) ?? __('firewatch::messages.rank_no_route');
-        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(100 * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
+        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(self::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
 
         return [
             'group' => $row['eg'],
