@@ -95,7 +95,7 @@ The server must share a kernel and filesystem with the application. A server on 
 
 - Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local,testing`). Elsewhere it registers nothing and Nightwatch is untouched.
 - `composer install --no-dev` leaves it absent.
-- Never list `production` or `prod`. The doctor warns.
+- Never list `production` or `prod`. If you do, `firewatch:doctor` flags it.
 - It vetoes every Nightwatch transmit, so no hosted reporting happens from a capture environment.
 
 ## What is captured and stored
@@ -214,7 +214,7 @@ To upgrade, run `composer update`, then restart the assistant session. A release
 
 - Run the suite with `vendor/bin/pest`.
 - The scenario tests drive the real Nightwatch sensors.
-- `CODING_STANDARDS.md` holds the rules.
+- Pull requests are reviewed against `CODING_STANDARDS.md`. The design lives in the closed decision issues, `GLOSSARY.md` and `docs/adr/`.
 - A pull request that changes behavior updates the README and the changelog.
 
 ## Changelog and license
