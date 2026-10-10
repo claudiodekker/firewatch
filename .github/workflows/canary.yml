@@ -1,0 +1,87 @@
+name: Canary
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve the newest Nightwatch
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.newest.outputs.version }}
+
+    steps:
+      - id: newest
+        run: |
+          version=$(curl -fsS https://repo.packagist.org/p2/laravel/nightwatch.json | jq -er '[.packages["laravel/nightwatch"][].version | select(test("^v?[0-9]+\\.[0-9]+\\.[0-9]+$"))][0]')
+          echo "Newest Nightwatch release: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  canary:
+    name: PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}, Nightwatch ${{ needs.resolve.outputs.version }}
+    needs: resolve
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+        laravel: ['12.41.1', '13.*']
+        include:
+          # Composer 2.9 refuses to resolve releases that have security advisories, and the floor has some.
+          - laravel: '12.41.1'
+            no-security-blocking: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: sqlite3, intl
+          coverage: none
+
+      - name: Install dependencies
+        env:
+          COMPOSER_NO_SECURITY_BLOCKING: ${{ matrix.no-security-blocking }}
+        run: |
+          composer require --no-update --no-interaction "laravel/framework:${{ matrix.laravel }}" "laravel/nightwatch:${{ needs.resolve.outputs.version }}"
+          composer update --prefer-dist --no-interaction --no-progress
+          git checkout -- composer.json
+
+      - name: Test the contract and the scenarios
+        run: php vendor/bin/pest --group=contract --group=scenario
+
+  report:
+    name: Report
+    needs: [resolve, canary]
+    if: always() && needs.canary.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Open or update the issue for this Nightwatch version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Canary: Nightwatch $VERSION fails"
+          found=$(gh issue list --state all --search "\"$title\" in:title" --json number,title,state --limit 100 | jq -c --arg title "$title" 'map(select(.title == $title))[0] // empty')
+
+          if [ -n "$found" ]; then
+            number=$(jq -r .number <<< "$found")
+            if [ "$(jq -r .state <<< "$found")" = CLOSED ]; then
+              gh issue reopen "$number"
+            fi
+            gh issue comment "$number" --body "The canary is still red for Nightwatch $VERSION: $RUN_URL"
+          else
+            gh issue create --title "$title" --label needs-triage --body "The canary is red for Nightwatch $VERSION: $RUN_URL"
+          fi
