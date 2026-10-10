@@ -82,6 +82,23 @@ class FirewatchServer extends Server
     }
 
     /**
+     * Get the arguments any of the tools takes.
+     *
+     * @return list<string>
+     */
+    public function arguments(): array
+    {
+        $arguments = [];
+
+        foreach ($this->listing()['tools'] as $tool) {
+            array_push($arguments, ...array_keys($tool['inputSchema']['properties'] ?? []));
+        }
+
+        /** @var list<string> */
+        return array_values(array_unique($arguments));
+    }
+
+    /**
      * Read the version and the instructions for this server session.
      */
     protected function boot(): void
