@@ -76,8 +76,6 @@ abstract class TestCase extends Orchestra
     }
 
     /**
-     * End the capture of the application, closing the store connection its ingest kept, as the end of its process would.
-     *
      * Laravel's static state keeps an application alive past its test, and Windows can't delete a store that is still open.
      */
     public function endCapture(): void

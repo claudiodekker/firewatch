@@ -410,15 +410,10 @@ function storeWithRequests(int $count): int
     requestsStartedAt(range(1790776001, 1790776000 + $count));
     test()->travelTo('2026-09-30 14:03:00');
 
-    return analyzedLivePages();
+    return livePagesCountingStatistics();
 }
 
-/**
- * Analyze the store and get its live pages.
- *
- * A pass that deleted optimizes the store, which analyzes it on a connection that saw the deletes; analyzed beforehand, the statistics are already counted.
- */
-function analyzedLivePages(): int
+function livePagesCountingStatistics(): int
 {
     app(Writer::class)->maintain(fn (SQLite3 $connection) => $connection->exec('ANALYZE'));
 
@@ -468,7 +463,7 @@ describe('the size backstop', function () {
     it('trims records of unknown start by arrival once none of known start are left', function () {
         ingest(array_fill(0, 200, syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 'unknown'])));
         $this->travelTo('2026-09-30 14:03:00');
-        $live = analyzedLivePages();
+        $live = livePagesCountingStatistics();
 
         withBackstop($live - 1, chunk: 10);
         app(Pruner::class)->run();
