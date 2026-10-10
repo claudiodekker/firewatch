@@ -20,7 +20,7 @@ test('every tool the assistant-facing text names in backticks is registered, or 
     $listed = toolListing()['tools'];
     $tools = array_column($listed, 'name');
     $arguments = array_merge(...array_map(fn (array $tool) => array_keys($tool['inputSchema']['properties']), $listed));
-    $answerFields = ['next', 'withheld', 'detail', 'first_seen_at'];
+    $answerFields = ['next', 'now', 'withheld', 'detail', 'first_seen_at'];
     $otherWords = ['database', 'started_at', 'proc_open'];
     $shapes = array_column(DetectorName::cases(), 'value');
     $text = implode("\n", Arr::flatten(trans('firewatch::messages')));
@@ -57,6 +57,10 @@ test('the instructions describe every listed tool once, in the order an assistan
 
     expect($matches[1])->toBe(['overview', 'detect', 'rank', 'occurrences', 'execution', 'trace', 'actor', 'compare', 'trend', 'query', 'describe', 'fingerprint'])
         ->and(array_diff(array_column(toolListing()['tools'], 'name'), $matches[1]))->toBe([]);
+});
+
+test('the instructions are about 330 words', function () {
+    expect(str_word_count(__('firewatch::messages.instructions')))->toBeBetween(300, 360);
 });
 
 /**
