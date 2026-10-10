@@ -17,9 +17,19 @@ class Bounds
     public const CELL_CHARACTERS = Policy::CELL_CHARACTERS;
 
     /**
-     * The most characters an answer has, estimated from the 8,000 tokens of its hard budget at 3 characters to a token.
+     * The tokens of the hard budget of an answer.
      */
-    public const ANSWER_CHARACTERS = 24000;
+    protected const ANSWER_TOKENS = 8000;
+
+    /**
+     * The characters estimated to a token.
+     */
+    protected const CHARACTERS_PER_TOKEN = 3;
+
+    /**
+     * The most characters an answer has.
+     */
+    public const ANSWER_CHARACTERS = self::ANSWER_TOKENS * self::CHARACTERS_PER_TOKEN;
 
     /**
      * Cut every cell of a result to its cap, and state how many each section had cut.
