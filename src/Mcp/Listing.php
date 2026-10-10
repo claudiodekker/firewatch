@@ -5,8 +5,6 @@ namespace ClaudioDekker\Firewatch\Mcp;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @internal
@@ -50,7 +48,7 @@ class Listing
      */
     public static function typesOf(SQLite3 $connection, string $group): array
     {
-        $rows = self::run($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group ORDER BY type', [':group' => $group]);
+        $rows = Stored::rows($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group ORDER BY type', ['group' => $group]);
 
         return array_values(array_filter(array_map(fn (array $row) => RecordType::tryFrom($row['type']), $rows)));
     }
@@ -88,7 +86,7 @@ class Listing
         $needed = $percentile->floor();
         $duration = Stored::number('duration');
 
-        $samples = self::run($connection, "SELECT count({$duration}) AS samples FROM records WHERE {$selection}", $bindings, $this->window)[0]['samples'];
+        $samples = Stored::rows($connection, "SELECT count({$duration}) AS samples FROM records WHERE {$selection}", $bindings, $this->window)[0]['samples'];
 
         if ($samples < $needed) {
             return [
@@ -98,8 +96,8 @@ class Listing
             ];
         }
 
-        $bindings[':offset'] = intdiv($samples * $percentile->share() + Ranking::PERCENT - 1, Ranking::PERCENT) - 1;
-        $row = self::run($connection, "SELECT {$duration} AS duration FROM records WHERE {$selection} AND {$duration} IS NOT NULL ORDER BY {$duration} LIMIT 1 OFFSET :offset", $bindings, $this->window)[0];
+        $bindings['offset'] = intdiv($samples * $percentile->share() + Ranking::PERCENT - 1, Ranking::PERCENT) - 1;
+        $row = Stored::rows($connection, "SELECT {$duration} AS duration FROM records WHERE {$selection} AND {$duration} IS NOT NULL ORDER BY {$duration} LIMIT 1 OFFSET :offset", $bindings, $this->window)[0];
 
         return [
             'samples' => $samples,
@@ -118,15 +116,15 @@ class Listing
     {
         [$where, $bindings] = $this->where($threshold);
         $key = $this->order->sortKey();
-        $bindings[':fetch'] = Rows::fetch($limit);
+        $bindings['fetch'] = Rows::fetch($limit);
 
         if ($after !== null) {
             $where .= " AND ({$key} < :after_value OR ({$key} = :after_value AND id < :after_id))";
-            $bindings[':after_value'] = $after['value'];
-            $bindings[':after_id'] = $after['id'];
+            $bindings['after_value'] = $after['value'];
+            $bindings['after_id'] = $after['id'];
         }
 
-        $records = self::run($connection, "SELECT id, type, started_at, duration, source, execution_id, trace_id, group_hash, job_id, user_id, deploy, data, {$key} AS sort_key FROM records WHERE {$where} ORDER BY {$key} DESC, id DESC LIMIT :fetch", $bindings, $this->window);
+        $records = Stored::rows($connection, "SELECT id, type, started_at, duration, source, execution_id, trace_id, group_hash, job_id, user_id, deploy, data, {$key} AS sort_key FROM records WHERE {$where} ORDER BY {$key} DESC, id DESC LIMIT :fetch", $bindings, $this->window);
 
         return [
             'rows' => array_map($this->row(...), $records),
@@ -145,9 +143,9 @@ class Listing
     public function callSites(SQLite3 $connection, int|float|null $threshold): array
     {
         [$where, $bindings] = $this->where($threshold);
-        $bindings[':limit'] = self::CALL_SITES;
+        $bindings['limit'] = self::CALL_SITES;
 
-        $sites = self::run($connection, "SELECT json_extract(data, '\$.file') AS file, json_extract(data, '\$.line') AS line, count(*) AS count FROM records WHERE {$where} AND json_type(data, '\$.file') = 'text' GROUP BY file, line ORDER BY count DESC, file, line LIMIT :limit", $bindings, $this->window);
+        $sites = Stored::rows($connection, "SELECT json_extract(data, '\$.file') AS file, json_extract(data, '\$.line') AS line, count(*) AS count FROM records WHERE {$where} AND json_type(data, '\$.file') = 'text' GROUP BY file, line ORDER BY count DESC, file, line LIMIT :limit", $bindings, $this->window);
 
         return array_map(fn (array $site) => [
             'location' => Stored::location($site['file'], $site['line']),
@@ -178,7 +176,7 @@ class Listing
         foreach ($selectors as $column => $value) {
             if ($value !== null) {
                 $conditions[] = "{$column} = :{$column}";
-                $bindings[":{$column}"] = $value;
+                $bindings[$column] = $value;
             }
         }
 
@@ -198,17 +196,17 @@ class Listing
 
         if ($this->method !== null) {
             $conditions[] = "upper(json_extract(data, '\$.method')) = upper(:method)";
-            $bindings[':method'] = $this->method;
+            $bindings['method'] = $this->method;
         }
 
         if ($this->status !== null) {
             $conditions[] = "json_extract(data, '\$.status_code') BETWEEN :status_from AND :status_to";
-            [$bindings[':status_from'], $bindings[':status_to']] = $this->status;
+            [$bindings['status_from'], $bindings['status_to']] = $this->status;
         }
 
         if ($this->outcome !== null) {
             $conditions[] = "json_extract(data, '\$.status') = :outcome";
-            $bindings[':outcome'] = $this->outcome->value;
+            $bindings['outcome'] = $this->outcome->value;
         }
 
         if ($this->level !== null) {
@@ -216,7 +214,7 @@ class Listing
 
             foreach ($this->level->andWorse() as $at => $level) {
                 $names[] = ":level{$at}";
-                $bindings[":level{$at}"] = $level;
+                $bindings["level{$at}"] = $level;
             }
 
             $conditions[] = "lower(json_extract(data, '\$.level')) IN (".implode(', ', $names).')';
@@ -224,18 +222,18 @@ class Listing
 
         if ($this->slowerThanMilliseconds !== null) {
             $conditions[] = "{$duration} > :slower";
-            $bindings[':slower'] = $this->slowerThanMilliseconds * Microseconds::PER_MILLISECOND;
+            $bindings['slower'] = $this->slowerThanMilliseconds * Microseconds::PER_MILLISECOND;
         }
 
         if ($threshold !== null) {
             $conditions[] = "{$duration} >= :threshold";
-            $bindings[':threshold'] = $threshold;
+            $bindings['threshold'] = $threshold;
         }
 
         if ($this->matching !== null && $this->type !== null) {
             $fields = array_map(fn (string $field) => "instr(lower(COALESCE(json_extract(data, '\$.{$field}'), '')), lower(:matching)) > 0", self::matchedFields($this->type));
             $conditions[] = '('.implode(' OR ', $fields).')';
-            $bindings[':matching'] = $this->matching;
+            $bindings['matching'] = $this->matching;
         }
 
         return [implode(' AND ', $conditions), $bindings];
@@ -392,37 +390,5 @@ class Listing
             ],
             null, RecordType::USER => [],
         };
-    }
-
-    /**
-     * Run a query and read all its rows.
-     *
-     * @param  array<string, string|int|float>  $bindings
-     * @return list<array<string, mixed>>
-     */
-    protected static function run(SQLite3 $connection, string $sql, array $bindings, ?Window $window = null): array
-    {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare($sql);
-
-        foreach ($bindings as $name => $value) {
-            $statement->bindValue($name, $value, match (true) {
-                is_int($value) => SQLITE3_INTEGER,
-                is_float($value) => SQLITE3_FLOAT,
-                default => SQLITE3_TEXT,
-            });
-        }
-
-        $window?->bind($statement);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-        $rows = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_ASSOC))) {
-            $rows[] = $row;
-        }
-
-        return $rows;
     }
 }

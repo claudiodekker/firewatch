@@ -7,8 +7,6 @@ use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
 use LogicException;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @internal
@@ -676,27 +674,15 @@ class Ranking
             $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->type->view().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
         }
 
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare($sql);
-
-        if ($filtered) {
-            $this->window->bind($statement);
-            $statement->bindValue(':deploy', $this->deploy, $this->deploy === null ? SQLITE3_NULL : SQLITE3_TEXT);
-            $statement->bindValue(':group', $this->group, $this->group === null ? SQLITE3_NULL : SQLITE3_TEXT);
+        if (! $filtered) {
+            return Stored::rows($connection, $sql, $bindings);
         }
 
-        foreach ($bindings as $name => $value) {
-            $statement->bindValue(":{$name}", $value);
-        }
+        $filters = [
+            'deploy' => $this->deploy,
+            'group' => $this->group,
+        ];
 
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-        $rows = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_ASSOC))) {
-            $rows[] = $row;
-        }
-
-        return $rows;
+        return Stored::rows($connection, $sql, [...$filters, ...$bindings], $this->window);
     }
 }
