@@ -94,6 +94,8 @@ class Stored
 
     /**
      * Get microseconds as milliseconds to two decimals, or null for no number.
+     *
+     * @return ($microseconds is int|float ? float : float|null)
      */
     public static function milliseconds(mixed $microseconds): ?float
     {

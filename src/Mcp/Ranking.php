@@ -144,17 +144,22 @@ class Ranking
             return null;
         }
 
-        $names = array_map(fn (Stage $stage) => $stage->value, $stages);
-        $complete = implode(' AND ', array_map(fn (string $name) => "{$name} IS NOT NULL", $names));
-        $sumColumns = implode(', ', array_map(fn (string $name) => "sum({$name}) AS {$name}", $names));
+        $complete = implode(' AND ', array_map(fn (Stage $stage) => "{$stage->value} IS NOT NULL", $stages));
+        $sumColumns = implode(', ', array_map(fn (Stage $stage) => "sum({$stage->value}) AS {$stage->value}", $stages));
 
         $totals = $this->query($connection, "SELECT count(*) AS executions, {$sumColumns} FROM base WHERE {$complete}")[0];
-        $slowest = $this->query($connection, 'SELECT execution_id, d, '.implode(', ', $names)." FROM base WHERE {$complete} AND d IS NOT NULL ORDER BY d DESC, id DESC LIMIT 1")[0] ?? null;
+        $row = $this->query($connection, "SELECT * FROM base WHERE {$complete} AND d IS NOT NULL ORDER BY d DESC, id DESC LIMIT 1")[0] ?? null;
+
+        $sums = [];
+
+        foreach ($stages as $stage) {
+            $sums[$stage->value] = $totals[$stage->value] ?? 0;
+        }
 
         $executions = $totals['executions'];
-        $sums = array_map(fn (string $name) => $totals[$name] ?? 0, array_combine($names, $names));
+        $slowest = $row === null ? null : new SlowestExecution($row['execution_id'], $row['d'], array_intersect_key($row, $sums));
 
-        return new StageView($stages, $executions, $records - $executions, $sums, $slowest);
+        return new StageView($this->type, $executions, $records - $executions, $sums, $slowest);
     }
 
     /**

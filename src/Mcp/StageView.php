@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Stage;
 
 /**
@@ -15,20 +16,25 @@ readonly class StageView
     protected const PERCENT_DECIMALS = 1;
 
     /**
+     * The stages of the type, in the order they run.
+     *
+     * @var list<Stage>
+     */
+    public array $stages;
+
+    /**
      * Create a new stage view instance.
      *
-     * @param  list<Stage>  $stages
-     * @param  array<string, int|float>  $sums  the microseconds of each stage over the executions, by stage
-     * @param  array<string, mixed>|null  $slowest  the duration `d`, the execution id and each stage of the slowest execution
+     * @param  array<string, int|float>  $sums  microseconds by stage, summed over the executions
      */
     public function __construct(
-        public array $stages,
+        public RecordType $type,
         public int $executions,
         public int $excluded,
         public array $sums,
-        public ?array $slowest,
+        public ?SlowestExecution $slowest,
     ) {
-        //
+        $this->stages = Stage::of($type);
     }
 
     /**
@@ -89,7 +95,7 @@ readonly class StageView
     /**
      * Get the milliseconds the stages of an execution took on average.
      */
-    protected function average(): ?float
+    protected function average(): float
     {
         return Stored::milliseconds($this->total() / $this->executions);
     }
@@ -122,8 +128,8 @@ readonly class StageView
             'dominant_stage' => $this->dominant()?->value,
             'stage_executions' => $this->executions,
             'stage_avg_ms' => $this->average(),
-            'slowest_execution_id' => $this->slowest['execution_id'] ?? null,
-            'slowest_duration_ms' => Stored::milliseconds($this->slowest['d'] ?? null),
+            'slowest_execution_id' => $this->slowest?->executionId,
+            'slowest_duration_ms' => Stored::milliseconds($this->slowest?->duration),
             'stages' => array_map($this->row(...), $this->stages),
         ];
     }
@@ -138,10 +144,13 @@ readonly class StageView
         $notes = [];
 
         if ($this->excluded > 0) {
-            $notes[] = trans_choice('firewatch::messages.rank_stages_excluded', $this->excluded, ['count' => $this->excluded]);
+            $notes[] = trans_choice('firewatch::messages.rank_stages_excluded', $this->excluded, [
+                'count' => $this->excluded,
+                'complete' => $this->executions,
+            ]);
         }
 
-        if ($this->executions > 0 && $this->sums[Stage::BOOTSTRAP->value] == 0) {
+        if ($this->type === RecordType::REQUEST && $this->executions > 0 && $this->sums[Stage::BOOTSTRAP->value] == 0) {
             $notes[] = __('firewatch::messages.rank_stages_bootstrap_zero');
         }
 
@@ -159,7 +168,7 @@ readonly class StageView
             'stage' => $stage->value,
             'mean_ms' => Stored::milliseconds($this->sums[$stage->value] / $this->executions),
             'share_pct' => $this->share($stage),
-            'slowest_ms' => Stored::milliseconds($this->slowest[$stage->value] ?? null),
+            'slowest_ms' => Stored::milliseconds($this->slowest?->stages[$stage->value]),
         ];
     }
 
