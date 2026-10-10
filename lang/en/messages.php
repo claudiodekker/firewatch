@@ -211,7 +211,20 @@ return [
         'sqlite' => 'SQLite :version is older than the :minimum Firewatch needs; nothing was changed.',
     ],
 
-    'doctor_not_implemented' => 'The doctor is not implemented yet: it checked nothing.',
+    /*
+    |--------------------------------------------------------------------------
+    | Doctor Command
+    |--------------------------------------------------------------------------
+    |
+    | What `firewatch:doctor` prints for each check. A key is the
+    | check id, then the case it reports, and a warning or a
+    | failure has a second key with `_fix` for its fix line.
+    |
+    */
+
+    'doctor' => [
+        'threw_fix' => 'This is a Firewatch bug: report it with the output of `php artisan firewatch:doctor --json`.',
+    ],
 
     'blind_spot' => 'Blind spot (:id): :message',
 
