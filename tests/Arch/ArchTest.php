@@ -91,6 +91,10 @@ test('nothing on the server path writes to standard output', function () {
     expect($offences)->toBe([]);
 });
 
+arch('nothing in the package source needs the intl extension, which composer.json does not require')
+    ->expect('ClaudioDekker\\Firewatch')
+    ->not->toUse(['Illuminate\\Support\\Number', 'NumberFormatter']);
+
 arch('the SQL child references nothing outside itself')
     ->expect(PackageSource::SQL_CHILD_NAMESPACE)
     ->toOnlyUse(PackageSource::SQL_CHILD_NAMESPACE);
