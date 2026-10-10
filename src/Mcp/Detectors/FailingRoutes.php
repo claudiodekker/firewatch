@@ -49,12 +49,12 @@ class FailingRoutes implements Detector
      */
     public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
+        $selected = Fragment::selecting($window, $group);
         $bindings = [
+            ...$selected->bindings,
             'status' => $threshold,
-            'group' => $group ?? '',
         ];
-        $where = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
-        $failed = "{$where} AND status_code >= :status";
+        $failed = "{$selected->sql} AND status_code >= :status";
         $serverError = Failure::serverError('status_code');
 
         $groups = Stored::rows($connection, "SELECT group_hash, count(*) AS requests, count(status_code) AS with_status,
@@ -65,7 +65,7 @@ class FailingRoutes implements Detector
             max(started_at) FILTER (WHERE status_code >= :status) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE status_code >= :status) AS actors,
             count(*) FILTER (WHERE status_code >= :status AND NULLIF(user_id, '') IS NULL) AS anonymous
-            FROM requests WHERE {$where} GROUP BY group_hash", $bindings, $window);
+            FROM requests WHERE {$selected->sql} GROUP BY group_hash", $bindings, $window);
 
         $examined = array_sum(array_column($groups, 'requests'));
         $failing = array_values(array_filter($groups, fn (array $row) => $row['failed'] > 0));

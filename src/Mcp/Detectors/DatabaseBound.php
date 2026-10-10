@@ -72,13 +72,13 @@ class DatabaseBound implements Detector
     public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $meta = Markers::read($connection);
+        $selected = Fragment::selecting($window, $group);
         $bindings = [
-            'group' => $group ?? '',
+            ...$selected->bindings,
             'from' => History::removedThrough($meta, [RecordType::QUERY]),
             'share' => Percentile::MEDIAN->share(),
         ];
 
-        $selected = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
         $described = $this->threshold()->describe($threshold);
         $population = $this->population($connection, $window, $selected, $bindings);
 
@@ -113,7 +113,7 @@ class DatabaseBound implements Detector
      * @param  array<string, int|float|string|null>  $bindings
      * @return array{examined: int, incomplete: int}
      */
-    protected function population(SQLite3 $connection, Window $window, string $selected, array $bindings): array
+    protected function population(SQLite3 $connection, Window $window, Fragment $selected, array $bindings): array
     {
         $counted = Stored::number('queries');
 
@@ -121,7 +121,7 @@ class DatabaseBound implements Detector
             count(*) FILTER (WHERE eligible AND counted > captured) AS incomplete
             FROM (SELECT counted, (:from IS NULL OR started_at >= :from) AS eligible,
                 CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = requests.execution_id) ELSE 0 END AS captured
-                FROM (SELECT started_at, execution_id, {$counted} AS counted FROM requests WHERE {$selected}) AS requests)", $bindings, $window)[0];
+                FROM (SELECT started_at, execution_id, {$counted} AS counted FROM requests WHERE {$selected->sql}) AS requests)", $bindings, $window)[0];
 
         return [
             'examined' => $row['examined'],
@@ -135,7 +135,7 @@ class DatabaseBound implements Detector
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, string $selected, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $selected, array $bindings): array
     {
         $rank = 'max(1, (n * :share + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
         $durationMicros = Stored::number('duration');
@@ -144,7 +144,7 @@ class DatabaseBound implements Detector
             SELECT group_hash, id, started_at, execution_id, route_path, NULLIF(user_id, '') AS user_id, duration_micros, query_micros FROM (
                 SELECT group_hash, id, started_at, execution_id, route_path, user_id, {$durationMicros} AS duration_micros,
                     (SELECT total(queries.duration) FROM queries WHERE queries.execution_id = requests.execution_id) AS query_micros
-                FROM requests WHERE {$selected} AND (:from IS NULL OR started_at >= :from)) WHERE duration_micros > 0
+                FROM requests WHERE {$selected->sql} AND (:from IS NULL OR started_at >= :from)) WHERE duration_micros > 0
         ), ranked AS (
             SELECT *, count(*) OVER (PARTITION BY group_hash) AS n,
                 ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY query_micros * 1.0 / duration_micros, id) AS by_share,
@@ -277,7 +277,7 @@ class DatabaseBound implements Detector
      * @param  list<string>  $groups
      * @return array<string, list<array<string, mixed>>>
      */
-    protected function topQueries(SQLite3 $connection, Window $window, string $selected, array $bindings, array $groups): array
+    protected function topQueries(SQLite3 $connection, Window $window, Fragment $selected, array $bindings, array $groups): array
     {
         $names = array_map(fn (int $index) => "member{$index}", array_keys($groups));
         $members = implode(', ', array_map(fn (string $name) => ":{$name}", $names));
@@ -288,7 +288,7 @@ class DatabaseBound implements Detector
         $rows = Stored::rows($connection, "SELECT eg, qg, sql, calls, micros FROM (
             SELECT judged.group_hash AS eg, queries.group_hash AS qg, min(queries.sql) AS sql, count(*) AS calls, total(queries.duration) AS micros,
                 ROW_NUMBER() OVER (PARTITION BY judged.group_hash ORDER BY total(queries.duration) DESC, queries.group_hash) AS position
-            FROM (SELECT group_hash, execution_id FROM requests WHERE {$selected} AND (:from IS NULL OR started_at >= :from) AND {$durationMicros} > 0 AND group_hash IN ({$members})) AS judged
+            FROM (SELECT group_hash, execution_id FROM requests WHERE {$selected->sql} AND (:from IS NULL OR started_at >= :from) AND {$durationMicros} > 0 AND group_hash IN ({$members})) AS judged
             JOIN queries ON queries.execution_id = judged.execution_id
             GROUP BY judged.group_hash, queries.group_hash) WHERE position <= {$top}", $bindings, $window);
 

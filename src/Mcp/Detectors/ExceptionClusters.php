@@ -95,9 +95,11 @@ class ExceptionClusters implements Detector
      */
     protected function groups(SQLite3 $connection, Window $window, ?string $group): array
     {
+        $selected = Fragment::selecting($window, $group);
+
         return Stored::rows($connection, "WITH occurrences AS (
             SELECT id, execution_id, started_at, group_hash, user_id, class, message, file, line, handled, trace IS NULL AS fatal
-            FROM exceptions WHERE {$window->condition()} AND (:group = '' OR group_hash = :group)
+            FROM exceptions WHERE {$selected->sql}
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS by_latest FROM occurrences
         )
@@ -111,7 +113,7 @@ class ExceptionClusters implements Detector
             min(started_at) AS first_seen, max(started_at) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) AS actors,
             count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS anonymous
-        FROM placed GROUP BY group_hash", ['group' => $group ?? ''], $window);
+        FROM placed GROUP BY group_hash", $selected->bindings, $window);
     }
 
     /**
@@ -120,12 +122,13 @@ class ExceptionClusters implements Detector
     protected function examined(SQLite3 $connection, Window $window): int
     {
         $meta = Markers::read($connection);
+        $executions = Executions::table($window, group: null);
         $bindings = [
-            'group' => '',
+            ...$executions->bindings,
             'from' => History::removedThrough($meta, [RecordType::EXCEPTION]),
         ];
 
-        [$row] = Stored::rows($connection, Executions::table($window).' SELECT count(*) AS examined FROM executions WHERE :from IS NULL OR started_at >= :from', $bindings, $window);
+        [$row] = Stored::rows($connection, $executions->sql.' SELECT count(*) AS examined FROM executions WHERE :from IS NULL OR started_at >= :from', $bindings, $window);
 
         return $row['examined'];
     }
@@ -154,7 +157,7 @@ class ExceptionClusters implements Detector
      */
     protected function units(SQLite3 $connection, Window $window, array $hashes): array
     {
-        $rows = Stored::rows($connection, Executions::labels().", occurrences AS (
+        $rows = Stored::rows($connection, Executions::labels()->sql.", occurrences AS (
             SELECT execution_id, execution_source AS source, group_hash
             FROM exceptions WHERE {$window->condition()} AND group_hash IN (SELECT value FROM json_each(:hashes))
         ), labelled AS (

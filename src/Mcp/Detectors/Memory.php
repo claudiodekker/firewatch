@@ -49,8 +49,9 @@ class Memory implements Detector
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_memory')];
 
-        $groups = $this->groups($connection, $window, [
-            'group' => $group ?? '',
+        $executions = Executions::table($window, $group);
+        $groups = $this->groups($connection, $window, $executions, [
+            ...$executions->bindings,
             'bytes' => Stored::bytes($threshold),
         ]);
 
@@ -69,12 +70,11 @@ class Memory implements Detector
      * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $executions, array $bindings): array
     {
-        $executions = Executions::table($window);
         $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
 
-        return Stored::rows($connection, "{$executions}, measured AS (
+        return Stored::rows($connection, "{$executions->sql}, measured AS (
             SELECT *, peak >= :bytes AS reached FROM executions WHERE peak IS NOT NULL
         ), ranked AS (
             SELECT *, count(*) OVER (PARTITION BY group_hash) AS n,

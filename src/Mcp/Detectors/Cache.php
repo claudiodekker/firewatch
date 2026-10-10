@@ -97,6 +97,8 @@ class Cache implements Detector
      */
     protected function stores(SQLite3 $connection, Window $window, ?string $group): array
     {
+        $selected = Fragment::selecting($window, $group);
+
         return Stored::rows($connection, "SELECT store, count(*) AS events,
                 count(*) FILTER (WHERE event = 'hit') AS hits,
                 count(*) FILTER (WHERE event = 'miss') AS misses,
@@ -104,8 +106,8 @@ class Cache implements Detector
                 count(*) FILTER (WHERE event = 'write-failure') AS write_failures,
                 count(*) FILTER (WHERE event = 'delete') AS deletes,
                 count(*) FILTER (WHERE event = 'delete-failure') AS delete_failures
-            FROM cache_events WHERE {$this->selected($window)}
-            GROUP BY store ORDER BY store", ['group' => $group ?? ''], $window);
+            FROM cache_events WHERE {$selected->sql}
+            GROUP BY store ORDER BY store", $selected->bindings, $window);
     }
 
     /**
@@ -115,6 +117,7 @@ class Cache implements Detector
      */
     protected function keys(SQLite3 $connection, Window $window, int|float $percent, ?string $group, int $limit): array
     {
+        $selected = Fragment::selecting($window, $group);
         $whole = self::PERCENT;
         $worstFirst = 'failures DESC, hit_rate IS NULL, hit_rate ASC, group_hash ASC';
 
@@ -123,7 +126,7 @@ class Cache implements Detector
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
                 event IN ('hit', 'miss') AS read,
                 event IN ('write-failure', 'delete-failure') AS failed
-            FROM cache_events WHERE {$this->selected($window)}
+            FROM cache_events WHERE {$selected->sql}
         ), placed AS (
             SELECT *, count(*) FILTER (WHERE failed) OVER (PARTITION BY group_hash) > 0 AS failing FROM events
         ), judged AS (
@@ -155,19 +158,11 @@ class Cache implements Detector
             ORDER BY {$worstFirst} LIMIT :limit
         )
         SELECT * FROM cut ORDER BY {$worstFirst}", [
+            ...$selected->bindings,
             'floor' => self::READS_FLOOR,
             'percent' => $percent,
-            'group' => $group ?? '',
             'limit' => $limit,
         ], $window);
-    }
-
-    /**
-     * Get the SQL condition of the cache events that started in the window, of one group when the call names it.
-     */
-    protected function selected(Window $window): string
-    {
-        return $window->condition().' AND (:group = \'\' OR group_hash = :group)';
     }
 
     /**

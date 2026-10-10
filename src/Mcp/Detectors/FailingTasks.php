@@ -69,10 +69,12 @@ class FailingTasks implements Detector
      */
     protected function groups(SQLite3 $connection, Window $window, ?string $group): array
     {
+        $selected = Fragment::selecting($window, $group);
+
         return Stored::rows($connection, "WITH tasks AS (
             SELECT id, execution_id, started_at, group_hash, user_id, name,
                 status = :failed AS failed, status = :skipped AS skipped, status IN (:failed, :skipped) AS failing
-            FROM scheduled_tasks WHERE {$window->condition()} AND (:group = '' OR group_hash = :group)
+            FROM scheduled_tasks WHERE {$selected->sql}
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY failing DESC, started_at DESC, id DESC) AS by_latest FROM tasks
         )
@@ -83,7 +85,7 @@ class FailingTasks implements Detector
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE failing) AS actors,
             count(*) FILTER (WHERE failing AND NULLIF(user_id, '') IS NULL) AS anonymous
         FROM placed GROUP BY group_hash", [
-            'group' => $group ?? '',
+            ...$selected->bindings,
             'failed' => Outcome::FAILED->value,
             'skipped' => Outcome::SKIPPED->value,
         ], $window);

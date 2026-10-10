@@ -73,7 +73,9 @@ class FailingHttp implements Detector
      */
     protected function examined(SQLite3 $connection, Window $window, ?string $group): int
     {
-        [$row] = Stored::rows($connection, "SELECT count(*) AS examined FROM outgoing_requests WHERE {$this->selected($window)}", ['group' => $group ?? ''], $window);
+        $selected = Fragment::selecting($window, $group);
+
+        [$row] = Stored::rows($connection, "SELECT count(*) AS examined FROM outgoing_requests WHERE {$selected->sql}", $selected->bindings, $window);
 
         return $row['examined'];
     }
@@ -85,18 +87,19 @@ class FailingHttp implements Detector
      */
     protected function hosts(SQLite3 $connection, Window $window, int|float $status, ?string $group, int $limit): array
     {
+        $selected = Fragment::selecting($window, $group);
         $labels = Executions::labels();
         $code = Stored::number('status_code');
         $listed = self::LISTED;
         $worstFirst = 'failures DESC, CAST(failures AS REAL) / answered DESC, last_seen DESC, group_hash ASC';
 
         // A group hash is compared with IS, so that the requests the wire sent without one stay one group.
-        return Stored::rows($connection, "{$labels}, calls AS MATERIALIZED (
+        return Stored::rows($connection, "{$labels->sql}, calls AS MATERIALIZED (
             SELECT id, started_at, group_hash, host, execution_source AS source,
                 CASE WHEN instr(url, '?') > 0 THEN substr(url, 1, instr(url, '?') - 1) ELSE url END AS url,
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
                 {$code} AS status, {$code} >= :status AS failed
-            FROM outgoing_requests WHERE {$this->selected($window)}
+            FROM outgoing_requests WHERE {$selected->sql}
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY failed DESC, started_at DESC, id DESC) AS by_latest FROM calls
         ), hosts AS (
@@ -136,18 +139,10 @@ class FailingHttp implements Detector
                 SELECT source, label, calls FROM units WHERE units.group_hash IS ranked.group_hash AND position <= {$listed} ORDER BY position
             )) AS ran_in
         FROM ranked ORDER BY {$worstFirst}", [
+            ...$selected->bindings,
             'status' => $status,
-            'group' => $group ?? '',
             'limit' => $limit,
         ], $window);
-    }
-
-    /**
-     * Get the SQL condition of the outgoing requests that started in the window, of one group when the call names it.
-     */
-    protected function selected(Window $window): string
-    {
-        return $window->condition().' AND (:group = \'\' OR group_hash = :group)';
     }
 
     /**

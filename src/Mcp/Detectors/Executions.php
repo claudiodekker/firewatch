@@ -13,11 +13,11 @@ use ClaudioDekker\Firewatch\RecordType;
 class Executions
 {
     /**
-     * Get the SQL of the executions that started in the window.
+     * Get the SQL of the executions that started in the window, of one group when the call names it.
      */
-    public static function table(Window $window): string
+    public static function table(Window $window, ?string $group): Fragment
     {
-        $selected = $window->condition().' AND (:group = \'\' OR group_hash = :group)';
+        $selected = Fragment::selecting($window, $group);
         $branches = array_map(fn (RecordType $type) => sprintf(
             "SELECT id, execution_id, started_at, group_hash, '%s' AS source, user_id, %s AS duration, %s AS counted, %s AS peak, %s AS label FROM %s WHERE %s",
             $type->source(),
@@ -26,16 +26,16 @@ class Executions
             Stored::number('peak_memory_usage'),
             self::labelField($type),
             $type->view(),
-            $selected,
+            $selected->sql,
         ), ExecutionType::records());
 
-        return 'WITH executions AS ('.implode(' UNION ALL ', $branches).')';
+        return new Fragment('WITH executions AS ('.implode(' UNION ALL ', $branches).')', $selected->bindings);
     }
 
     /**
      * Get the SQL of the label of every execution, whenever it started.
      */
-    public static function labels(): string
+    public static function labels(): Fragment
     {
         $branches = array_map(fn (RecordType $type) => sprintf(
             'SELECT id, execution_id, started_at, %s AS label FROM %s',
@@ -43,7 +43,7 @@ class Executions
             $type->view(),
         ), ExecutionType::records());
 
-        return 'WITH labels AS ('.implode(' UNION ALL ', $branches).')';
+        return new Fragment('WITH labels AS ('.implode(' UNION ALL ', $branches).')');
     }
 
     /**

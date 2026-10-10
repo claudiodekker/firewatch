@@ -45,13 +45,9 @@ class FailingJobs implements Detector
     public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
-        $bindings = [
-            'group' => $group ?? '',
-            'failed' => Outcome::FAILED->value,
-            'released' => Outcome::RELEASED->value,
-        ];
+        $attempts = $this->attempts($window, $group);
 
-        $groups = $this->groups($connection, $window, $bindings);
+        $groups = $this->groups($connection, $window, $attempts);
 
         $examined = array_sum(array_column($groups, 'attempts'));
         $failing = array_values(array_filter($groups, fn (array $row) => $row['failing_attempts'] >= $threshold));
@@ -63,7 +59,7 @@ class FailingJobs implements Detector
         usort($failing, fn (array $a, array $b) => [$b['jobs_failed'], $b['failing_attempts'], $b['last_seen'], $a['group_hash']] <=> [$a['jobs_failed'], $a['failing_attempts'], $a['last_seen'], $b['group_hash']]);
 
         $shown = array_slice($failing, 0, $limit);
-        $exceptions = $this->exceptions($connection, $window, $bindings);
+        $exceptions = $this->exceptions($connection, $window, $attempts);
         $findings = array_map(fn (array $row) => $this->finding($row, $this->ofGroup($exceptions, $row['group_hash'])), $shown);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: count($failing), findings: $findings);
@@ -72,14 +68,11 @@ class FailingJobs implements Detector
     /**
      * Get what the attempts say of each group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $attempts): array
     {
-        $attempts = $this->attempts($window);
-
-        return Stored::rows($connection, "{$attempts}, placed AS (
+        return Stored::rows($connection, "{$attempts->sql}, placed AS (
             SELECT *, job IS NOT NULL AND ROW_NUMBER() OVER (PARTITION BY group_hash, job ORDER BY started_at DESC, attempt DESC, id DESC) = 1 AS is_last,
                 max(released) OVER (PARTITION BY group_hash, job) AS was_released,
                 ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY failing DESC, started_at DESC, id DESC) AS by_latest
@@ -98,7 +91,7 @@ class FailingJobs implements Detector
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE failing) AS actors,
             count(*) FILTER (WHERE failing AND NULLIF(user_id, '') IS NULL) AS anonymous
         FROM placed GROUP BY group_hash", [
-            ...$bindings,
+            ...$attempts->bindings,
             'processed' => Outcome::PROCESSED->value,
         ], $window);
     }
@@ -106,34 +99,37 @@ class FailingJobs implements Detector
     /**
      * Get the latest exception of each group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function exceptions(SQLite3 $connection, Window $window, array $bindings): array
+    protected function exceptions(SQLite3 $connection, Window $window, Fragment $attempts): array
     {
-        $attempts = $this->attempts($window);
-
-        return Stored::rows($connection, "{$attempts}, thrown AS (
+        return Stored::rows($connection, "{$attempts->sql}, thrown AS (
             SELECT attempts.group_hash, exceptions.class, exceptions.message, exceptions.file, exceptions.line,
                 ROW_NUMBER() OVER (PARTITION BY attempts.group_hash ORDER BY exceptions.started_at DESC, exceptions.id DESC) AS position
             FROM attempts JOIN exceptions ON exceptions.execution_id = attempts.execution_id
             WHERE attempts.failing
         )
-        SELECT group_hash, class, message, file, line FROM thrown WHERE position = 1", $bindings, $window);
+        SELECT group_hash, class, message, file, line FROM thrown WHERE position = 1", $attempts->bindings, $window);
     }
 
     /**
      * Get the SQL of the attempts that started in the window.
      */
-    protected function attempts(Window $window): string
+    protected function attempts(Window $window, ?string $group): Fragment
     {
+        $selected = Fragment::selecting($window, $group);
         $attempt = Stored::number('attempt');
-
-        return "WITH attempts AS (
+        $sql = "WITH attempts AS (
             SELECT id, execution_id, started_at, group_hash, user_id, name, status, NULLIF(job_id, '') AS job, {$attempt} AS attempt,
                 status = :failed AS failed, status = :released AS released, status IN (:failed, :released) AS failing
-            FROM job_attempts WHERE {$window->condition()} AND (:group = '' OR group_hash = :group)
+            FROM job_attempts WHERE {$selected->sql}
         )";
+
+        return new Fragment($sql, [
+            ...$selected->bindings,
+            'failed' => Outcome::FAILED->value,
+            'released' => Outcome::RELEASED->value,
+        ]);
     }
 
     /**
