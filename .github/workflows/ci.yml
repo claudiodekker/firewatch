@@ -46,9 +46,17 @@ jobs:
       - name: Test
         run: composer test
 
-  windows:
-    name: Windows, PHP 8.4, Laravel 13.*, Nightwatch ~1.30.2
-    runs-on: windows-latest
+  platform:
+    name: ${{ matrix.os }}, PHP 8.4, Laravel 13.*, Nightwatch ~1.30.2
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        include:
+          - os: windows-latest
+            exclude-group: --exclude-group=posix
 
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +70,5 @@ jobs:
       - name: Install dependencies
         run: composer update --prefer-dist --no-interaction --no-progress --with "laravel/framework:13.*" --with "laravel/nightwatch:~1.30.2"
 
-      # The SQL child's transport, deadline, output ceiling and partial rows; #88 runs the whole suite here.
-      - name: Test the SQL tool
-        run: php vendor/bin/pest tests/Feature/Mcp/QueryChildTest.php tests/Feature/Mcp/QueryCeilingsTest.php tests/Feature/Mcp/QueryAvailabilityTest.php --exclude-group=posix
+      - name: Test
+        run: php vendor/bin/pest ${{ matrix.exclude-group }}
