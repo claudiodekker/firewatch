@@ -6,12 +6,14 @@ use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Stage;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
+use Laravel\Nightwatch\Facades\Nightwatch;
 
 const RANK_AT = 1790776000.0;
 
@@ -801,4 +803,159 @@ it('counts no deploy for the requests the real sensor recorded without one, and 
 
     expect($group['deploys'])->toBe(0)
         ->and(array_column($breakdown['result']['deploys'], 'deploy'))->toBe([__('firewatch::messages.rank_no_deploy')]);
+});
+
+/**
+ * Make a record whose stages take the given milliseconds, every other stage of its type 0, and whose duration is their sum, as Nightwatch records it.
+ *
+ * @param  array<string, int>  $stages
+ * @param  array<string, mixed>  $fields
+ */
+function rankStaged(RecordType $type, string $letter, array $stages, array $fields = []): RecordBuilder
+{
+    $microseconds = [];
+
+    foreach (Stage::of($type) as $stage) {
+        $microseconds[$stage->value] = ($stages[$stage->value] ?? 0) * 1000;
+    }
+
+    return rankRecord($type, $letter, array_sum($stages), [...$microseconds, ...$fields]);
+}
+
+it('breaks a request group into the mean of each stage in the order they run, its share and the dominant stage', function () {
+    ingest([
+        rankStaged(RecordType::REQUEST, 'a', ['bootstrap' => 6, 'before_middleware' => 1, 'action' => 30, 'after_middleware' => 1, 'terminating' => 2])->inExecution('e1'),
+        rankStaged(RecordType::REQUEST, 'a', ['bootstrap' => 6, 'before_middleware' => 2, 'action' => 31, 'after_middleware' => 1, 'terminating' => 2])->inExecution('e2'),
+        rankStaged(RecordType::REQUEST, 'a', ['bootstrap' => 7, 'before_middleware' => 1, 'action' => 33, 'sending' => 1, 'terminating' => 2])->inExecution('e3'),
+        rankStaged(RecordType::REQUEST, 'a', ['render' => 900], ['timestamp' => RANK_AT - 100]),
+        rankStaged(RecordType::REQUEST, 'b', ['render' => 900]),
+    ]);
+
+    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a'), 'since' => RANK_AT - 1]);
+
+    expect($envelope['result'])->toMatchArray([
+        'records' => 3,
+        'dominant_stage' => 'action',
+        'stage_executions' => 3,
+        'stage_avg_ms' => 42.0,
+        'slowest_execution_id' => 'e3',
+        'slowest_duration_ms' => 44.0,
+    ])
+        ->and($envelope['result']['stages'])->toBe([
+            ['stage' => 'bootstrap', 'mean_ms' => 6.33, 'share_pct' => 15.1, 'slowest_ms' => 7.0],
+            ['stage' => 'before_middleware', 'mean_ms' => 1.33, 'share_pct' => 3.2, 'slowest_ms' => 1.0],
+            ['stage' => 'action', 'mean_ms' => 31.33, 'share_pct' => 74.6, 'slowest_ms' => 33.0],
+            ['stage' => 'render', 'mean_ms' => 0.0, 'share_pct' => 0.0, 'slowest_ms' => 0.0],
+            ['stage' => 'after_middleware', 'mean_ms' => 0.67, 'share_pct' => 1.6, 'slowest_ms' => 0.0],
+            ['stage' => 'sending', 'mean_ms' => 0.33, 'share_pct' => 0.8, 'slowest_ms' => 1.0],
+            ['stage' => 'terminating', 'mean_ms' => 2.0, 'share_pct' => 4.8, 'slowest_ms' => 2.0],
+        ])
+        ->and(array_keys($envelope['result']))->toBe(['type', 'group', 'label', 'records', 'dominant_stage', 'stage_executions', 'stage_avg_ms', 'slowest_execution_id', 'slowest_duration_ms', 'stages', 'deploys'])
+        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 1, ['group' => rankHash('a'), 'count' => 1]).__('firewatch::messages.rank_breakdown_dominant', ['stage' => 'action', 'share' => 74.6, 'avg' => 42.0]))
+        ->and($envelope['notes'])->toBe([]);
+});
+
+it('gives a tie for the highest mean to the stage that runs first', function (array $stages, string $dominant) {
+    ingest([rankStaged(RecordType::REQUEST, 'a', $stages)]);
+
+    expect(Envelope::assert(Rank::class, ['group' => rankHash('a')])['result']['dominant_stage'])->toBe($dominant);
+})->with([
+    'bootstrap and action' => [['bootstrap' => 5, 'action' => 5, 'terminating' => 1], 'bootstrap'],
+    'action and terminating' => [['bootstrap' => 1, 'action' => 5, 'terminating' => 5], 'action'],
+]);
+
+it('leaves an execution with a missing stage out of the stages and counts it in a note', function () {
+    ingest([
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 10]),
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 20]),
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 100])->without('render'),
+    ]);
+
+    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
+    $action = collect($envelope['result']['stages'])->firstWhere('stage', 'action');
+
+    expect($envelope['result'])->toMatchArray(['records' => 3, 'stage_executions' => 2, 'stage_avg_ms' => 15.0])
+        ->and($action)->toMatchArray(['mean_ms' => 15.0, 'share_pct' => 100.0])
+        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1]));
+});
+
+it('answers every stage field but the count null when no execution has all its stages', function () {
+    ingest([rankStaged(RecordType::REQUEST, 'a', ['action' => 10])->without('render')]);
+
+    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
+
+    expect($envelope['result'])->toMatchArray([
+        'dominant_stage' => null,
+        'stage_executions' => 0,
+        'stage_avg_ms' => null,
+        'slowest_execution_id' => null,
+        'slowest_duration_ms' => null,
+        'stages' => null,
+    ])
+        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1]));
+});
+
+it('answers no stages for a type that records none', function (RecordType $type) {
+    ingest([rankRecord($type, 'a', 10)]);
+
+    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
+
+    expect($envelope['result'])->toMatchArray([
+        'type' => $type->value,
+        'dominant_stage' => null,
+        'stage_executions' => null,
+        'stage_avg_ms' => null,
+        'slowest_execution_id' => null,
+        'slowest_duration_ms' => null,
+        'stages' => null,
+    ])
+        ->and($envelope['notes'])->toBe([]);
+})->with([
+    'a job attempt' => [RecordType::JOB_ATTEMPT],
+    'a scheduled task' => [RecordType::SCHEDULED_TASK],
+    'a queued job' => [RecordType::QUEUED_JOB],
+]);
+
+it('says shares compare only between executions served the same way when the mean bootstrap is 0', function (int $bootstrap, bool $noted) {
+    ingest([rankStaged(RecordType::REQUEST, 'a', ['bootstrap' => $bootstrap, 'action' => 5])]);
+
+    $notes = Envelope::assert(Rank::class, ['group' => rankHash('a')])['notes'];
+
+    expect(in_array(__('firewatch::messages.rank_stages_bootstrap_zero'), $notes, true))->toBe($noted);
+})->with([
+    'bootstrap 0' => [0, true],
+    'bootstrap 1 ms' => [1, false],
+]);
+
+it('names no dominant stage and no shares when the stages took no time', function () {
+    ingest([rankStaged(RecordType::COMMAND, 'a', [], ['name' => 'inspire'])]);
+
+    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
+
+    expect($envelope['result'])->toMatchArray(['dominant_stage' => null, 'stage_executions' => 1, 'stage_avg_ms' => 0.0])
+        ->and(array_column($envelope['result']['stages'], 'share_pct'))->toBe([null, null, null])
+        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 1, ['group' => rankHash('a'), 'count' => 1]));
+});
+
+it('takes the slowest execution among those with every stage, the later record on a tie', function () {
+    ingest([
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 50])->inExecution('partial')->without('render'),
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 30])->inExecution('earlier'),
+        rankStaged(RecordType::REQUEST, 'a', ['action' => 30])->inExecution('later'),
+    ]);
+
+    expect(Envelope::assert(Rank::class, ['group' => rankHash('a')])['result'])->toMatchArray(['slowest_execution_id' => 'later', 'slowest_duration_ms' => 30.0]);
+});
+
+it('breaks a command the real sensor recorded into its three stages', function () {
+    runArtisan(['command' => 'env']);
+    Nightwatch::digest();
+
+    $group = rankRows(['type' => 'command'])[0];
+    $result = Envelope::assert(Rank::class, ['group' => $group['group']])['result'];
+
+    expect(array_column($result['stages'], 'stage'))->toBe(['bootstrap', 'action', 'terminating'])
+        ->and($result['stage_executions'])->toBe(1)
+        ->and($result['stage_avg_ms'])->toBe($group['avg_ms'])
+        ->and($result['dominant_stage'])->toBeIn(['bootstrap', 'action', 'terminating']);
 });
