@@ -55,9 +55,8 @@ class FailingTasks implements Detector
         $failing = array_values(array_filter($groups, fn (array $row) => $row['failed'] + $row['skipped'] > 0));
 
         // Only a group of the failed kind has a failure, so the failures order the kinds as well.
-        usort($failing, fn (array $a, array $b) => [$b['failed'], $b['skipped']] <=> [$a['failed'], $a['skipped']] ?: strcmp($a['group_hash'], $b['group_hash']));
-
-        $findings = array_map($this->finding(...), array_slice($failing, 0, $limit));
+        $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['failed'], $b['skipped']] <=> [$a['failed'], $a['skipped']] ?: strcmp($a['group_hash'], $b['group_hash']), $limit);
+        $findings = array_map($this->finding(...), $shown);
 
         return Judgement::of($this->name(), null, examined: $examined, total: count($failing), findings: $findings, caveats: $caveats);
     }

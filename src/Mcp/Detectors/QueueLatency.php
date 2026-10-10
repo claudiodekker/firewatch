@@ -80,9 +80,8 @@ class QueueLatency implements Detector
 
         $late = array_values(array_filter($groups, fn (array $row) => $row['qualifying'] > 0));
 
-        usort($late, fn (array $a, array $b) => [$b['worst'], $a['group_hash']] <=> [$a['worst'], $b['group_hash']]);
-
-        $findings = array_map($this->finding(...), array_slice($late, 0, $limit));
+        $shown = Judgement::worst($late, fn (array $a, array $b) => [$b['worst'], $a['group_hash']] <=> [$a['worst'], $b['group_hash']], $limit);
+        $findings = array_map($this->finding(...), $shown);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: count($late), findings: $findings, saw: $saw, caveats: $caveats);
     }

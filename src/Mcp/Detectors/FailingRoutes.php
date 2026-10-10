@@ -14,6 +14,11 @@ use SQLite3;
 class FailingRoutes implements Detector
 {
     /**
+     * The percent a share is of its whole.
+     */
+    protected const PERCENT = 100;
+
+    /**
      * The decimals of a share in an answer.
      */
     protected const PERCENT_DECIMALS = 1;
@@ -79,15 +84,14 @@ class FailingRoutes implements Detector
             FROM requests WHERE {$failed}) WHERE position = 1", $bindings, $window);
         $statuses = Stored::rows($connection, "SELECT group_hash, status_code, count(*) AS requests FROM requests WHERE {$failed} GROUP BY group_hash, status_code ORDER BY status_code", $bindings, $window);
 
+        $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['server_errors'], $b['failed'], $this->failurePct($b), $a['group_hash']] <=> [$a['server_errors'], $a['failed'], $this->failurePct($a), $b['group_hash']], $limit);
         $findings = array_map(fn (array $row) => $this->finding(
             row: $row,
             latest: $this->ofGroup($latest, $row['group_hash'])[0] ?? [],
             statuses: $this->ofGroup($statuses, $row['group_hash']),
-        ), $failing);
+        ), $shown);
 
-        usort($findings, fn (array $a, array $b) => [$b['evidence']['server_errors'], $b['evidence']['failed'], $b['evidence']['failure_pct'], $a['group']] <=> [$a['evidence']['server_errors'], $a['evidence']['failed'], $a['evidence']['failure_pct'], $b['group']]);
-
-        return Judgement::of($this->name(), $this->threshold()->describe($threshold), examined: $examined, total: count($findings), findings: array_slice($findings, 0, $limit));
+        return Judgement::of($this->name(), $this->threshold()->describe($threshold), examined: $examined, total: count($failing), findings: $findings);
     }
 
     /**
@@ -118,7 +122,7 @@ class FailingRoutes implements Detector
             'evidence' => [
                 'failed' => $row['failed'],
                 'requests' => $row['requests'],
-                'failure_pct' => round(100 * $row['failed'] / $row['with_status'], self::PERCENT_DECIMALS),
+                'failure_pct' => $this->failurePct($row),
                 'server_errors' => $row['server_errors'],
                 'status_counts' => array_column($statuses, 'requests', 'status_code'),
                 'with_exception' => $row['with_exception'],
@@ -126,6 +130,16 @@ class FailingRoutes implements Detector
                 'method' => $latest['method'] ?? null,
             ],
         ];
+    }
+
+    /**
+     * Get the share of the answered requests of a group that failed, in percent.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    protected function failurePct(array $row): float
+    {
+        return round(self::PERCENT * $row['failed'] / $row['with_status'], self::PERCENT_DECIMALS);
     }
 
     /**

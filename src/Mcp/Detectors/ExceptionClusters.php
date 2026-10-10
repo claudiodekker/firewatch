@@ -67,9 +67,7 @@ class ExceptionClusters implements Detector
             return Judgement::of($this->name(), $described, examined: $examined, total: 0, findings: []);
         }
 
-        usort($flagged, fn (array $a, array $b) => [$b['escaped'] > 0, $b['occurrences'], $b['last_seen']] <=> [$a['escaped'] > 0, $a['occurrences'], $a['last_seen']] ?: strcmp($a['group_hash'], $b['group_hash']));
-
-        $shown = array_slice($flagged, 0, $limit);
+        $shown = Judgement::worst($flagged, fn (array $a, array $b) => [$b['escaped'] > 0, $b['occurrences'], $b['last_seen']] <=> [$a['escaped'] > 0, $a['occurrences'], $a['last_seen']] ?: strcmp($a['group_hash'], $b['group_hash']), $limit);
         $hashes = array_column($shown, 'group_hash');
         $traces = $this->traces($connection, $window, $hashes);
         $units = $this->units($connection, $window, $hashes);

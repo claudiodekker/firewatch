@@ -56,9 +56,7 @@ class FailingJobs implements Detector
             return Judgement::of($this->name(), $described, examined: $examined, total: 0, findings: []);
         }
 
-        usort($failing, fn (array $a, array $b) => [$b['jobs_failed'], $b['failing_attempts'], $b['last_seen'], $a['group_hash']] <=> [$a['jobs_failed'], $a['failing_attempts'], $a['last_seen'], $b['group_hash']]);
-
-        $shown = array_slice($failing, 0, $limit);
+        $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['jobs_failed'], $b['failing_attempts'], $b['last_seen'], $a['group_hash']] <=> [$a['jobs_failed'], $a['failing_attempts'], $a['last_seen'], $b['group_hash']], $limit);
         $exceptions = $this->exceptions($connection, $window, $attempts);
         $findings = array_map(fn (array $row) => $this->finding($row, $this->ofGroup($exceptions, $row['group_hash'])), $shown);
 

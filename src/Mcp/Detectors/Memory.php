@@ -57,11 +57,10 @@ class Memory implements Detector
 
         $examined = array_sum(array_column($groups, 'executions'));
         $heavy = array_values(array_filter($groups, fn (array $row) => $row['executions_over'] > 0));
-        $findings = array_map($this->finding(...), $heavy);
+        $shown = Judgement::worst($heavy, fn (array $a, array $b) => [Stored::megabytes($b['peak']), $b['executions_over'], $a['group_hash']] <=> [Stored::megabytes($a['peak']), $a['executions_over'], $b['group_hash']], $limit);
+        $findings = array_map($this->finding(...), $shown);
 
-        usort($findings, fn (array $a, array $b) => [$b['count'], $b['evidence']['executions_over'], $a['group']] <=> [$a['count'], $a['evidence']['executions_over'], $b['group']]);
-
-        return Judgement::of($this->name(), $described, examined: $examined, total: count($findings), findings: array_slice($findings, 0, $limit), caveats: $caveats);
+        return Judgement::of($this->name(), $described, examined: $examined, total: count($heavy), findings: $findings, caveats: $caveats);
     }
 
     /**
