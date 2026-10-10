@@ -73,6 +73,14 @@ enum Producer: string
     }
 
     /**
+     * Determine if the producer's application must write a log while it boots.
+     */
+    public function logsWhileBooting(): bool
+    {
+        return $this === self::LOG_OUTSIDE_EXECUTION;
+    }
+
+    /**
      * Drive the sensors of the current application so they write the producer's record.
      */
     public function produce(): void
@@ -93,7 +101,7 @@ enum Producer: string
             self::OUTGOING_REQUEST => $this->outgoingRequest(),
             self::QUEUED_JOB => $this->queuedJob(),
             self::USER => $this->signedInRequest(),
-            self::LOG_OUTSIDE_EXECUTION => $this->logsAroundARequest(),
+            self::LOG_OUTSIDE_EXECUTION => $this->logsAfterARequest(),
             self::OCTANE_REQUEST => $this->octaneRequest(),
             self::UNROUTED_REQUEST => $this->unroutedRequests(),
         };
@@ -102,12 +110,12 @@ enum Producer: string
     /**
      * Serve a request to the application.
      */
-    protected function request(string $uri = '/'): void
+    protected function request(string $uri = '/', string $method = 'GET', ?Request $request = null): void
     {
         config()->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
 
         $kernel = app(HttpKernel::class);
-        $request = Request::create($uri);
+        $request ??= Request::create($uri, $method);
 
         $response = $kernel->handle($request);
 
@@ -115,12 +123,10 @@ enum Producer: string
     }
 
     /**
-     * Write a log before a request starts and another after it has finished.
+     * Serve a request, then write a log after it has finished.
      */
-    protected function logsAroundARequest(): void
+    protected function logsAfterARequest(): void
     {
-        Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]);
-
         $this->request();
 
         Log::channel('nightwatch')->warning('The payment is late.');
@@ -131,18 +137,20 @@ enum Producer: string
      */
     protected function octaneRequest(): void
     {
-        app(Core::class)->prepareForRequest(Request::create('/'));
+        $request = Request::create('/');
 
-        $this->request();
+        app(Core::class)->prepareForRequest($request);
+
+        $this->request(request: $request);
     }
 
     /**
-     * Serve two requests to paths no route answers.
+     * Serve requests of two methods to two paths no route answers.
      */
     protected function unroutedRequests(): void
     {
         $this->request('/missing-page');
-        $this->request('/another-missing-page');
+        $this->request('/another-missing-page', 'POST');
     }
 
     /**

@@ -8,7 +8,7 @@
     "execution_source": "request",
     "execution_id": "{uuid}",
     "execution_preview": "GET /",
-    "execution_stage": "before_middleware",
+    "execution_stage": "bootstrap",
     "user": "",
     "level": "warning",
     "message": "The payment is slow.",

@@ -48,10 +48,11 @@ class Sensors
     {
         $previous = Container::getInstance();
 
-        $app = $this->application($producer);
+        $recorder = new WireRecorder;
+
+        $app = $this->application($producer, $recorder);
 
         try {
-            $recorder = new WireRecorder;
             $core = $app->make(Core::class);
             $core->ingest = $recorder;
 
@@ -74,20 +75,22 @@ class Sensors
     /**
      * Create a fresh workbench application for the producer and make it the current one.
      */
-    protected function application(Producer $producer): Application
+    protected function application(Producer $producer, WireRecorder $recorder): Application
     {
         $variable = 'NIGHTWATCH_FORCE_REQUEST';
         $forced = getenv($variable);
 
         $this->setEnvironmentVariable($variable, $producer->recordsRequests() ? '1' : null);
+        $this->setEnvironmentVariable('WORKBENCH_BOOT_LOG', $producer->logsWhileBooting() ? '1' : null);
 
         try {
-            $app = Testbench::create(basePath: null, options: ['extra' => ['dont-discover' => ['laravel/nightwatch'], 'providers' => [
+            $app = Testbench::create(basePath: null, resolvingCallback: fn (Application $app) => $app->instance(WireRecorder::class, $recorder), options: ['extra' => ['dont-discover' => ['laravel/nightwatch'], 'providers' => [
                 FirewatchServiceProvider::class,
                 WorkbenchServiceProvider::class,
             ]]]);
         } finally {
             $this->setEnvironmentVariable($variable, $forced);
+            $this->setEnvironmentVariable('WORKBENCH_BOOT_LOG', null);
         }
 
         Facade::clearResolvedInstances();
