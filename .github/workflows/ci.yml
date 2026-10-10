@@ -130,3 +130,19 @@ jobs:
 
       - name: Test with coverage
         run: php -d memory_limit=-1 vendor/bin/pest --coverage --min=90
+
+  dev-only-install:
+    name: Dev-only install
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: sqlite3, intl
+          coverage: none
+
+      - name: Prove Firewatch is absent after composer install --no-dev
+        run: bash .github/scripts/dev-only-install.sh .
