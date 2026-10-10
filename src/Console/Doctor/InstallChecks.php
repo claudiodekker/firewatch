@@ -69,7 +69,10 @@ class InstallChecks
 
         if ($production !== []) {
             return CheckResult::warn(
-                __('firewatch::messages.doctor.mode.production', ['environments' => $environments, 'production' => implode(', ', $production)]),
+                __('firewatch::messages.doctor.mode.production', [
+                    'environments' => $environments,
+                    'production' => implode(', ', $production),
+                ]),
                 __('firewatch::messages.doctor.mode.production_fix'),
             );
         }
@@ -96,7 +99,11 @@ class InstallChecks
      */
     public function php(): CheckResult
     {
-        $facts = ['version' => $this->phpVersion, 'binary' => $this->phpBinary, 'minimum' => static::MINIMUM_PHP_VERSION];
+        $facts = [
+            'version' => $this->phpVersion,
+            'binary' => $this->phpBinary,
+            'minimum' => static::MINIMUM_PHP_VERSION,
+        ];
 
         if (version_compare($this->phpVersion, static::MINIMUM_PHP_VERSION, '<')) {
             return CheckResult::fail(
@@ -114,7 +121,11 @@ class InstallChecks
     public function sqlite(): CheckResult
     {
         $version = ($this->sqliteVersion)();
-        $facts = ['version' => (string) $version, 'binary' => $this->phpBinary, 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION];
+        $facts = [
+            'version' => (string) $version,
+            'binary' => $this->phpBinary,
+            'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+        ];
 
         if ($version === null) {
             return CheckResult::fail(
@@ -145,7 +156,10 @@ class InstallChecks
      */
     public function nightwatch(): CheckResult
     {
-        $facts = ['version' => $this->install->version, 'line' => NightwatchInstall::VERIFIED_LINE];
+        $facts = [
+            'version' => $this->install->version,
+            'line' => NightwatchInstall::VERIFIED_LINE,
+        ];
 
         if (! $this->install->hasVetoEvent() || ! property_exists($this->install->vetoEvent(), 'records')) {
             return CheckResult::fail(
@@ -246,7 +260,10 @@ class InstallChecks
         }
 
         return CheckResult::warn(
-            __('firewatch::messages.doctor.store-path.refused', ['issue' => $issue->line(), 'path' => $path]),
+            __('firewatch::messages.doctor.store-path.refused', [
+                'issue' => $issue->line(),
+                'path' => $path,
+            ]),
             __('firewatch::messages.doctor.store-path.refused_fix'),
         );
     }

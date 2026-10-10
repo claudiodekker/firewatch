@@ -292,6 +292,76 @@ return [
             'posture' => 'payload fields redacted: :fields; headers redacted: :headers; request payloads :payload; logs :logs',
             'nightwatch_defaults' => 'Nightwatch\'s defaults are in effect, because Firewatch\'s capture settings were not applied',
         ],
+
+        'store-permissions' => [
+            'ok' => 'directory 0700, file 0600',
+            'absent' => 'no store directory yet',
+            'windows' => 'not applicable on Windows',
+            'looser' => 'directory :directory_mode and file :file_mode are looser than 0700 and 0600',
+            'looser_fix' => 'run `chmod 700 :directory` and `chmod 600 :path`',
+        ],
+
+        'store-gitignore' => [
+            'ok' => ':directory has its own .gitignore',
+            'absent' => 'no store directory yet',
+            'missing' => ':directory has no .gitignore, so the store can be committed',
+            'missing_fix' => 'create :directory/.gitignore containing *',
+        ],
+
+        'store-identity' => [
+            'ok' => 'Firewatch store at :path, schema :version',
+            'absent' => 'no store yet at :path; the first captured request or job creates it',
+            'foreign' => ':path is not a Firewatch store, so Firewatch never touches it and captures nothing',
+            'foreign_fix' => 'set FIREWATCH_DATABASE to another path, or move the file away',
+            'older' => 'the store is schema :found and this release writes :expected; the next captured batch rebuilds it',
+            'older_fix' => 'exercise the application, or run `php artisan firewatch:clear --drop` to rebuild it now',
+            'newer' => 'the store is schema :found from a newer Firewatch and this release reads :expected; capture drops its batches',
+            'newer_fix' => 'upgrade Firewatch, or run `php artisan firewatch:clear --drop` to discard the store',
+            'damaged' => 'a Firewatch store whose schema can\'t be read; see store-integrity',
+        ],
+
+        'store-integrity' => [
+            'ok' => 'quick_check found no problem',
+            'problems' => 'quick_check found :problems, the first being: :first',
+            'problem_count' => '{1} :count problem|[2,*] :count problems',
+            'damaged' => 'the store file is damaged',
+            'damaged_fix' => 'run `php artisan firewatch:clear --drop`, or let the next captured batch move it aside',
+        ],
+
+        'store-activity' => [
+            'ok' => ':records from :oldest to :newest, :file on disk and :live live; retention :age or :limit records; last prune :prune:coverage',
+            'quiet' => ':records, the newest at :newest; nothing was captured in the last 24 hours',
+            'quiet_fix' => 'exercise the application in an allowed environment, and see mode',
+            'empty' => 'the store holds no records; retention :age or :limit records',
+            'records' => '{1} :count record|[2,*] :count records',
+            'never' => 'never',
+            'coverage' => '; :type complete from :from (:reason)',
+        ],
+
+        'store-losses' => [
+            'ok' => 'no dropped batches',
+            'dropped' => ':batches dropped, holding :records in all; the newest at :at (:kind): :message',
+            'batches' => '{1} :count batch|[2,*] :count batches',
+            'busy_fix' => 'raise FIREWATCH_BUSY_TIMEOUT above :milliseconds ms, or close what holds the store',
+            'full_fix' => 'free disk space or lower FIREWATCH_RETENTION_RECORDS',
+            'other_fix' => 'act on the message, then run `php artisan firewatch:clear` to empty the log',
+        ],
+
+        'store-drift' => [
+            'ok' => 'no drift',
+            'found' => 'drift seen: :rows',
+            'store' => 'store',
+            'found_fix' => 'pin laravel/nightwatch to :line.* or upgrade Firewatch',
+        ],
+
+        'store' => [
+            'absent' => 'no store yet',
+            'busy' => 'the store stayed busy, so it was not checked',
+            'busy_fix' => 'run the doctor again',
+            'unavailable' => 'not checked, because SQLite is below the floor (see sqlite)',
+            'see_identity' => 'not checked; see store-identity',
+            'see_integrity' => 'not checked; see store-integrity',
+        ],
     ],
 
     'blind_spot' => 'Blind spot (:id): :message',

@@ -75,7 +75,7 @@ class FailureLog
     /**
      * Read the dropped batches the file still holds, oldest first.
      *
-     * @return list<array{at: float, kind: string, dropped: int}>
+     * @return list<array{at: float, kind: string, dropped: int, message: string}>
      */
     public function dropped(): array
     {
@@ -90,6 +90,7 @@ class FailureLog
                     'at' => (float) $entry['at'],
                     'kind' => $entry['kind'],
                     'dropped' => $entry['dropped'],
+                    'message' => is_string($entry['message'] ?? null) ? $entry['message'] : '',
                 ];
             }
         }

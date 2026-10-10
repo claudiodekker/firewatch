@@ -38,7 +38,10 @@ readonly class DoctorReport
             $found = $check($id);
 
             foreach (is_array($found) ? $found : [$found] as $result) {
-                $lines[] = ['check' => $id, 'result' => $result];
+                $lines[] = [
+                    'check' => $id,
+                    'result' => $result,
+                ];
             }
         }
 

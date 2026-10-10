@@ -50,8 +50,10 @@ class DoctorCommand extends Command
      */
     protected function print(DoctorReport $report): void
     {
-        foreach ($report->lines() as ['check' => $check, 'result' => $result]) {
-            $this->raw("[{$result->status->value}] {$check->value} {$result->message}");
+        foreach ($report->lines() as $line) {
+            $result = $line['result'];
+
+            $this->raw("[{$result->status->value}] {$line['check']->value} {$result->message}");
 
             if ($result->fix !== null) {
                 $this->raw("  fix: {$result->fix}");

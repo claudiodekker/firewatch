@@ -1,8 +1,18 @@
 <?php
 
+use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Console\Doctor\InstallChecks;
+use ClaudioDekker\Firewatch\Console\Doctor\StoreChecks;
+use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\NightwatchInstall;
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Availability;
+use ClaudioDekker\Firewatch\Store\FailureKind;
+use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\StoreFailure;
+use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
 use Laravel\Nightwatch\Events\IngestingEvents;
@@ -423,5 +433,413 @@ describe('capture-posture', function () {
             'message' => __('firewatch::messages.doctor.capture-posture.nightwatch_defaults'),
             'fix' => __('firewatch::messages.doctor.nightwatch-order.registered_first_fix'),
         ]);
+    });
+});
+
+/**
+ * Store a request that finished just now, through Firewatch's real ingest.
+ */
+function doctorCapture(): void
+{
+    ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => Instant::now()])]);
+}
+
+/**
+ * Get the path of the store, with its directory created.
+ */
+function doctorStorePath(): string
+{
+    $path = app(Configuration::class)->database;
+
+    if (! is_dir(dirname($path))) {
+        mkdir(dirname($path), recursive: true);
+    }
+
+    return $path;
+}
+
+/**
+ * Create a store with one record whose every page is in the one file, and overwrite the file from an offset.
+ */
+function doctorDamagedStore(int $offset): void
+{
+    $writer = new Writer(app(Configuration::class), sqliteVersion: '3.45.1');
+    $writer->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('cache-event', '{}')"));
+
+    $path = app(Configuration::class)->database;
+    clearstatcache(true, $path);
+    $handle = fopen($path, 'r+b');
+    fseek($handle, $offset);
+    fwrite($handle, str_repeat("\xff", filesize($path) - $offset));
+    fclose($handle);
+}
+
+/**
+ * Bind a reader whose store is held locked by another connection, which the test releases with the returned closure.
+ */
+function doctorBusyStore(): Closure
+{
+    doctorCapture();
+
+    $connection = new SQLite3(app(Configuration::class)->database);
+    $connection->exec('PRAGMA journal_mode = DELETE');
+    $connection->exec('BEGIN EXCLUSIVE');
+
+    app()->instance(Reader::class, new class(app(Configuration::class)) extends Reader
+    {
+        protected const BUSY_TIMEOUT_MILLISECONDS = 20;
+    });
+
+    return fn () => $connection->exec('ROLLBACK');
+}
+
+describe('store-permissions', function () {
+    it('passes the modes a writer creates', function () {
+        doctorCapture();
+
+        expect(doctorCheck('store-permissions'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.store-permissions.ok'),
+        ]);
+    })->group('posix');
+
+    it('warns when the directory or the file is looser', function (string $loosen) {
+        doctorCapture();
+        $path = app(Configuration::class)->database;
+        chmod($loosen === 'directory' ? dirname($path) : $path, $loosen === 'directory' ? 0755 : 0644);
+
+        expect(doctorCheck('store-permissions'))->toMatchArray([
+            'status' => 'warn',
+            'message' => __('firewatch::messages.doctor.store-permissions.looser', [
+                'directory_mode' => $loosen === 'directory' ? '0755' : '0700',
+                'file_mode' => $loosen === 'directory' ? '0600' : '0644',
+            ]),
+            'fix' => __('firewatch::messages.doctor.store-permissions.looser_fix', ['directory' => dirname($path), 'path' => $path]),
+        ]);
+    })->with(['directory', 'file'])->group('posix');
+
+    it('accepts a stricter mode', function () {
+        doctorCapture();
+        chmod(app(Configuration::class)->database, 0400);
+
+        expect(doctorCheck('store-permissions')['status'])->toBe('ok');
+    })->group('posix');
+
+    it('informs when there is no store directory yet', function () {
+        expect(doctorCheck('store-permissions'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store-permissions.absent'),
+        ]);
+    });
+
+    it('is not applicable on Windows', function () {
+        doctorCapture();
+        app()->instance(StoreChecks::class, app()->make(StoreChecks::class, ['osFamily' => 'Windows']));
+        chmod(dirname(app(Configuration::class)->database), 0777);
+
+        expect(doctorCheck('store-permissions'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store-permissions.windows'),
+        ]);
+    })->group('posix');
+});
+
+describe('store-gitignore', function () {
+    it('passes a directory with its own ignore file', function () {
+        doctorCapture();
+        $directory = dirname(app(Configuration::class)->database);
+
+        expect(doctorCheck('store-gitignore'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.store-gitignore.ok', ['directory' => $directory]),
+        ]);
+    });
+
+    it('warns when the directory has none', function () {
+        doctorCapture();
+        $directory = dirname(app(Configuration::class)->database);
+        unlink($directory.'/.gitignore');
+
+        expect(doctorCheck('store-gitignore'))->toMatchArray([
+            'status' => 'warn',
+            'message' => __('firewatch::messages.doctor.store-gitignore.missing', ['directory' => $directory]),
+            'fix' => __('firewatch::messages.doctor.store-gitignore.missing_fix', ['directory' => $directory]),
+        ]);
+    });
+
+    it('informs when there is no store directory yet', function () {
+        expect(doctorCheck('store-gitignore'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store-gitignore.absent'),
+        ]);
+    });
+});
+
+describe('store-identity', function () {
+    it('informs when no store was written yet', function () {
+        expect(doctorCheck('store-identity'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store-identity.absent', ['path' => app(Configuration::class)->database]),
+        ]);
+    });
+
+    it('passes a Firewatch store of this schema', function () {
+        doctorCapture();
+
+        expect(doctorCheck('store-identity'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.store-identity.ok', ['path' => app(Configuration::class)->database, 'version' => Schema::VERSION]),
+        ]);
+    });
+
+    it('fails on a file that is not a Firewatch store', function (string $contents) {
+        file_put_contents(doctorStorePath(), $contents);
+
+        expect(doctorCheck('store-identity'))->toMatchArray([
+            'status' => 'fail',
+            'message' => __('firewatch::messages.doctor.store-identity.foreign', ['path' => app(Configuration::class)->database]),
+            'fix' => __('firewatch::messages.doctor.store-identity.foreign_fix'),
+        ]);
+    })->with([
+        'a file that is not a database' => [str_repeat('not a database ', 100)],
+    ]);
+
+    it('fails on a SQLite file of another application', function () {
+        (new SQLite3(doctorStorePath()))->exec('CREATE TABLE orders (id INTEGER)');
+
+        expect(doctorCheck('store-identity')['status'])->toBe('fail');
+    });
+
+    it('warns about a store of another schema and says whether a writer rebuilds it', function (int $version, string $case) {
+        (new SQLite3(doctorStorePath()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = '.$version.'; CREATE TABLE records (id INTEGER)');
+
+        expect(doctorCheck('store-identity'))->toMatchArray([
+            'status' => 'warn',
+            'message' => __("firewatch::messages.doctor.store-identity.{$case}", ['found' => $version, 'expected' => Schema::VERSION]),
+            'fix' => __("firewatch::messages.doctor.store-identity.{$case}_fix"),
+        ]);
+    })->with([
+        'an older schema' => [0, 'older'],
+        'a newer schema' => [2, 'newer'],
+    ]);
+
+    it('leaves the failure of a damaged store to store-integrity', function () {
+        doctorDamagedStore(offset: 100);
+
+        expect(doctorCheck('store-identity'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store-identity.damaged'),
+        ]);
+    });
+
+    it('warns when the store stays busy', function () {
+        $release = doctorBusyStore();
+
+        expect(doctorCheck('store-identity'))->toMatchArray([
+            'status' => 'warn',
+            'message' => __('firewatch::messages.doctor.store.busy'),
+            'fix' => __('firewatch::messages.doctor.store.busy_fix'),
+        ]);
+
+        $release();
+    });
+});
+
+describe('store-integrity', function () {
+    it('passes a store quick_check finds nothing in', function () {
+        doctorCapture();
+
+        expect(doctorCheck('store-integrity'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.store-integrity.ok'),
+        ]);
+    });
+
+    it('fails a damaged store', function (int $offset) {
+        doctorDamagedStore($offset);
+
+        expect(doctorCheck('store-integrity'))->toMatchArray([
+            'status' => 'fail',
+            'message' => __('firewatch::messages.doctor.store-integrity.damaged'),
+            'fix' => __('firewatch::messages.doctor.store-integrity.damaged_fix'),
+        ]);
+    })->with([
+        'in its tables' => [4096],
+        'in its first page' => [100],
+    ]);
+
+    it('fails the run for a damaged store', function () {
+        doctorDamagedStore(offset: 4096);
+
+        $report = doctorRun();
+
+        expect($report['status'])->toBe('fail')
+            ->and($report['exit'])->toBe(1);
+    });
+
+    it('informs when there is no store, for another check\'s reason and for SQLite below the floor', function (string $arrange, string $key) {
+        match ($arrange) {
+            'absent' => null,
+            'foreign' => file_put_contents(doctorStorePath(), str_repeat('not a database ', 100)),
+            'old' => app()->instance(Reader::class, new Reader(app(Configuration::class), sqliteVersion: '3.37.2')),
+        };
+
+        expect(doctorCheck('store-integrity'))->toMatchArray([
+            'status' => 'info',
+            'message' => __("firewatch::messages.doctor.{$key}"),
+        ]);
+    })->with([
+        'no store' => ['absent', 'store.absent'],
+        'a foreign file' => ['foreign', 'store.see_identity'],
+        'SQLite below the floor' => ['old', 'store.unavailable'],
+    ]);
+});
+
+describe('store-activity', function () {
+    it('informs about an empty store', function () {
+        doctorCapture();
+        Artisan::call('firewatch:clear', ['--force' => true]);
+
+        expect(doctorCheck('store-activity'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store-activity.empty', ['age' => '36500d', 'limit' => '100,000']),
+        ]);
+    });
+
+    it('informs when there is no store', function () {
+        expect(doctorCheck('store-activity'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store.absent'),
+        ]);
+    });
+
+    it('reports what the store holds', function () {
+        doctorCapture();
+
+        $check = doctorCheck('store-activity');
+
+        expect($check['status'])->toBe('ok')
+            ->and($check['message'])->toStartWith(trans_choice('firewatch::messages.doctor.store-activity.records', 1, ['count' => 1]).' from ')
+            ->and($check['message'])->toContain('retention 36500d or 100,000 records')
+            ->and($check['fix'])->toBeNull();
+    });
+
+    it('names where a type\'s history starts after a clear', function () {
+        doctorCapture();
+        Artisan::call('firewatch:clear', ['--force' => true]);
+        doctorCapture();
+
+        expect(doctorCheck('store-activity')['message'])->toContain('; request complete from ')->toContain('(cleared)');
+    });
+
+    it('warns when nothing was captured for a day', function (int $hours, string $status) {
+        doctorCapture();
+        $this->travelTo(now()->addHours($hours));
+
+        expect(doctorCheck('store-activity')['status'])->toBe($status);
+    })->with([
+        'just under a day' => [23, 'ok'],
+        'past a day' => [25, 'warn'],
+    ]);
+
+    it('says what to do about a quiet store', function () {
+        doctorCapture();
+        $this->travelTo(now()->addHours(25));
+
+        expect(doctorCheck('store-activity')['fix'])->toBe(__('firewatch::messages.doctor.store-activity.quiet_fix'));
+    });
+});
+
+describe('store-losses', function () {
+    it('passes when no batch was dropped', function () {
+        expect(doctorCheck('store-losses'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.store-losses.ok'),
+        ]);
+    });
+
+    it('warns about the batches dropped and quotes the newest', function () {
+        doctorStorePath();
+        app(FailureLog::class)->record(new StoreFailure(FailureKind::FULL, 'database or disk is full'), dropped: 2);
+        app(FailureLog::class)->record(new StoreFailure(FailureKind::BUSY, 'database is locked'), dropped: 3);
+
+        $check = doctorCheck('store-losses');
+
+        expect($check['status'])->toBe('warn')
+            ->and($check['message'])->toStartWith('2 batches dropped, holding 5 records in all; the newest at ')
+            ->and($check['message'])->toEndWith('(busy): database is locked')
+            ->and($check['fix'])->toBe(__('firewatch::messages.doctor.store-losses.busy_fix', ['milliseconds' => 300]));
+    });
+
+    it('says what to do for each kind of loss', function (FailureKind $kind, string $fix) {
+        doctorStorePath();
+        app(FailureLog::class)->record(new StoreFailure($kind, 'it failed'), dropped: 1);
+
+        expect(doctorCheck('store-losses')['fix'])->toBe(__("firewatch::messages.doctor.store-losses.{$fix}"));
+    })->with([
+        'a full disk' => [FailureKind::FULL, 'full_fix'],
+        'another failure' => [FailureKind::IO, 'other_fix'],
+    ]);
+
+    it('does not count a damaged store that was replaced with nothing dropped', function () {
+        doctorStorePath();
+        app(FailureLog::class)->recovered(new RuntimeException('file is not a database'));
+
+        expect(doctorCheck('store-losses')['status'])->toBe('ok');
+    });
+});
+
+describe('store-drift', function () {
+    it('passes a store without drift', function () {
+        doctorCapture();
+
+        expect(doctorCheck('store-drift'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.store-drift.ok'),
+        ]);
+    });
+
+    it('warns about each kind of drift', function () {
+        ingest([syntheticRecord(RecordType::CACHE_EVENT)->with(['t' => 'future-type'])]);
+
+        expect(doctorCheck('store-drift'))->toMatchArray([
+            'status' => 'warn',
+            'message' => __('firewatch::messages.doctor.store-drift.found', ['rows' => 'unknown_type future-type (1)']),
+            'fix' => __('firewatch::messages.doctor.store-drift.found_fix', ['line' => '1.30']),
+        ]);
+    });
+
+    it('informs when there is no store', function () {
+        expect(doctorCheck('store-drift')['message'])->toBe(__('firewatch::messages.doctor.store.absent'));
+    });
+});
+
+describe('reading', function () {
+    it('creates no store, directory or lock on an empty checkout', function () {
+        $directory = dirname(app(Configuration::class)->database);
+
+        doctorRun();
+
+        expect($directory)->not->toBeDirectory();
+    });
+
+    it('changes nothing beside a file that is not a store', function () {
+        $path = doctorStorePath();
+        file_put_contents($path, str_repeat('not a database ', 100));
+        $before = [md5_file($path), scandir(dirname($path))];
+
+        doctorRun();
+
+        expect([md5_file($path), scandir(dirname($path))])->toBe($before);
+    });
+
+    it('warns without failing the command', function () {
+        doctorStorePath();
+        app(FailureLog::class)->record(new StoreFailure(FailureKind::IO, 'it failed'), dropped: 1);
+
+        $report = doctorRun();
+
+        expect($report['status'])->toBe('warn')
+            ->and($report['exit'])->toBe(0);
     });
 });
