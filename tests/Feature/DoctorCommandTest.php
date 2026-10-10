@@ -545,7 +545,7 @@ describe('store-permissions', function () {
             'status' => 'info',
             'message' => __('firewatch::messages.doctor.store-permissions.absent'),
         ]);
-    });
+    })->group('posix');
 
     it('is not applicable on Windows', function () {
         doctorCapture();
@@ -556,7 +556,17 @@ describe('store-permissions', function () {
             'status' => 'info',
             'message' => __('firewatch::messages.doctor.store-permissions.windows'),
         ]);
-    })->group('posix');
+    });
+
+    it('is not applicable on the Windows host it runs on', function () {
+        doctorCapture();
+
+        expect(doctorCheck('store-permissions'))->toMatchArray([
+            'status' => 'info',
+            'message' => __('firewatch::messages.doctor.store-permissions.windows'),
+            'fix' => null,
+        ]);
+    })->onlyOnWindows();
 });
 
 describe('store-gitignore', function () {
@@ -1000,7 +1010,7 @@ describe('the report', function () {
                 ['id' => 'config', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.config.ok'), 'fix' => null],
                 ['id' => 'budgets', 'status' => 'ok', 'message' => trans_choice('firewatch::messages.doctor.budgets.ok', 0, ['count' => 0]), 'fix' => null],
                 ['id' => 'store-path', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.store-path.ok', ['path' => $directory.'/firewatch.sqlite']), 'fix' => null],
-                ['id' => 'store-permissions', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store-permissions.absent'), 'fix' => null],
+                ['id' => 'store-permissions', 'status' => 'info', 'message' => __(PHP_OS_FAMILY === 'Windows' ? 'firewatch::messages.doctor.store-permissions.windows' : 'firewatch::messages.doctor.store-permissions.absent'), 'fix' => null],
                 ['id' => 'store-gitignore', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store-gitignore.absent'), 'fix' => null],
                 ['id' => 'store-identity', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store-identity.absent', ['path' => $directory.'/firewatch.sqlite']), 'fix' => null],
                 ['id' => 'store-integrity', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store.absent'), 'fix' => null],
