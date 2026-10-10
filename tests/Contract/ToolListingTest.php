@@ -58,3 +58,49 @@ test('the instructions describe every listed tool once, in the order an assistan
     expect($matches[1])->toBe(['overview', 'detect', 'rank', 'occurrences', 'execution', 'trace', 'actor', 'compare', 'trend', 'query', 'describe', 'fingerprint'])
         ->and(array_diff(array_column(toolListing()['tools'], 'name'), $matches[1]))->toBe([]);
 });
+
+/**
+ * Determine if the text names the value as a whole word.
+ */
+function namesValue(string $text, string $value): bool
+{
+    return preg_match('/(?<![\w-])'.preg_quote($value, '/').'(?![\w-])/', $text) === 1;
+}
+
+test('every closed value of an argument is named in its description or its tool description', function () {
+    $recordTypes = ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'];
+    $groupTypes = array_values(array_diff($recordTypes, ['log']));
+    $closed = [
+        'rank.type' => $groupTypes,
+        'compare.type' => $groupTypes,
+        'trend.type' => $groupTypes,
+        'occurrences.type' => $recordTypes,
+        'execution.type' => ['request', 'command', 'job-attempt', 'scheduled-task'],
+        'describe.type' => [...$recordTypes, 'user'],
+        'fingerprint.type' => ['request', 'command', 'job-attempt', 'queued-job', 'scheduled-task', 'query', 'cache-event', 'outgoing-request', 'mail', 'notification'],
+        'rank.by' => ['p95_duration', 'p50_duration', 'max_duration', 'total_duration', 'occurrences', 'p95_memory', 'max_memory', 'last_seen', 'queries'],
+        'compare.by' => ['p95_duration', 'p50_duration', 'max_duration', 'total_duration', 'occurrences', 'p95_memory', 'p50_memory', 'max_memory', 'queries'],
+        'trend.by' => ['occurrences', 'max_duration', 'avg_duration', 'total_duration', 'max_memory'],
+        'occurrences.order' => ['recent', 'slowest', 'memory', 'queries'],
+        'occurrences.outcome' => ['processed', 'failed', 'released', 'skipped'],
+        'occurrences.level' => ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'],
+        'occurrences.at_or_above' => ['median', 'p95'],
+        'detect.shape' => ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'],
+    ];
+
+    $unnamed = [];
+
+    foreach (toolListing()['tools'] as $tool) {
+        foreach ($tool['inputSchema']['properties'] as $argument => $schema) {
+            $values = [...($closed["{$tool['name']}.{$argument}"] ?? []), ...($schema['enum'] ?? [])];
+
+            foreach (array_unique($values) as $value) {
+                if (! namesValue($schema['description'], $value) && ! namesValue($tool['description'], $value)) {
+                    $unnamed[] = "{$tool['name']}.{$argument}: {$value}";
+                }
+            }
+        }
+    }
+
+    expect($unnamed)->toBe([]);
+});
