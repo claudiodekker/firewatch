@@ -101,7 +101,7 @@ describe('a healthy store', function () {
 
         expect($result['exit'])->toBe(0)
             ->and($result['output'])->toMatch(rebuiltPattern())
-            ->and($markers)->toEqual(new Markers(createdAt: 1790780400.0))
+            ->and($markers)->toEqual(new Markers(createdAt: 1790780400.0, firewatchVersion: firewatchVersion()))
             ->and(storeRows('SELECT id FROM records'))->toBe([])
             ->and(storeRows('SELECT id FROM users'))->toBe([])
             ->and(storeRows('SELECT kind FROM drift'))->toBe([])

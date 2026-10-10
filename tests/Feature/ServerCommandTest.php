@@ -3,14 +3,8 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Bounds;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use Composer\InstalledVersions;
 use Illuminate\Support\Facades\Artisan;
 use Laravel\Mcp\Server\Registrar;
-
-function firewatchVersion(): string
-{
-    return InstalledVersions::getPrettyVersion('claudiodekker/firewatch') ?? 'dev';
-}
 
 it('lists the tools under a header, one line each', function () {
     $result = Artisan::call('firewatch:server', ['--list' => true]);
