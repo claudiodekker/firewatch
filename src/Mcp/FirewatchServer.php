@@ -43,10 +43,10 @@ class FirewatchServer extends Server
     protected array $tools = [
         Overview::class,
         Rank::class,
+        Detect::class,
         Occurrences::class,
         Execution::class,
         Trace::class,
-        Detect::class,
         Actor::class,
         Compare::class,
         Trend::class,

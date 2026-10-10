@@ -69,7 +69,7 @@ it('serves a session over stdio and exits at the end of its input', function () 
         ->and($replies[1]['result']['serverInfo']['name'])->toBe('firewatch')
         ->and($replies[1]['result']['capabilities'])->toBe(['tools' => ['listChanged' => false]])
         ->and($replies[1]['result']['instructions'])->toBe(__('firewatch::messages.instructions'))
-        ->and(array_column($replies[2]['result']['tools'], 'name'))->toBe(['overview', 'rank', 'occurrences', 'execution', 'trace', 'detect', 'actor', 'compare', 'trend', 'query', 'describe', 'fingerprint'])
+        ->and(array_column($replies[2]['result']['tools'], 'name'))->toBe(['overview', 'rank', 'detect', 'occurrences', 'execution', 'trace', 'actor', 'compare', 'trend', 'query', 'describe', 'fingerprint'])
         ->and($replies[3]['result']['isError'])->toBeFalse()
         ->and($replies[3]['result']['content'][0]['text'])->toStartWith("## overview\n");
 })->group('process');

@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\Bounds;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
@@ -91,7 +92,7 @@ class Query extends Tool
      */
     public function description(): string
     {
-        return __('firewatch::messages.tools.query');
+        return __('firewatch::messages.tools.query', ['characters' => number_format(Bounds::CELL_CHARACTERS)]);
     }
 
     /**

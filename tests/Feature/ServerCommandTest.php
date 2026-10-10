@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\Bounds;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use Composer\InstalledVersions;
 use Illuminate\Support\Facades\Artisan;
@@ -19,10 +20,10 @@ it('lists the tools under a header, one line each', function () {
             __('firewatch::messages.listing', ['version' => firewatchVersion(), 'count' => 12]),
             '  overview     Entry point: what is wrong now.',
             '  rank         Groups of one type (routes, queries, jobs...) worst first by a measure: what is slow, hea…',
+            '  detect       Problem shapes, worst evidence first, with default thresholds: `n-plus-one`, a read query…',
             '  occurrences  Individual records, newest first by default, for at least one selector: `group`, `type`, …',
             '  execution    One request, command, job attempt or scheduled task in full: outcome, stages, headers and…',
             '  trace        One trace\'s executions in start order and each queued job\'s lineage: dispatch, attempts, …',
-            '  detect       Problem shapes, worst evidence first, with default thresholds: `n-plus-one`, a read query…',
             '  actor        One signed-in person and the window\'s work tied to them.',
             '  compare      Each group before against after: did my change help?',
             '  trend        A measure over equal time buckets: did it rise, fall or hold, and where did it peak?',
@@ -90,6 +91,20 @@ it('lists the tools as JSON with the server name and version', function () {
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
+                    'name' => 'detect',
+                    'description' => __('firewatch::messages.tools.detect'),
+                    'inputSchema' => ['properties' => [
+                        'shape' => ['description' => __('firewatch::messages.detect_shape_argument'), 'enum' => ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'], 'type' => 'string'],
+                        'threshold' => ['description' => __('firewatch::messages.detect_threshold_argument'), 'type' => 'number'],
+                        'group' => ['description' => __('firewatch::messages.detect_group_argument'), 'type' => 'string'],
+                        'since' => ['description' => windowArgument('since'), 'type' => 'string'],
+                        'until' => ['description' => windowArgument('until'), 'type' => 'string'],
+                        'limit' => ['description' => limitArgument('detect', 100, 20), 'type' => 'integer'],
+                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
+                    ], 'type' => 'object'],
+                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                ],
+                [
                     'name' => 'occurrences',
                     'description' => __('firewatch::messages.tools.occurrences'),
                     'inputSchema' => ['properties' => [
@@ -134,20 +149,6 @@ it('lists the tools as JSON with the server name and version', function () {
                         'trace_id' => ['description' => __('firewatch::messages.trace_id_argument'), 'type' => 'string'],
                         'job_id' => ['description' => __('firewatch::messages.trace_job_id_argument'), 'type' => 'string'],
                         'limit' => ['description' => limitArgument('trace', 100, 50), 'type' => 'integer'],
-                        'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
-                    ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
-                ],
-                [
-                    'name' => 'detect',
-                    'description' => __('firewatch::messages.tools.detect'),
-                    'inputSchema' => ['properties' => [
-                        'shape' => ['description' => __('firewatch::messages.detect_shape_argument'), 'enum' => ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'], 'type' => 'string'],
-                        'threshold' => ['description' => __('firewatch::messages.detect_threshold_argument'), 'type' => 'number'],
-                        'group' => ['description' => __('firewatch::messages.detect_group_argument'), 'type' => 'string'],
-                        'since' => ['description' => windowArgument('since'), 'type' => 'string'],
-                        'until' => ['description' => windowArgument('until'), 'type' => 'string'],
-                        'limit' => ['description' => limitArgument('detect', 100, 20), 'type' => 'integer'],
                         'format' => ['description' => __('firewatch::messages.format_argument'), 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
@@ -198,7 +199,7 @@ it('lists the tools as JSON with the server name and version', function () {
                 ],
                 [
                     'name' => 'query',
-                    'description' => __('firewatch::messages.tools.query'),
+                    'description' => __('firewatch::messages.tools.query', ['characters' => number_format(Bounds::CELL_CHARACTERS)]),
                     'inputSchema' => ['properties' => [
                         'sql' => ['description' => __('firewatch::messages.query_sql_argument'), 'type' => 'string'],
                         'limit' => ['description' => limitArgument('query', 500, 50), 'type' => 'integer'],

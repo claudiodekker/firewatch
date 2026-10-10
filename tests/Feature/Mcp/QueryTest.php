@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\Bounds;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\RecordType;
@@ -378,7 +379,8 @@ test('the tool is listed with its description, arguments and annotations', funct
     $listing = app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
     $tool = collect($listing['tools'])->firstWhere('name', 'query');
 
-    expect($tool['description'])->toBe(__('firewatch::messages.tools.query'))
+    expect($tool['description'])->toBe(__('firewatch::messages.tools.query', ['characters' => number_format(Bounds::CELL_CHARACTERS)]))
+        ->and($tool['description'])->toContain(number_format(Bounds::CELL_CHARACTERS).' characters', 'substr(')
         ->and(str_word_count($tool['description']))->toBeLessThanOrEqual(150)
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['sql', 'limit', 'format'])
         ->and($tool['annotations'])->toBe(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false])
