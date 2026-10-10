@@ -35,11 +35,6 @@ class DatabaseBound implements Thresholded
     protected const AGGREGATE = 'aggregate';
 
     /**
-     * The percent a share is of its whole.
-     */
-    protected const PERCENT = 100;
-
-    /**
      * The decimals of a share in an answer.
      */
     protected const PERCENT_DECIMALS = 1;
@@ -57,7 +52,7 @@ class DatabaseBound implements Thresholded
      */
     public function threshold(): Threshold
     {
-        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: self::PERCENT, whole: false);
+        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: Ranking::PERCENT, whole: false);
     }
 
     /**
@@ -77,20 +72,20 @@ class DatabaseBound implements Thresholded
     {
         $meta = Markers::read($connection);
         $selected = Fragment::selecting($window, $group);
-        $bindings = [
+        $requests = new Fragment($selected->sql, [
             ...$selected->bindings,
             'from' => History::removedThrough($meta, [RecordType::QUERY]),
-        ];
+        ]);
 
         $described = $this->threshold()->describe($threshold);
-        $population = $this->population($connection, $window, $selected, $bindings);
+        $population = $this->population($connection, $window, $requests);
 
         if ($population['examined'] === 0) {
             return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS);
         }
 
         $caveats = $this->caveats($population['incomplete']);
-        $groups = $this->groups($connection, $window, $selected, $bindings);
+        $groups = $this->groups($connection, $window, $requests);
         $judged = array_sum(array_column($groups, 'requests'));
         $saw = $judged === $population['examined'] ? [] : ['without_duration' => $population['examined'] - $judged];
 
@@ -101,7 +96,7 @@ class DatabaseBound implements Thresholded
 
         $shown = Judgement::worst($bound, $this->worse(...), $limit);
         $shownGroups = array_column($shown, 'group');
-        $queries = $this->topQueries($connection, $window, $selected, $bindings, array_column($shownGroups, 'group_hash'));
+        $queries = $this->topQueries($connection, $window, $requests, array_column($shownGroups, 'group_hash'));
         $findings = array_map(
             fn (array $entry) => $this->finding($entry['group'], $entry['typical'], $queries[$entry['group']['group_hash']] ?? []),
             $shown,
@@ -113,10 +108,9 @@ class DatabaseBound implements Thresholded
     /**
      * Get what the window holds.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return array{examined: int, incomplete: int}
      */
-    protected function population(SQLite3 $connection, Window $window, Fragment $selected, array $bindings): array
+    protected function population(SQLite3 $connection, Window $window, Fragment $selected): array
     {
         $counted = Stored::number('queries');
 
@@ -124,7 +118,7 @@ class DatabaseBound implements Thresholded
             count(*) FILTER (WHERE eligible AND counted > captured) AS incomplete
             FROM (SELECT counted, (:from IS NULL OR started_at >= :from) AS eligible,
                 CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = requests.execution_id) ELSE 0 END AS captured
-                FROM (SELECT started_at, execution_id, {$counted} AS counted FROM requests WHERE {$selected->sql}) AS requests)", $bindings, $window)[0];
+                FROM (SELECT started_at, execution_id, {$counted} AS counted FROM requests WHERE {$selected->sql}) AS requests)", $selected->bindings, $window)[0];
 
         return [
             'examined' => $row['examined'],
@@ -135,10 +129,9 @@ class DatabaseBound implements Thresholded
     /**
      * Get what the requests that have a duration say of each group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, Fragment $selected, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $selected): array
     {
         $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
         $durationMicros = Stored::number('duration');
@@ -163,7 +156,7 @@ class DatabaseBound implements Thresholded
             max(CASE WHEN by_latest = 1 THEN route_path END) AS route_path,
             min(started_at) AS first_seen, max(started_at) AS last_seen,
             count(DISTINCT user_id) AS actors, count(*) FILTER (WHERE user_id IS NULL) AS anonymous
-        FROM ranked GROUP BY group_hash", $bindings, $window);
+        FROM ranked GROUP BY group_hash", $selected->bindings, $window);
     }
 
     /**
@@ -206,7 +199,7 @@ class DatabaseBound implements Thresholded
             return false;
         }
 
-        return $percent * $typical['duration_micros'] <= $typical['query_micros'] * self::PERCENT;
+        return $percent * $typical['duration_micros'] <= $typical['query_micros'] * Ranking::PERCENT;
     }
 
     /**
@@ -241,7 +234,7 @@ class DatabaseBound implements Thresholded
      */
     protected function share(array $typical): float
     {
-        return round(self::PERCENT * $typical['query_micros'] / $typical['duration_micros'], self::PERCENT_DECIMALS);
+        return round(Ranking::PERCENT * $typical['query_micros'] / $typical['duration_micros'], self::PERCENT_DECIMALS);
     }
 
     /**
@@ -255,7 +248,7 @@ class DatabaseBound implements Thresholded
     protected function finding(array $group, array $typical, array $queries): array
     {
         $share = $this->share($typical);
-        $aggregate = round(self::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
+        $aggregate = round(Ranking::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
         $route = Stored::blank($group['route_path']);
 
         return [
@@ -283,15 +276,14 @@ class DatabaseBound implements Thresholded
     /**
      * Get the queries that took longest in the requests of each group, by the group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @param  list<string>  $groups
      * @return array<string, list<array<string, mixed>>>
      */
-    protected function topQueries(SQLite3 $connection, Window $window, Fragment $selected, array $bindings, array $groups): array
+    protected function topQueries(SQLite3 $connection, Window $window, Fragment $selected, array $groups): array
     {
         $names = array_map(fn (int $index) => "member{$index}", array_keys($groups));
         $members = implode(', ', array_map(fn (string $name) => ":{$name}", $names));
-        $bindings = [...$bindings, ...array_combine($names, $groups)];
+        $bindings = [...$selected->bindings, ...array_combine($names, $groups)];
         $top = self::TOP_QUERIES;
         $durationMicros = Stored::number('duration');
 

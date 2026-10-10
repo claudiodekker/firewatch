@@ -35,7 +35,7 @@ class Executions
     /**
      * Get the SQL of the label of every execution, whenever it started.
      */
-    public static function labels(): Fragment
+    public static function labels(): string
     {
         $branches = array_map(fn (RecordType $type) => sprintf(
             'SELECT id, execution_id, started_at, %s AS label FROM %s',
@@ -43,7 +43,7 @@ class Executions
             $type->view(),
         ), ExecutionType::records());
 
-        return new Fragment('WITH labels AS ('.implode(' UNION ALL ', $branches).')');
+        return 'WITH labels AS ('.implode(' UNION ALL ', $branches).')';
     }
 
     /**

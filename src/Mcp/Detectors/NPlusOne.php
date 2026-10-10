@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -23,11 +24,6 @@ class NPlusOne implements Thresholded
      * The decimals of a share in an answer.
      */
     protected const PERCENT_DECIMALS = 1;
-
-    /**
-     * The percent a share is of its whole.
-     */
-    protected const PERCENT = 100;
 
     /**
      * The most call sites a finding lists.
@@ -225,7 +221,7 @@ class NPlusOne implements Thresholded
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
         $label = Stored::blank($worst['label']) ?? __('firewatch::messages.rank_no_route');
-        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(self::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
+        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(Ranking::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
 
         return [
             'group' => $row['eg'],

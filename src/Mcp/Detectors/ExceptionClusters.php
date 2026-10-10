@@ -158,7 +158,7 @@ class ExceptionClusters implements Thresholded
      */
     protected function units(SQLite3 $connection, Window $window, array $hashes): array
     {
-        $rows = Stored::rows($connection, Executions::labels()->sql.", occurrences AS (
+        $rows = Stored::rows($connection, Executions::labels().", occurrences AS (
             SELECT execution_id, execution_source AS source, group_hash
             FROM exceptions WHERE {$window->condition()} AND group_hash IN (SELECT value FROM json_each(:hashes))
         ), labelled AS (

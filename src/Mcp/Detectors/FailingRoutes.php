@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
 use ClaudioDekker\Firewatch\Mcp\Failure;
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -15,11 +16,6 @@ use SQLite3;
 class FailingRoutes implements Thresholded
 {
     use JudgesAtItsDefault;
-
-    /**
-     * The percent a share is of its whole.
-     */
-    protected const PERCENT = 100;
 
     /**
      * The decimals of a share in an answer.
@@ -142,7 +138,7 @@ class FailingRoutes implements Thresholded
      */
     protected function failurePct(array $row): float
     {
-        return round(self::PERCENT * $row['failed'] / $row['with_status'], self::PERCENT_DECIMALS);
+        return round(Ranking::PERCENT * $row['failed'] / $row['with_status'], self::PERCENT_DECIMALS);
     }
 
     /**

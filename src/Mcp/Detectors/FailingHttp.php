@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\Detectors\Concerns\JudgesAtItsDefault;
+use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -24,11 +25,6 @@ class FailingHttp implements Thresholded
      * The decimals of a share in an answer.
      */
     protected const PERCENT_DECIMALS = 1;
-
-    /**
-     * The percent a share is of its whole.
-     */
-    protected const PERCENT = 100;
 
     /**
      * Get the name of the shape the detector judges.
@@ -102,7 +98,7 @@ class FailingHttp implements Thresholded
         $worstFirst = 'failures DESC, CAST(failures AS REAL) / answered DESC, last_seen DESC, group_hash ASC';
 
         // A group hash is compared with IS, so that the requests the wire sent without one stay one group.
-        return Stored::rows($connection, "{$labels->sql}, calls AS MATERIALIZED (
+        return Stored::rows($connection, "{$labels}, calls AS MATERIALIZED (
             SELECT id, started_at, group_hash, host, execution_source AS source,
                 CASE WHEN instr(url, '?') > 0 THEN substr(url, 1, instr(url, '?') - 1) ELSE url END AS url,
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
@@ -176,7 +172,7 @@ class FailingHttp implements Thresholded
                 'host' => $row['host'],
                 'calls' => $row['calls'],
                 'failures' => $row['failures'],
-                'failure_pct' => round(self::PERCENT * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
+                'failure_pct' => round(Ranking::PERCENT * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
                 'status_counts' => Stored::json($row['status_counts']),
                 'top_urls' => Stored::json($row['top_urls']),
                 'ran_in' => array_map($this->unit(...), Stored::json($row['ran_in'])),

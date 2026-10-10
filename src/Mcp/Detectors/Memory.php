@@ -53,10 +53,7 @@ class Memory implements Thresholded
         $caveats = [__('firewatch::messages.detect_caveat_memory')];
 
         $executions = Executions::table($window, $group);
-        $groups = $this->groups($connection, $window, $executions, [
-            ...$executions->bindings,
-            'bytes' => Stored::bytes($threshold),
-        ]);
+        $groups = $this->groups($connection, $window, $executions, $threshold);
 
         $examined = array_sum(array_column($groups, 'executions'));
         $heavy = array_values(array_filter($groups, fn (array $row) => $row['executions_over'] > 0));
@@ -69,10 +66,9 @@ class Memory implements Thresholded
     /**
      * Get what the executions that have a peak say of each group.
      *
-     * @param  array<string, int|float|string|null>  $bindings
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, Fragment $executions, array $bindings): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $executions, int|float $megabytes): array
     {
         $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
 
@@ -93,7 +89,10 @@ class Memory implements Thresholded
             min(started_at) FILTER (WHERE reached) AS first_seen, max(started_at) FILTER (WHERE reached) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE reached) AS actors,
             count(*) FILTER (WHERE reached AND NULLIF(user_id, '') IS NULL) AS anonymous
-        FROM ranked GROUP BY group_hash", $bindings, $window);
+        FROM ranked GROUP BY group_hash", [
+            ...$executions->bindings,
+            'bytes' => Stored::bytes($megabytes),
+        ], $window);
     }
 
     /**
