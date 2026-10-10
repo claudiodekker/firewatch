@@ -22,7 +22,7 @@ class Stored
     /**
      * The decimals of a millisecond in an answer.
      */
-    public const MILLISECOND_DECIMALS = 2;
+    protected const MILLISECOND_DECIMALS = 2;
 
     /**
      * The decimals of a megabyte in an answer.

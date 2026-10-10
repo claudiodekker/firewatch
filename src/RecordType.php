@@ -357,6 +357,14 @@ enum RecordType: string
     }
 
     /**
+     * Determine if the type is one of the four executions.
+     */
+    public function isExecution(): bool
+    {
+        return ExecutionType::tryFrom($this->value) !== null;
+    }
+
+    /**
      * Determine if Nightwatch stamps the type's records when they end rather than when they start.
      */
     public function isStampedAtEnd(): bool

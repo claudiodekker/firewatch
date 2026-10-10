@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
-use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 
@@ -97,7 +96,7 @@ enum Measure: string
     {
         return match ($this) {
             self::OCCURRENCES, self::LAST_SEEN => true,
-            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY, self::QUERIES => in_array($type, ExecutionType::records(), true),
+            self::P95_MEMORY, self::P50_MEMORY, self::MAX_MEMORY, self::QUERIES => $type->isExecution(),
             default => $type !== RecordType::EXCEPTION,
         };
     }

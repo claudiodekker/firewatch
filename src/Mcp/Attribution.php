@@ -232,7 +232,7 @@ class Attribution
     {
         $types = self::parameters(RecordType::events());
         $executions = self::parameters(ExecutionType::records());
-        $children = self::parameters(array_filter(RecordType::events(), fn (RecordType $type) => ! in_array($type, ExecutionType::records(), true)));
+        $children = self::parameters(array_filter(RecordType::events(), fn (RecordType $type) => ! $type->isExecution()));
         $inheriting = "type IN ({$children}) AND NULLIF(user_id, '') IS NULL AND execution_id IS NOT NULL";
         $ownLink = self::linkOf('r');
         $executionLink = self::linkOf('x');

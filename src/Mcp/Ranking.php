@@ -272,7 +272,7 @@ class Ranking
             }
         }
 
-        if ($this->configuration !== null && self::isExecution($this->type)) {
+        if ($this->configuration !== null && $this->type->isExecution()) {
             $type = ExecutionType::from($this->type->value);
 
             foreach ($this->budgets($connection) as $hash => $budget) {
@@ -290,7 +290,7 @@ class Ranking
      */
     public function statistics(SQLite3 $connection): array
     {
-        $executions = self::isExecution($this->type);
+        $executions = $this->type->isExecution();
         $failure = Failure::expression($this->type) !== null;
 
         $aggregates = $this->query($connection, 'SELECT group_hash, count(*) AS occurrences, count(d) AS timed, min(d) AS min, avg(d) AS avg, max(d) AS max, sum(d) AS total, max(started_at) AS last, min(started_at) AS wfirst, count(DISTINCT deploy) AS deploys'
@@ -499,13 +499,12 @@ class Ranking
             ];
         }
 
-        if (self::isExecution($this->type)) {
-            $mb = Stored::megabytes(...);
+        if ($this->type->isExecution()) {
             $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
 
             $row += [
-                'p95_memory_mb' => $mb($memory),
-                'max_memory_mb' => $mb($group['mem_max']),
+                'p95_memory_mb' => Stored::megabytes($memory),
+                'max_memory_mb' => Stored::megabytes($group['mem_max']),
                 'queries' => $group['queries'] ?? null,
             ];
         }
@@ -620,14 +619,6 @@ class Ranking
     }
 
     /**
-     * Determine if a type is one of the four executions.
-     */
-    public static function isExecution(RecordType $type): bool
-    {
-        return in_array($type, ExecutionType::records(), true);
-    }
-
-    /**
      * Get the field a group of the type is labelled by.
      */
     public static function labelField(RecordType $type): string
@@ -660,7 +651,7 @@ class Ranking
                 $columns[] = 'method';
             }
 
-            if (self::isExecution($this->type)) {
+            if ($this->type->isExecution()) {
                 array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q', $this->type === RecordType::SCHEDULED_TASK ? "COALESCE(status = '".Outcome::SKIPPED->value."', 0) AS skipped" : '0 AS skipped');
                 array_push($columns, ...($this->type === RecordType::REQUEST ? ['route_methods', 'route_path'] : ['name']));
             }
