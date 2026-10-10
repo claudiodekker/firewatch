@@ -26,22 +26,37 @@ claude mcp add firewatch -- php artisan firewatch:server
 
 The server speaks MCP over stdio. Use only this command to start it, never `mcp:start` or `mcp:inspector`. To see the tools an assistant would get, run `php artisan firewatch:server --list`.
 
-Twelve tools exist so far:
+## Ask your assistant
 
-- `overview` answers what is wrong now, in a fixed order: the error rate of the requests, the slowest groups by total time, the records of each type, the user directory, the signed-in actors, and for each problem shape whether it found something, was clean or could not be evaluated.
-- `rank` lists the worst groups of one record type by a measure such as `p95_duration`, over a time window, optionally matched by label, split by deploy and paged with a cursor.
-- `occurrences` lists individual records for a group, type, execution, trace, job or user, newest first or by duration, memory or queries, with filters that fit each type and a cursor for the rest.
-- `execution` shows one request, command, job attempt or scheduled task in full: its outcome, stages, exceptions with their frames and a timeline of its children.
-- `trace` follows one trace or queued job: the request, commands and job attempts it touched in start order, and each job's path from dispatch to its attempts, with the wait before each.
-- `detect` runs problem shapes, worst first: `n-plus-one` a query one execution ran 3+ times; `database-bound` routes typically spending 60%+ in queries; `failing-routes` routes answering 400+; `failing-jobs` jobs with a failed or released attempt; `queue-latency` jobs pending or waiting 5+ seconds; `failing-tasks` failed or skipped scheduled tasks; `exception-clusters` exception groups, escaped first; `error-logs` error logs by message shape; `failing-http` hosts answering 400+; `cache` keys hit under 50% over 3+ reads, or with a failed write or delete; `memory` executions peaking at 64+ MB.
-- `actor` identifies one signed-in person from a user id, a username, a name or a part of either, and lists the window's executions tied to them by their own user, a job's dispatch or a child inside a command or task. It counts the work it cannot attribute. Several people who fit are listed and never guessed between.
-- `compare` answers "did my change help?": note `now` from an answer, change the code, use the application, then pass that value as `split_at`. Each group of one type is compared before and after it and gets a change such as slower, faster, steady, new or gone. To compare two deploys instead, pass `deploy_before` and `deploy_after` (set the identity with `FIREWATCH_DEPLOY`). A side with too few records, or none, is not evaluated.
-- `trend` answers "is this getting worse?": it cuts a window into 2 to 60 equal buckets (12 by default) and states a count, a maximum, average or total duration, or peak memory per bucket, whether it rose, fell or held, and the busiest bucket. Leave `since` or `until` out and the window runs from the first to the last record.
-- `query` runs the assistant's own read-only SQL, one statement over the record views and raw tables, in a separate PHP process that boots no framework. It needs `proc_open` enabled and `PHP_BINARY` to be an executable PHP.
-- `describe` is the map for `query`: what the store holds, the deploy strings, the units, and every object and column the SQL can read, with example values. It answers before anything is recorded, and `type` narrows it to one record type or `user`.
-- `fingerprint` turns something you read in source (a route's methods and path, a job or command name, a query's connection and SQL, a cache key, a host, a mail class) into the group id Nightwatch gives it, says whether the store holds it, and checks the recipe against the newest whole stored record so a miss isn't read as "never ran".
+| Question | Tool |
+|---|---|
+| What is wrong with this app right now? | `overview` |
+| Which routes are slowest? | `rank` |
+| Is there an N+1 anywhere? | `detect` |
+| What did that failing request do, query by query? | `execution` |
+| What did this user hit? | `actor` |
+| Did my change make it slower? | `compare` |
+| Is this job getting slower over the week? | `trend` |
+| Which queries run most often? | `query` |
 
-Every tool answers in markdown, or in JSON with `format: json`, and each answer says which records it read and what Firewatch can't see. A clean `detect` answer counts what it examined.
+## Tools
+
+| Tool | Answers |
+|---|---|
+| `overview` | What is wrong right now, across everything |
+| `rank` | Which groups are worst by a measure |
+| `detect` | Named problem shapes with evidence |
+| `occurrences` | Individual records, filtered and ordered |
+| `execution` | One request, command, job attempt or task in full |
+| `trace` | A trace's executions and its queued-job lineage |
+| `actor` | One signed-in person's work |
+| `compare` | Before against after, per group |
+| `trend` | A measure over equal time buckets |
+| `query` | Read-only SQL over the store: one statement, 10 s limit, run in an isolated child process |
+| `describe` | Schema, store facts, deploys, units, examples |
+| `fingerprint` | The group id of something read in source |
+
+Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `queue-latency`, `failing-tasks`, `exception-clusters`, `error-logs`, `failing-http`, `cache`, `memory`.
 
 ## What gets captured
 
@@ -61,37 +76,33 @@ Firewatch decides once per process how it runs:
 
 ## Configuration
 
-Every key except `budgets` can be set from an environment variable, so publishing the file is optional:
-
-```bash
-php artisan vendor:publish --tag=firewatch-config
-```
-
-| Key | Environment variable | Default | Accepted values |
+| Key | Env | Default | Meaning |
 |---|---|---|---|
-| `enabled` | `FIREWATCH_ENABLED` | `true` | `true`, `false`, `1`, `0`, `yes`, `no`, `on`, `off` |
-| `environments` | `FIREWATCH_ENVIRONMENTS` | `local,testing` | names of letters, digits, `_`, `.` and `-`, comma-separated or a list |
-| `database` | `FIREWATCH_DATABASE` | `storage/firewatch/firewatch.sqlite` | a file path outside `public/`; relative paths resolve against the base path |
-| `busy_timeout` | `FIREWATCH_BUSY_TIMEOUT` | `300` | milliseconds, 0 to 5000 |
-| `retention.age` | `FIREWATCH_RETENTION_AGE` | `7d` | digits then `s`, `m`, `h`, `d` or `w` |
-| `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | 1 to 10000000 |
-| `deploy` | `FIREWATCH_DEPLOY` | unset | any string, cut at 255 bytes |
-| `capture.logs` | `FIREWATCH_CAPTURE_LOGS` | `true` | a boolean |
-| `capture.request_payload` | `FIREWATCH_CAPTURE_REQUEST_PAYLOAD` | `true` | a boolean |
-| `capture.redact_payload_fields` | `FIREWATCH_REDACT_PAYLOAD_FIELDS` | none | comma-separated or a list |
-| `capture.redact_headers` | `FIREWATCH_REDACT_HEADERS` | none | comma-separated or a list |
-| `budgets` | none | none | a list of budget entries |
+| `enabled` | `FIREWATCH_ENABLED` | `true` | the only on/off switch |
+| `environments` | `FIREWATCH_ENVIRONMENTS` | `local,testing` | environments where Firewatch captures |
+| `database` | `FIREWATCH_DATABASE` | `storage/firewatch/firewatch.sqlite` | store path, not under `public/` |
+| `busy_timeout` | `FIREWATCH_BUSY_TIMEOUT` | `300` | milliseconds a write waits for a lock, 0 to 5000 |
+| `retention.age` | `FIREWATCH_RETENTION_AGE` | `7d` | maximum record age (`30m`, `12h`, `7d`, `2w`) |
+| `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | maximum record count |
+| `deploy` | `FIREWATCH_DEPLOY` | `unset` | deploy label when Nightwatch has none |
+| `capture.logs` | `FIREWATCH_CAPTURE_LOGS` | `true` | capture logs |
+| `capture.request_payload` | `FIREWATCH_CAPTURE_REQUEST_PAYLOAD` | `true` | payload for 500 responses |
+| `capture.redact_payload_fields` | `FIREWATCH_REDACT_PAYLOAD_FIELDS` | `empty` | payload fields to redact |
+| `capture.redact_headers` | `FIREWATCH_REDACT_HEADERS` | `empty` | headers to redact |
+| `budgets` | `none` | `empty` | performance budgets |
 
-An invalid value never stops capture: that key falls back to its default, and console commands report the problem once.
+The environment variable beats the published file, which beats the default. The published file reads each variable, and a literal you write there replaces it. An invalid value falls back to its default and never stops capture. Issues are reported once per console process and by `firewatch:doctor`.
 
-A budget entry names an execution type (`request`, `command`, `job-attempt` or `scheduled-task`), optional matchers (`methods` and `path` for requests, `name` otherwise) and a `duration` ceiling in milliseconds, a `memory` ceiling in MB, or both. The first matching entry with a matcher governs, else the first entry of the type without one. `execution`, `rank` and `overview` judge against it: a group by its p95 from 20 executions that ran, else by its maximum. Add entries like these:
+A specific budget beats a global one. Durations are in milliseconds and memory in MB:
 
 ```php
 'budgets' => [
     ['type' => 'request', 'methods' => ['POST'], 'path' => 'checkout/*', 'duration' => 800, 'memory' => 64],
-    ['type' => 'command', 'name' => 'reports:*', 'duration' => 60000],
+    ['type' => 'scheduled-task', 'duration' => 5000],
 ],
 ```
+
+Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded and the doctor reports them. Two stores must not share a directory.
 
 ## The store
 
@@ -101,14 +112,23 @@ Records older than `retention.age` are pruned, and the store is trimmed when it 
 
 Capture never slows down or breaks your application. A batch that can't be written within `busy_timeout` is dropped, and the drop is noted in `failures.jsonl` beside the store, which answers then report. A store from an earlier Firewatch version is rebuilt, one from a later version is left alone, and a damaged one is moved aside as `firewatch.sqlite.corrupt`. A file that isn't Firewatch's is never touched.
 
-## Commands
+## Commands and diagnostics
 
-| Command | What it does |
+| Command | Options | Purpose |
+|---|---|---|
+| `firewatch:server` | `--list`, `--json` | the stdio MCP server; `--list` prints the tools without a session, `--json` with it |
+| `firewatch:doctor` | `--json` | checks the install, configuration and store; `--json` for machines |
+| `firewatch:clear` | `--type`, `--drop`, `--force` | clears the store |
+
+The doctor prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-line fix for warnings and failures. It exits 1 only when a check fails and changes nothing. It does not exist when Firewatch is stepped aside, so the missing command is the signal.
+
+| Symptom | Fix |
 |---|---|
-| `firewatch:server` | Runs the MCP server over stdio. `--list` prints its tools. |
-| `firewatch:clear` | Removes every record, the users and `failures.jsonl`, or with `--type=<type>` only that type's records, after a confirmation. `--force` skips the confirmation. |
-| `firewatch:clear --drop` | Rebuilds the store from scratch, including its diagnostics. Use it when the store is damaged or from another version. |
-| `firewatch:doctor` | Checks the installation, the configuration and the store without changing anything, and prints a line for each check with a fix for every warning or failure. `--json` prints the report as JSON. It exits with a failure only when a check fails. |
+| `Command "firewatch:doctor"` (or any `firewatch:` command) is not defined | The environment is not in `FIREWATCH_ENVIRONMENTS` |
+| The client shows the server as failed | Run `php artisan firewatch:doctor` |
+| The assistant sees no data | Run the doctor and read `store-activity` and `mode` |
+| Garbled or failed handshake | Application providers print output at boot: run the launch command by hand and look for output before the first message |
+| Behavior changed after upgrading | Restart the assistant session |
 
 ## Troubleshooting
 

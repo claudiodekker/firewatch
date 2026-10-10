@@ -1,14 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
-use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use Illuminate\Support\Arr;
-use Laravel\Mcp\Server\Transport\FakeTransporter;
-
-function toolListing(): array
-{
-    return app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
-}
 
 test('every tool description is at most 150 words', function () {
     $words = array_map(fn (array $tool) => str_word_count($tool['description']), toolListing()['tools']);
