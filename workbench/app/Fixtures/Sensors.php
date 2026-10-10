@@ -84,7 +84,9 @@ class Sensors
         $this->setEnvironmentVariable('WORKBENCH_BOOT_LOG', $producer->logsWhileBooting() ? '1' : null);
 
         try {
-            $app = Testbench::create(basePath: null, resolvingCallback: fn (Application $app) => $app->instance(WireRecorder::class, $recorder), options: ['extra' => ['dont-discover' => ['laravel/nightwatch'], 'providers' => [
+            $app = Testbench::create(basePath: null, resolvingCallback: function (Application $app) use ($recorder) {
+                $app->instance(WireRecorder::class, $recorder);
+            }, options: ['extra' => ['dont-discover' => ['laravel/nightwatch'], 'providers' => [
                 FirewatchServiceProvider::class,
                 WorkbenchServiceProvider::class,
             ]]]);
