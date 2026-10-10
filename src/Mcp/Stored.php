@@ -17,12 +17,12 @@ class Stored
     /**
      * The bytes in a megabyte.
      */
-    protected const MEGABYTE = 1048576;
+    public const MEGABYTE = 1048576;
 
     /**
      * The decimals of a millisecond in an answer.
      */
-    protected const MILLISECOND_DECIMALS = 2;
+    public const MILLISECOND_DECIMALS = 2;
 
     /**
      * The decimals of a megabyte in an answer.

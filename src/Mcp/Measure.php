@@ -26,7 +26,7 @@ enum Measure: string
     /**
      * The noise floor of a memory measure in bytes, because the runtime reports peak memory in steps of 2 MiB.
      */
-    protected const MEMORY_NOISE_FLOOR = 2 * Ranking::MEGABYTE;
+    protected const MEMORY_NOISE_FLOOR = 2 * Stored::MEGABYTE;
 
     /**
      * The measures only a trend states, which neither a ranking nor a comparison takes.
