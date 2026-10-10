@@ -24,6 +24,9 @@ jobs:
             laravel: '12.41.1'
             nightwatch: '~1.30.2'
             no-security-blocking: '1'
+          - php: '8.6'
+            laravel: '13.*'
+            nightwatch: '~1.30.2'
 
     steps:
       - uses: actions/checkout@v4
