@@ -298,6 +298,32 @@ describe('clearing everything', function () {
             ->and(clearIds())->toBe([]);
     });
 
+    it('writes the marker of the clear in the same transaction as each chunk it deletes', function () {
+        clearPopulatedStore();
+        $this->travelTo('2026-09-30 14:30:00');
+        $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
+        {
+            public array $commits = [];
+
+            public function transaction(Closure $callback): mixed
+            {
+                $result = parent::transaction($callback);
+
+                $this->commits[] = ['records' => count(clearIds()), 'clearedAt' => clearMarkers()->clearedAt];
+
+                return $result;
+            }
+        };
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => $writer, 'chunkRows' => 2]));
+
+        runClear()->run();
+
+        $deleting = array_filter($writer->commits, fn (array $commit) => $commit['records'] < 6);
+
+        expect(array_column($writer->commits, 'records'))->toContain(6, 4, 2, 0)
+            ->and(array_values(array_unique(array_column($deleting, 'clearedAt'), SORT_REGULAR)))->toBe([1790778600.0]);
+    });
+
     it('returns the freed pages to the file', function () {
         ingest(array_map(fn (int $i) => syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0 + $i]), range(1, 300)));
         $this->endCapture();
