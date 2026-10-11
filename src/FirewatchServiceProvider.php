@@ -201,6 +201,9 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->app->instance(Configuration::class, $configuration);
     }
 
+    /**
+     * Look for the git repository from the application's base path, unless a reader is already bound.
+     */
     protected function registerGitHead(): void
     {
         $this->app->bindIf(GitHead::class, fn () => new GitHead($this->app->basePath()));
@@ -311,6 +314,8 @@ class FirewatchServiceProvider extends ServiceProvider
     /**
      * Get the deploy identity to write to Nightwatch, or nothing so Nightwatch resolves its own.
      *
+     * When neither Firewatch nor Nightwatch has one, the deploy is the commit git HEAD points to.
+     *
      * @return array<string, string>
      */
     protected function deployment(): array
@@ -324,6 +329,9 @@ class FirewatchServiceProvider extends ServiceProvider
         return $deploy === null ? [] : ['nightwatch.deployment' => $deploy];
     }
 
+    /**
+     * Determine if Nightwatch's published config or its default platform variables hold a deploy.
+     */
     protected function nightwatchHasDeployment(): bool
     {
         $config = $this->app->make('config');
