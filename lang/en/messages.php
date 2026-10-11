@@ -93,7 +93,7 @@ return [
 
     'overview_next_execution' => 'Open the execution of the window that finished last, in full.',
 
-    'overview_by_deploy_argument' => 'true breaks the slowest list into a block per deploy, oldest first, with avg_ms; compare totals only within a block.',
+    'overview_by_deploy_argument' => 'true breaks the slowest list into a block per deploy, in the order first seen, with avg_ms; compare totals only within a block.',
 
     'overview_deploys_truncated_how' => 'The most recent deploys are shown: narrow the window with `since` or `until` to see the others.',
 

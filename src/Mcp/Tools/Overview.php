@@ -281,7 +281,7 @@ class Overview extends Tool
     }
 
     /**
-     * Get the calls that follow, the first five: the comparison of the newest deploys shown, the findings of each shape that has some, the ranking of the slowest group's type, and the execution of the window that finished last.
+     * Get the calls that follow, the first five: the comparison of the newest deploys shown (only with by_deploy, ahead of the rest), the findings of each shape that has some, the ranking of the slowest group's type, and the execution of the window that finished last.
      *
      * @param  list<Judgement>  $judgements
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>

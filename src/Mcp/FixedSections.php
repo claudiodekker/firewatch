@@ -282,11 +282,13 @@ class FixedSections
 
         usort($seen, fn (array $a, array $b) => ($a['first'] <=> $b['first']) ?: strcmp($a['deploy'] ?? '', $b['deploy'] ?? ''));
 
+        $blocks = array_map(fn (array $block) => [
+            'deploy' => $block['deploy'],
+            'groups' => self::deployGroups($connection, $window, self::top($block['leaders'])),
+        ], $seen);
+
         return [
-            'blocks' => array_map(fn (array $block) => [
-                'deploy' => $block['deploy'],
-                'groups' => self::deployGroups($connection, $window, self::top($block['leaders'])),
-            ], $seen),
+            'blocks' => $blocks,
             'matched' => $rows[0]['matched'] ?? 0,
         ];
     }

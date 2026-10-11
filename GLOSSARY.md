@@ -500,7 +500,7 @@ The entry-point tool that checks every problem shape and states the store's cove
 _Avoid_: Dashboard, summary tool
 
 **Fixed sections**:
-The parts of the overview that are read before any detector runs and that no deadline skips: the error rate, the slowest groups by total time, the record counts, the user directory and the actors. With `by_deploy` the slowest groups come as one block per deploy instead of one list: the five deploys that started last, listed in the order they were first seen, the records of no deploy a block of their own. Each group carries `avg_ms` beside its total, because a deploy that served more traffic totals more, so totals compare only within a block and averages across blocks.
+The parts of the overview that are read before any detector runs and that no deadline skips: the error rate, the slowest groups by total time, the record counts, the user directory and the actors. With `by_deploy` the slowest groups come as one block per deploy instead of one list: the five deploys whose timed records ran last, listed in the order they were first seen, the records of no deploy a block of their own. Each group carries `avg_ms` beside its total, because a deploy that served more traffic totals more, so totals compare only within a block and averages across blocks.
 _Avoid_: Header, statistics
 
 **Selector**:
