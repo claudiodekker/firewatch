@@ -16,9 +16,9 @@ class GroupSelection
      * @param  list<RecordType>  $held
      */
     protected function __construct(
-        public readonly ?string $group,
-        public readonly ?RecordType $named,
-        public readonly ?string $deploy,
+        protected ?string $group,
+        protected ?RecordType $named,
+        protected ?string $deploy,
         protected array $held,
     ) {
         //
@@ -87,18 +87,19 @@ class GroupSelection
     }
 
     /**
-     * Get the filters an empty answer names.
+     * Get why the answer is empty, naming the selection's filters around the tool's own, or null when it is not.
      *
      * @param  list<string>  $own
-     * @return list<string>
      */
-    public function filters(array $own = []): array
+    public function vacancy(Frame $frame, int $inWindow, bool $hasRows, array $own = []): ?Emptiness
     {
-        return [
+        $filters = [
             ...($this->group === null ? [] : ["group: {$this->group}"]),
             ...($this->named === null ? [] : ["type: {$this->named->value}"]),
             ...$own,
             ...($this->deploy === null ? [] : ["deploy: {$this->deploy}"]),
         ];
+
+        return $frame->vacancy(inWindow: $inWindow, groupHeld: $this->isHeld(), hasRows: $hasRows, filters: $filters);
     }
 }

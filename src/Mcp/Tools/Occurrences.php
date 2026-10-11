@@ -168,7 +168,7 @@ class Occurrences extends Tool
         }
 
         $hasRows = $read['listed'] !== null && $read['listed']['rows'] !== [];
-        $empty = $frame->vacancy(inWindow: $read['inWindow'], groupHeld: $read['selection']->isHeld(), hasRows: $hasRows, filters: $read['selection']->filters($this->given($ids, $filters)));
+        $empty = $read['selection']->vacancy($frame, $read['inWindow'], $hasRows, $this->given($ids, $filters));
 
         if ($empty !== null) {
             return $frame->empty($empty);

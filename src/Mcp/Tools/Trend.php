@@ -143,8 +143,7 @@ class Trend extends Tool
             return $frame->empty();
         }
 
-        [$selection, $window, $inWindow, $buckets] = $read;
-        $type = $selection->measured();
+        [$selection, $type, $window, $inWindow, $buckets] = $read;
 
         $frame->about($type === null ? [] : [$type], $window, facts: [CallFact::ANCHORED]);
 
@@ -152,7 +151,7 @@ class Trend extends Tool
             return $frame->empty();
         }
 
-        $empty = $frame->vacancy(inWindow: $inWindow, groupHeld: $selection->isHeld(), hasRows: $buckets !== null, filters: $selection->filters());
+        $empty = $selection->vacancy($frame, $inWindow, $buckets !== null);
 
         if ($empty !== null || $buckets === null) {
             return $frame->empty($empty);
@@ -170,7 +169,7 @@ class Trend extends Tool
     /**
      * Resolve the type, the measure and the coverage start, and read the buckets, in one snapshot.
      *
-     * @return array{GroupSelection, Window, int, Buckets|null}
+     * @return array{GroupSelection, RecordType|null, Window, int, Buckets|null}
      */
     protected function load(SQLite3 $connection, StoreFacts $facts, Arguments $arguments, Window $given, ?RecordType $explicit, ?string $group, ?string $deploy, int $count): array
     {
@@ -186,7 +185,7 @@ class Trend extends Tool
 
         $window = $buckets === null ? $given->derive(null, null) : $buckets->window;
 
-        return [$selection, $window, $window->count($connection), $buckets];
+        return [$selection, $type, $window, $window->count($connection), $buckets];
     }
 
     /**

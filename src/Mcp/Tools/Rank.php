@@ -21,6 +21,7 @@ use ClaudioDekker\Firewatch\Mcp\StageView;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
+use Closure;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -137,8 +138,7 @@ class Rank extends Tool
             $inWindow = $window->count($connection);
             $selection = GroupSelection::resolve($connection, $group, $explicit, $deploy, "rank(group: \"{$group}\")");
             $type = $selection->measured();
-            $filters = $selection->filters($matching === null ? [] : ["matching: {$matching}"]);
-            $unranked = fn (Frame $frame) => $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: $selection->isHeld(), hasRows: false, filters: $filters));
+            $unranked = fn (Frame $frame) => $frame->empty($selection->vacancy($frame, $inWindow, hasRows: false, own: $matching === null ? [] : ["matching: {$matching}"]));
 
             if ($type === null || ! $selection->isHeld()) {
                 return [$type, $unranked];
@@ -154,12 +154,12 @@ class Rank extends Tool
             if ($group === null) {
                 $ranked = $ranking->read($connection, $continuation->after(), $limit);
 
-                return [$type, fn (Frame $frame) => $this->ranking($continuation, $frame, $window, $filters, $inWindow, $type, $measure, $ranked)];
+                return [$type, fn (Frame $frame) => $this->ranking($continuation, $frame, $window, $unranked, $type, $measure, $ranked)];
             }
 
             $broken = $ranking->breakdown($connection, $limit);
 
-            return [$type, fn (Frame $frame) => $this->breakdown($frame, $filters, $inWindow, $type, $group, $selection, $broken)];
+            return [$type, fn (Frame $frame) => $this->breakdown($frame, $unranked, $type, $group, $selection, $broken)];
         });
 
         if ($read === null) {
@@ -182,14 +182,14 @@ class Rank extends Tool
     /**
      * Put the groups, worst first, in the envelope.
      *
-     * @param  list<string>  $filters
      * @param  Continuation<array{value: int|float|null, occurrences: int, hash: string}>  $continuation
+     * @param  Closure(Frame): Answer  $unranked
      * @param  array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
      */
-    protected function ranking(Continuation $continuation, Frame $frame, Window $window, array $filters, int $inWindow, RecordType $type, Measure $by, array $ranked): Answer
+    protected function ranking(Continuation $continuation, Frame $frame, Window $window, Closure $unranked, RecordType $type, Measure $by, array $ranked): Answer
     {
         if ($ranked['ranked'] === 0) {
-            return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
+            return $unranked($frame);
         }
 
         $page = $ranked['page'];
@@ -225,13 +225,13 @@ class Rank extends Tool
     /**
      * Put the deploys one group was recorded under in the envelope.
      *
-     * @param  list<string>  $filters
+     * @param  Closure(Frame): Answer  $unranked
      * @param  array{page: Rows<array<string, mixed>>, rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}  $breakdown
      */
-    protected function breakdown(Frame $frame, array $filters, int $inWindow, RecordType $type, string $group, GroupSelection $selection, array $breakdown): Answer
+    protected function breakdown(Frame $frame, Closure $unranked, RecordType $type, string $group, GroupSelection $selection, array $breakdown): Answer
     {
         if ($breakdown['rows'] === []) {
-            return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
+            return $unranked($frame);
         }
 
         $entry = $breakdown['page']->truncation(section: 'deploys', how: __('firewatch::messages.rank_truncated_how'), matched: $breakdown['matched']);

@@ -138,8 +138,7 @@ class Compare extends Tool
             return $frame->empty(notes: $notes);
         }
 
-        [$selection, $window, $inWindow, $comparison] = $read;
-        $type = $selection->measured();
+        [$selection, $type, $window, $inWindow, $comparison] = $read;
 
         $frame->about($type === null ? [] : [$type], $window, facts: $boundary->isInstant() ? [CallFact::ANCHORED] : [], straddling: $comparison?->straddling);
 
@@ -148,7 +147,7 @@ class Compare extends Tool
         }
 
         $hasRows = $comparison !== null && ! $comparison->isEmpty();
-        $empty = $frame->vacancy(inWindow: $inWindow, groupHeld: $selection->isHeld(), hasRows: $hasRows, filters: $selection->filters($boundary->filters()));
+        $empty = $selection->vacancy($frame, $inWindow, $hasRows, $boundary->filters());
 
         if ($empty !== null || $comparison === null) {
             return $frame->empty($empty, $notes);
@@ -168,7 +167,7 @@ class Compare extends Tool
     /**
      * Resolve the type and the window against the store, refuse a split outside the window, and compare, in one snapshot.
      *
-     * @return array{GroupSelection, Window, int, Comparison|null}
+     * @return array{GroupSelection, RecordType|null, Window, int, Comparison|null}
      */
     protected function load(SQLite3 $connection, StoreFacts $facts, Arguments $arguments, Window $given, float $epoch, Boundary $boundary, ?RecordType $explicit, ?string $group, int $limit): array
     {
@@ -187,7 +186,7 @@ class Compare extends Tool
             ? null
             : Comparison::of($connection, $type, $by, $window, $boundary, $coverageStart, $group, $limit);
 
-        return [$selection, $window, $inWindow, $comparison];
+        return [$selection, $type, $window, $inWindow, $comparison];
     }
 
     /**
