@@ -11,7 +11,6 @@ use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeSqlRunner;
-use Illuminate\Support\ProcessUtils;
 
 beforeEach(function () {
     $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
@@ -31,11 +30,20 @@ function srUnavailable(Unavailable $reason): void
 it('reports the SQL tool unavailable in the doctor without spawning a child', function () {
     srUnavailable(Unavailable::SPAWN_FAILED);
 
-    $result = app(ServerChecks::class)->sqlAccess();
-
-    expect($result->message)->toBe(__('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.spawn_failed')]))
-        ->and($result->fix)->toBe('run `'.ProcessUtils::escapeArgument(PHP_BINARY).' -r "echo 1;"` to see why a PHP process can\'t start');
+    expect(app(ServerChecks::class)->sqlAccess()->message)->toBe(__('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.spawn_failed')]));
 });
+
+it('quotes the PHP binary in the spawn_failed fix only when it needs quoting, for the platform\'s shell', function (string $osFamily, string $binary, string $expected) {
+    $runner = new FakeSqlRunner(reason: Unavailable::SPAWN_FAILED, binary: $binary);
+
+    expect((new ServerChecks(app(), $runner, $osFamily))->sqlAccess()->fix)
+        ->toBe("run `{$expected} -r \"echo 1;\"` to see why a PHP process can't start");
+})->with([
+    'windows without spaces' => ['Windows', 'C:\php\php.exe', 'C:\php\php.exe'],
+    'windows with spaces' => ['Windows', 'C:\Program Files\php\php.exe', '"C:\Program Files\php\php.exe"'],
+    'linux without spaces' => ['Linux', '/usr/bin/php', '/usr/bin/php'],
+    'linux with spaces' => ['Linux', '/opt/my php/php', "'/opt/my php/php'"],
+]);
 
 it('reports the SQL tool available in the doctor from a fake that finds nothing wrong, without spawning a child', function () {
     app()->instance(SqlRunner::class, new FakeSqlRunner);

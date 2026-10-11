@@ -2,7 +2,9 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Console\Doctor\InstallChecks;
+use ClaudioDekker\Firewatch\Console\Doctor\ServerChecks;
 use ClaudioDekker\Firewatch\Console\Doctor\StoreChecks;
+use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mode;
 use ClaudioDekker\Firewatch\NightwatchInstall;
@@ -19,12 +21,12 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
+use ClaudioDekker\Firewatch\Tests\Support\FakeSqlRunner;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Lang;
-use Illuminate\Support\ProcessUtils;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Events\IngestingEvents;
@@ -303,12 +305,25 @@ describe('nightwatch', function () {
         expect(doctorCheck('nightwatch'))->toMatchArray([
             'status' => 'fail',
             'message' => "Firewatch left Nightwatch {$version}'s ingest in place: {$reason}",
-            'fix' => __('firewatch::messages.doctor.nightwatch.api_fix', ['line' => '1.30']),
+            'fix' => 'resolve the reason above, or install laravel/nightwatch 1.30.* if a Nightwatch upgrade caused it',
         ]);
     })->with([
         'core not registered' => ['breakCore' => fn () => app()->offsetUnset(Core::class), 'reason' => 'its core is not registered'],
         'core without an ingest property' => ['breakCore' => fn () => app()->instance(Core::class, new stdClass), 'reason' => 'its core has no assignable ingest property'],
     ]);
+
+    it('fails with the message of an unexpected error in the swap, and still reports it', function () {
+        Exceptions::fake();
+        app()->bind(Ingest::class, fn () => throw new LogicException('the store is unreachable'));
+        registerFirewatch();
+
+        $version = app(NightwatchInstall::class)->version;
+        expect(doctorCheck('nightwatch'))->toMatchArray([
+            'status' => 'fail',
+            'message' => "Firewatch left Nightwatch {$version}'s ingest in place: the store is unreachable",
+        ]);
+        Exceptions::assertReported(fn (LogicException $exception) => $exception->getMessage() === 'the store is unreachable');
+    });
 });
 
 describe('nightwatch-order', function () {
@@ -1001,20 +1016,17 @@ describe('sql-access', function () {
 });
 
 describe('client', function () {
-    it('prints the absolute launch command on the SQL child\'s binary, quoted for the shell', function () {
-        $binary = PHP_OS_FAMILY === 'Windows' ? 'C:\Program Files\PHP\php.exe' : '/opt/my php/bin/php';
-        app()->instance(Availability::class, new Availability(phpBinary: $binary));
-        $artisan = base_path('artisan');
+    it('prints the absolute launch command on the SQL child\'s binary, quoting a path only when the platform\'s shell needs it', function (string $osFamily, string $binary, string $base, string $php, string $artisan) {
+        $checks = new ServerChecks(tap(app(), fn ($app) => $app->setBasePath($base)), new FakeSqlRunner(binary: $binary), $osFamily);
+        $path = $base.DIRECTORY_SEPARATOR.'artisan';
 
-        expect(doctorCheck('client'))->toBe([
-            'id' => 'client',
-            'status' => 'info',
-            'message' => PHP_OS_FAMILY === 'Windows'
-                ? "launch command: \"{$binary}\" \"{$artisan}\" firewatch:server (run from the project root)"
-                : "launch command: '{$binary}' '{$artisan}' firewatch:server (run from the project root)",
-            'fix' => null,
-        ]);
-    });
+        expect($checks->client()->message)->toBe('launch command: '.$php.' '.str_replace('{path}', $path, $artisan).' firewatch:server (run from the project root)');
+    })->with([
+        'windows without spaces' => ['Windows', 'C:\php\php.exe', '/srv/app', 'C:\php\php.exe', '{path}'],
+        'windows with spaces' => ['Windows', 'C:\Program Files\php\php.exe', '/srv/my app', '"C:\Program Files\php\php.exe"', '"{path}"'],
+        'linux without spaces' => ['Linux', '/usr/bin/php', '/srv/app', '/usr/bin/php', '{path}'],
+        'linux with spaces' => ['Linux', '/opt/my php/php', '/srv/my app', "'/opt/my php/php'", "'{path}'"],
+    ]);
 });
 
 describe('the report', function () {
@@ -1087,7 +1099,7 @@ describe('the report', function () {
                 ['id' => 'capture-posture', 'status' => 'info', 'message' => __('firewatch::messages.doctor.capture-posture.posture', ['fields' => __('firewatch::messages.doctor.none'), 'headers' => __('firewatch::messages.doctor.none'), 'payload' => __('firewatch::messages.doctor.on'), 'logs' => __('firewatch::messages.doctor.on')]), 'fix' => null],
                 ['id' => 'server', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.server.ok', ['version' => $listing['server']['version'], 'count' => 12]), 'fix' => null],
                 ['id' => 'sql-access', 'status' => 'warn', 'message' => __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.php_binary')]), 'fix' => __('firewatch::messages.doctor.sql-access.php_binary_fix')],
-                ['id' => 'client', 'status' => 'info', 'message' => __('firewatch::messages.doctor.client.launch', ['command' => ProcessUtils::escapeArgument($directory.'/no-php').' '.ProcessUtils::escapeArgument(base_path('artisan')).' firewatch:server']), 'fix' => null],
+                ['id' => 'client', 'status' => 'info', 'message' => __('firewatch::messages.doctor.client.launch', ['command' => $directory.'/no-php '.base_path('artisan').' firewatch:server']), 'fix' => null],
             ],
             'exit' => 0,
         ]);

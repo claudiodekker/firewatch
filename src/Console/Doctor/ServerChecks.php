@@ -7,7 +7,6 @@ use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\Sqlite;
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Support\ProcessUtils;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 
 /**
@@ -21,6 +20,7 @@ class ServerChecks
     public function __construct(
         protected Application $app,
         protected SqlRunner $runner,
+        protected string $osFamily = PHP_OS_FAMILY,
     ) {
         //
     }
@@ -68,19 +68,35 @@ class ServerChecks
             __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __("firewatch::messages.sql_unavailable.{$reason->value}")]),
             __("firewatch::messages.doctor.sql-access.{$reason->value}_fix", [
                 'binary' => $this->runner->phpBinary(),
-                'command' => ProcessUtils::escapeArgument($this->runner->phpBinary()),
+                'command' => $this->quote($this->runner->phpBinary()),
                 'minimum' => Sqlite::MINIMUM_VERSION,
             ]),
         );
     }
 
     /**
-     * Report the launch command an assistant's client runs, with absolute paths quoted for this platform's shell.
+     * Report the launch command an assistant's client runs, with absolute paths quoted when this platform's shell needs it.
      */
     public function client(): CheckResult
     {
-        $command = ProcessUtils::escapeArgument($this->runner->phpBinary()).' '.ProcessUtils::escapeArgument($this->app->basePath('artisan')).' '.ServerCommand::NAME;
+        $command = $this->quote($this->runner->phpBinary()).' '.$this->quote($this->app->basePath('artisan')).' '.ServerCommand::NAME;
 
         return CheckResult::info(__('firewatch::messages.doctor.client.launch', ['command' => $command]));
+    }
+
+    /**
+     * Quote an argument for this platform's shell only when it holds whitespace or a shell metacharacter.
+     */
+    protected function quote(string $argument): string
+    {
+        $windows = $this->osFamily === 'Windows';
+
+        if (! preg_match($windows ? '/[\s"\'&|<>()^;,%!]/' : '/[\s"\'\\\\&|<>()$`;*?\[\]{}!#~=%]/', $argument)) {
+            return $argument;
+        }
+
+        return $windows
+            ? '"'.str_replace('"', '\\"', $argument).'"'
+            : "'".str_replace("'", "'\\''", $argument)."'";
     }
 }

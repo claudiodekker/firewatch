@@ -487,8 +487,12 @@ class FirewatchServiceProvider extends ServiceProvider
                 Mode::ACTIVE => $this->app->make(Ingest::class),
                 Mode::OFF => new NullIngest,
             });
-        } catch (RuntimeException $exception) {
+        } catch (Throwable $exception) {
             $install->keptIngest($exception->getMessage());
+
+            if (! $exception instanceof RuntimeException) {
+                throw $exception;
+            }
 
             return;
         }

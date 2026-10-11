@@ -269,6 +269,7 @@ return [
             'unverified' => 'Nightwatch :version is newer than the verified :line line, so captured shapes may drift',
             'unverified_fix' => 'pin laravel/nightwatch to :line.* or upgrade Firewatch, and watch store-drift',
             'ingest_kept' => 'Firewatch left Nightwatch :version\'s ingest in place: :reason',
+            'ingest_kept_fix' => 'resolve the reason above, or install laravel/nightwatch :line.* if a Nightwatch upgrade caused it',
             'api' => 'Nightwatch :version lacks `:event`, so Firewatch can\'t veto its transmit',
             'api_fix' => 'install laravel/nightwatch :line.*',
         ],

@@ -169,7 +169,7 @@ class InstallChecks
         if ($this->install->ingestKept() !== null) {
             return CheckResult::fail(
                 __('firewatch::messages.doctor.nightwatch.ingest_kept', $facts),
-                __('firewatch::messages.doctor.nightwatch.api_fix', $facts),
+                __('firewatch::messages.doctor.nightwatch.ingest_kept_fix', $facts),
             );
         }
 
