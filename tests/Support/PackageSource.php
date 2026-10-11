@@ -71,6 +71,43 @@ class PackageSource
     }
 
     /**
+     * Get the classes, interfaces, traits and enums whose docblock marks them neither `@internal` nor `@api`.
+     *
+     * @return list<string>
+     */
+    public static function declarationsWithoutSurfaceTag(): array
+    {
+        $untagged = array_filter(
+            static::declarations(),
+            fn (string $name) => preg_match('/@(internal|api)\b/', (new ReflectionClass($name))->getDocComment() ?: '') !== 1,
+        );
+
+        return array_values($untagged);
+    }
+
+    /**
+     * Get the constants declared without a docblock, leaving out enum cases.
+     *
+     * @return list<string>
+     */
+    public static function undocumentedConstants(): array
+    {
+        $offences = [];
+
+        foreach (static::declarations() as $name) {
+            foreach ((new ReflectionClass($name))->getReflectionConstants() as $constant) {
+                if ($constant->getDeclaringClass()->getName() !== $name || $constant->isEnumCase() || $constant->getDocComment() !== false) {
+                    continue;
+                }
+
+                $offences[] = "{$name}::{$constant->name}";
+            }
+        }
+
+        return $offences;
+    }
+
+    /**
      * @param  Closure(PhpToken, list<PhpToken>, int): bool  $offends
      * @return list<string>
      */
@@ -345,6 +382,31 @@ class PackageSource
         }
 
         return $classes;
+    }
+
+    /**
+     * Get every class, interface, trait and enum the package source declares.
+     *
+     * @return list<class-string>
+     */
+    protected static function declarations(): array
+    {
+        $declarations = [];
+
+        foreach (static::files() as $relativePath => $contents) {
+            // Autoloading a plain script would run it, so only files that declare a type are loaded.
+            if (preg_match('/^\s*((abstract|final|readonly)\s+)*(class|interface|trait|enum)\s/m', $contents) !== 1) {
+                continue;
+            }
+
+            $name = static::ROOT_NAMESPACE.str_replace(['/', '.php'], ['\\', ''], $relativePath);
+
+            if (class_exists($name) || interface_exists($name) || trait_exists($name)) {
+                $declarations[] = $name;
+            }
+        }
+
+        return $declarations;
     }
 
     /**
