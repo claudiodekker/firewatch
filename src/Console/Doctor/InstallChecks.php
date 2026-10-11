@@ -155,16 +155,26 @@ class InstallChecks
     }
 
     /**
-     * Report the Nightwatch release against the verified line and the API the seam relies on.
+     * Report the Nightwatch release against the verified line, whether this process replaced its ingest, and the event the veto listens on.
      */
     public function nightwatch(): CheckResult
     {
         $facts = [
             'version' => $this->install->version,
             'line' => NightwatchInstall::VERIFIED_LINE,
+            'event' => $this->install->vetoEvent(),
+            'reason' => (string) $this->install->ingestKept(),
         ];
 
-        if (! $this->install->hasVetoEvent() || ! property_exists($this->install->vetoEvent(), 'records')) {
+        // The doctor runs Off, and Off passes through the same swap guard as Active.
+        if ($this->install->ingestKept() !== null) {
+            return CheckResult::fail(
+                __('firewatch::messages.doctor.nightwatch.ingest_kept', $facts),
+                __('firewatch::messages.doctor.nightwatch.api_fix', $facts),
+            );
+        }
+
+        if (! $this->install->hasVetoEvent()) {
             return CheckResult::fail(
                 __('firewatch::messages.doctor.nightwatch.api', $facts),
                 __('firewatch::messages.doctor.nightwatch.api_fix', $facts),

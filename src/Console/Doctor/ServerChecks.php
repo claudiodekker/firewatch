@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\Sqlite;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\ProcessUtils;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 
 /**
@@ -67,17 +68,18 @@ class ServerChecks
             __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __("firewatch::messages.sql_unavailable.{$reason->value}")]),
             __("firewatch::messages.doctor.sql-access.{$reason->value}_fix", [
                 'binary' => $this->runner->phpBinary(),
+                'command' => ProcessUtils::escapeArgument($this->runner->phpBinary()),
                 'minimum' => Sqlite::MINIMUM_VERSION,
             ]),
         );
     }
 
     /**
-     * Report the launch command an assistant's client runs, with absolute paths.
+     * Report the launch command an assistant's client runs, with absolute paths quoted for this platform's shell.
      */
     public function client(): CheckResult
     {
-        $command = PHP_BINARY.' '.$this->app->basePath('artisan').' '.ServerCommand::NAME;
+        $command = ProcessUtils::escapeArgument($this->runner->phpBinary()).' '.ProcessUtils::escapeArgument($this->app->basePath('artisan')).' '.ServerCommand::NAME;
 
         return CheckResult::info(__('firewatch::messages.doctor.client.launch', ['command' => $command]));
     }

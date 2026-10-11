@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeSqlRunner;
+use Illuminate\Support\ProcessUtils;
 
 beforeEach(function () {
     $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
@@ -33,7 +34,7 @@ it('reports the SQL tool unavailable in the doctor without spawning a child', fu
     $result = app(ServerChecks::class)->sqlAccess();
 
     expect($result->message)->toBe(__('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.spawn_failed')]))
-        ->and($result->fix)->toBe(__('firewatch::messages.doctor.sql-access.spawn_failed_fix', ['binary' => PHP_BINARY]));
+        ->and($result->fix)->toBe('run `'.ProcessUtils::escapeArgument(PHP_BINARY).' -r "echo 1;"` to see why a PHP process can\'t start');
 });
 
 it('reports the SQL tool available in the doctor from a fake that finds nothing wrong, without spawning a child', function () {
