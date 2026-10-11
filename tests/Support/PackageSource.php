@@ -442,7 +442,7 @@ class PackageSource
         }
 
         foreach (Finder::create()->files()->name('*.php')->in($path) as $file) {
-            $relativePath = ltrim(($directory === '' ? '' : "{$directory}/").$file->getRelativePathname(), '/');
+            $relativePath = ltrim(($directory === '' ? '' : "{$directory}/").str_replace('\\', '/', $file->getRelativePathname()), '/');
 
             yield $relativePath => $file->getContents();
         }
