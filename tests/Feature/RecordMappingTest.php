@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\RecordType;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Http\Request;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Nightwatch\Facades\Nightwatch;
+use Laravel\Octane\Events\RequestReceived;
 use Workbench\App\Notifications\OrderShipped;
 
 function forceRequestTo(string $uri): void
@@ -202,4 +204,19 @@ it('stores a record of an unknown type with its common columns filled from the w
         'server' => 'web-1',
         'data' => '{"execution_preview":"","execution_stage":"action","colour":"red"}',
     ]);
+});
+
+it('drops a log written between two Octane requests, as Nightwatch\'s own ingest does when the next request flushes it', function () {
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+
+    event(new RequestReceived(app(), app(), Request::create('/')));
+    test()->get('/');
+    Log::channel('nightwatch')->warning('The payment is slow.');
+    event(new RequestReceived(app(), app(), Request::create('/')));
+    test()->get('/');
+    Nightwatch::digest();
+
+    expect(storeRows("SELECT count(*) AS n FROM records WHERE type = 'request'"))->toBe([['n' => 2]])
+        ->and(storeRows("SELECT count(*) AS n FROM records WHERE type = 'log'"))->toBe([['n' => 0]]);
 });
