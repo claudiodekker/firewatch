@@ -40,14 +40,16 @@ it('finds the group of an exception thrown on an application line, and the recip
     test()->get('/invoices');
 
     $envelope = Envelope::assert(Fingerprint::class, ['type' => 'exception', 'class' => DomainException::class, 'file' => throwSiteFile(), 'line' => $line]);
-    $input = DomainException::class.',0,'.throwSiteFile().",{$line}";
+    $backslashed = Envelope::assert(Fingerprint::class, ['type' => 'exception', 'class' => DomainException::class, 'file' => str_replace('/', '\\', throwSiteFile()), 'line' => $line]);
+    $input = DomainException::class.',0,'.nativePath(throwSiteFile()).",{$line}";
 
     expect($envelope['result']['candidates'])->toBe([['group' => hash('xxh128', $input), 'input' => $input, 'assumption' => __('firewatch::messages.fingerprint_assumption_code_zero')]])
         ->and($envelope['result']['held'])->toHaveCount(1)
         ->and($envelope['result']['held'][0])->toMatchArray(['group' => hash('xxh128', $input), 'type' => 'exception', 'records' => 1, 'label' => DomainException::class])
         ->and($envelope['result']['recipe_check'])->toBe([['type' => 'exception', 'check' => 'agrees', 'detail' => null]])
         ->and($envelope['empty'])->toBeNull()
-        ->and($envelope['notes'])->toBe([]);
+        ->and($envelope['notes'])->toBe([])
+        ->and($backslashed['result'])->toBe($envelope['result']);
 });
 
 it('finds an exception thrown inside the framework by the application line that called it, not the vendor line', function () {
@@ -65,7 +67,7 @@ it('finds an exception thrown inside the framework by the application line that 
     $caller = Envelope::assert(Fingerprint::class, ['type' => 'exception', 'class' => ItemNotFoundException::class, 'file' => throwSiteFile(), 'line' => $line]);
     $inside = Envelope::assert(Fingerprint::class, ['type' => 'exception', 'class' => ItemNotFoundException::class, 'file' => $vendorFile, 'line' => (int) $vendorLine]);
 
-    expect($vendorFile)->toStartWith('vendor/laravel/framework/')
+    expect($vendorFile)->toStartWith(nativePath('vendor/laravel/framework/'))
         ->and($caller['result']['held'])->toHaveCount(1)
         ->and($caller['result']['recipe_check'][0]['check'])->toBe('agrees')
         ->and($inside['result']['held'])->toBe([])
@@ -83,14 +85,14 @@ it('finds an exception thrown in a Blade template by the template and no line, a
     $file = 'tests/Fixtures/views/invoice.blade.php';
     $envelope = Envelope::assert(Fingerprint::class, ['type' => 'exception', 'class' => RuntimeException::class, 'file' => $file]);
     $lined = Envelope::assert(Fingerprint::class, ['type' => 'exception', 'class' => RuntimeException::class, 'file' => $file, 'line' => 2]);
-    $input = RuntimeException::class.",0,{$file},";
+    $input = RuntimeException::class.',0,'.nativePath($file).',';
     $zero = __('firewatch::messages.fingerprint_assumption_code_zero');
 
     expect($envelope['result']['candidates'])->toBe([['group' => hash('xxh128', $input), 'input' => $input, 'assumption' => $zero]])
         ->and(array_column($envelope['result']['held'], 'group'))->toBe([hash('xxh128', $input)])
         ->and($envelope['result']['recipe_check'][0]['check'])->toBe('agrees')
         ->and($envelope['notes'])->toBe([__('firewatch::messages.fingerprint_view_note')])
-        ->and(array_column($lined['result']['candidates'], 'input'))->toBe([$input, RuntimeException::class.",0,{$file},2"])
+        ->and(array_column($lined['result']['candidates'], 'input'))->toBe([$input, RuntimeException::class.',0,'.nativePath($file).',2'])
         ->and(array_column($lined['result']['candidates'], 'assumption'))->toBe([__('firewatch::messages.fingerprint_assumption_view')."; {$zero}", __('firewatch::messages.fingerprint_assumption_ignition')."; {$zero}"])
         ->and(array_column($lined['result']['held'], 'group'))->toBe([hash('xxh128', $input)]);
 });
@@ -105,7 +107,7 @@ it('fingerprints a database exception by the SQLSTATE it carries as its code', f
     test()->get('/issues');
 
     $envelope = Envelope::assert(Fingerprint::class, ['type' => 'exception', 'class' => UniqueConstraintViolationException::class, 'file' => throwSiteFile(), 'line' => $line]);
-    $site = throwSiteFile().",{$line}";
+    $site = nativePath(throwSiteFile()).",{$line}";
     $zero = UniqueConstraintViolationException::class.",0,{$site}";
     $sqlState = UniqueConstraintViolationException::class.",23000,{$site}";
 
@@ -147,7 +149,7 @@ it('finds an exception thrown in a template included by another, whose render Ni
     [$stored] = storeRows('SELECT file FROM exceptions');
     $zero = __('firewatch::messages.fingerprint_assumption_code_zero');
 
-    expect($stored['file'])->toStartWith('tests/Fixtures/views/invoice.blade.php) (View: ')
+    expect($stored['file'])->toStartWith(nativePath('tests/Fixtures/views/invoice.blade.php').') (View: ')
         ->and(array_column($envelope['result']['candidates'], 'assumption'))->toBe([$zero, __('firewatch::messages.fingerprint_assumption_nested')."; {$zero}"])
         ->and(array_column($envelope['result']['held'], 'group'))->toBe([$envelope['result']['candidates'][1]['group']])
         ->and($envelope['result']['recipe_check'][0]['check'])->toBe('agrees');

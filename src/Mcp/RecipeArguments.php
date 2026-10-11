@@ -252,7 +252,7 @@ class RecipeArguments
     }
 
     /**
-     * Read a text argument as the field its recipe reads: a path trimmed to one leading slash, a domain without its scheme.
+     * Read a text argument as the field its recipe reads: a path trimmed to one leading slash, a domain without its scheme, a file in this host's separator.
      */
     protected static function textField(Arguments $arguments, RecordType $type, string $argument, mixed $value): string
     {
@@ -261,6 +261,7 @@ class RecipeArguments
         return match ($argument) {
             'path' => '/'.trim($text, '/'),
             'domain' => str_replace(['http://', 'https://'], '', $text),
+            'file' => Recipe::hostFile($text),
             default => $text,
         };
     }

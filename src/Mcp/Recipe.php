@@ -80,7 +80,17 @@ class Recipe
      */
     public static function isVendor(string $file): bool
     {
-        return str_starts_with($file, 'vendor/') || in_array($file, ['artisan', 'public/index.php'], true);
+        $path = str_replace('\\', '/', $file);
+
+        return str_starts_with($path, 'vendor/') || in_array($path, ['artisan', 'public/index.php'], true);
+    }
+
+    /**
+     * Get a file read in source, with either separator, as Nightwatch stores it on a host with the given separator.
+     */
+    public static function hostFile(string $file, string $separator = DIRECTORY_SEPARATOR): string
+    {
+        return str_replace(['/', '\\'], $separator, $file);
     }
 
     /**
