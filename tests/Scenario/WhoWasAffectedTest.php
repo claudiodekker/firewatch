@@ -99,7 +99,8 @@ it('says who was affected: the person meant, the work tied to them by each link,
     $result = $envelope['result'];
     $executions = $result['executions'];
     $activity = array_column($result['activity'], null, 'type');
-    $followed = array_map(Envelope::follow(...), $envelope['next']);
+    // PHP 8.6.0RC3 compiles array_map(Envelope::follow(...), ...) without the file's imports and looks for a global Envelope.
+    $followed = array_map(fn (array $call) => Envelope::follow($call), $envelope['next']);
 
     expect($ambiguous['result']['matched_by'])->toBe('contains')
         ->and(array_column($ambiguous['result']['candidates'], 'id'))->toBe(['7', '8'])
