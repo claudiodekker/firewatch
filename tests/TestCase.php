@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\GitHead;
 use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\NullIngest;
+use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Facade;
@@ -84,6 +85,8 @@ abstract class TestCase extends Orchestra
     }
 
     /**
+     * Let go of the ingest and the store writer, closing the store as the end of the capturing process would.
+     *
      * Laravel's static state keeps an application alive past its test, and Windows can't delete a store that is still open.
      */
     public function endCapture(): void
@@ -93,6 +96,8 @@ abstract class TestCase extends Orchestra
         if ($core instanceof Core && $core->ingest instanceof Ingest) {
             $core->ingest = new NullIngest;
         }
+
+        $this->app?->forgetInstance(Writer::class);
     }
 
     /**
