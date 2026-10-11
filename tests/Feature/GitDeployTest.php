@@ -25,7 +25,7 @@ function gitCleanup(string $path): void
     test()->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($path));
 }
 
-function gitDirectory(): string
+function gitEmptyDirectory(): string
 {
     $path = GitRepository::temporaryPath();
 
@@ -115,7 +115,7 @@ it('reads a submodule, whose .git file names a relative git directory', function
 
 it('follows a .git file that names an absolute git directory', function () {
     $repository = gitRepository();
-    $application = gitDirectory();
+    $application = gitEmptyDirectory();
     file_put_contents("{$application}/.git", "gitdir: {$repository->path}/.git\n");
 
     expect(deployUnderGit($application))->toBe($repository->head());
@@ -167,7 +167,7 @@ it('gives no deploy and no notice for what it cannot read', function (Closure $a
 ]);
 
 it('gives no deploy when there is no repository', function () {
-    expect(deployUnderGit(gitDirectory()))->toBeNull()
+    expect(deployUnderGit(gitEmptyDirectory()))->toBeNull()
         ->and(notices())->toBe([]);
 });
 
@@ -184,5 +184,16 @@ it('uses the git commit only when neither Firewatch nor Nightwatch has a deploy'
     'FIREWATCH_DEPLOY' => [['FIREWATCH_DEPLOY' => 'firewatch-deploy'], 'firewatch-deploy'],
     'NIGHTWATCH_DEPLOY' => [['NIGHTWATCH_DEPLOY' => 'nightwatch-deploy'], 'nightwatch-deploy'],
     'FORGE_DEPLOY_COMMIT' => [['FORGE_DEPLOY_COMMIT' => 'forge-commit'], 'forge-commit'],
+    'LARAVEL_CLOUD_DEPLOY_UUID' => [['LARAVEL_CLOUD_DEPLOY_UUID' => 'cloud-uuid'], 'cloud-uuid'],
+    'VAPOR_COMMIT_HASH' => [['VAPOR_COMMIT_HASH' => 'vapor-hash'], 'vapor-hash'],
     'both' => [['FIREWATCH_DEPLOY' => 'firewatch-deploy', 'NIGHTWATCH_DEPLOY' => 'nightwatch-deploy'], 'firewatch-deploy'],
 ]);
+
+it('leaves a deploy published in the application\'s nightwatch config file over git HEAD', function () {
+    test()->gitStart = gitRepository()->path;
+    config()->set('nightwatch.deployment', 'published-deploy');
+
+    registerFirewatch();
+
+    expect(config('nightwatch.deployment'))->toBe('published-deploy');
+});

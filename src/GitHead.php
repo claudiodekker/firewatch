@@ -39,8 +39,8 @@ class GitHead
             return null;
         }
 
-        if (preg_match(static::COMMIT, $head) === 1) {
-            return strtolower($head);
+        if (($commit = $this->commitFrom($head)) !== null) {
+            return $commit;
         }
 
         $ref = str_starts_with($head, 'ref:') ? trim(substr($head, 4)) : '';
@@ -110,7 +110,12 @@ class GitHead
     {
         $contents = $this->read("{$common}/{$ref}");
 
-        return $contents !== null && preg_match(static::COMMIT, $contents) === 1 ? strtolower($contents) : null;
+        return $contents === null ? null : $this->commitFrom($contents);
+    }
+
+    protected function commitFrom(string $text): ?string
+    {
+        return preg_match(static::COMMIT, $text) === 1 ? strtolower($text) : null;
     }
 
     protected function packedRef(string $common, string $ref): ?string
@@ -124,8 +129,8 @@ class GitHead
 
             [$commit, $name] = array_pad(explode(' ', $line, 2), 2, '');
 
-            if ($name === $ref && preg_match(static::COMMIT, $commit) === 1) {
-                return strtolower($commit);
+            if ($name === $ref) {
+                return $this->commitFrom($commit);
             }
         }
 

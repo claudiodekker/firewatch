@@ -332,7 +332,8 @@ class FirewatchServiceProvider extends ServiceProvider
             $deployment = $config->get('nightwatch.deployment');
         } else {
             // Nightwatch merges its defaults under the published file in its own register(), after this one.
-            $path = dirname((string) (new ReflectionClass(NightwatchServiceProvider::class))->getFileName()).'/../config/nightwatch.php';
+            $provider = (new ReflectionClass(NightwatchServiceProvider::class))->getFileName();
+            $path = dirname((string) $provider).'/../config/nightwatch.php';
             $defaults = is_file($path) ? require $path : [];
             $deployment = is_array($defaults) ? ($defaults['deployment'] ?? null) : null;
         }
