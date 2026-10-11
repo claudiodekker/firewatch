@@ -60,22 +60,22 @@ class DatabaseBound implements Detector
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $population = Population::every($connection, $meta, $window, $group, [RecordType::REQUEST]);
-        $requests = $population->executions;
+        $examination = Examination::every($connection, $meta, $window, $group, [RecordType::REQUEST]);
+        $requests = $examination->executions;
         $described = $this->threshold()->describe($threshold);
 
-        if ($population->examined === 0) {
+        if ($examination->examined === 0) {
             return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS);
         }
 
-        $caveats = $population->caveats();
+        $caveats = $examination->caveats();
         $groups = $this->groups($connection, $window, $requests);
         $judged = array_sum(array_column($groups, 'requests'));
-        $saw = $judged === $population->examined ? [] : ['without_duration' => $population->examined - $judged];
+        $saw = $judged === $examination->examined ? [] : ['without_duration' => $examination->examined - $judged];
 
         $bound = $this->bound($groups, $threshold);
         if ($bound === []) {
-            return Judgement::of($this->name(), $described, examined: $population->examined, total: 0, findings: [], saw: $saw, caveats: $caveats);
+            return Judgement::of($this->name(), $described, examined: $examination->examined, total: 0, findings: [], saw: $saw, caveats: $caveats);
         }
 
         $shown = Judgement::worst($bound, $this->worse(...), $limit);
@@ -86,7 +86,7 @@ class DatabaseBound implements Detector
             $shown,
         );
 
-        return Judgement::of($this->name(), $described, examined: $population->examined, total: count($bound), findings: $findings, saw: $saw, caveats: $caveats);
+        return Judgement::of($this->name(), $described, examined: $examination->examined, total: count($bound), findings: $findings, saw: $saw, caveats: $caveats);
     }
 
     /**
