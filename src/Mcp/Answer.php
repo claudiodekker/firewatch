@@ -241,7 +241,7 @@ class Answer
             $lines[] = __('firewatch::messages.next');
 
             foreach ($this->next as $call) {
-                $lines[] = '- '.$this->call($call).' - '.$call['why'];
+                $lines[] = '- '.Call::written($call['tool'], $call['arguments']).' - '.$call['why'];
             }
         }
 
@@ -322,22 +322,6 @@ class Answer
         }
 
         return true;
-    }
-
-    /**
-     * Get a drill-down call as it is written to a tool.
-     *
-     * @param  array{tool: string, arguments: array<string, mixed>, why: string}  $call
-     */
-    protected function call(array $call): string
-    {
-        $arguments = array_map(
-            fn (string $name, mixed $value) => $name.': '.json_encode($value, RecordMapper::JSON_FLAGS),
-            array_keys($call['arguments']),
-            $call['arguments'],
-        );
-
-        return $call['tool'].'('.implode(', ', $arguments).')';
     }
 
     /**
