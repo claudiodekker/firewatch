@@ -192,7 +192,10 @@ describe('a store in every state', function () {
     it('says the store is busy after its fixed wait, and deletes nothing', function () {
         clearPopulatedStore();
         $this->endCapture();
-        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => new Writer(app(Configuration::class), app(FailureLog::class), busyTimeoutMilliseconds: 20)]));
+        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class), app(Writer::class)) extends ClearStore
+        {
+            protected const BUSY_TIMEOUT_MILLISECONDS = 20;
+        });
         $connection = new SQLite3(clearStorePath());
         $connection->busyTimeout(20);
         $connection->exec('PRAGMA journal_mode = DELETE');

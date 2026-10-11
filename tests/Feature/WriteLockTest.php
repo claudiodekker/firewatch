@@ -174,6 +174,19 @@ it('gives the write what is left of the busy timeout after waiting for the lock'
     'without the bug' => ['3.51.3', true, 300],
 ]);
 
+it('waits as long as a caller asked for inside its callback, and as configured again after it', function (string $version) {
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $version);
+    $timeout = fn () => $writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA busy_timeout'));
+
+    $before = $timeout();
+    $during = $writer->waitingUpTo(5000, $timeout);
+
+    expect([$before, $during, $timeout()])->toBe([300, 5000, 300]);
+})->with([
+    'with the bug' => ['3.45.0'],
+    'without the bug' => ['3.51.3'],
+]);
+
 it('records a lock file it can\'t open as a filesystem failure', function () {
     registerFirewatchOnSqlite('3.45.0');
     mkdir(lockPath(), recursive: true);

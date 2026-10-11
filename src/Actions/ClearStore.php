@@ -23,7 +23,7 @@ class ClearStore
     /**
      * How long the clear waits for a busy store, in milliseconds, whatever capture is configured to wait.
      */
-    public const BUSY_TIMEOUT_MILLISECONDS = 5000;
+    protected const BUSY_TIMEOUT_MILLISECONDS = 5000;
 
     /**
      * The deletion the clear removes records and reclaims pages with.
@@ -32,8 +32,6 @@ class ClearStore
 
     /**
      * Create a new clear store action instance.
-     *
-     * @param  Writer  $writer  a writer of its own, which waits for a busy store as long as the clear does
      */
     public function __construct(
         protected Reader $reader,
@@ -66,6 +64,16 @@ class ClearStore
      * @return array{records: int, users: int, before: int, after: int, logInUse: bool}
      */
     public function clear(?RecordType $type): array
+    {
+        return $this->writer->waitingUpTo(static::BUSY_TIMEOUT_MILLISECONDS, fn () => $this->clearRecords($type));
+    }
+
+    /**
+     * Clear the store of every record, user and failure line, or of the records of one type, waiting for a busy store.
+     *
+     * @return array{records: int, users: int, before: int, after: int, logInUse: bool}
+     */
+    protected function clearRecords(?RecordType $type): array
     {
         $before = $this->size();
         $instant = Instant::now();
@@ -106,6 +114,17 @@ class ClearStore
      * @return array{damaged: bool, before: int, after: int, logInUse: bool}
      */
     public function drop(?StoreState $state): array
+    {
+        return $this->writer->waitingUpTo(static::BUSY_TIMEOUT_MILLISECONDS, fn () => $this->dropStore($state));
+    }
+
+    /**
+     * Rebuild the store in place as a fresh one, waiting for a busy store.
+     *
+     * @param  StoreState|null  $state  why the store was unusable, or null when it was healthy
+     * @return array{damaged: bool, before: int, after: int, logInUse: bool}
+     */
+    protected function dropStore(?StoreState $state): array
     {
         $before = $this->size();
 
