@@ -37,9 +37,9 @@ class BudgetSection
      */
     public static function read(SQLite3 $connection, Window $window, Configuration $configuration): self
     {
-        $ignored = $configuration->ignoredBudgetEntries;
+        $ignored = $configuration->budgets->ignored;
 
-        if ($configuration->budgets === []) {
+        if ($configuration->budgets->isEmpty()) {
             return new self(null, [], 0, $ignored);
         }
 

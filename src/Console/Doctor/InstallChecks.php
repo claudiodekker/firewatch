@@ -236,7 +236,7 @@ class InstallChecks
             __('firewatch::messages.doctor.budgets.issue_fix', ['key' => $issue->key]),
         ), $this->issues(Check::BUDGETS));
 
-        foreach ($this->shadowedEntries() as $number) {
+        foreach ($this->configuration->budgets->shadowed() as $number) {
             $results[] = CheckResult::info(__('firewatch::messages.doctor.budgets.shadowed', ['number' => $number]));
         }
 
@@ -244,7 +244,7 @@ class InstallChecks
             return $results;
         }
 
-        $count = count($this->configuration->budgets);
+        $count = count($this->configuration->budgets->entries);
 
         return [CheckResult::ok(trans_choice('firewatch::messages.doctor.budgets.ok', $count, ['count' => $count]))];
     }
@@ -313,31 +313,6 @@ class InstallChecks
             $issue->key === 'budgets', str_starts_with($issue->key, 'budgets[') => Check::BUDGETS,
             default => Check::CONFIG,
         };
-    }
-
-    /**
-     * Get the numbers of the global budget entries that an earlier global entry of the same type shadows.
-     *
-     * @return list<int>
-     */
-    protected function shadowedEntries(): array
-    {
-        $governed = [];
-        $shadowed = [];
-
-        foreach ($this->configuration->budgets as $entry) {
-            if (! $entry->isGlobal()) {
-                continue;
-            }
-
-            if (isset($governed[$entry->type->value])) {
-                $shadowed[] = $entry->number;
-            }
-
-            $governed[$entry->type->value] = true;
-        }
-
-        return $shadowed;
     }
 
     /**

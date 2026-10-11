@@ -10,6 +10,11 @@ namespace ClaudioDekker\Firewatch\Configuration;
 readonly class ConfigurationIssue
 {
     /**
+     * The characters of a string value quoted in an issue's reason.
+     */
+    protected const DESCRIBED_VALUE_CHARACTERS = 60;
+
+    /**
      * Create a new configuration issue instance.
      */
     public function __construct(
@@ -42,6 +47,20 @@ readonly class ConfigurationIssue
     public static function ignoredBudgetEntry(int $number, string $reason): static
     {
         return new static(key: "budgets[{$number}]", reason: $reason, effect: 'entry ignored');
+    }
+
+    /**
+     * Describe a value for an issue's reason.
+     */
+    public static function describe(mixed $value): string
+    {
+        return match (true) {
+            is_string($value) => json_encode(mb_substr($value, 0, static::DESCRIBED_VALUE_CHARACTERS), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR),
+            $value === null => 'null',
+            $value === [] => '[]',
+            is_scalar($value) => var_export($value, true),
+            default => get_debug_type($value),
+        };
     }
 
     /**
