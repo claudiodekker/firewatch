@@ -12,6 +12,7 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Support\Facades\Exceptions;
 
 const PRUNE_NOW = '2026-09-30 14:00:00';
 const PRUNE_CUTOFF = 1790172000.0;
@@ -329,6 +330,41 @@ describe('the pass', function () {
         expect(file_exists(dirname(app(Configuration::class)->database).'/failures.jsonl'))->toBeFalse();
     });
 
+    it('stops silently when a read of the pass finds the store busy', function () {
+        // WAL never blocks a reader, and leaving it needs every writer closed, which only this release's writers are.
+        app()->bind(Writer::class, fn () => new Writer(app(Configuration::class), sqliteVersion: '3.45.0'));
+        registerFirewatch();
+        requestsStartedAt([PRUNE_CUTOFF + 1]);
+        $this->endCapture();
+        $this->travelTo('2026-09-30 14:03:00');
+        $heldReader = new class(app(Configuration::class)) extends Reader
+        {
+            protected const BUSY_TIMEOUT_MILLISECONDS = 20;
+
+            public function snapshot(Closure $callback): mixed
+            {
+                $holder = new SQLite3($this->configuration->database);
+                $holder->exec('PRAGMA journal_mode = DELETE');
+                $holder->exec('BEGIN EXCLUSIVE');
+
+                try {
+                    return parent::snapshot($callback);
+                } finally {
+                    $holder->exec('ROLLBACK');
+                    $holder->close();
+                }
+            }
+        };
+
+        app()->instance(Pruner::class, new Pruner(app(Writer::class), $heldReader, app(Configuration::class)));
+        registerFirewatch();
+
+        requestsStartedAt([PRUNE_CUTOFF + 2]);
+
+        expect(pruneFailures())->toBe([]);
+        Exceptions::assertNothingReported();
+    });
+
     it('reports a step that fails for another reason, never throws it, and keeps the batch', function () {
         app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class)) extends Pruner
         {
@@ -347,7 +383,8 @@ describe('the pass', function () {
 
         expect($startedAts)->toBe([PRUNE_CUTOFF + 1])
             ->and($lines)->toHaveCount(1)
-            ->and($lines[0])->toMatchArray(['kind' => 'other', 'dropped' => 0]);
+            ->and($lines[0])->toMatchArray(['entry' => 'prune', 'kind' => 'other'])
+            ->and($lines[0])->not->toHaveKey('dropped');
     });
 });
 
@@ -582,7 +619,7 @@ it('trims a full store at once, though the pass of the minute was claimed, so th
     $startedAts = startedAts();
 
     expect(pruneFailures())->toHaveCount(1)
-        ->and(pruneFailures()[0])->toMatchArray(['kind' => 'full', 'dropped' => 5])
+        ->and(pruneFailures()[0])->toMatchArray(['entry' => 'batch', 'kind' => 'full', 'dropped' => 5])
         ->and($startedAts)->toContain((float) $first + 4)
         ->and($startedAts)->not->toContain(1790776001.0)
         ->and(pruneMarkers()->prunedReason)->toBe(PruneReason::SIZE);

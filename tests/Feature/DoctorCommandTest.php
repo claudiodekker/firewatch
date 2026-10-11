@@ -12,6 +12,7 @@ use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Instant;
+use ClaudioDekker\Firewatch\Store\Pruner;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
@@ -19,6 +20,7 @@ use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Lang;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Nightwatch\Events\IngestingEvents;
@@ -836,6 +838,42 @@ describe('store-losses', function () {
         app(FailureLog::class)->recovered(new RuntimeException('file is not a database'));
 
         expect(doctorCheck('store-losses')['status'])->toBe('ok');
+    });
+
+    it('names a failed prune apart from the dropped batches', function () {
+        app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class)) extends Pruner
+        {
+            protected function prune(float $now): void
+            {
+                throw new RuntimeException('the pass broke');
+            }
+        });
+
+        registerFirewatch();
+
+        ingest([syntheticRecord(RecordType::REQUEST)]);
+
+        $check = doctorCheck('store-losses');
+
+        expect($check['status'])->toBe('warn')
+            ->and($check['message'])->toStartWith('1 prune failed; the newest at ')
+            ->and($check['message'])->toEndWith('(other): the pass broke');
+
+        Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Firewatch could not prune the store: the pass broke');
+    });
+
+    it('quotes both a dropped batch and a failed prune and fixes the newest', function () {
+        doctorStorePath();
+        app(FailureLog::class)->record(new StoreFailure(FailureKind::BUSY, 'database is locked'), dropped: 2);
+        $this->travel(1)->seconds();
+        app(FailureLog::class)->pruneFailed(new StoreFailure(FailureKind::FULL, 'database or disk is full'));
+
+        $check = doctorCheck('store-losses');
+
+        expect($check['message'])->toStartWith('1 batch dropped, holding 2 records in all; the newest at ')
+            ->and($check['message'])->toContain('(busy): database is locked; 1 prune failed; the newest at ')
+            ->and($check['message'])->toEndWith('(full): database or disk is full')
+            ->and($check['fix'])->toBe(__('firewatch::messages.doctor.store-losses.full_fix'));
     });
 });
 

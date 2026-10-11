@@ -52,6 +52,7 @@
 - On Windows, `firewatch:clear --drop` says the store is busy and leaves a damaged store as it is while another process holds it open, instead of failing with "database disk image is malformed".
 - A new or rebuilt store records the version of Firewatch that created it as `firewatch_version` in `meta`.
 - `rank` with `group` gives a request or command group's stage view: the mean of each stage over its executions with every stage, each one's share, the `dominant_stage` and the stages of its slowest execution.
+- `firewatch:doctor`'s `store-losses` check names a failed prune apart from the dropped batches, and the first one is reported as a failed prune, not as a batch of 0 records. A prune that finds the store held by a reader ends quietly, as one held by a writer does.
 - A README covering the quick start, install, a configuration snippet for each assistant client, the dev-only warning, what is stored and never redacted, the tools, the blind spots, configuration, retention, commands and troubleshooting. A contract test fails when its configuration, tool, detector or command tables disagree with the code.
 - Firewatch is released under the MIT license.
 - Records are labelled with the commit git HEAD points to when neither `FIREWATCH_DEPLOY` nor Nightwatch has a deploy, so a deploy pair can compare the last commit with the one before it. Firewatch reads the commit from the repository's files and starts no `git` process.

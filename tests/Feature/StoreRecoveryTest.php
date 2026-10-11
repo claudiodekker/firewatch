@@ -262,7 +262,8 @@ describe('a damaged Firewatch store', function () {
         expect(recoveryKeys())->toBe(['new'])
             ->and(md5_file($path.'.corrupt'))->toBe($damaged)
             ->and(recoveryFailures())->toHaveCount(1)
-            ->and(recoveryFailures()[0])->toMatchArray(['at' => (float) $now->format('U.u'), 'kind' => 'corrupt', 'code' => 11, 'dropped' => 0])
+            ->and(recoveryFailures()[0])->toMatchArray(['at' => (float) $now->format('U.u'), 'entry' => 'recovery', 'kind' => 'corrupt', 'code' => 11])
+            ->and(recoveryFailures()[0])->not->toHaveKey('dropped')
             ->and(recoveryFailures()[0]['message'])->toEndWith('database disk image is malformed')
             ->and(app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->rebuiltWhy))->toBe('corrupt');
         Exceptions::assertNothingReported();
@@ -283,7 +284,8 @@ describe('a damaged Firewatch store', function () {
         expect(recoveryKeys())->toBe(['new'])
             ->and(md5_file(recoveryPath().'.corrupt'))->toBe($damaged)
             ->and(recoveryFailures())->toHaveCount(1)
-            ->and(recoveryFailures()[0])->toMatchArray(['kind' => 'corrupt', 'code' => 26, 'dropped' => 0]);
+            ->and(recoveryFailures()[0])->toMatchArray(['entry' => 'recovery', 'kind' => 'corrupt', 'code' => 26])
+            ->and(recoveryFailures()[0])->not->toHaveKey('dropped');
     })->with([
         'a writer that closes its connection per batch' => '3.45.1',
         'a writer that keeps its connection' => '3.51.3',

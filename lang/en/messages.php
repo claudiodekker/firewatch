@@ -341,9 +341,11 @@ return [
         ],
 
         'store-losses' => [
-            'ok' => 'no dropped batches',
+            'ok' => 'no dropped batches or failed prunes',
             'dropped' => ':batches dropped, holding :records in all; the newest at :at (:kind): :message',
             'batches' => '{1} :count batch|[2,*] :count batches',
+            'pruned' => ':prunes failed; the newest at :at (:kind): :message',
+            'prunes' => '{1} :count prune|[2,*] :count prunes',
             'busy_fix' => 'raise FIREWATCH_BUSY_TIMEOUT above :milliseconds ms, or close what holds the store',
             'full_fix' => 'free disk space or lower FIREWATCH_RETENTION_RECORDS',
             'other_fix' => 'act on the message, then run `php artisan firewatch:clear` to empty the log',

@@ -54,12 +54,16 @@ enum FailureKind: string
     public const SQLITE_NOTADB = 26;
 
     /**
-     * Classify why a batch could not be stored.
+     * Classify why a store operation failed.
      */
     public static function of(Throwable $exception): self
     {
         if ($exception instanceof StoreFailure) {
             return $exception->kind;
+        }
+
+        if ($exception instanceof StoreUnusable) {
+            return $exception->state === StoreState::BUSY ? self::BUSY : self::OTHER;
         }
 
         if (! $exception instanceof SQLite3Exception) {

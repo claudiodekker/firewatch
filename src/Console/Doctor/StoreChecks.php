@@ -208,18 +208,30 @@ class StoreChecks
     }
 
     /**
-     * Report the dropped batches the failure file holds, quoting the newest.
+     * Report the dropped batches and failed prunes the failure file holds, quoting the newest of each.
      */
     public function losses(): CheckResult
     {
         $dropped = $this->failures->dropped();
+        $prunes = $this->failures->prunes();
 
-        if ($dropped === []) {
+        if ($dropped === [] && $prunes === []) {
             return CheckResult::ok(__('firewatch::messages.doctor.store-losses.ok'));
         }
 
-        $newest = $dropped[count($dropped) - 1];
-        $records = $this->records(array_sum(array_column($dropped, 'dropped')));
+        $findings = [];
+
+        if ($dropped !== []) {
+            $findings[] = $this->droppedMessage($dropped);
+        }
+
+        if ($prunes !== []) {
+            $findings[] = $this->prunedMessage($prunes);
+        }
+
+        $failures = [...$dropped, ...$prunes];
+        usort($failures, fn (array $a, array $b) => $a['at'] <=> $b['at']);
+        $newest = $failures[count($failures) - 1];
 
         $fix = match (FailureKind::tryFrom($newest['kind'])) {
             FailureKind::BUSY => __('firewatch::messages.doctor.store-losses.busy_fix', ['milliseconds' => $this->configuration->busyTimeoutMilliseconds]),
@@ -227,16 +239,7 @@ class StoreChecks
             default => __('firewatch::messages.doctor.store-losses.other_fix'),
         };
 
-        return CheckResult::warn(
-            __('firewatch::messages.doctor.store-losses.dropped', [
-                'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', count($dropped), ['count' => count($dropped)]),
-                'records' => $records,
-                'at' => $this->moment($newest['at']),
-                'kind' => $newest['kind'],
-                'message' => $newest['message'],
-            ]),
-            $fix,
-        );
+        return CheckResult::warn(implode('; ', $findings), $fix);
     }
 
     /**
@@ -394,5 +397,40 @@ class StoreChecks
         }
 
         return Carbon::createFromTimestamp($epoch, date_default_timezone_get())->format('Y-m-d H:i:s T');
+    }
+
+    /**
+     * Get the message that counts the dropped batches and quotes the newest.
+     *
+     * @param  non-empty-list<array{at: float, kind: string, dropped: int, message: string}>  $dropped
+     */
+    protected function droppedMessage(array $dropped): string
+    {
+        $newest = $dropped[count($dropped) - 1];
+
+        return __('firewatch::messages.doctor.store-losses.dropped', [
+            'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', count($dropped), ['count' => count($dropped)]),
+            'records' => $this->records(array_sum(array_column($dropped, 'dropped'))),
+            'at' => $this->moment($newest['at']),
+            'kind' => $newest['kind'],
+            'message' => $newest['message'],
+        ]);
+    }
+
+    /**
+     * Get the message that counts the failed prunes and quotes the newest.
+     *
+     * @param  non-empty-list<array{at: float, kind: string, message: string}>  $prunes
+     */
+    protected function prunedMessage(array $prunes): string
+    {
+        $newest = $prunes[count($prunes) - 1];
+
+        return __('firewatch::messages.doctor.store-losses.pruned', [
+            'prunes' => trans_choice('firewatch::messages.doctor.store-losses.prunes', count($prunes), ['count' => count($prunes)]),
+            'at' => $this->moment($newest['at']),
+            'kind' => $newest['kind'],
+            'message' => $newest['message'],
+        ]);
     }
 }

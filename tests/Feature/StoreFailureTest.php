@@ -83,6 +83,7 @@ it('drops a batch when another process holds the write lock past the busy timeou
 
     expect(failureLines())->toBe([[
         'at' => (float) $now->format('U.u'),
+        'entry' => 'batch',
         'kind' => 'busy',
         'code' => 5,
         'message' => 'database is locked',
@@ -106,6 +107,7 @@ it('records a file that is not a Firewatch store by its kind', function (Closure
 
     expect(failureLines())->toBe([[
         'at' => (float) $now->format('U.u'),
+        'entry' => 'batch',
         'kind' => $kind,
         'code' => $code,
         'message' => sprintf($message, $database),
@@ -128,7 +130,7 @@ it('records a file that is not a Firewatch store by its kind', function (Closure
 
 it('keeps the latest 100 failure lines', function (int $earlier, int $kept) {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
-    $lines = array_map(fn (int $index) => json_encode(['at' => $index, 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 1]), range(1, $earlier));
+    $lines = array_map(fn (int $index) => json_encode(['at' => $index, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 1]), range(1, $earlier));
     file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', implode("\n", $lines)."\n");
 
     Cache::get('dropped');

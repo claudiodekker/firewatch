@@ -53,7 +53,7 @@ class Pruner
     /**
      * Run a pass after a batch was stored, if no process ran one in the last minute.
      *
-     * @throws SQLite3Exception|StoreFailure
+     * @throws SQLite3Exception|StoreFailure|StoreUnusable
      */
     public function run(): void
     {
@@ -69,7 +69,7 @@ class Pruner
     /**
      * Run a pass at once for a store that is full, whichever process claimed the minute.
      *
-     * @throws SQLite3Exception|StoreFailure
+     * @throws SQLite3Exception|StoreFailure|StoreUnusable
      */
     public function runNow(): void
     {
@@ -81,13 +81,13 @@ class Pruner
      *
      * @param  Closure(): void  $steps
      *
-     * @throws SQLite3Exception|StoreFailure
+     * @throws SQLite3Exception|StoreFailure|StoreUnusable
      */
     protected function unlessBusy(Closure $steps): void
     {
         try {
             $steps();
-        } catch (SQLite3Exception|StoreFailure $exception) {
+        } catch (SQLite3Exception|StoreFailure|StoreUnusable $exception) {
             if (FailureKind::of($exception) !== FailureKind::BUSY) {
                 throw $exception;
             }
