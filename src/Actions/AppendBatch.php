@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\Store\Markers;
+use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
 use SQLite3;
 use SQLite3Result;
@@ -18,14 +19,6 @@ use SQLite3Stmt;
  */
 class AppendBatch
 {
-    /**
-     * The statement that stores one record.
-     */
-    protected const INSERT = <<<'SQL'
-        INSERT INTO records (type, v, started_at, duration, group_hash, trace_id, execution_id, source, job_id, user_id, deploy, server, data)
-        VALUES (:type, :v, :started_at, :duration, :group_hash, :trace_id, :execution_id, :source, :job_id, :user_id, :deploy, :server, :data)
-        SQL;
-
     /**
      * The statement that adds a user to the directory, or refreshes one it holds.
      */
@@ -104,7 +97,7 @@ class AppendBatch
         $receivedAt = Instant::now();
 
         $this->writer->transaction(function (SQLite3 $connection) use ($rows, $users, $drift, $receivedAt) {
-            $this->execute($connection, static::INSERT, $rows);
+            $this->execute($connection, $this->insert(), $rows);
             $this->execute($connection, static::UPSERT_USER, $users);
             $driftRows = $this->driftRows($connection, $drift, $receivedAt);
 
@@ -113,6 +106,16 @@ class AppendBatch
         });
 
         $this->storedFirstBatch = true;
+    }
+
+    /**
+     * Get the statement that stores one record.
+     */
+    protected function insert(): string
+    {
+        $columns = [...Schema::COLUMNS, 'data'];
+
+        return 'INSERT INTO records ('.implode(', ', $columns).') VALUES (:'.implode(', :', $columns).')';
     }
 
     /**
