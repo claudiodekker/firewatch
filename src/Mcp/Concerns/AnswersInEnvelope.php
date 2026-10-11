@@ -41,7 +41,6 @@ trait AnswersInEnvelope
 
     /**
      * Get the window arguments, with the sentence that says what an absent bound means for the tool.
-     * The one tool that lists the accepted time forms is the one that passes $listsForms.
      *
      * @return array{since: StringType, until: StringType}
      */
