@@ -13,6 +13,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\Population;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
@@ -152,7 +153,7 @@ class Rank extends Tool
             }
 
             $measure = $by ?? $this->measure($arguments, $type, $group);
-            $ranking = new Ranking($type, $measure, $window, $deploy, $matching, $group, $this->configuration);
+            $ranking = new Ranking(new Population($type, $window, $deploy, $group), $measure, $matching, $this->configuration);
 
             if ($inWindow === 0) {
                 return [$type, $unranked];

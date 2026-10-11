@@ -55,8 +55,8 @@ class Buckets
             return new self($type, $by, $given->derive(null, null), null, [], null, ComparisonReason::OUTSIDE_COVERAGE, 0, null);
         }
 
-        $ranking = new Ranking($type, $by, Window::between($from, $given->until(), $given->timezone()), $deploy, group: $group);
-        $extent = $ranking->extent($connection);
+        $population = new Population($type, Window::between($from, $given->until(), $given->timezone()), $deploy, $group);
+        $extent = $population->extent($connection);
 
         if ($extent === null) {
             return null;
@@ -69,7 +69,7 @@ class Buckets
         $count = $until > $since ? $count : 1;
         $width = ($until - $since) / $count;
 
-        $rows = $ranking->buckets($connection, $since, $width, $count);
+        $rows = $population->buckets($connection, $by, $since, $width, $count);
         $buckets = array_map(fn (int $index) => self::bucket($by, $since, $until, $width, $count, $index, $rows[$index] ?? null, $coverageStart), range(0, $count - 1));
 
         $window = $given->derive($first, $last);
