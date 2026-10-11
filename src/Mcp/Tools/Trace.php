@@ -331,7 +331,7 @@ class Trace extends Tool
         return [
             'execution_id' => $execution['execution_id'],
             'source' => $execution['source'],
-            'label' => ExecutionHeader::label($type, $execution),
+            'label' => $type->labelOf($execution),
             'started_at' => $execution['started_at'],
             'duration_ms' => Stored::milliseconds($execution['duration']),
             'outcome' => ExecutionHeader::outcome($type, $execution),

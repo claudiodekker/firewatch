@@ -163,7 +163,7 @@ class BudgetSection
         return [
             'type' => $type->value,
             'group' => $hash,
-            'label' => Ranking::shownLabel($type, $budget['label']),
+            'label' => $type->groupLabel($budget['label']),
             'measure' => $worst['measure'],
             'unit' => $worst['unit'],
             'measured' => $worst['measured'],

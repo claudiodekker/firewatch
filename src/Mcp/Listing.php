@@ -284,17 +284,11 @@ class Listing
      */
     protected function name(?RecordType $type, array $data): ?string
     {
-        $name = match ($type) {
-            null, RecordType::LOG => null,
-            RecordType::REQUEST => $data['route_path'] ?? null,
-            RecordType::QUERY => $data['sql'] ?? null,
-            RecordType::OUTGOING_REQUEST => $data['host'] ?? null,
-            RecordType::CACHE_EVENT => $data['key'] ?? null,
-            RecordType::EXCEPTION, RecordType::MAIL, RecordType::NOTIFICATION => $data['class'] ?? null,
-            default => $data['name'] ?? null,
-        };
+        if ($type === null || $type === RecordType::LOG) {
+            return null;
+        }
 
-        return $type === RecordType::REQUEST && ($name === null || $name === '') ? __('firewatch::messages.rank_no_route') : $name;
+        return $type->labelOf($data);
     }
 
     /**

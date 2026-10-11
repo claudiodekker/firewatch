@@ -159,15 +159,15 @@ class ExceptionClusters implements Thresholded
             SELECT execution_id, execution_source AS source, group_hash
             FROM exceptions WHERE {$window->condition()} AND group_hash IN (SELECT value FROM json_each(:hashes))
         ), labelled AS (
-            SELECT execution_id, COALESCE(label, '') AS label, ROW_NUMBER() OVER (PARTITION BY execution_id ORDER BY started_at DESC, id DESC) AS position
+            SELECT execution_id, type, COALESCE(label, '') AS label, ROW_NUMBER() OVER (PARTITION BY execution_id ORDER BY started_at DESC, id DESC) AS position
             FROM (SELECT DISTINCT execution_id FROM occurrences WHERE execution_id IS NOT NULL) AS carried JOIN labels USING (execution_id)
         ), units AS (
-            SELECT occurrences.group_hash, occurrences.source, labelled.label, count(*) AS occurrences,
+            SELECT occurrences.group_hash, occurrences.source, labelled.type, labelled.label, count(*) AS occurrences,
                 ROW_NUMBER() OVER (PARTITION BY occurrences.group_hash ORDER BY count(*) DESC, occurrences.source, labelled.label) AS position
             FROM occurrences LEFT JOIN labelled ON labelled.execution_id = occurrences.execution_id AND labelled.position = 1
-            GROUP BY occurrences.group_hash, occurrences.source, labelled.label
+            GROUP BY occurrences.group_hash, occurrences.source, labelled.type, labelled.label
         )
-        SELECT group_hash, source, label, occurrences FROM units WHERE position <= ".self::UNITS.' ORDER BY group_hash, position', ['hashes' => json_encode($hashes, JSON_THROW_ON_ERROR)], $window);
+        SELECT group_hash, source, type, label, occurrences FROM units WHERE position <= ".self::UNITS.' ORDER BY group_hash, position', ['hashes' => json_encode($hashes, JSON_THROW_ON_ERROR)], $window);
 
         $units = [];
 
@@ -188,7 +188,7 @@ class ExceptionClusters implements Thresholded
     {
         return [
             'source' => $row['source'],
-            'label' => Executions::label($row['label']),
+            'label' => Executions::label($row['type'], $row['label']),
             'occurrences' => $row['occurrences'],
         ];
     }

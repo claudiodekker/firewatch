@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Cell;
 
 /**
  * @internal
@@ -20,12 +19,13 @@ class Executions
     {
         $selected = Fragment::selecting($window, $group);
         $branches = array_map(fn (RecordType $type) => sprintf(
-            "SELECT id, execution_id, started_at, group_hash, '%s' AS source, user_id, %s AS duration, %s AS counted, %s AS peak, %s AS label FROM %s WHERE %s",
+            "SELECT id, execution_id, started_at, group_hash, '%s' AS type, '%s' AS source, user_id, %s AS duration, %s AS counted, %s AS peak, %s AS label FROM %s WHERE %s",
+            $type->value,
             $type->source(),
             Stored::number('duration'),
             Stored::number('queries'),
             Stored::number('peak_memory_usage'),
-            self::labelField($type),
+            $type->labelColumn(),
             $type->view(),
             $selected->sql,
         ), ExecutionType::records());
@@ -39,8 +39,9 @@ class Executions
     public static function labels(): string
     {
         $branches = array_map(fn (RecordType $type) => sprintf(
-            'SELECT id, execution_id, started_at, %s AS label FROM %s',
-            self::labelField($type),
+            "SELECT id, execution_id, started_at, '%s' AS type, %s AS label FROM %s",
+            $type->value,
+            $type->labelColumn(),
             $type->view(),
         ), ExecutionType::records());
 
@@ -50,16 +51,8 @@ class Executions
     /**
      * Get the label of an execution as a finding shows it, or null when the store holds no execution to label.
      */
-    public static function label(mixed $label): mixed
+    public static function label(mixed $type, mixed $label): ?string
     {
-        return $label === null ? null : (Cell::blank($label) ?? __('firewatch::messages.rank_no_route'));
-    }
-
-    /**
-     * Get the column the executions of a type are labelled by.
-     */
-    protected static function labelField(RecordType $type): string
-    {
-        return $type === RecordType::REQUEST ? 'route_path' : 'name';
+        return is_string($type) ? RecordType::from($type)->groupLabel($label) : null;
     }
 }

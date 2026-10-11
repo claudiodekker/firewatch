@@ -9,7 +9,6 @@ use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
@@ -144,7 +143,7 @@ class NPlusOne implements Thresholded
 
         $sql = "{$executions->sql}, runs AS (
             SELECT executions.execution_id, executions.group_hash AS eg, queries.group_hash AS qg, executions.id, executions.started_at, executions.user_id,
-                executions.duration, executions.source, executions.label, count(*) AS runs, total(queries.duration) AS micros
+                executions.duration, executions.type, executions.source, executions.label, count(*) AS runs, total(queries.duration) AS micros
             FROM executions JOIN queries ON queries.execution_id = executions.execution_id
             WHERE (:from IS NULL OR executions.started_at >= :from) AND ({$trimmed} LIKE 'select%' OR {$trimmed} LIKE 'with%')
             GROUP BY executions.execution_id, queries.group_hash HAVING count(*) >= :runs
@@ -172,7 +171,7 @@ class NPlusOne implements Thresholded
         $sites = [];
         $queries = [];
 
-        foreach (Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, execution_id, runs, micros, duration, source, label, worst_position, latest_position FROM ranked WHERE worst_position = 1 OR latest_position = 1", $ranked->bindings, $window) as $row) {
+        foreach (Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, execution_id, runs, micros, duration, type, source, label, worst_position, latest_position FROM ranked WHERE worst_position = 1 OR latest_position = 1", $ranked->bindings, $window) as $row) {
             $executions[$this->key($row)][$row['worst_position'] === 1 ? 'worst' : 'latest'] = $row;
 
             if ($row['worst_position'] === 1 && $row['latest_position'] === 1) {
@@ -218,7 +217,7 @@ class NPlusOne implements Thresholded
         $worst = $details['executions'][$key]['worst'];
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
-        $label = Cell::blank($worst['label']) ?? __('firewatch::messages.rank_no_route');
+        $label = RecordType::from($worst['type'])->groupLabel($worst['label']);
         $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(Ranking::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
 
         return [

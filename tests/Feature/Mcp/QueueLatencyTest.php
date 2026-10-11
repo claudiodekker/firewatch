@@ -530,7 +530,7 @@ describe('the finding', function () {
     it('labels a group whose dispatch has no name', function () {
         ingest([qltPending('a', 9000, fields: ['name' => ''])]);
 
-        expect(qltAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.rank_no_route'));
+        expect(qltAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.group_unnamed'));
     });
 
     it('counts the distinct users of the late dispatches, and those without one apart', function () {

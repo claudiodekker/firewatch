@@ -278,6 +278,12 @@ describe('the finding', function () {
 
         expect(memAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.rank_no_route'));
     });
+
+    it('labels the group of a command that has no name without calling it a route', function () {
+        ingest([memExecution('one', 80 * MEM_MB, '', RecordType::COMMAND)]);
+
+        expect(memAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.group_unnamed'));
+    });
 });
 
 describe('the order', function () {

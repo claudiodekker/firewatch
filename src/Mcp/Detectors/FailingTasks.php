@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Mcp\Outcome;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Cell;
 use SQLite3;
 
 /**
@@ -93,7 +92,7 @@ class FailingTasks implements Thresholdless
     {
         return [
             'group' => $row['group_hash'],
-            'name' => Cell::blank($row['name']) ?? __('firewatch::messages.rank_no_route'),
+            'name' => RecordType::SCHEDULED_TASK->groupLabel($row['name']),
             'count' => $row['failed'] + $row['skipped'],
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],

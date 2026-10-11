@@ -106,7 +106,7 @@ class FailingRoutes implements Thresholded
 
         return [
             'group' => $group,
-            'name' => $unmatched ? __('firewatch::messages.rank_no_route') : $route,
+            'name' => RecordType::REQUEST->groupLabel($route),
             'count' => $row['failed'],
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],

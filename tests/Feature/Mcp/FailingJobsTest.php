@@ -11,6 +11,8 @@ use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Queue;
+use Laravel\Nightwatch\Facades\Nightwatch;
 
 const FJB_AT = 1790776000.0;
 
@@ -353,6 +355,23 @@ describe('the jobs', function () {
 });
 
 describe('the finding', function () {
+    it('names a job that has no name without calling it a route', function () {
+        test()->refreshApplication();
+        test()->loadLaravelMigrations();
+        config()->set('queue.default', 'database');
+        config()->set('queue.failed.driver', 'null');
+
+        Queue::push('');
+        Nightwatch::digest();
+        runArtisan(['command' => 'queue:work', '--once' => true]);
+
+        $envelope = fjbAnswer();
+
+        expect(storeRows('SELECT name FROM job_attempts'))->toBe([['name' => '']])
+            ->and(json_encode($envelope))->not->toContain(__('firewatch::messages.rank_no_route'))
+            ->and($envelope['result']['findings'][0]['name'])->toBe(__('firewatch::messages.group_unnamed'));
+    });
+
     it('states the group, its failed and released attempts, how its jobs ended, its latest failure and whom it reached', function () {
         ingest([
             fjbAttempt('worked', 1, 'processed', fields: ['timestamp' => FJB_AT, 'user' => 'u0']),
@@ -416,12 +435,6 @@ describe('the finding', function () {
         ]);
 
         expect(fjbAnswer()['result']['findings'][0])->toMatchArray(['group' => md5('ShipOrder'), 'name' => 'NewName']);
-    });
-
-    it('labels a group whose attempt has no name', function () {
-        ingest([fjbAttempt('a', 1, 'failed', fields: ['name' => ''])]);
-
-        expect(fjbAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.rank_no_route'));
     });
 
     it('counts the distinct users of the attempts that failed or were released, and those without one apart', function () {

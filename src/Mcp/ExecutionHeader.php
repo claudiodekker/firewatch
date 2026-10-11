@@ -25,7 +25,7 @@ class ExecutionHeader
             'trace_id' => $row['trace_id'],
             'source' => $row['source'],
             'group' => $row['group_hash'],
-            'label' => self::label($type, $row),
+            'label' => $type->labelOf($row),
             'outcome' => self::outcome($type, $row),
             'started_at' => $row['started_at'],
             'duration_ms' => Stored::milliseconds($row['duration']),
@@ -35,20 +35,6 @@ class ExecutionHeader
             'deploy' => Cell::blank($row['deploy']),
             'server' => Cell::blank($row['server']),
         ];
-    }
-
-    /**
-     * Get the display field a group is labelled by.
-     *
-     * @param  array<string, mixed>  $row
-     */
-    public static function label(RecordType $type, array $row): mixed
-    {
-        if ($type !== RecordType::REQUEST) {
-            return $row['name'] ?? null;
-        }
-
-        return Cell::blank($row['route_path'] ?? null) ?? __('firewatch::messages.rank_no_route');
     }
 
     /**

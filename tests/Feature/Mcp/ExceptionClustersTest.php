@@ -512,6 +512,14 @@ describe('the units', function () {
         'no route path' => [fn () => excExecution('a')->without('route_path')],
     ]);
 
+    it('labels an occurrence of a job that has no name without calling it a route', function () {
+        ingest([excExecution('a', '', RecordType::JOB_ATTEMPT), excException('a', fields: ['execution_source' => 'job'])]);
+
+        expect(excAnswer()['result']['findings'][0]['evidence']['units'])->toBe([
+            ['source' => 'job', 'label' => __('firewatch::messages.group_unnamed'), 'occurrences' => 1],
+        ]);
+    });
+
     it('labels an occurrence in the window by its execution that started before it', function () {
         ingest([
             excExecution('long', 'reports:build', RecordType::COMMAND, ['timestamp' => EXC_AT - 60]),
