@@ -225,7 +225,7 @@ A batch of wire records Firewatch could not store and discarded without retry, r
 _Avoid_: Lost event, failed write
 
 **Store failure**:
-One line recorded beside the store when a write, rebuild or recovery failed, kept apart from the store so it survives the store's own failure.
+One line recorded beside the store when a write or a prune failed or a damaged store was replaced, naming which as its entry, kept apart from the store so it survives the store's own failure.
 _Avoid_: Error log, exception
 
 **Foreign file**:
