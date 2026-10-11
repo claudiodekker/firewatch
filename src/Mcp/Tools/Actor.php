@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Attribution;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
@@ -132,7 +133,7 @@ class Actor extends Tool
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
         $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['who' => 'taylor']);
 
-        $frame->about(RecordType::events(), $window, actor: true);
+        $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR]);
 
         $read = $frame->read(fn (SQLite3 $connection) => $this->load($connection, $who, $window, $limit));
 

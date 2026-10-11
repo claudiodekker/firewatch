@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\Mcp\Accounting;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\BudgetVerdict;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Children;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -120,7 +121,7 @@ class Execution extends Tool
         $window = Window::none(reason: __('firewatch::messages.execution_window_reason'), timezone: $frame->timezone);
         $searched = $type === null ? ExecutionType::records() : [RecordType::from($type->value)];
 
-        $frame->about($searched, $window, anchored: $id === null);
+        $frame->about($searched, $window, facts: $id === null ? [CallFact::ANCHORED] : []);
 
         $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $id, $type));
 
@@ -130,7 +131,7 @@ class Execution extends Tool
 
         [$found, $traced] = $read;
 
-        $frame->about($found === null ? $searched : [RecordType::from($found['row']['type']), ...Children::types()], $window, anchored: $id === null);
+        $frame->about($found === null ? $searched : [RecordType::from($found['row']['type']), ...Children::types()], $window, facts: $id === null ? [CallFact::ANCHORED] : []);
 
         if ($frame->isEmpty()) {
             return $frame->empty();

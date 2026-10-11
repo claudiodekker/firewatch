@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
@@ -161,7 +162,7 @@ class Occurrences extends Tool
         $frame = $this->frame($now);
         $window = $this->window($request, $now, $frame->timezone, $cursor);
 
-        $frame->about($type === null ? RecordType::events() : [$type], $window, actor: $ids['user_id'] !== null);
+        $frame->about($type === null ? RecordType::events() : [$type], $window, facts: $ids['user_id'] !== null ? [CallFact::ACTOR] : []);
 
         $read = $frame->read(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $deploy, $filters, $limit, $selector, $cursor));
 
