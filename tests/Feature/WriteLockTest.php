@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
@@ -10,7 +11,7 @@ use Laravel\Nightwatch\Facades\Nightwatch;
 
 function registerFirewatchOnSqlite(string $version): void
 {
-    app()->bind(Writer::class, fn () => new Writer(app(Configuration::class), sqliteVersion: $version));
+    app()->bind(Writer::class, fn () => new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $version));
 
     registerFirewatch();
 }
@@ -87,7 +88,7 @@ it('writes without the lock file on SQLite builds without the bug', function (st
 ]);
 
 it('takes no lock file and keeps one connection on SQLite builds without the bug', function (string $version, bool $kept) {
-    $writer = new Writer(app(Configuration::class), sqliteVersion: $version);
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $version);
 
     $first = $writer->transaction(fn (SQLite3 $connection) => $connection);
     $second = $writer->transaction(fn (SQLite3 $connection) => $connection);
@@ -159,7 +160,7 @@ it('gives the write what is left of the busy timeout after waiting for the lock'
     Sleep::whenFakingSleep(function () {
         flock(test()->lockHandle, LOCK_UN);
     });
-    $writer = new Writer(app(Configuration::class), sqliteVersion: $version);
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $version);
 
     $result = $writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA busy_timeout'));
 
@@ -182,7 +183,7 @@ it('records a lock file it can\'t open as a filesystem failure', function () {
 });
 
 it('records a lock file it can\'t restrict to its owner as a filesystem failure', function () {
-    app()->bind(Writer::class, fn () => new class(app(Configuration::class), sqliteVersion: '3.45.0') extends Writer
+    app()->bind(Writer::class, fn () => new class(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.0') extends Writer
     {
         protected function makePrivate(string $path): bool
         {

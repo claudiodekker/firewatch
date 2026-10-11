@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Pruner;
 use ClaudioDekker\Firewatch\Store\PruneReason;
@@ -292,7 +293,7 @@ describe('the pass', function () {
 
     it('starts no pass for a batch that failed', function () {
         app(Writer::class)->transaction(fn () => null);
-        $writer = new class(app(Configuration::class)) extends Writer
+        $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
         {
             public int $transactions = 0;
 
@@ -303,7 +304,7 @@ describe('the pass', function () {
                 throw new StoreFailure(FailureKind::BUSY, 'busy');
             }
         };
-        app()->instance(Writer::class, $writer);
+        app()->bind(Writer::class, fn () => $writer);
         registerFirewatch();
 
         requestsStartedAt([PRUNE_CUTOFF - 1]);
@@ -537,7 +538,7 @@ describe('reclamation', function () {
 });
 
 it('drops a batch that would pass the ceiling as a full failure and never throws it', function () {
-    app()->instance(Writer::class, new class(app(Configuration::class)) extends Writer
+    app()->singleton(Writer::class, fn () => new class(app(Configuration::class), app(FailureLog::class)) extends Writer
     {
         public const SIZE_BACKSTOP_BYTES = 40 * 4096;
     });
@@ -563,7 +564,7 @@ function pruneFailures(): array
 }
 
 it('trims a full store at once, though the pass of the minute was claimed, so the next batch is taken', function (string $sqliteVersion) {
-    app()->instance(Writer::class, new class(app(Configuration::class), $sqliteVersion) extends Writer
+    app()->singleton(Writer::class, fn () => new class(app(Configuration::class), app(FailureLog::class), sqliteVersion: $sqliteVersion) extends Writer
     {
         public const SIZE_BACKSTOP_BYTES = 40 * 4096;
     });

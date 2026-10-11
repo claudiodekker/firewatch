@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreState;
@@ -23,7 +24,7 @@ function stateStore(): string
  */
 function stateCurrentStore(): string
 {
-    $writer = new Writer(app(Configuration::class), sqliteVersion: '3.45.1');
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
     $writer->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('cache-event', '{}')"));
 
     return app(Configuration::class)->database;

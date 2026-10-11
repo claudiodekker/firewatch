@@ -231,6 +231,6 @@ class ClearStore
      */
     protected function writer(): Writer
     {
-        return $this->writer ??= new Writer($this->configuration->withBusyTimeout(static::BUSY_TIMEOUT_MILLISECONDS));
+        return $this->writer ??= new Writer($this->configuration, $this->failures, static::BUSY_TIMEOUT_MILLISECONDS);
     }
 }

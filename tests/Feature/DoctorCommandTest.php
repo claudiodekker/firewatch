@@ -477,7 +477,7 @@ function doctorStorePath(): string
  */
 function doctorDamagedStore(int $offset): void
 {
-    $writer = new Writer(app(Configuration::class), sqliteVersion: '3.45.1');
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
     $writer->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('cache-event', '{}')"));
 
     $path = app(Configuration::class)->database;

@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\FileIdentity;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Filesystem\Filesystem;
@@ -13,7 +14,9 @@ function writerWith(?FileIdentity $identity = null, ?Closure $pid = null): Write
 
     test()->directories = [...test()->directories, $directory];
 
-    return new Writer($normaliser->resolve(['database' => $directory.'/firewatch.sqlite']), sqliteVersion: '3.51.3', identity: $identity, pid: $pid);
+    $configuration = $normaliser->resolve(['database' => $directory.'/firewatch.sqlite']);
+
+    return new Writer($configuration, new FailureLog($configuration), sqliteVersion: '3.51.3', identity: $identity, pid: $pid);
 }
 
 beforeEach(function () {
@@ -98,7 +101,7 @@ it('sees a store file swapped in right after its connection opened', function ()
     {
         public function __construct(Configuration $configuration)
         {
-            parent::__construct($configuration, sqliteVersion: '3.51.3');
+            parent::__construct($configuration, new FailureLog($configuration), sqliteVersion: '3.51.3');
         }
 
         protected function open(int $busyTimeoutMilliseconds): SQLite3
