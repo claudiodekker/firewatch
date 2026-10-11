@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Route;
 
+// A request's boot on the Windows runner can stall for over 300 ms, and the slow route must still dominate it.
 const WHICH_DEPLOY_SLOW_MS = 500;
 
 /**

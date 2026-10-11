@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Tests\Support\GitRepository;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Route;
 
+// A request's boot on the Windows runner can stall for over 300 ms, and the slowed route must still dominate it.
 const LAST_COMMIT_SLOWDOWN_MS = 500;
 
 /**

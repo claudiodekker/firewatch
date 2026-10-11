@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Route;
 
+// A warm request's boot on the Windows runner can stall for over 300 ms, so the cold run is compared with the median run.
 const COLD_RUN_MS = 400;
 
 /**
