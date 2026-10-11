@@ -39,6 +39,7 @@ class ClearStore
         protected FailureLog $failures,
         protected Writer $writer,
         protected int $chunkRows = Deletion::CHUNK_ROWS,
+        protected int $busyTimeoutMilliseconds = self::BUSY_TIMEOUT_MILLISECONDS,
     ) {
         $this->deletion = new Deletion($writer, $chunkRows);
     }
@@ -65,7 +66,7 @@ class ClearStore
      */
     public function clear(?RecordType $type): array
     {
-        return $this->writer->waitingUpTo(static::BUSY_TIMEOUT_MILLISECONDS, fn () => $this->clearRecords($type));
+        return $this->writer->waitingUpTo($this->busyTimeoutMilliseconds, fn () => $this->clearRecords($type));
     }
 
     /**
@@ -115,7 +116,7 @@ class ClearStore
      */
     public function drop(?StoreState $state): array
     {
-        return $this->writer->waitingUpTo(static::BUSY_TIMEOUT_MILLISECONDS, fn () => $this->dropStore($state));
+        return $this->writer->waitingUpTo($this->busyTimeoutMilliseconds, fn () => $this->dropStore($state));
     }
 
     /**

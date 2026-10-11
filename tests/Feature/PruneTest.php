@@ -375,13 +375,7 @@ describe('the pass', function () {
     });
 
     it('reports a step that fails for another reason, never throws it, and keeps the batch', function () {
-        app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class)) extends Pruner
-        {
-            protected function prune(float $now): void
-            {
-                throw new RuntimeException('the pass broke');
-            }
-        });
+        app()->instance(Pruner::class, app()->make(Pruner::class, ['reader' => new Reader(app(Configuration::class), sqliteVersion: '3.30.0')]));
         registerFirewatch();
 
         requestsStartedAt([PRUNE_CUTOFF + 1]);
