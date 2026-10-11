@@ -5,14 +5,10 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Catalogue;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
-use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\EmptyKind;
 use ClaudioDekker\Firewatch\Mcp\Holdings;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -25,10 +21,7 @@ use ClaudioDekker\Firewatch\Sql\Child\Policy;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\FailureLog;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreState;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
@@ -127,57 +120,41 @@ class Describe extends Tool
         $type = $this->type($request);
         $catalogue = new Catalogue;
 
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::none(reason: __('firewatch::messages.describe_window_reason'), timezone: $timezone);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
-        $types = $type === null ? RecordType::events() : [$type];
-        $structural = BlindSpots::for($types, actor: $type === RecordType::USER, storeLevel: $type === null);
+        $frame = $this->frame($now);
 
-        try {
-            [$holdings, $facts, $samples] = $this->reader->snapshot(fn (SQLite3 $connection) => [
-                Holdings::read($connection),
-                StoreFacts::read($connection),
-                $type === null ? [] : $this->samples($connection, $catalogue, $type),
-            ]);
-        } catch (StoreUnusable $unusable) {
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
-            $summary = $unusable->state === StoreState::ABSENT ? 'describe_summary_absent' : 'describe_summary_unusable';
+        $frame->about(
+            types: $type === null ? RecordType::events() : [$type],
+            window: Window::none(reason: __('firewatch::messages.describe_window_reason'), timezone: $frame->timezone),
+            actor: $type === RecordType::USER,
+            storeLevel: $type === null,
+        );
 
-            return new Answer(
-                tool: $this->name(),
-                now: $epoch,
-                timezone: $timezone,
-                window: $window,
+        $read = $frame->read(fn (SQLite3 $connection) => [
+            Holdings::read($connection),
+            $type === null ? [] : $this->samples($connection, $catalogue, $type),
+        ]);
+
+        if ($read === null) {
+            $empty = $frame->unusable();
+            $summary = $empty->kind === EmptyKind::NO_STORE ? 'describe_summary_absent' : 'describe_summary_unusable';
+
+            return $frame->answer(
                 summary: __("firewatch::messages.{$summary}"),
                 empty: $empty,
                 result: $type === null ? [...$this->schemaSections($catalogue), ...$this->sqlSection($catalogue)] : $this->columnsSection($catalogue, $type, records: null, samples: []),
-                coverage: $coverage,
-                blindSpots: [...$structural, ...$this->conditions->for(null, $types, $window)],
             );
         }
 
-        $history = History::of($facts->meta, $types, ...$retention);
-        $empty = $holdings->records === 0 ? Emptiness::storeEmpty($this->configuration->database) : null;
-        $coverage = $empty === null
-            ? new Coverage(CoverageState::OK, $types, $history, oldest: $holdings->oldest, newest: $holdings->newest, records: $holdings->records)
-            : new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
+        [$holdings, $samples] = $read;
 
         $result = $type === null
-            ? $this->storeSections($catalogue, $holdings, $facts)
+            ? $this->storeSections($catalogue, $holdings, $frame->facts())
             : $this->columnsSection($catalogue, $type, records: $holdings->of($type), samples: $samples);
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $this->summary($type, $holdings, $result),
-            empty: $empty,
+            empty: $frame->storeEmpty(),
             result: $result,
-            coverage: $coverage,
-            blindSpots: [...$structural, ...$this->conditions->for($facts, $types, $window)],
             notes: $this->notes($type, $holdings),
             truncated: $type === null ? array_filter([$holdings->truncation()]) : [],
             next: $this->next($type, $holdings, $catalogue),

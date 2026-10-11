@@ -5,11 +5,8 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
@@ -19,14 +16,11 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Thresholded;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Ungrouped;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
-use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -125,82 +119,48 @@ class Detect extends Tool
         $group = $this->group($request, $shape);
         $limit = $this->limit($request);
 
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
+        $frame = $this->frame($now);
+        $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
 
         $detectors = $shape === null ? $this->detectors->all() : [$shape];
         $types = array_values(array_unique(array_merge(...array_map(fn (Detector $detector) => $detector->types(), $detectors)), SORT_REGULAR));
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
 
-        try {
-            [[$total, $inWindow, $oldest, $newest], $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
-                $this->count($connection, $window),
-                StoreFacts::read($connection),
-                array_map(fn (Detector $detector) => $this->detectors->judge($connection, $detector, $window, $threshold, $group, $limit), $detectors),
-            ]);
-        } catch (StoreUnusable $unusable) {
+        $frame->about($types, $window, actor: true);
+
+        $read = $frame->read(fn (SQLite3 $connection) => [
+            $this->inWindow($connection, $window),
+            array_map(fn (Detector $detector) => $this->detectors->judge($connection, $detector, $window, $threshold, $group, $limit), $detectors),
+        ]);
+
+        if ($read === null) {
             $judgements = array_map(fn (Detector $detector) => Judgement::notEvaluated($detector->name(), $detector instanceof Thresholded ? $detector->threshold()->describe($threshold) : null, Reason::STORE_UNAVAILABLE), $detectors);
-            $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for(null, $types, $window)];
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
 
-            return $this->answerFor(
-                shape: $shape,
-                judgements: $judgements,
-                epoch: $epoch,
-                timezone: $timezone,
-                window: $window,
-                empty: Emptiness::of($unusable, $this->configuration->database),
-                coverage: $coverage,
-                blindSpots: $blindSpots,
-            );
+            return $this->answerFor($frame, $window, $shape, $judgements, $frame->unusable());
         }
 
-        $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for($facts, $types, $window)];
-        $history = History::of($facts->meta, $types, ...$retention);
+        [$inWindow, $judgements] = $read;
 
-        $coverage = $total === 0
-            ? new Coverage(CoverageState::EMPTY, $types, $history, records: 0)
-            : new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
-
-        $empty = match (true) {
-            $total === 0 => Emptiness::storeEmpty($this->configuration->database),
-            $inWindow === 0 => Emptiness::windowEmpty($total),
+        $empty = $frame->storeEmpty() ?? match (true) {
+            $inWindow === 0 => Emptiness::windowEmpty($frame->facts()->records),
             $group !== null && $judgements[0]->matchedNothing() => Emptiness::noMatch($inWindow, ["group: {$group}"]),
             default => null,
         };
 
-        return $this->answerFor(
-            shape: $shape,
-            judgements: $judgements,
-            epoch: $epoch,
-            timezone: $timezone,
-            window: $window,
-            empty: $empty,
-            coverage: $coverage,
-            blindSpots: $blindSpots,
-        );
+        return $this->answerFor($frame, $window, $shape, $judgements, $empty);
     }
 
     /**
      * Put the judgements of one shape, or of all of them, in the envelope.
      *
      * @param  list<Judgement>  $judgements
-     * @param  list<array<string, mixed>>  $blindSpots
      */
-    protected function answerFor(?Detector $shape, array $judgements, float $epoch, string $timezone, Window $window, ?Emptiness $empty, Coverage $coverage, array $blindSpots): Answer
+    protected function answerFor(Frame $frame, Window $window, ?Detector $shape, array $judgements, ?Emptiness $empty): Answer
     {
         if ($shape === null) {
-            return new Answer(
-                tool: $this->name(),
-                now: $epoch,
-                timezone: $timezone,
-                window: $window,
+            return $frame->answer(
                 summary: $this->allSummary($judgements),
                 empty: $empty,
                 result: ['detectors' => array_map(fn (Judgement $judgement) => $judgement->toArray(), $judgements)],
-                coverage: $coverage,
-                blindSpots: $blindSpots,
                 next: $this->shapesNext($window, $judgements),
             );
         }
@@ -208,16 +168,10 @@ class Detect extends Tool
         $judgement = $judgements[0];
         $cut = count($judgement->findings) < $judgement->total;
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $this->summary($judgement),
             empty: $empty,
             result: $judgement->toArray(),
-            coverage: $coverage,
-            blindSpots: $blindSpots,
             truncated: $cut ? [$this->truncation($shape, $judgement)] : [],
             next: $judgement->reason === Reason::STORE_UNAVAILABLE ? [] : $this->next($window, $shape, $judgement),
         );
