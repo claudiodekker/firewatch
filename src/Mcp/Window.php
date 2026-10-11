@@ -5,6 +5,8 @@ namespace ClaudioDekker\Firewatch\Mcp;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Store\Instant;
 use Laravel\Mcp\Request;
+use SQLite3;
+use SQLite3Result;
 use SQLite3Stmt;
 
 /**
@@ -143,6 +145,25 @@ class Window
     {
         $statement->bindValue(':since', $this->since, $this->since === null ? SQLITE3_NULL : SQLITE3_FLOAT);
         $statement->bindValue(':until', $this->until, $this->until === null ? SQLITE3_NULL : SQLITE3_FLOAT);
+    }
+
+    /**
+     * Count the records of the window.
+     */
+    public function count(SQLite3 $connection): int
+    {
+        /** @var SQLite3Stmt $statement */
+        $statement = $connection->prepare("SELECT count(*) FROM records WHERE {$this->condition()}");
+
+        $this->bind($statement);
+
+        /** @var SQLite3Result $result */
+        $result = $statement->execute();
+
+        /** @var array{int} $row */
+        $row = $result->fetchArray(SQLITE3_NUM);
+
+        return $row[0];
     }
 
     /**

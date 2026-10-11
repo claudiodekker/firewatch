@@ -2,8 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
-use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 
@@ -56,7 +56,7 @@ class Emptiness
                 'found' => $unusable->found,
                 'expected' => Schema::VERSION,
                 'version' => $unusable->found,
-                'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+                'minimum' => Sqlite::MINIMUM_VERSION,
             ]),
         };
 

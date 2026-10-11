@@ -2,12 +2,12 @@
 
 use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
@@ -246,7 +246,7 @@ describe('a store in another state', function () {
         app()->forgetInstance(Reader::class);
 
         expect($result['exit'])->toBe(1)
-            ->and($result['output'])->toBe(__('firewatch::messages.clear.sqlite', ['version' => '3.30.0', 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION]))
+            ->and($result['output'])->toBe(__('firewatch::messages.clear.sqlite', ['version' => '3.30.0', 'minimum' => Sqlite::MINIMUM_VERSION]))
             ->and(storeRows('SELECT id FROM records'))->toHaveCount(2);
     });
 

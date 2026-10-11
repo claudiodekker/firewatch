@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Availability;
 use ClaudioDekker\Firewatch\Sql\Child\Policy;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Arr;
@@ -92,7 +93,7 @@ it('answers what the store holds, then the schema and the SQL tool, in full', fu
         ->and($result['sqlite_version'])->toBe(SQLite3::version()['versionString'])
         ->and($result['file_bytes'])->toBe(filesize($path))
         ->and($result['live_bytes'])->toBeGreaterThan(0)
-        ->and($result['wal_mitigation'])->toBe(Writer::hasWalResetBug(SQLite3::version()['versionString']))
+        ->and($result['wal_mitigation'])->toBe(Sqlite::hasWalResetBug(SQLite3::version()['versionString']))
         ->and($result['source_capture'])->toBeTrue()
         ->and($result['last_prune_at'])->toBe($clock)
         ->and($result['dropped_records'])->toBe(0)

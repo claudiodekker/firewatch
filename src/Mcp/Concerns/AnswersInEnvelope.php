@@ -20,9 +20,6 @@ use Illuminate\JsonSchema\Types\StringType;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
-use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 use Throwable;
 
 /**
@@ -148,26 +145,5 @@ trait AnswersInEnvelope
     protected function frame(CarbonImmutable $now): Frame
     {
         return new Frame($this->name(), $now, config()->string('app.timezone'), $this->configuration, $this->reader, $this->conditions);
-    }
-
-    /**
-     * Count the records of the window.
-     */
-    protected function inWindow(SQLite3 $connection, Window $window): int
-    {
-        $condition = $window->condition();
-
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*) FROM records WHERE {$condition}");
-
-        $window->bind($statement);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-
-        /** @var array{int} $row */
-        $row = $result->fetchArray(SQLITE3_NUM);
-
-        return $row[0];
     }
 }

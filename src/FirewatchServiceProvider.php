@@ -16,6 +16,7 @@ use ClaudioDekker\Firewatch\Mcp\StrayOutput;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Closure;
 use Composer\InstalledVersions;
@@ -29,7 +30,6 @@ use Laravel\Nightwatch\Events\IngestingEvents;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 use RuntimeException;
-use SQLite3;
 use Throwable;
 
 /**
@@ -259,7 +259,7 @@ class FirewatchServiceProvider extends ServiceProvider
             $this->app->make(Configuration::class),
             environment: $this->app->environment(),
             argv: $this->argv(),
-            sqliteVersion: class_exists(SQLite3::class) ? SQLite3::version()['versionString'] : null,
+            sqliteVersion: Sqlite::version(),
         );
     }
 

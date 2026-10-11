@@ -141,7 +141,7 @@ class Rank extends Tool
         $frame->about($explicit === null ? [] : [$explicit], $window);
 
         $read = $frame->read(function (SQLite3 $connection) use ($request, $arguments, $window, $group, $explicit, $matching, $deploy, $limit, $by, $continuation, $filters) {
-            $inWindow = $this->inWindow($connection, $window);
+            $inWindow = $window->count($connection);
             [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "rank(group: \"{$group}\")");
             $unranked = fn (Frame $frame) => $this->unranked($frame, $filters, $inWindow, $group, $held);
 

@@ -40,6 +40,19 @@ class Stored
     }
 
     /**
+     * Read the types that hold a group in the store, in the order of the types with groups.
+     *
+     * @return list<RecordType>
+     */
+    public static function holders(SQLite3 $connection, string $group): array
+    {
+        $rows = self::rows($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group', ['group' => $group]);
+        $held = array_map(fn (array $row) => is_string($row['type']) ? RecordType::tryFrom($row['type']) : null, $rows);
+
+        return array_values(array_filter(Measure::types(), fn (RecordType $type) => in_array($type, $held, true)));
+    }
+
+    /**
      * Get the SQL of a stored value that is a number, which is NULL for any other value.
      */
     public static function number(string $expression): string

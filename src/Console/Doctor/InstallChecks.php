@@ -6,7 +6,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationIssue;
 use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\NightwatchInstall;
-use ClaudioDekker\Firewatch\Store\Writer;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Events\Dispatcher;
@@ -48,7 +48,7 @@ class InstallChecks
         protected string $phpBinary = PHP_BINARY,
         ?Closure $sqliteVersion = null,
     ) {
-        $this->sqliteVersion = $sqliteVersion ?? static fn (): ?string => class_exists(SQLite3::class) ? SQLite3::version()['versionString'] : null;
+        $this->sqliteVersion = $sqliteVersion ?? static fn (): ?string => Sqlite::version();
     }
 
     /**
@@ -127,7 +127,7 @@ class InstallChecks
         $facts = [
             'version' => (string) $version,
             'binary' => $this->phpBinary,
-            'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+            'minimum' => Sqlite::MINIMUM_VERSION,
         ];
 
         if ($version === null) {
@@ -137,14 +137,14 @@ class InstallChecks
             );
         }
 
-        if (version_compare($version, ModeResolver::MINIMUM_SQLITE_VERSION, '<')) {
+        if (Sqlite::isTooOld($version)) {
             return CheckResult::fail(
                 __('firewatch::messages.doctor.sqlite.too_old', $facts),
                 __('firewatch::messages.doctor.sqlite.too_old_fix', $facts),
             );
         }
 
-        if (Writer::hasWalResetBug($version)) {
+        if (Sqlite::hasWalResetBug($version)) {
             return CheckResult::warn(
                 __('firewatch::messages.doctor.sqlite.wal_reset', $facts),
                 __('firewatch::messages.doctor.sqlite.wal_reset_fix'),

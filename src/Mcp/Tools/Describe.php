@@ -23,7 +23,7 @@ use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Holdings;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\Writer;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -173,7 +173,7 @@ class Describe extends Tool
      */
     protected function storeSections(Catalogue $catalogue, Holdings $holdings, StoreFacts $facts): array
     {
-        $version = SQLite3::version()['versionString'];
+        $version = (string) Sqlite::version();
         $dropped = $this->failures->dropped();
         $batches = array_map(fn (array $batch) => [
             'dropped_at' => $batch['at'],
@@ -185,7 +185,7 @@ class Describe extends Tool
             'sqlite_version' => $version,
             'file_bytes' => Cell::integer(@filesize($this->configuration->database)),
             'live_bytes' => $holdings->liveBytes,
-            'wal_mitigation' => Writer::hasWalResetBug($version),
+            'wal_mitigation' => Sqlite::hasWalResetBug($version),
             'source_capture' => true,
             'last_prune_at' => $facts->meta->pruneClaimedAt,
             'dropped_records' => array_sum(array_column($dropped, 'dropped')),
