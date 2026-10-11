@@ -305,6 +305,20 @@ class Arguments
     }
 
     /**
+     * Read a boolean argument, or the default its schema declares when it is not given.
+     */
+    public function boolean(string $argument, string $example): bool
+    {
+        $value = $this->get($argument) ?? $this->declared($argument)['default'];
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        throw $this->invalid($argument, 'true or false', 'true or false', $example);
+    }
+
+    /**
      * Get what the tool's schema declares for the argument.
      *
      * @return array<string, mixed>
