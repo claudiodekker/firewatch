@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Attribution;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Identification;
@@ -41,7 +41,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Actor extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -123,7 +123,7 @@ class Actor extends Tool
     }
 
     /**
-     * Read the arguments, then the store, and put the identification and the attribution, or why there is none, in the envelope.
+     * Read the arguments, then the store, and put the identification and the attribution, or why there is none, in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {

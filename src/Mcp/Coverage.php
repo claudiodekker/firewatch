@@ -59,7 +59,7 @@ class Coverage
     }
 
     /**
-     * Get the coverage as the envelope's `coverage` key.
+     * Get the coverage as the answer's `coverage` key.
      *
      * @return array<string, mixed>
      */

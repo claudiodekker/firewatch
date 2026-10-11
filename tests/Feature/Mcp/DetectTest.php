@@ -9,7 +9,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\FakeDetector;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
@@ -48,7 +48,7 @@ function dtcRequest(string $route = '/orders', ?int $status = 200, array $fields
  */
 function dtcAnswer(array $arguments = ['shape' => 'failing-routes']): array
 {
-    return Envelope::assert(Detect::class, $arguments);
+    return Answers::assert(Detect::class, $arguments);
 }
 
 /**
@@ -74,16 +74,16 @@ function dtcRun(array $call): array
         'detect' => Detect::class,
     ];
 
-    return Envelope::assert($tools[$call['tool']], $call['arguments']);
+    return Answers::assert($tools[$call['tool']], $call['arguments']);
 }
 
 /**
- * @param  array<string, mixed>  $envelope
+ * @param  array<string, mixed>  $answer
  * @return array<string, mixed>
  */
-function dtcFinding(array $envelope, string $route): array
+function dtcFinding(array $answer, string $route): array
 {
-    $findings = array_values(array_filter($envelope['result']['findings'], fn (array $finding) => $finding['group'] === dtcGroup($route)));
+    $findings = array_values(array_filter($answer['result']['findings'], fn (array $finding) => $finding['group'] === dtcGroup($route)));
 
     return $findings[0];
 }
@@ -96,12 +96,12 @@ describe('the verdict', function () {
             dtcRequest('/health', 200),
         ]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => [], 'caveats' => []])
-            ->and($envelope['result']['findings'])->toHaveCount(1)
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-routes', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-routes')]))
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result'])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => [], 'caveats' => []])
+            ->and($answer['result']['findings'])->toHaveCount(1)
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-routes', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-routes')]))
+            ->and($answer['empty'])->toBeNull();
     });
 
     it('states what it set aside as an empty object, as it sets nothing aside', function () {
@@ -115,53 +115,53 @@ describe('the verdict', function () {
     it('is clean over the requests examined when none failed', function () {
         ingest([dtcRequest('/orders', 200), dtcRequest('/orders', 204), dtcRequest('/health', 301)]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-routes', 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-routes')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-routes', 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-routes')]));
     });
 
     it('is not evaluated when the store holds no request, even if it holds other records', function () {
         ingest([syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-routes', 'reason' => 'no_records']))
-            ->and($envelope['empty'])->toBeNull()
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('console-requests');
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-routes', 'reason' => 'no_records']))
+            ->and($answer['empty'])->toBeNull()
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('console-requests');
     });
 
     it('counts a request without a status as examined and leaves it out of the judgement', function () {
         ingest([dtcRequest('/orders', null), dtcRequest('/orders', 200)]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 2, 'total' => 0]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 2, 'total' => 0]);
     });
 
     it('is not evaluated when the store holds no records, and says the store is empty', function () {
         app(Writer::class)->transaction(fn () => null);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['empty']['kind'])->toBe('store_empty');
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['empty']['kind'])->toBe('store_empty');
     });
 
     it('is not evaluated when the window holds none of the records, and says so', function () {
         ingest([dtcRequest('/orders', 500)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'since' => (string) (DETECT_AT + 100)]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'since' => (string) (DETECT_AT + 100)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'window_empty', 'population' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'window_empty', 'population' => 1]);
     });
 
     it('is not evaluated when there is no store, with the store unavailable', function () {
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0, 'total' => 0, 'findings' => []]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0, 'total' => 0, 'findings' => []]);
     });
 
     it('is not evaluated when the store cannot be read, and says why', function () {
@@ -169,9 +169,9 @@ describe('the verdict', function () {
         mkdir(dirname($path), recursive: true);
         file_put_contents($path, str_repeat('not a database ', 100));
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0]);
     });
 
     it('selects requests by the window on their own start', function () {
@@ -180,18 +180,18 @@ describe('the verdict', function () {
             dtcRequest('/orders', 200, ['timestamp' => DETECT_AT]),
         ]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'since' => (string) (DETECT_AT - 1), 'until' => (string) (DETECT_AT + 1)]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'since' => (string) (DETECT_AT - 1), 'until' => (string) (DETECT_AT + 1)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 
     it('attaches the blind spots of requests, the actor and what the findings reach', function () {
         ingest([dtcRequest('/orders', 500)]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect(array_column($envelope['blind_spots'], 'id'))->toContain('console-requests', 'payload-on-server-error-only', 'octane-bootstrap', 'actor-partial')
-            ->and($envelope['coverage']['types_read'])->toBe(['request']);
+        expect(array_column($answer['blind_spots'], 'id'))->toContain('console-requests', 'payload-on-server-error-only', 'octane-bootstrap', 'actor-partial')
+            ->and($answer['coverage']['types_read'])->toBe(['request']);
     });
 });
 
@@ -199,33 +199,33 @@ describe('the threshold', function () {
     it('is stated on every result, with the default applied', function () {
         ingest([dtcRequest('/orders', 500)]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result']['threshold'])->toBe(['name' => 'status', 'value' => 400, 'default' => 400, 'unit' => 'status', 'range' => ['min' => 100, 'max' => 599], 'is_default' => true]);
+        expect($answer['result']['threshold'])->toBe(['name' => 'status', 'value' => 400, 'default' => 400, 'unit' => 'status', 'range' => ['min' => 100, 'max' => 599], 'is_default' => true]);
     });
 
     it('is stated with the value asked for, and says the default did not apply', function () {
         ingest([dtcRequest('/orders', 500)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'threshold' => 500]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'threshold' => 500]);
 
-        expect($envelope['result']['threshold'])->toBe(['name' => 'status', 'value' => 500, 'default' => 400, 'unit' => 'status', 'range' => ['min' => 100, 'max' => 599], 'is_default' => false]);
+        expect($answer['result']['threshold'])->toBe(['name' => 'status', 'value' => 500, 'default' => 400, 'unit' => 'status', 'range' => ['min' => 100, 'max' => 599], 'is_default' => false]);
     });
 
     it('states the default again when it is asked for', function () {
         ingest([dtcRequest('/orders', 500)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'threshold' => 400]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'threshold' => 400]);
 
-        expect($envelope['result']['threshold']['is_default'])->toBeTrue();
+        expect($answer['result']['threshold']['is_default'])->toBeTrue();
     });
 
     it('counts a status as failed from the threshold on, with 399 and 400 either side of the default', function (int $status, bool $failed) {
         ingest([dtcRequest('/orders', $status)]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result']['total'])->toBe($failed ? 1 : 0);
+        expect($answer['result']['total'])->toBe($failed ? 1 : 0);
     })->with([
         'one below' => [399, false],
         'at it' => [400, true],
@@ -237,17 +237,17 @@ describe('the threshold', function () {
     it('counts a status as failed from the threshold asked for on, and no lower', function () {
         ingest([dtcRequest('/orders', 404), dtcRequest('/health', 500)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'threshold' => 500]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'threshold' => 500]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['/health']);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['/health']);
     });
 
     it('accepts the ends of the range', function (int $threshold) {
         ingest([dtcRequest('/orders', 200)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'threshold' => $threshold]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'threshold' => $threshold]);
 
-        expect($envelope['result']['threshold']['value'])->toBe($threshold);
+        expect($answer['result']['threshold']['value'])->toBe($threshold);
     })->with([100, 599]);
 
     it('refuses what is not a whole number from 100 to 599, and never clamps it', function (mixed $threshold, string $shown) {
@@ -288,12 +288,12 @@ describe('the shape', function () {
     it('runs every shape that ships when none is named, one result each', function () {
         ingest([dtcRequest('/orders', 500)]);
 
-        $envelope = dtcAnswer([]);
+        $answer = dtcAnswer([]);
 
-        expect(array_keys($envelope['result']))->toBe(['detectors'])
-            ->and(array_column($envelope['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
-            ->and($envelope['result']['detectors'][2])->toMatchArray(['verdict' => 'findings', 'total' => 1])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
+        expect(array_keys($answer['result']))->toBe(['detectors'])
+            ->and(array_column($answer['result']['detectors'], 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
+            ->and($answer['result']['detectors'][2])->toMatchArray(['verdict' => 'findings', 'total' => 1])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
                 __('firewatch::messages.detect_part_findings', ['shapes' => 'failing-routes (1)']),
                 __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']),
                 __('firewatch::messages.detect_part_clean', ['shapes' => 'database-bound, exception-clusters, memory']),
@@ -312,17 +312,17 @@ describe('the shape', function () {
             syntheticRecord(RecordType::CACHE_EVENT),
         ]);
 
-        $envelope = dtcAnswer([]);
+        $answer = dtcAnswer([]);
 
-        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 11, ['count' => 11]));
+        expect($answer['summary'])->toBe(trans_choice('firewatch::messages.detect_all_clean_summary', 11, ['count' => 11]));
     });
 
     it('names the shapes that were not evaluated, and why', function () {
         ingest([syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = dtcAnswer([]);
+        $answer = dtcAnswer([]);
 
-        expect($envelope['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
+        expect($answer['summary'])->toBe(__('firewatch::messages.detect_all_summary', ['parts' => implode('; ', [
             __('firewatch::messages.detect_part_not_evaluated', ['reason' => 'no_records', 'shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']),
             __('firewatch::messages.detect_part_clean', ['shapes' => 'exception-clusters, memory']),
         ])]))->not->toContain('firewatch::');
@@ -332,10 +332,10 @@ describe('the shape', function () {
         FakeDetector::ship(...array_map(fn (DetectorName $name) => new FakeDetector($name, total: $total), DetectorName::cases()));
         ingest([dtcRequest('/orders', 200)]);
 
-        $envelope = dtcAnswer([]);
+        $answer = dtcAnswer([]);
 
-        expect($envelope['summary'])->toEndWith('.')
-            ->and(array_filter(DetectorName::cases(), fn (DetectorName $name) => ! str_contains($envelope['summary'], $name->value)))->toBe([]);
+        expect($answer['summary'])->toEndWith('.')
+            ->and(array_filter(DetectorName::cases(), fn (DetectorName $name) => ! str_contains($answer['summary'], $name->value)))->toBe([]);
     })->with(['not evaluated' => 0, 'with findings' => 100]);
 
     it('refuses a threshold for a shape that takes none, and states none for it', function () {
@@ -343,10 +343,10 @@ describe('the shape', function () {
         ingest([dtcRequest('/orders', 200)]);
 
         $refusal = dtcRefusal(['shape' => 'failing-tasks', 'threshold' => 3]);
-        $envelope = dtcAnswer(['shape' => 'failing-tasks']);
+        $answer = dtcAnswer(['shape' => 'failing-tasks']);
 
         expect($refusal)->toStartWith('error: conflicting_arguments')->toContain('argument: threshold')->toContain('failing-tasks')
-            ->and($envelope['result']['threshold'])->toBeNull();
+            ->and($answer['result']['threshold'])->toBeNull();
     });
 
     it('refuses a group without a shape, as a group belongs to the population of one shape', function () {
@@ -496,12 +496,12 @@ describe('the findings', function () {
             dtcRequest('/orders', 500, ['trace_id' => 'loose'])->without('_group'),
         ]);
 
-        $envelope = dtcAnswer();
-        $loose = collect($envelope['result']['findings'])->firstWhere('group', null);
+        $answer = dtcAnswer();
+        $loose = collect($answer['result']['findings'])->firstWhere('group', null);
 
-        expect($envelope['result']['total'])->toBe(2)
+        expect($answer['result']['total'])->toBe(2)
             ->and($loose)->toMatchArray(['name' => '/orders', 'count' => 1, 'latest_execution_id' => 'loose'])
-            ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'execution']);
+            ->and(array_column($answer['next'], 'tool'))->toBe(['execution', 'execution']);
     });
 
     it('orders the groups by server errors, then failures, then failure share, then group', function () {
@@ -540,27 +540,27 @@ describe('the findings', function () {
     it('shows the findings up to the limit, with the exact total and a note of the cut', function () {
         ingest(array_map(fn (int $route) => dtcRequest("/route-{$route}", 500), range(1, 4)));
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'limit' => 3]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)
-            ->and($envelope['result']['total'])->toBe(4)
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect($answer['result']['findings'])->toHaveCount(3)
+            ->and($answer['result']['total'])->toBe(4)
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest(array_map(fn (int $route) => dtcRequest("/route-{$route}", 500), range(1, 3)));
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'limit' => 3]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 
     it('lists twenty findings by default', function () {
         ingest(array_map(fn (int $route) => dtcRequest("/route-{$route}", 500), range(1, 21)));
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['result']['findings'])->toHaveCount(20)->and($envelope['result']['total'])->toBe(21);
+        expect($answer['result']['findings'])->toHaveCount(20)->and($answer['result']['total'])->toBe(21);
     });
 
 });
@@ -569,37 +569,37 @@ describe('one group', function () {
     it('restricts the judgement to the group, and examines only its requests', function () {
         ingest([dtcRequest('/orders', 500), dtcRequest('/orders', 200), dtcRequest('/health', 500)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'group' => dtcGroup('/orders')]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'group' => dtcGroup('/orders')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['/orders']);
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['/orders']);
     });
 
     it('is clean when the group has requests and none failed', function () {
         ingest([dtcRequest('/orders', 200), dtcRequest('/health', 500)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'group' => dtcGroup('/orders')]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'group' => dtcGroup('/orders')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 
     it('answers that no request matches a group that holds none', function () {
         ingest([dtcRequest('/orders', 500), dtcRequest('/health', 200)]);
 
-        $envelope = dtcAnswer(['shape' => 'failing-routes', 'group' => dtcGroup('/missing')]);
+        $answer = dtcAnswer(['shape' => 'failing-routes', 'group' => dtcGroup('/missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
     });
 
     it('answers that nothing matches a group by the counts a shape set aside, never by a block it carries beside them', function (array $saw, ?string $kind) {
         FakeDetector::ship(new FakeDetector(DetectorName::CACHE, saw: $saw));
         ingest([dtcRequest('/orders', 200)]);
 
-        $envelope = dtcAnswer(['shape' => 'cache', 'group' => dtcGroup('/missing')]);
+        $answer = dtcAnswer(['shape' => 'cache', 'group' => dtcGroup('/missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'saw' => $saw])
-            ->and($envelope['empty']['kind'] ?? null)->toBe($kind);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'saw' => $saw])
+            ->and($answer['empty']['kind'] ?? null)->toBe($kind);
     })->with([
         'a block alone' => [['activity' => ['stores' => [], 'total' => ['hits' => 0]]], 'no_match'],
         'a block beside a count of nothing' => [['activity' => ['stores' => []], 'excluded' => 0], 'no_match'],
@@ -615,17 +615,17 @@ describe('what to look at next', function () {
             dtcRequest('/health', 404, ['trace_id' => 'second']),
         ]);
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
         $group = dtcGroup('/orders');
 
-        expect($envelope['next'])->toBe([
+        expect($answer['next'])->toBe([
             ['tool' => 'execution', 'arguments' => ['execution_id' => 'worst'], 'why' => __('firewatch::messages.detect_next_execution')],
             ['tool' => 'occurrences', 'arguments' => ['group' => $group], 'why' => __('firewatch::messages.detect_next_occurrences')],
             ['tool' => 'rank', 'arguments' => ['group' => $group], 'why' => __('firewatch::messages.detect_next_rank')],
             ['tool' => 'execution', 'arguments' => ['execution_id' => 'second'], 'why' => __('firewatch::messages.detect_next_execution')],
         ]);
 
-        foreach ($envelope['next'] as $call) {
+        foreach ($answer['next'] as $call) {
             expect(dtcRun($call)['empty'])->toBeNull();
         }
     });
@@ -633,10 +633,10 @@ describe('what to look at next', function () {
     it('offers at most five calls, the first finding giving three and each other one its latest execution', function () {
         ingest(array_map(fn (int $route) => dtcRequest("/route-{$route}", 500), range(1, 6)));
 
-        $envelope = dtcAnswer();
+        $answer = dtcAnswer();
 
-        expect($envelope['next'])->toHaveCount(5)
-            ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution', 'execution']);
+        expect($answer['next'])->toHaveCount(5)
+            ->and(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution', 'execution']);
     });
 
     it('offers nothing when nothing was found', function () {
@@ -648,10 +648,10 @@ describe('what to look at next', function () {
     it('offers to look at a shape with findings from the all-shapes answer, and the call runs', function () {
         ingest([dtcRequest('/orders', 500)]);
 
-        $envelope = dtcAnswer([]);
+        $answer = dtcAnswer([]);
 
-        expect($envelope['next'][0])->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes'], 'why' => __('firewatch::messages.detect_next_shape')])
-            ->and(dtcRun($envelope['next'][0])['result']['verdict'])->toBe('findings');
+        expect($answer['next'][0])->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes'], 'why' => __('firewatch::messages.detect_next_shape')])
+            ->and(dtcRun($answer['next'][0])['result']['verdict'])->toBe('findings');
     });
 
     it('offers its calls over the instants its window resolved to, so they read the same window when they run later', function () {

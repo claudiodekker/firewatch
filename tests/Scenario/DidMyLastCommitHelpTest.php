@@ -1,7 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Compare;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\GitRepository;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Route;
@@ -61,13 +61,13 @@ function lastCommitServeBothCommits(): array
 it('finds the order list slower under the commit that slowed it, with no deploy set by hand', function () {
     [$first, $second] = lastCommitServeBothCommits();
 
-    $envelope = Envelope::assert(Compare::class, ['type' => 'request', 'deploy_before' => $first, 'deploy_after' => $second]);
-    $rows = collect($envelope['result']['groups'])->keyBy('label');
+    $answer = Answers::assert(Compare::class, ['type' => 'request', 'deploy_before' => $first, 'deploy_after' => $second]);
+    $rows = collect($answer['result']['groups'])->keyBy('label');
 
     expect($first)->not->toBe($second)->toMatch('/^[0-9a-f]{40}$/')
         ->and($second)->toMatch('/^[0-9a-f]{40}$/')
-        ->and($envelope['result']['before'])->toMatchArray(['deploy' => $first, 'records' => 3, 'earlier_records' => 1])
-        ->and($envelope['result']['after'])->toMatchArray(['deploy' => $second, 'records' => 3])
+        ->and($answer['result']['before'])->toMatchArray(['deploy' => $first, 'records' => 3, 'earlier_records' => 1])
+        ->and($answer['result']['after'])->toMatchArray(['deploy' => $second, 'records' => 3])
         ->and(array_keys($rows->all()))->toBe(['/orders'])
         ->and($rows['/orders'])->toMatchArray(['before_records' => 3, 'after_records' => 3, 'measured_on' => 'p50', 'change' => 'slower', 'reason' => null])
         ->and($rows['/orders']['after_ms'])->toBeGreaterThan($rows['/orders']['before_ms']);

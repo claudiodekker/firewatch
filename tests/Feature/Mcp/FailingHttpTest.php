@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -75,7 +75,7 @@ function fhpExecution(string $execution, string $label = '/checkout', RecordType
  */
 function fhpAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'failing-http', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'failing-http', ...$arguments]);
 }
 
 /**
@@ -92,12 +92,12 @@ describe('the verdict', function () {
     it('has findings when an outgoing request to a host was answered with an error status, over every one examined, and states the threshold', function () {
         ingest([...fhpCalls('api.example.test', [200, 500]), ...fhpCalls('cdn.example.test', [200])]);
 
-        $envelope = fhpAnswer();
+        $answer = fhpAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'failing-http', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => []])
-            ->and($envelope['result']['threshold'])->toBe(['name' => 'status', 'value' => 400, 'default' => 400, 'unit' => 'status', 'range' => ['min' => 100, 'max' => 599], 'is_default' => true])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-http', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-http')]))
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('api.example.test'));
+        expect($answer['result'])->toMatchArray(['detector' => 'failing-http', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => []])
+            ->and($answer['result']['threshold'])->toBe(['name' => 'status', 'value' => 400, 'default' => 400, 'unit' => 'status', 'range' => ['min' => 100, 'max' => 599], 'is_default' => true])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-http', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-http')]))
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('api.example.test'));
     });
 
     it('takes a status of 400 or above for a failure by default, and a redirect or no status for none', function (?int $status, string $verdict) {
@@ -151,19 +151,19 @@ describe('the verdict', function () {
     it('is clean over the outgoing requests examined when none was answered with an error status, and says how many', function () {
         ingest([...fhpCalls('api.example.test', [200, 204]), ...fhpCalls('cdn.example.test', [301])]);
 
-        $envelope = fhpAnswer();
+        $answer = fhpAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-http', 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-http')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-http', 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-http')]));
     });
 
     it('is not evaluated when the window holds no outgoing request, never clean', function () {
         ingest([syntheticRecord(RecordType::REQUEST), syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = fhpAnswer();
+        $answer = fhpAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-http', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-http', 'reason' => 'no_records']));
     });
 
     it('judges the outgoing requests that started in the window, the start included and the end not', function () {
@@ -173,9 +173,9 @@ describe('the verdict', function () {
             fhpCall('at-until', 500, fields: ['timestamp' => FHP_AT + 10]),
         ]);
 
-        $envelope = fhpAnswer(['since' => (string) FHP_AT, 'until' => (string) (FHP_AT + 10)]);
+        $answer = fhpAnswer(['since' => (string) FHP_AT, 'until' => (string) (FHP_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 
     it('finds an outgoing request that failed at the start of the window, and not one that failed at its end', function () {
@@ -184,10 +184,10 @@ describe('the verdict', function () {
             fhpCall('at-until', 500, 'cdn.example.test', ['timestamp' => FHP_AT + 10]),
         ]);
 
-        $envelope = fhpAnswer(['since' => (string) FHP_AT, 'until' => (string) (FHP_AT + 10)]);
+        $answer = fhpAnswer(['since' => (string) FHP_AT, 'until' => (string) (FHP_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['latest_execution_id'])->toBe('at-since');
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($answer['result']['findings'][0]['latest_execution_id'])->toBe('at-since');
     });
 });
 
@@ -202,9 +202,9 @@ describe('the finding', function () {
             fhpCall('checkout', 200, fields: ['timestamp' => FHP_AT + 240]),
         ]);
 
-        $envelope = fhpAnswer();
+        $answer = fhpAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => md5('api.example.test'),
             'name' => 'api.example.test',
             'count' => 3,
@@ -221,7 +221,7 @@ describe('the finding', function () {
                 'top_urls' => [['url' => 'https://api.example.test/charges', 'failures' => 3]],
                 'ran_in' => [['source' => 'request', 'label' => '/checkout', 'calls' => 3]],
             ],
-        ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
+        ]])->and($answer['result']['findings'][0])->not->toHaveKey('worst_execution_id');
     });
 
     it('points at the latest failed outgoing request, and at the one stored last of two that started together', function () {
@@ -527,19 +527,19 @@ describe('the order', function () {
     it('shows the findings up to the limit, with the exact total and a note of the cut', function () {
         ingest(array_merge(...array_map(fn (int $host) => fhpCalls("host-{$host}.example.test", array_fill(0, $host, 500)), range(1, 4))));
 
-        $envelope = fhpAnswer(['limit' => 3]);
+        $answer = fhpAnswer(['limit' => 3]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['host-4.example.test', 'host-3.example.test', 'host-2.example.test'])
-            ->and($envelope['result'])->toMatchArray(['examined' => 10, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['host-4.example.test', 'host-3.example.test', 'host-2.example.test'])
+            ->and($answer['result'])->toMatchArray(['examined' => 10, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest(array_merge(...array_map(fn (int $host) => fhpCalls("host-{$host}.example.test", [500]), range(1, 3))));
 
-        $envelope = fhpAnswer(['limit' => 3]);
+        $answer = fhpAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 });
 
@@ -547,11 +547,11 @@ describe('one group', function () {
     it('restricts the judgement to the host, and examines only its outgoing requests', function () {
         ingest([...fhpCalls('api.example.test', [404, 200]), ...fhpCalls('cdn.example.test', [500, 500])]);
 
-        $envelope = fhpAnswer(['group' => md5('api.example.test')]);
+        $answer = fhpAnswer(['group' => md5('api.example.test')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['api.example.test'])
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['calls' => 2, 'failures' => 1, 'status_counts' => [404 => 1]]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['api.example.test'])
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['calls' => 2, 'failures' => 1, 'status_counts' => [404 => 1]]);
     });
 
     it('is clean when the host has outgoing requests and none failed', function () {
@@ -563,10 +563,10 @@ describe('one group', function () {
     it('answers that no outgoing request matches a group that holds none', function () {
         ingest([...fhpCalls('api.example.test', [500]), ...fhpCalls('cdn.example.test', [200])]);
 
-        $envelope = fhpAnswer(['group' => md5('missing')]);
+        $answer = fhpAnswer(['group' => md5('missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
     });
 });
 
@@ -614,14 +614,14 @@ describe('what to look at next', function () {
             fhpCall('c', 200, 'cdn.example.test', ['timestamp' => FHP_AT + 50]),
         ]);
 
-        $envelope = fhpAnswer();
+        $answer = fhpAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
-            ->and(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => md5('api.example.test')], ['group' => md5('api.example.test')], ['execution_id' => 'c']]);
+        expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
+            ->and(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => md5('api.example.test')], ['group' => md5('api.example.test')], ['execution_id' => 'c']]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -634,7 +634,7 @@ describe('with the other shapes', function () {
             ...fhpCalls('works.example.test', [200]),
         ]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'failing-http');
 
         expect($row)->toBe([
@@ -650,7 +650,7 @@ describe('with the other shapes', function () {
     it('is run between error-logs and cache when no shape is named', function () {
         ingest([fhpCall('a', 500)]);
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[8])->toMatchArray(['verdict' => 'findings', 'total' => 1]);

@@ -3,7 +3,7 @@
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Route;
 
@@ -48,7 +48,7 @@ function slowRouteTraffic(?array $uris = null): void
  */
 function slowRouteRanked(): array
 {
-    return Envelope::assert(Rank::class, ['type' => 'request', 'by' => 'p95_duration']);
+    return Answers::assert(Rank::class, ['type' => 'request', 'by' => 'p95_duration']);
 }
 
 /**
@@ -59,7 +59,7 @@ function slowRouteRanked(): array
  */
 function slowRouteStages(array $ranked): array
 {
-    return Envelope::follow($ranked['next'][0]);
+    return Answers::follow($ranked['next'][0]);
 }
 
 /**
@@ -106,7 +106,7 @@ it('shows the stages of the slowest execution as the execution answer does', fun
     slowRouteTraffic();
 
     $result = slowRouteStages(slowRouteRanked())['result'];
-    $header = Envelope::assert(Execution::class, ['execution_id' => $result['slowest_execution_id']])['result']['header'];
+    $header = Answers::assert(Execution::class, ['execution_id' => $result['slowest_execution_id']])['result']['header'];
 
     expect($header['stages'])->toEqual(array_column($result['stages'], 'slowest_ms', 'stage'))
         ->and($header['duration_ms'])->toEqual($result['slowest_duration_ms']);
@@ -115,8 +115,8 @@ it('shows the stages of the slowest execution as the execution answer does', fun
 it('gives no stages for a scheduled task, which records none', function () {
     slowRouteTraffic();
 
-    $group = Envelope::assert(Rank::class, ['type' => 'scheduled-task'])['result']['groups'][0]['group'];
-    $result = Envelope::assert(Rank::class, ['group' => $group])['result'];
+    $group = Answers::assert(Rank::class, ['type' => 'scheduled-task'])['result']['groups'][0]['group'];
+    $result = Answers::assert(Rank::class, ['group' => $group])['result'];
 
     expect($result['dominant_stage'])->toBeNull()
         ->and($result['stage_executions'])->toBeNull()
@@ -145,7 +145,7 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
         ->and($quick)->toMatchArray(['label' => '/quick', 'failure_pct' => 0, 'p95_ms' => null])
         ->and($quick['withheld']['p95_ms'])->toMatchArray(['reason' => 'sample_too_small', 'have' => 5, 'needed' => 20]);
 
-    $tail = Envelope::assert(Occurrences::class, ['group' => $slow['group'], 'at_or_above' => 'p95']);
+    $tail = Answers::assert(Occurrences::class, ['group' => $slow['group'], 'at_or_above' => 'p95']);
     $rows = $tail['result']['rows'];
 
     expect($tail['result']['baseline'])->toMatchArray(['percentile' => 'p95', 'samples' => 20, 'withheld' => null])
@@ -155,7 +155,7 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
         ->and(array_column($rows, 'duration_ms'))->each->toBeGreaterThanOrEqual(round($tail['result']['baseline']['threshold_ms'], 2))
         ->and(array_column($rows, 'execution_id'))->toContain($slow['slowest_execution_id']);
 
-    $opened = Envelope::assert(Execution::class, ['execution_id' => $rows[0]['execution_id']]);
+    $opened = Answers::assert(Execution::class, ['execution_id' => $rows[0]['execution_id']]);
     $header = $opened['result']['header'];
 
     // The slowest execution is often the cold first request, whose boot can outlast the action on a slow runner.
@@ -163,7 +163,7 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
         ->and($header['stages']['action'])->toBeGreaterThanOrEqual((float) SLOW_ROUTE_MS)
         ->and(array_column($opened['next'], 'tool'))->toBe(['rank', 'trace']);
 
-    $stages = Envelope::follow($opened['next'][0])['result'];
+    $stages = Answers::follow($opened['next'][0])['result'];
 
     expect($stages['group'])->toBe($slow['group'])
         ->and($stages['dominant_stage'])->toBe('action')

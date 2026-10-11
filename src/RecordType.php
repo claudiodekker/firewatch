@@ -62,7 +62,7 @@ enum RecordType: string
     /**
      * The wire fields every record carries, with the name they are stored under and their accepted JSON types.
      */
-    protected const ENVELOPE = [
+    protected const COMMON_FIELDS = [
         't' => ['type', 'string'],
         'v' => ['v', 'integer'],
         'timestamp' => ['started_at', 'number'],
@@ -152,7 +152,7 @@ enum RecordType: string
     {
         return match ($this) {
             self::REQUEST => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 'user' => ['user_id', 'string'],
                 'method' => ['method', 'string'],
                 'url' => ['url', 'string'],
@@ -178,7 +178,7 @@ enum RecordType: string
                 'payload' => ['payload', 'string'],
             ],
             self::COMMAND => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 'class' => ['class', 'string'],
                 'name' => ['name', 'string'],
                 'command' => ['command', 'string'],
@@ -190,7 +190,7 @@ enum RecordType: string
                 ...self::EXECUTION_TOTALS,
             ],
             self::JOB_ATTEMPT => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 'user' => ['user_id', 'string'],
                 'job_id' => ['job_id', 'string'],
                 'attempt_id' => ['execution_id', 'string'],
@@ -203,7 +203,7 @@ enum RecordType: string
                 ...self::EXECUTION_TOTALS,
             ],
             self::SCHEDULED_TASK => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 'name' => ['name', 'string'],
                 'cron' => ['cron', 'string'],
                 'timezone' => ['timezone', 'string'],
@@ -217,7 +217,7 @@ enum RecordType: string
                 ...self::EXECUTION_TOTALS,
             ],
             self::QUERY => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 ...self::EXECUTION_SCOPE,
                 'sql' => ['sql', 'string'],
                 'file' => ['file', 'string'],
@@ -227,7 +227,7 @@ enum RecordType: string
                 'connection_type' => ['connection_type', 'string'],
             ],
             self::EXCEPTION => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 ...self::EXECUTION_SCOPE,
                 'class' => ['class', 'string'],
                 'file' => ['file', 'string'],
@@ -253,7 +253,7 @@ enum RecordType: string
                 'extra' => ['extra', 'string'],
             ],
             self::CACHE_EVENT => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 ...self::EXECUTION_SCOPE,
                 'store' => ['store', 'string'],
                 'key' => ['key', 'string'],
@@ -262,7 +262,7 @@ enum RecordType: string
                 'ttl' => ['ttl', 'integer'],
             ],
             self::MAIL => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 ...self::EXECUTION_SCOPE,
                 'mailer' => ['mailer', 'string'],
                 'class' => ['class', 'string'],
@@ -275,7 +275,7 @@ enum RecordType: string
                 'failed' => ['failed', 'boolean'],
             ],
             self::NOTIFICATION => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 ...self::EXECUTION_SCOPE,
                 'channel' => ['channel', 'string'],
                 'class' => ['class', 'string'],
@@ -283,7 +283,7 @@ enum RecordType: string
                 'failed' => ['failed', 'boolean'],
             ],
             self::OUTGOING_REQUEST => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 ...self::EXECUTION_SCOPE,
                 'host' => ['host', 'string'],
                 'method' => ['method', 'string'],
@@ -294,7 +294,7 @@ enum RecordType: string
                 'status_code' => ['status_code', 'integer'],
             ],
             self::QUEUED_JOB => [
-                ...self::ENVELOPE,
+                ...self::COMMON_FIELDS,
                 ...self::EXECUTION_SCOPE,
                 'job_id' => ['job_id', 'string'],
                 'name' => ['name', 'string'],

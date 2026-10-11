@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Route;
 
 function failingRoutesTraffic(): void
@@ -24,11 +24,11 @@ function failingRoutesTraffic(): void
 it('flags the routes whose requests failed, server errors first, and not the route that worked', function () {
     failingRoutesTraffic();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'failing-routes']);
-    $findings = collect($envelope['result']['findings'])->keyBy('name');
+    $answer = Answers::assert(Detect::class, ['shape' => 'failing-routes']);
+    $findings = collect($answer['result']['findings'])->keyBy('name');
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 5, 'total' => 3])
-        ->and($envelope['result']['findings'][0]['name'])->toBe('/boom')
+    expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 5, 'total' => 3])
+        ->and($answer['result']['findings'][0]['name'])->toBe('/boom')
         ->and($findings->keys()->sort()->values()->all())->toBe(collect(['/boom', '/teapot', __('firewatch::messages.rank_no_route')])->sort()->values()->all())
         ->and($findings['/boom']['evidence'])->toMatchArray(['failed' => 1, 'requests' => 1, 'server_errors' => 1, 'unmatched' => false])
         ->and($findings['/boom']['evidence']['status_counts'])->toEqual([500 => 1])
@@ -40,15 +40,15 @@ it('flags the routes whose requests failed, server errors first, and not the rou
 it('opens what a finding points at', function () {
     failingRoutesTraffic();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'failing-routes']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'failing-routes']);
 
-    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
+    expect(array_map(fn (array $call) => Answers::follow($call)['empty'], $answer['next']))->each->toBeNull();
 });
 
 it('puts the verdict in the overview next to the other shapes', function () {
     failingRoutesTraffic();
 
-    $row = Envelope::assert(Overview::class)['result']['detectors'][0];
+    $row = Answers::assert(Overview::class)['result']['detectors'][0];
 
     expect($row)->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'findings', 'examined' => 5, 'total' => 3])
         ->and($row['worst']['name'])->toBe('/boom');

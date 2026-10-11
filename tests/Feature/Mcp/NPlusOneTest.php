@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -73,7 +73,7 @@ function npoRun(string $id, int $runs, string $label = '/orders', string $sql = 
  */
 function npoAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'n-plus-one', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'n-plus-one', ...$arguments]);
 }
 
 /**
@@ -90,11 +90,11 @@ describe('the verdict', function () {
     it('has findings when one execution ran a read query shape at least three times', function () {
         ingest(npoRun('one', 3));
 
-        $envelope = npoAnswer();
+        $answer = npoAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'n-plus-one', 'verdict' => 'findings', 'reason' => null, 'examined' => 1, 'total' => 1, 'saw' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'n-plus-one', 'total' => 1, 'examined' => 1, 'input' => __('firewatch::messages.detect_input.n-plus-one')]))
-            ->and($envelope['result']['threshold'])->toBe(['name' => 'runs', 'value' => 3, 'default' => 3, 'unit' => 'runs', 'range' => ['min' => 2, 'max' => null], 'is_default' => true]);
+        expect($answer['result'])->toMatchArray(['detector' => 'n-plus-one', 'verdict' => 'findings', 'reason' => null, 'examined' => 1, 'total' => 1, 'saw' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'n-plus-one', 'total' => 1, 'examined' => 1, 'input' => __('firewatch::messages.detect_input.n-plus-one')]))
+            ->and($answer['result']['threshold'])->toBe(['name' => 'runs', 'value' => 3, 'default' => 3, 'unit' => 'runs', 'range' => ['min' => 2, 'max' => null], 'is_default' => true]);
     });
 
     it('tells two runs from three', function (int $runs, string $verdict) {
@@ -113,10 +113,10 @@ describe('the verdict', function () {
             npoExecution('quiet'),
         ]);
 
-        $envelope = npoAnswer();
+        $answer = npoAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'n-plus-one', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.n-plus-one')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'n-plus-one', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.n-plus-one')]));
     });
 
     it('examines the executions of all four types', function () {
@@ -133,10 +133,10 @@ describe('the verdict', function () {
     it('is not evaluated when no execution ran a query', function () {
         ingest([npoExecution('quiet'), npoExecution('also-quiet', 'orders:ship', RecordType::COMMAND)]);
 
-        $envelope = npoAnswer();
+        $answer = npoAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'n-plus-one', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'n-plus-one', 'reason' => 'no_records']));
     });
 
     it('judges the executions that started in the window, with their queries wherever those started', function () {
@@ -146,10 +146,10 @@ describe('the verdict', function () {
             ...npoRun('late', 3, '/late', execution: ['timestamp' => NPO_AT + 300]),
         ]);
 
-        $envelope = npoAnswer(['since' => NPO_AT]);
+        $answer = npoAnswer(['since' => NPO_AT]);
 
-        expect($envelope['result'])->toMatchArray(['examined' => 1, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['name'])->toStartWith('/late');
+        expect($answer['result'])->toMatchArray(['examined' => 1, 'total' => 1])
+            ->and($answer['result']['findings'][0]['name'])->toStartWith('/late');
     });
 });
 
@@ -240,10 +240,10 @@ describe('runs', function () {
     it('makes one finding of a group whose executions repeat the same shape', function () {
         ingest([...npoRun('a', 3), ...npoRun('b', 5), ...npoRun('c', 2)]);
 
-        $envelope = npoAnswer();
+        $answer = npoAnswer();
 
-        expect($envelope['result']['total'])->toBe(1)
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['worst_runs' => 5, 'executions_affected' => 2, 'total_runs' => 8]);
+        expect($answer['result']['total'])->toBe(1)
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['worst_runs' => 5, 'executions_affected' => 2, 'total_runs' => 8]);
     });
 
     it('takes the threshold of runs from the call, and refuses one below two', function () {
@@ -427,11 +427,11 @@ describe('the order', function () {
     it('lists no more findings than the limit, and says how many there are', function () {
         ingest([...npoRun('a', 5, '/a'), ...npoRun('b', 4, '/b'), ...npoRun('c', 3, '/c')]);
 
-        $envelope = npoAnswer(['limit' => 2]);
+        $answer = npoAnswer(['limit' => 2]);
 
-        expect($envelope['result']['total'])->toBe(3)
-            ->and($envelope['result']['findings'])->toHaveCount(2)
-            ->and($envelope['truncated'][0])->toMatchArray(['section' => 'findings', 'shown' => 2, 'matched' => 3]);
+        expect($answer['result']['total'])->toBe(3)
+            ->and($answer['result']['findings'])->toHaveCount(2)
+            ->and($answer['truncated'][0])->toMatchArray(['section' => 'findings', 'shown' => 2, 'matched' => 3]);
     });
 });
 
@@ -509,12 +509,12 @@ describe('the history', function () {
         ingest([npoExecution('one', fields: ['queries' => 3])]);
         npoClearThenRun(NPO_AT + 600, ['one']);
 
-        $envelope = npoAnswer();
+        $answer = npoAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0])
-            ->and($envelope['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_reads')])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'n-plus-one', 'reason' => 'outside_coverage']))
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('history-cleared');
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0])
+            ->and($answer['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_reads')])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'n-plus-one', 'reason' => 'outside_coverage']))
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('history-cleared');
     });
 
     it('is not evaluated for want of records, not outside the coverage, when an execution after the clear ran no query', function () {
@@ -530,29 +530,29 @@ describe('the group', function () {
     it('restricts the judgement to the executions of one group', function () {
         ingest([...npoRun('a', 3, '/a'), ...npoRun('b', 3, '/b'), ...npoRun('c', 1, '/b')]);
 
-        $envelope = npoAnswer(['group' => md5('/b')]);
+        $answer = npoAnswer(['group' => md5('/b')]);
 
-        expect($envelope['result'])->toMatchArray(['examined' => 2, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('/b'));
+        expect($answer['result'])->toMatchArray(['examined' => 2, 'total' => 1])
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('/b'));
     });
 
     it('answers a group that holds no executions as no match, not as an error', function () {
         ingest(npoRun('a', 3, '/a'));
 
-        $envelope = npoAnswer(['group' => md5('/elsewhere')]);
+        $answer = npoAnswer(['group' => md5('/elsewhere')]);
 
-        expect($envelope['result']['verdict'])->toBe('not_evaluated')
-            ->and($envelope['empty']['kind'])->toBe('no_match');
+        expect($answer['result']['verdict'])->toBe('not_evaluated')
+            ->and($answer['empty']['kind'])->toBe('no_match');
     });
 
     it('does not call a group no match when history left out its executions', function () {
         ingest([npoExecution('one', fields: ['queries' => 3])]);
         npoClearThenRun(NPO_AT + 600, ['one']);
 
-        $envelope = npoAnswer(['group' => md5('/orders')]);
+        $answer = npoAnswer(['group' => md5('/orders')]);
 
-        expect($envelope['result']['reason'])->toBe('outside_coverage')
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result']['reason'])->toBe('outside_coverage')
+            ->and($answer['empty'])->toBeNull();
     });
 
     it('refuses the hash of a query group, which is a different question', function () {
@@ -570,14 +570,14 @@ describe('what it points at', function () {
     it('offers the worst execution, the records of the group and its ranking, and every call runs', function () {
         ingest([...npoRun('old-but-worst', 6), ...npoRun('recent', 3, execution: ['timestamp' => NPO_AT + 30]), ...npoRun('other', 3, '/other')]);
 
-        $envelope = npoAnswer();
+        $answer = npoAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect($envelope['next'][0])->toMatchArray(['tool' => 'execution', 'arguments' => ['execution_id' => 'old-but-worst']])
-            ->and(array_column(array_slice($envelope['next'], 1, 2), 'tool'))->toBe(['occurrences', 'rank']);
+        expect($answer['next'][0])->toMatchArray(['tool' => 'execution', 'arguments' => ['execution_id' => 'old-but-worst']])
+            ->and(array_column(array_slice($answer['next'], 1, 2), 'tool'))->toBe(['occurrences', 'rank']);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -586,8 +586,8 @@ describe('with the other shapes', function () {
     it('is one row of the overview, first in the catalogue, with its worst finding', function () {
         ingest([...npoRun('one', 3), npoExecution('plain', '/plain', fields: ['status_code' => 200])]);
 
-        $envelope = Envelope::assert(Overview::class);
-        $row = $envelope['result']['detectors'][0];
+        $answer = Answers::assert(Overview::class);
+        $row = $answer['result']['detectors'][0];
 
         expect($row)->toBe([
             'detector' => 'n-plus-one',
@@ -596,13 +596,13 @@ describe('with the other shapes', function () {
             'examined' => 1,
             'total' => 1,
             'worst' => ['name' => '/orders: '.NPO_USER_SQL, 'group' => md5('/orders')],
-        ])->and($envelope['next'][0])->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'n-plus-one'], 'why' => __('firewatch::messages.detect_next_shape')]);
+        ])->and($answer['next'][0])->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'n-plus-one'], 'why' => __('firewatch::messages.detect_next_shape')]);
     });
 
     it('is run with the others when no shape is named', function () {
         ingest(npoRun('one', 3));
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[0])->toMatchArray(['verdict' => 'findings', 'total' => 1]);

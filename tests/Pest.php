@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use ClaudioDekker\Firewatch\Tests\TestCase;
@@ -35,8 +35,8 @@ pest()->extend(TestCase::class)
     })
     ->in('Scenario', 'Feature', 'Contract');
 
-pest()->beforeEach(fn () => Envelope::followNext(true))
-    ->afterEach(fn () => Envelope::followNext(false))
+pest()->beforeEach(fn () => Answers::followNext(true))
+    ->afterEach(fn () => Answers::followNext(false))
     ->in('Scenario');
 
 pest()->group('scenario')->in('Scenario');

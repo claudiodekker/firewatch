@@ -14,7 +14,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trend;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Date;
 
 const UNAVAILABLE_AT = 1790776000.0;
@@ -39,12 +39,12 @@ it('answers a store that is missing or is not Firewatch\'s, stating the coverage
         $arrange($path);
     }
 
-    $envelope = Envelope::assert($tool, $arguments);
+    $answer = Answers::assert($tool, $arguments);
 
-    expect($envelope['empty'])->toBe(['kind' => $kind, 'population' => null, 'message' => __("firewatch::messages.{$key}", ['path' => $path])])
-        ->and($envelope['coverage'])->toMatchArray(['state' => $state, 'reason' => $reason, 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => $typesRead, 'straddling' => null])
-        ->and($envelope['coverage']['history'])->toMatchArray(['from' => null, 'reason' => null])
-        ->and($envelope['next'])->toBe([]);
+    expect($answer['empty'])->toBe(['kind' => $kind, 'population' => null, 'message' => __("firewatch::messages.{$key}", ['path' => $path])])
+        ->and($answer['coverage'])->toMatchArray(['state' => $state, 'reason' => $reason, 'oldest_at' => null, 'newest_at' => null, 'records' => null, 'types_read' => $typesRead, 'straddling' => null])
+        ->and($answer['coverage']['history'])->toMatchArray(['from' => null, 'reason' => null])
+        ->and($answer['next'])->toBe([]);
 
     if ($arrange === null) {
         expect(dirname($path))->not->toBeDirectory();

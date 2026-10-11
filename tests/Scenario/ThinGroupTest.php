@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Route;
 
 // A warm request's boot on the Windows runner can stall for over 300 ms, so the cold run is compared with the third-fastest run, not the second-slowest.
@@ -41,7 +41,7 @@ function coldRouteTraffic(int $runs): void
  */
 function coldRouteRow(): array
 {
-    return Envelope::assert(Rank::class, ['type' => 'request'])['result']['groups'][0];
+    return Answers::assert(Rank::class, ['type' => 'request'])['result']['groups'][0];
 }
 
 it('lists the runs of a route served a few times, so the cold first run reads straight off the ranking', function () {
@@ -61,7 +61,7 @@ it('lists the runs of a route served a few times, so the cold first run reads st
 it('lists the runs behind a withheld at_or_above baseline of the same route', function () {
     coldRouteTraffic(6);
 
-    $baseline = Envelope::assert(Occurrences::class, ['group' => coldRouteRow()['group'], 'at_or_above' => 'p95'])['result']['baseline'];
+    $baseline = Answers::assert(Occurrences::class, ['group' => coldRouteRow()['group'], 'at_or_above' => 'p95'])['result']['baseline'];
 
     expect($baseline['threshold_ms'])->toBeNull()
         ->and($baseline['values_ms'])->toHaveCount($baseline['withheld']['have'])

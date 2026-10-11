@@ -3,7 +3,7 @@
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -34,10 +34,10 @@ function databaseBoundRequest(): void
 it('finds the route whose request spent its time in a query, and names the query', function () {
     databaseBoundRequest();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
-    $finding = $envelope['result']['findings'][0];
+    $answer = Answers::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
+    $finding = $answer['result']['findings'][0];
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+    expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
         ->and($finding['name'])->toBe('/report')
         ->and($finding['evidence'])->toMatchArray(['requests' => 1, 'basis' => 'aggregate'])
         ->and($finding['evidence']['share_pct'])->toBeGreaterThan(1)
@@ -50,21 +50,21 @@ it('finds nothing in a request that ran no query, and says it looked at the requ
     Route::get('/health', fn () => 'ok');
     test()->get('/health');
 
-    expect(Envelope::assert(Detect::class, ['shape' => 'database-bound'])['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0]);
+    expect(Answers::assert(Detect::class, ['shape' => 'database-bound'])['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0]);
 });
 
 it('opens what a finding points at', function () {
     databaseBoundRequest();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
+    $answer = Answers::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
 
-    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
+    expect(array_map(fn (array $call) => Answers::follow($call)['empty'], $answer['next']))->each->toBeNull();
 });
 
 it('examines the request in the overview, at the default threshold', function () {
     databaseBoundRequest();
 
-    $row = collect(Envelope::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'database-bound');
+    $row = collect(Answers::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'database-bound');
 
     expect($row)->toMatchArray(['examined' => 1])
         ->and($row['verdict'])->toBeIn(['findings', 'clean']);
@@ -73,8 +73,8 @@ it('examines the request in the overview, at the default threshold', function ()
 it('states that query bindings may be unpaired on the real request', function () {
     databaseBoundRequest();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
-    $blindSpots = array_column($envelope['blind_spots'], 'message', 'id');
+    $answer = Answers::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
+    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
 
     expect($blindSpots)->toHaveKey('query-bindings-unpaired')
         ->and($blindSpots['query-bindings-unpaired'])->toBe(__('firewatch::messages.blind_spots.query-bindings-unpaired'));

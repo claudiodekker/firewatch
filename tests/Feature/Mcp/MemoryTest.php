@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -58,7 +58,7 @@ function memPeaks(array $megabytes, string $label = '/orders'): array
  */
 function memAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'memory', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'memory', ...$arguments]);
 }
 
 /**
@@ -75,12 +75,12 @@ describe('the verdict', function () {
     it('has findings when an execution of a group peaked at 64 megabytes or more, over every execution examined', function () {
         ingest([...memPeaks([10, 64]), ...memPeaks([10], '/health')]);
 
-        $envelope = memAnswer();
+        $answer = memAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'memory', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'memory', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.memory')]))
-            ->and($envelope['result']['threshold'])->toBe(['name' => 'peak', 'value' => 64, 'default' => 64, 'unit' => 'mb', 'range' => ['min' => 1, 'max' => null], 'is_default' => true])
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('/orders'));
+        expect($answer['result'])->toMatchArray(['detector' => 'memory', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'memory', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.memory')]))
+            ->and($answer['result']['threshold'])->toBe(['name' => 'peak', 'value' => 64, 'default' => 64, 'unit' => 'mb', 'range' => ['min' => 1, 'max' => null], 'is_default' => true])
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('/orders'));
     });
 
     it('tells one byte under the threshold from the threshold, in bytes and not in the megabytes shown', function (int|float|null $threshold, int $bytes, string $verdict) {
@@ -125,10 +125,10 @@ describe('the verdict', function () {
     it('is clean over the executions that have a peak, and says how many', function () {
         ingest(memPeaks([10, 20, 63.9]));
 
-        $envelope = memAnswer();
+        $answer = memAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'memory', 'examined' => 3, 'input' => __('firewatch::messages.detect_input.memory')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 3, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'memory', 'examined' => 3, 'input' => __('firewatch::messages.detect_input.memory')]));
     });
 
     it('does not examine an execution that has no peak', function () {
@@ -144,19 +144,19 @@ describe('the verdict', function () {
     it('is not evaluated when no execution has a peak, never clean', function () {
         ingest([memExecution('unmeasured', null), syntheticRecord(RecordType::QUERY)]);
 
-        $envelope = memAnswer();
+        $answer = memAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'memory', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'memory', 'reason' => 'no_records']));
     });
 
     it('examines the executions of all four types, and finds each', function (RecordType $type, string $label) {
         ingest([memExecution('one', 80 * MEM_MB, $label, $type)]);
 
-        $envelope = memAnswer();
+        $answer = memAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-            ->and($envelope['result']['findings'][0])->toMatchArray(['group' => md5($label), 'name' => $label]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($answer['result']['findings'][0])->toMatchArray(['group' => md5($label), 'name' => $label]);
     })->with([
         'a request' => [RecordType::REQUEST, '/orders'],
         'a command' => [RecordType::COMMAND, 'orders:ship'],
@@ -170,9 +170,9 @@ describe('the verdict', function () {
             memExecution('within', 10 * MEM_MB),
         ]);
 
-        $envelope = memAnswer(['since' => (string) (MEM_AT - 1), 'until' => (string) (MEM_AT + 1)]);
+        $answer = memAnswer(['since' => (string) (MEM_AT - 1), 'until' => (string) (MEM_AT + 1)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 });
 
@@ -186,9 +186,9 @@ describe('the finding', function () {
             memExecution('latest', 20 * MEM_MB, fields: ['timestamp' => MEM_AT + 240, 'user' => 'u2']),
         ]);
 
-        $envelope = memAnswer();
+        $answer = memAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => md5('/orders'),
             'name' => '/orders',
             'count' => 100.0,
@@ -305,19 +305,19 @@ describe('the order', function () {
     it('shows the findings up to the limit, with the exact total and a note of the cut', function () {
         ingest(array_merge(...array_map(fn (int $route) => memPeaks([64 + $route], "/route-{$route}"), range(1, 4))));
 
-        $envelope = memAnswer(['limit' => 3]);
+        $answer = memAnswer(['limit' => 3]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['/route-4', '/route-3', '/route-2'])
-            ->and($envelope['result'])->toMatchArray(['examined' => 4, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['/route-4', '/route-3', '/route-2'])
+            ->and($answer['result'])->toMatchArray(['examined' => 4, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest(array_merge(...array_map(fn (int $route) => memPeaks([80], "/route-{$route}"), range(1, 3))));
 
-        $envelope = memAnswer(['limit' => 3]);
+        $answer = memAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 });
 
@@ -325,19 +325,19 @@ describe('one group', function () {
     it('restricts the judgement to the group, and examines only its executions', function () {
         ingest([...memPeaks([80, 10]), ...memPeaks([90], '/health'), memExecution('command', 90 * MEM_MB, 'orders:ship', RecordType::COMMAND)]);
 
-        $envelope = memAnswer(['group' => md5('/orders')]);
+        $answer = memAnswer(['group' => md5('/orders')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['/orders']);
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['/orders']);
     });
 
     it('restricts the judgement to the group of a command', function () {
         ingest([...memPeaks([80]), memExecution('command', 90 * MEM_MB, 'orders:ship', RecordType::COMMAND)]);
 
-        $envelope = memAnswer(['group' => md5('orders:ship')]);
+        $answer = memAnswer(['group' => md5('orders:ship')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['worst_execution_id'])->toBe('command');
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($answer['result']['findings'][0]['worst_execution_id'])->toBe('command');
     });
 
     it('is clean when the group has executions and none reached the threshold', function () {
@@ -349,10 +349,10 @@ describe('one group', function () {
     it('answers that no execution matches a group that holds none', function () {
         ingest([...memPeaks([80]), ...memPeaks([10], '/health')]);
 
-        $envelope = memAnswer(['group' => md5('/missing')]);
+        $answer = memAnswer(['group' => md5('/missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
     });
 });
 
@@ -390,13 +390,13 @@ describe('what to look at next', function () {
             memExecution('recent', 70 * MEM_MB, fields: ['timestamp' => MEM_AT + 60]),
         ]);
 
-        $envelope = memAnswer();
+        $answer = memAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'highest'], ['group' => md5('/orders')], ['group' => md5('/orders')]]);
+        expect(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'highest'], ['group' => md5('/orders')], ['group' => md5('/orders')]]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -405,7 +405,7 @@ describe('with the other shapes', function () {
     it('is a row of the overview, at the default threshold, with its worst finding', function () {
         ingest([...memPeaks([80, 10]), ...memPeaks([90], '/health'), ...memPeaks([63], '/under')]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'memory');
 
         expect($row)->toBe([
@@ -421,7 +421,7 @@ describe('with the other shapes', function () {
     it('is run after the others when no shape is named', function () {
         ingest(memPeaks([80]));
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[10])->toMatchArray(['verdict' => 'findings', 'total' => 1]);

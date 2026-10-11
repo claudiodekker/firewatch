@@ -28,7 +28,7 @@ function answerWith(mixed ...$overrides): Answer
     ]);
 }
 
-test('an answer has every envelope key, in order, with an empty result as an object', function () {
+test('an answer has every answer key, in order, with an empty result as an object', function () {
     $answer = answerWith(result: [])->toArray();
 
     expect(array_keys($answer))->toBe(['tool', 'now', 'window', 'summary', 'empty', 'result', 'coverage', 'blind_spots', 'notes', 'truncated', 'next'])
@@ -36,7 +36,7 @@ test('an answer has every envelope key, in order, with an empty result as an obj
         ->and($answer)->toMatchArray(['empty' => null, 'blind_spots' => [], 'notes' => [], 'truncated' => [], 'next' => []]);
 });
 
-it('prints the whole envelope in its fixed layout', function () {
+it('prints the whole answer in its fixed layout', function () {
     $answer = answerWith(
         summary: 'One slow route.',
         empty: Emptiness::windowEmpty(40),

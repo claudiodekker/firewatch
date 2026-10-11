@@ -1,7 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Route;
 
 // A request's boot on the Windows runner can stall for over 300 ms, and the slow route must still dominate it.
@@ -38,15 +38,15 @@ it('names the route that got slow in the block of the deploy that slowed it, and
     whichDeployServe('v1', 0);
     whichDeployServe('v2', WHICH_DEPLOY_SLOW_MS);
 
-    $envelope = Envelope::assert(Overview::class, ['by_deploy' => true]);
-    [$first, $second] = $envelope['result']['slowest_by_total_time'];
+    $answer = Answers::assert(Overview::class, ['by_deploy' => true]);
+    [$first, $second] = $answer['result']['slowest_by_total_time'];
 
     expect([$first['deploy'], $second['deploy']])->toBe(['v1', 'v2'])
         ->and($second['groups'][0]['label'])->toBe('/orders')
         ->and($second['groups'][0]['avg_ms'])->toBeGreaterThan(collect($first['groups'])->firstWhere('label', '/orders')['avg_ms'])
-        ->and($envelope['next'][0])->toMatchArray(['tool' => 'compare', 'arguments' => ['type' => 'request', 'deploy_before' => 'v1', 'deploy_after' => 'v2']]);
+        ->and($answer['next'][0])->toMatchArray(['tool' => 'compare', 'arguments' => ['type' => 'request', 'deploy_before' => 'v1', 'deploy_after' => 'v2']]);
 
-    $compared = Envelope::follow($envelope['next'][0]);
+    $compared = Answers::follow($answer['next'][0]);
 
     expect($compared['empty'])->toBeNull()
         ->and($compared['result']['before']['deploy'])->toBe('v1')

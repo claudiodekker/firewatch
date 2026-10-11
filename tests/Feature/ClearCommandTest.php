@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
 use Symfony\Component\Console\Input\ArgvInput;
@@ -248,7 +248,7 @@ describe('clearing everything', function () {
         runClear()->run();
 
         expect(clearMarkers()->clearedAt)->toBe(1790778600.0)
-            ->and(Envelope::assert(Overview::class)['coverage']['history'])->toMatchArray(['from' => 1790778600.0, 'reason' => 'cleared']);
+            ->and(Answers::assert(Overview::class)['coverage']['history'])->toMatchArray(['from' => 1790778600.0, 'reason' => 'cleared']);
     });
 
     it('keeps the ids going, so no cursor repeats', function () {

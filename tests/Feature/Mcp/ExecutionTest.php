@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Exceptions;
@@ -52,7 +52,7 @@ function execQuery(string $sql, float $offset = 0.5, array $fields = [], string 
  */
 function execAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Execution::class, $arguments);
+    return Answers::assert(Execution::class, $arguments);
 }
 
 /**
@@ -88,9 +88,9 @@ it('opens the execution that finished last, which may have started first', funct
         execRecord(RecordType::COMMAND, 'late-command', ['timestamp' => EXECUTION_AT + 1, 'duration' => 1_000_000]),
     ]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['result']['header']['execution_id'])->toBe('slow-request');
+    expect($answer['result']['header']['execution_id'])->toBe('slow-request');
 });
 
 it('breaks a tie on the end time by the record stored last', function () {
@@ -99,9 +99,9 @@ it('breaks a tie on the end time by the record stored last', function () {
         execRecord(RecordType::REQUEST, 'second'),
     ]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['result']['header']['execution_id'])->toBe('second');
+    expect($answer['result']['header']['execution_id'])->toBe('second');
 });
 
 it('opens the latest of one type', function (string $type, string $expected) {
@@ -112,9 +112,9 @@ it('opens the latest of one type', function (string $type, string $expected) {
         execRecord(RecordType::SCHEDULED_TASK, 'task', ['duration' => 3_000_000]),
     ]);
 
-    $envelope = execAnswer(['type' => $type]);
+    $answer = execAnswer(['type' => $type]);
 
-    expect($envelope['result']['header'])->toMatchArray(['type' => $type, 'execution_id' => $expected]);
+    expect($answer['result']['header'])->toMatchArray(['type' => $type, 'execution_id' => $expected]);
 })->with([
     'request' => ['request', 'request'],
     'command' => ['command', 'command'],
@@ -128,9 +128,9 @@ it('opens the execution with the id, of any type', function (RecordType $type) {
         execRecord($type, 'wanted'),
     ]);
 
-    $envelope = execAnswer(['execution_id' => 'wanted']);
+    $answer = execAnswer(['execution_id' => 'wanted']);
 
-    expect($envelope['result']['header'])->toMatchArray(['type' => $type->value, 'execution_id' => 'wanted']);
+    expect($answer['result']['header'])->toMatchArray(['type' => $type->value, 'execution_id' => 'wanted']);
 })->with([
     'a request' => [RecordType::REQUEST],
     'a command' => [RecordType::COMMAND],
@@ -141,21 +141,21 @@ it('opens the execution with the id, of any type', function (RecordType $type) {
 it('answers that no execution of the type exists, naming the filter and the records it looked among', function () {
     ingest([execRecord(RecordType::REQUEST, 'request'), execChild(RecordType::LOG, 'request')]);
 
-    $envelope = execAnswer(['type' => 'command']);
+    $answer = execAnswer(['type' => 'command']);
 
-    expect($envelope['empty'])->toBe(['kind' => 'no_match', 'population' => 2, 'message' => __('firewatch::messages.no_match', ['population' => 2, 'filters' => 'type: command'])])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.no_match'))
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['next'])->toBe([])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 2, 'types_read' => ['command']]);
+    expect($answer['empty'])->toBe(['kind' => 'no_match', 'population' => 2, 'message' => __('firewatch::messages.no_match', ['population' => 2, 'filters' => 'type: command'])])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.empty_summary.no_match'))
+        ->and($answer['result'])->toBe([])
+        ->and($answer['next'])->toBe([])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'records' => 2, 'types_read' => ['command']]);
 });
 
 it('answers that no execution exists when the store holds only children', function () {
     ingest([execChild(RecordType::LOG, 'orphan')]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['empty'])->toBe(['kind' => 'no_match', 'population' => 1, 'message' => __('firewatch::messages.no_match', ['population' => 1, 'filters' => __('firewatch::messages.execution_any_type')])]);
+    expect($answer['empty'])->toBe(['kind' => 'no_match', 'population' => 1, 'message' => __('firewatch::messages.no_match', ['population' => 1, 'filters' => __('firewatch::messages.execution_any_type')])]);
 });
 
 it('refuses an execution id the store does not hold, as not found', function () {
@@ -178,7 +178,7 @@ it('says a trace id that is not an execution id is one, and points at the trace 
     ingest([execRecord(RecordType::JOB_ATTEMPT, 'attempt', ['trace_id' => 'job-trace'])]);
 
     $text = execRefusal(['execution_id' => 'job-trace']);
-    $followed = Envelope::assert(Trace::class, ['trace_id' => 'job-trace']);
+    $followed = Answers::assert(Trace::class, ['trace_id' => 'job-trace']);
 
     expect($text)->toBe(__('firewatch::messages.execution_not_found_trace', ['id' => 'job-trace', 'argument' => 'execution_id', 'accepted' => 'an execution id, not a trace id', 'example' => 'execution(execution_id: "<execution id>")']))
         ->and($followed['result']['executions'])->toHaveCount(1);
@@ -190,9 +190,9 @@ it('opens an execution whose id is also the trace id of other records', function
         execChild(RecordType::JOB_ATTEMPT, 'attempt', ['trace_id' => 'shared']),
     ]);
 
-    $envelope = execAnswer(['execution_id' => 'shared']);
+    $answer = execAnswer(['execution_id' => 'shared']);
 
-    expect($envelope['result']['header']['type'])->toBe('request');
+    expect($answer['result']['header']['type'])->toBe('request');
 });
 
 it('refuses a type given with an execution id', function () {
@@ -248,46 +248,46 @@ it('refuses the arguments before it reads the store', function () {
 it('states that it is not windowed, with the reason', function () {
     ingest([execRecord(RecordType::REQUEST, 'request')]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.execution_window_reason')])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.execution_summary', ['type' => 'request', 'id' => 'request', 'outcome' => 200]));
+    expect($answer['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.execution_window_reason')])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.execution_summary', ['type' => 'request', 'id' => 'request', 'outcome' => 200]));
 });
 
 it('answers that the store is empty, even for an execution id', function () {
     app(Writer::class)->transaction(fn () => null);
 
-    $envelope = execAnswer(['execution_id' => 'abc']);
+    $answer = execAnswer(['execution_id' => 'abc']);
 
-    expect($envelope['empty']['kind'])->toBe('store_empty')
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
-        ->and($envelope['next'])->toBe([]);
+    expect($answer['empty']['kind'])->toBe('store_empty')
+        ->and($answer['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
+        ->and($answer['next'])->toBe([]);
 });
 
 it('reads the execution and its children as the types it examined', function () {
     ingest([execRecord(RecordType::COMMAND, 'command')]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['coverage']['types_read'])->toBe(['command', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('dead-counters', 'memory-is-process-peak', 'query-bindings-unpaired', 'exceptions-unreported', 'failed-flag-unpopulated')
-        ->and(array_column($envelope['blind_spots'], 'id'))->not->toContain('payload-on-server-error-only');
+    expect($answer['coverage']['types_read'])->toBe(['command', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('dead-counters', 'memory-is-process-peak', 'query-bindings-unpaired', 'exceptions-unreported', 'failed-flag-unpopulated')
+        ->and(array_column($answer['blind_spots'], 'id'))->not->toContain('payload-on-server-error-only');
 });
 
 it('attaches the request blind spots to a request', function () {
     ingest([execRecord(RecordType::REQUEST, 'request')]);
 
-    $envelope = execAnswer(['execution_id' => 'request']);
+    $answer = execAnswer(['execution_id' => 'request']);
 
-    expect(array_column($envelope['blind_spots'], 'id'))->toContain('payload-on-server-error-only', 'console-requests', 'octane-bootstrap');
+    expect(array_column($answer['blind_spots'], 'id'))->toContain('payload-on-server-error-only', 'console-requests', 'octane-bootstrap');
 });
 
 it('says an execution is recorded when it finishes only when it was found as the latest', function (array $arguments, bool $attached) {
     ingest([execRecord(RecordType::REQUEST, 'request')]);
 
-    $envelope = execAnswer($arguments);
+    $answer = execAnswer($arguments);
 
-    expect(in_array('visible-at-completion', array_column($envelope['blind_spots'], 'id'), true))->toBe($attached);
+    expect(in_array('visible-at-completion', array_column($answer['blind_spots'], 'id'), true))->toBe($attached);
 })->with([
     'no argument' => [[], true],
     'a type' => [['type' => 'request'], true],
@@ -297,11 +297,11 @@ it('says an execution is recorded when it finishes only when it was found as the
 it('offers to rank the group of the execution, and the call runs', function () {
     ingest([execRecord(RecordType::REQUEST, 'request', ['_group' => str_repeat('b', 32)])]);
 
-    $envelope = execAnswer();
-    $call = $envelope['next'][0];
-    $ranked = Envelope::assert(Rank::class, $call['arguments']);
+    $answer = execAnswer();
+    $call = $answer['next'][0];
+    $ranked = Answers::assert(Rank::class, $call['arguments']);
 
-    expect($envelope['next'])->toHaveCount(2)
+    expect($answer['next'])->toHaveCount(2)
         ->and($call)->toBe(['tool' => 'rank', 'arguments' => ['group' => str_repeat('b', 32)], 'why' => __('firewatch::messages.execution_next_rank')])
         ->and($ranked['empty'])->toBeNull();
 });
@@ -312,11 +312,11 @@ it('offers to list the queries of an execution that captured some, and the call 
         execQuery('select 1', id: 'request'),
     ]);
 
-    $envelope = execAnswer();
-    $call = $envelope['next'][1];
-    $listed = Envelope::assert(Occurrences::class, $call['arguments']);
+    $answer = execAnswer();
+    $call = $answer['next'][1];
+    $listed = Answers::assert(Occurrences::class, $call['arguments']);
 
-    expect($envelope['next'])->toHaveCount(3)
+    expect($answer['next'])->toHaveCount(3)
         ->and($call)->toBe(['tool' => 'occurrences', 'arguments' => ['execution_id' => 'request', 'type' => 'query'], 'why' => __('firewatch::messages.execution_next_occurrences')])
         ->and($listed['result']['rows'])->toHaveCount(1);
 });
@@ -327,9 +327,9 @@ it('offers no list of queries for an execution that captured none', function () 
         execChild(RecordType::LOG, 'request'),
     ]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['rank', 'trace']);
+    expect(array_column($answer['next'], 'tool'))->toBe(['rank', 'trace']);
 });
 
 it('offers to follow the trace of the execution, and the call runs', function () {
@@ -338,9 +338,9 @@ it('offers to follow the trace of the execution, and the call runs', function ()
         syntheticRecord(RecordType::JOB_ATTEMPT)->with(['trace_id' => 'request', 'job_id' => 'job', 'attempt_id' => 'attempt', 'timestamp' => EXECUTION_AT + 5]),
     ]);
 
-    $envelope = execAnswer();
-    $call = $envelope['next'][1];
-    $traced = Envelope::assert(Trace::class, $call['arguments']);
+    $answer = execAnswer();
+    $call = $answer['next'][1];
+    $traced = Answers::assert(Trace::class, $call['arguments']);
 
     expect($call)->toBe(['tool' => 'trace', 'arguments' => ['trace_id' => 'request'], 'why' => __('firewatch::messages.execution_next_trace')])
         ->and(array_column($traced['result']['executions'], 'execution_id'))->toBe(['request', 'attempt']);
@@ -349,17 +349,17 @@ it('offers to follow the trace of the execution, and the call runs', function ()
 it('offers no trace to follow for an execution that has none', function () {
     ingest([execRecord(RecordType::JOB_ATTEMPT, 'attempt', ['trace_id' => null])]);
 
-    $envelope = execAnswer(['execution_id' => 'attempt']);
+    $answer = execAnswer(['execution_id' => 'attempt']);
 
-    expect(array_column($envelope['next'], 'tool'))->not->toContain('trace');
+    expect(array_column($answer['next'], 'tool'))->not->toContain('trace');
 });
 
 it('offers only the trace for an execution without a group', function () {
     ingest([execRecord(RecordType::COMMAND, 'command')->without('_group')]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['trace']);
+    expect(array_column($answer['next'], 'tool'))->toBe(['trace']);
 });
 
 test('the tool is listed with its description, arguments and annotations', function () {
@@ -462,10 +462,10 @@ it('records the stages of a command, and none for a job attempt or a scheduled t
 it('keeps a job attempt\'s trace id apart from its execution id', function () {
     ingest([execRecord(RecordType::JOB_ATTEMPT, 'attempt-1', ['trace_id' => 'trace-1'])]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['result']['header'])->toMatchArray(['execution_id' => 'attempt-1', 'trace_id' => 'trace-1'])
-        ->and($envelope['result']['caused'])->toBe(['jobs_queued' => 0, 'trace_id' => 'trace-1']);
+    expect($answer['result']['header'])->toMatchArray(['execution_id' => 'attempt-1', 'trace_id' => 'trace-1'])
+        ->and($answer['result']['caused'])->toBe(['jobs_queued' => 0, 'trace_id' => 'trace-1']);
 });
 
 it('states how many jobs the execution queued', function () {
@@ -499,10 +499,10 @@ it('cuts a cell at 2,000 characters and says so', function () {
     $payload = json_encode(['body' => str_repeat('x', 2500)], JSON_THROW_ON_ERROR);
     ingest([execRecord(RecordType::REQUEST, 'one', ['status_code' => 500, 'payload' => $payload])]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['result']['request']['payload']['body'])->toBe(str_repeat('x', 2000).__('firewatch::messages.cell_truncated', ['count' => 500]))
-        ->and($envelope['truncated'])->toBe([['section' => 'request', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how', ['characters' => '2,000'])]]);
+    expect($answer['result']['request']['payload']['body'])->toBe(str_repeat('x', 2000).__('firewatch::messages.cell_truncated', ['count' => 500]))
+        ->and($answer['truncated'])->toBe([['section' => 'request', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how', ['characters' => '2,000'])]]);
 });
 
 it('has no request details for the other types', function (RecordType $type) {
@@ -627,15 +627,15 @@ it('says children are outside coverage, not incomplete, when their type was clea
     $this->travelTo(Date::createFromTimestamp(EXECUTION_AT + 600));
     $exitCode = $this->artisan('firewatch:clear', ['--type' => 'query', '--force' => true])->run();
 
-    $envelope = execAnswer(['execution_id' => 'one']);
-    $from = $envelope['coverage']['history']['from'];
-    $accounting = $envelope['result']['accounting'];
+    $answer = execAnswer(['execution_id' => 'one']);
+    $from = $answer['coverage']['history']['from'];
+    $accounting = $answer['result']['accounting'];
 
     expect($exitCode)->toBe(0)
         ->and($from)->toEqual(EXECUTION_AT + 600)
         ->and($accounting['counters'][0])->toBe(['counter' => 'queries', 'counted' => 3, 'captured' => 0, 'state' => 'fewer'])
         ->and($accounting['lines'])->toBe([__('firewatch::messages.accounting_outside_coverage', ['noun' => 'queries', 'from' => Instant::format(EXECUTION_AT + 600, config()->string('app.timezone'))])])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('history-cleared');
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('history-cleared');
 });
 
 it('says incomplete when the type that lacks children was not cleared', function () {
@@ -747,12 +747,12 @@ it('shows the earliest five of six exceptions and says there are six', function 
         ...array_map(fn (int $index) => execException(fields: ['class' => "Error{$index}", 'timestamp' => EXECUTION_AT + 0.1 * (10 - $index)]), range(1, $count)),
     ]);
 
-    $envelope = execAnswer();
-    $classes = array_column($envelope['result']['exceptions'], 'class');
+    $answer = execAnswer();
+    $classes = array_column($answer['result']['exceptions'], 'class');
 
     expect($classes)->toBe(array_slice(array_reverse(array_map(fn (int $index) => "Error{$index}", range(1, $count))), 0, 5))
-        ->and($envelope['truncated'])->toBe($cut ? [['section' => 'exceptions', 'shown' => 5, 'matched' => 6, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_exceptions_how', ['id' => 'one'])]] : [])
-        ->and($envelope['result']['accounting']['counters'][1]['captured'])->toBe($count);
+        ->and($answer['truncated'])->toBe($cut ? [['section' => 'exceptions', 'shown' => 5, 'matched' => 6, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_exceptions_how', ['id' => 'one'])]] : [])
+        ->and($answer['result']['accounting']['counters'][1]['captured'])->toBe($count);
 })->with([
     'five' => [5, false],
     'six' => [6, true],
@@ -765,7 +765,7 @@ it('points at the call that lists every exception, which lists all six', functio
     ]);
 
     $how = execAnswer()['truncated'][0]['how'];
-    $rows = Envelope::assert(Occurrences::class, ['execution_id' => 'one', 'type' => 'exception'])['result']['rows'];
+    $rows = Answers::assert(Occurrences::class, ['execution_id' => 'one', 'type' => 'exception'])['result']['rows'];
 
     expect($how)->toBe(__('firewatch::messages.execution_exceptions_how', ['id' => 'one']))
         ->and($rows)->toHaveCount(6);
@@ -789,10 +789,10 @@ it('cuts a message at 2,000 characters and says so', function () {
         execException(fields: ['message' => str_repeat('m', 2100)]),
     ]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['result']['exceptions'][0]['message'])->toBe(str_repeat('m', 2000).__('firewatch::messages.cell_truncated', ['count' => 100]))
-        ->and(array_column($envelope['truncated'], 'section'))->toContain('exceptions');
+    expect($answer['result']['exceptions'][0]['message'])->toBe(str_repeat('m', 2000).__('firewatch::messages.cell_truncated', ['count' => 100]))
+        ->and(array_column($answer['truncated'], 'section'))->toContain('exceptions');
 });
 
 it('lists the children of every type in the order they started', function () {
@@ -912,10 +912,10 @@ it('lists no more entries than the limit, and says how many there are', function
         ...array_map(fn (int $index) => execQuery("select {$index}", 0.1 * $index), range(1, 3)),
     ]);
 
-    $envelope = execAnswer(['limit' => 2]);
+    $answer = execAnswer(['limit' => 2]);
 
-    expect(array_column($envelope['result']['timeline'], 'name'))->toBe(['select 1', 'select 2'])
-        ->and($envelope['truncated'])->toBe([['section' => 'timeline', 'shown' => 2, 'matched' => 3, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_timeline_how', ['id' => 'one'])]]);
+    expect(array_column($answer['result']['timeline'], 'name'))->toBe(['select 1', 'select 2'])
+        ->and($answer['truncated'])->toBe([['section' => 'timeline', 'shown' => 2, 'matched' => 3, 'reason' => 'limit', 'how' => __('firewatch::messages.execution_timeline_how', ['id' => 'one'])]]);
 });
 
 it('points at the call that lists every record of a cut timeline, which lists them all', function () {
@@ -925,7 +925,7 @@ it('points at the call that lists every record of a cut timeline, which lists th
     ]);
 
     $how = execAnswer(['limit' => 2])['truncated'][0]['how'];
-    $rows = Envelope::assert(Occurrences::class, ['execution_id' => 'one'])['result']['rows'];
+    $rows = Answers::assert(Occurrences::class, ['execution_id' => 'one'])['result']['rows'];
 
     expect($how)->toBe(__('firewatch::messages.execution_timeline_how', ['id' => 'one']))
         ->and($rows)->toHaveCount(4);
@@ -937,10 +937,10 @@ it('lists a timeline of exactly the limit as complete', function () {
         ...array_map(fn (int $index) => execQuery("select {$index}", 0.1 * $index), range(1, 2)),
     ]);
 
-    $envelope = execAnswer(['limit' => 2]);
+    $answer = execAnswer(['limit' => 2]);
 
-    expect($envelope['result']['timeline'])->toHaveCount(2)
-        ->and($envelope['truncated'])->toBe([]);
+    expect($answer['result']['timeline'])->toHaveCount(2)
+        ->and($answer['truncated'])->toBe([]);
 });
 
 it('counts a collapsed row once against the limit', function () {
@@ -950,11 +950,11 @@ it('counts a collapsed row once against the limit', function () {
         execQuery('select 2', 0.9),
     ]);
 
-    $envelope = execAnswer(['limit' => 2]);
+    $answer = execAnswer(['limit' => 2]);
 
-    expect($envelope['result']['timeline'])->toHaveCount(2)
-        ->and($envelope['truncated'])->toBe([])
-        ->and($envelope['result']['timeline'][0]['count'])->toBe(10);
+    expect($answer['result']['timeline'])->toHaveCount(2)
+        ->and($answer['truncated'])->toBe([])
+        ->and($answer['result']['timeline'][0]['count'])->toBe(10);
 });
 
 it('lists fifty entries by default', function () {
@@ -963,10 +963,10 @@ it('lists fifty entries by default', function () {
         ...array_map(fn (int $index) => execQuery("select {$index}", 0.001 * $index), range(1, 60)),
     ]);
 
-    $envelope = execAnswer();
+    $answer = execAnswer();
 
-    expect($envelope['result']['timeline'])->toHaveCount(50)
-        ->and($envelope['truncated'][0])->toMatchArray(['section' => 'timeline', 'shown' => 50, 'matched' => 60, 'reason' => 'limit']);
+    expect($answer['result']['timeline'])->toHaveCount(50)
+        ->and($answer['truncated'][0])->toMatchArray(['section' => 'timeline', 'shown' => 50, 'matched' => 60, 'reason' => 'limit']);
 });
 
 it('drops the last timeline entries when a hundred of them are over the size of an answer', function () {
@@ -975,11 +975,11 @@ it('drops the last timeline entries when a hundred of them are over the size of 
         ...array_map(fn (int $index) => execQuery("select {$index}", 0.001 * $index), range(1, 120)),
     ]);
 
-    $envelope = execAnswer(['limit' => 100]);
-    $shown = count($envelope['result']['timeline']);
+    $answer = execAnswer(['limit' => 100]);
+    $shown = count($answer['result']['timeline']);
 
     expect($shown)->toBeLessThan(100)
-        ->and($envelope['truncated'])->toBe([['section' => 'timeline', 'shown' => $shown, 'matched' => 120, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]]);
+        ->and($answer['truncated'])->toBe([['section' => 'timeline', 'shown' => $shown, 'matched' => 120, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]]);
 });
 
 it('prints the cut timeline in markdown, with how to see the rest', function () {

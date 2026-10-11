@@ -6,7 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
@@ -82,7 +82,7 @@ function trcDispatch(string $job, array $fields = []): RecordBuilder
  */
 function trcAnswer(array $arguments = ['trace_id' => 'trace']): array
 {
-    return Envelope::assert(Trace::class, $arguments);
+    return Answers::assert(Trace::class, $arguments);
 }
 
 /**
@@ -96,12 +96,12 @@ function trcRefusal(array $arguments): string
 }
 
 /**
- * @param  array<string, mixed>  $envelope
+ * @param  array<string, mixed>  $answer
  * @return array<string, mixed>
  */
-function trcJob(array $envelope, string $job): array
+function trcJob(array $answer, string $job): array
 {
-    $jobs = array_values(array_filter($envelope['result']['jobs'], fn (array $row) => $row['job_id'] === $job));
+    $jobs = array_values(array_filter($answer['result']['jobs'], fn (array $row) => $row['job_id'] === $job));
 
     return $jobs[0];
 }
@@ -122,9 +122,9 @@ describe('the executions of a trace', function () {
             trcAttempt('other-job', 'second', fields: ['timestamp' => TRACE_AT + 3]),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect(array_column($envelope['result']['executions'], 'execution_id'))->toBe(['trace', 'second', 'attempt']);
+        expect(array_column($answer['result']['executions'], 'execution_id'))->toBe(['trace', 'second', 'attempt']);
     });
 
     it('breaks a tie on the start time by the record stored first', function () {
@@ -133,9 +133,9 @@ describe('the executions of a trace', function () {
             trcAttempt('job-b', 'second', fields: ['timestamp' => TRACE_AT]),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect(array_column($envelope['result']['executions'], 'execution_id'))->toBe(['first', 'second']);
+        expect(array_column($answer['result']['executions'], 'execution_id'))->toBe(['first', 'second']);
     });
 
     it('describes each execution: its source, label, start, duration and how it ended', function (RecordType $type, array $fields, array $expected) {
@@ -148,9 +148,9 @@ describe('the executions of a trace', function () {
             ]),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['result']['executions'])->toEqual([[
+        expect($answer['result']['executions'])->toEqual([[
             'execution_id' => $expected['execution_id'],
             'source' => $expected['source'],
             'label' => $expected['label'],
@@ -169,9 +169,9 @@ describe('the executions of a trace', function () {
     it('has a null duration where the record has none', function () {
         ingest([trcRequest(fields: ['duration' => null])]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['result']['executions'][0]['duration_ms'])->toBeNull();
+        expect($answer['result']['executions'][0]['duration_ms'])->toBeNull();
     });
 
     it('lists at most the limit, and says how many there are', function () {
@@ -180,10 +180,10 @@ describe('the executions of a trace', function () {
             ...array_map(fn (int $number) => trcAttempt("job-{$number}", "attempt-{$number}", fields: ['timestamp' => TRACE_AT + $number]), range(1, 4)),
         ]);
 
-        $envelope = trcAnswer(['trace_id' => 'trace', 'limit' => 3]);
+        $answer = trcAnswer(['trace_id' => 'trace', 'limit' => 3]);
 
-        expect(array_column($envelope['result']['executions'], 'execution_id'))->toBe(['trace', 'attempt-1', 'attempt-2'])
-            ->and($envelope['truncated'])->toBe([[
+        expect(array_column($answer['result']['executions'], 'execution_id'))->toBe(['trace', 'attempt-1', 'attempt-2'])
+            ->and($answer['truncated'])->toBe([[
                 'section' => 'executions',
                 'shown' => 3,
                 'matched' => 5,
@@ -195,19 +195,19 @@ describe('the executions of a trace', function () {
     it('lists exactly the limit as complete', function () {
         ingest([trcRequest(), trcAttempt('job', 'attempt')]);
 
-        $envelope = trcAnswer(['trace_id' => 'trace', 'limit' => 2]);
+        $answer = trcAnswer(['trace_id' => 'trace', 'limit' => 2]);
 
-        expect($envelope['result']['executions'])->toHaveCount(2)
-            ->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['executions'])->toHaveCount(2)
+            ->and($answer['truncated'])->toBe([]);
     });
 
     it('lists fifty executions by default', function () {
         ingest(array_map(fn (int $number) => trcAttempt("job-{$number}", "attempt-{$number}", fields: ['timestamp' => TRACE_AT + $number / 100]), range(1, 51)));
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['result']['executions'])->toHaveCount(50)
-            ->and($envelope['truncated'][0]['matched'])->toBe(51);
+        expect($answer['result']['executions'])->toHaveCount(50)
+            ->and($answer['truncated'][0]['matched'])->toBe(51);
     });
 
     it('does not cap the lineage of the jobs by the limit', function () {
@@ -218,9 +218,9 @@ describe('the executions of a trace', function () {
             trcDispatch('job-c'),
         ]);
 
-        $envelope = trcAnswer(['trace_id' => 'trace', 'limit' => 1]);
+        $answer = trcAnswer(['trace_id' => 'trace', 'limit' => 1]);
 
-        expect($envelope['result']['jobs'])->toHaveCount(3);
+        expect($answer['result']['jobs'])->toHaveCount(3);
     });
 
     it('cuts the jobs of a trace that dispatched hundreds from the tail to fit the answer, and says so', function () {
@@ -229,20 +229,20 @@ describe('the executions of a trace', function () {
             ...array_map(fn (int $number) => trcDispatch(sprintf('job-%03d', $number), ['timestamp' => TRACE_AT + 0.125 + $number / 1000]), range(1, 300)),
         ]);
 
-        $envelope = trcAnswer();
-        $shown = array_column($envelope['result']['jobs'], 'job_id');
+        $answer = trcAnswer();
+        $shown = array_column($answer['result']['jobs'], 'job_id');
 
-        expect($envelope['result']['executions'])->toHaveCount(1)
+        expect($answer['result']['executions'])->toHaveCount(1)
             ->and(count($shown))->toBeGreaterThan(0)->toBeLessThan(300)
             ->and($shown)->toBe(array_map(fn (int $number) => sprintf('job-%03d', $number), range(1, count($shown))))
-            ->and($envelope['truncated'])->toBe([[
+            ->and($answer['truncated'])->toBe([[
                 'section' => 'jobs',
                 'shown' => count($shown),
                 'matched' => 300,
                 'reason' => 'size',
                 'how' => __('firewatch::messages.size_how', ['characters' => '24,000']),
             ]])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.trace_summary', ['id' => 'trace', 'executions' => '1 execution', 'jobs' => '300 queued jobs']));
+            ->and($answer['summary'])->toBe(__('firewatch::messages.trace_summary', ['id' => 'trace', 'executions' => '1 execution', 'jobs' => '300 queued jobs']));
     });
 });
 
@@ -365,10 +365,10 @@ describe('the lineage of a queued job', function () {
             trcAttempt('job', 'elsewhere', 2, ['trace_id' => 'worker-trace', 'timestamp' => TRACE_AT + 5]),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect(array_column(trcJob($envelope, 'job')['attempts'], 'trace_id'))->toBe([null, 'worker-trace'])
-            ->and(array_column($envelope['result']['executions'], 'execution_id'))->toBe(['trace', 'same']);
+        expect(array_column(trcJob($answer, 'job')['attempts'], 'trace_id'))->toBe([null, 'worker-trace'])
+            ->and(array_column($answer['result']['executions'], 'execution_id'))->toBe(['trace', 'same']);
     });
 
     it('follows the jobs an execution in the trace ran as well as the ones it dispatched', function () {
@@ -377,10 +377,10 @@ describe('the lineage of a queued job', function () {
             trcDispatch('ran-here', ['trace_id' => 'dispatch-trace', 'execution_id' => 'dispatching']),
         ]);
 
-        $envelope = trcAnswer(['trace_id' => 'worker-trace']);
+        $answer = trcAnswer(['trace_id' => 'worker-trace']);
 
-        expect(array_column($envelope['result']['jobs'], 'job_id'))->toBe(['ran-here'])
-            ->and($envelope['result']['jobs'][0]['dispatch']['execution_id'])->toBe('dispatching');
+        expect(array_column($answer['result']['jobs'], 'job_id'))->toBe(['ran-here'])
+            ->and($answer['result']['jobs'][0]['dispatch']['execution_id'])->toBe('dispatching');
     });
 
     it('shows a dispatch without attempts as pending, with no wait to show', function () {
@@ -394,11 +394,11 @@ describe('the lineage of a queued job', function () {
     it('shows a dispatch on an inline connection as having no attempts and no outcome, never pending', function (string $connection) {
         ingest([trcRequest(), trcDispatch('job', ['connection' => $connection])]);
 
-        $envelope = trcAnswer();
-        $job = trcJob($envelope, 'job');
+        $answer = trcAnswer();
+        $job = trcJob($answer, 'job');
 
         expect($job)->toMatchArray(['lineage' => 'no_attempts', 'outcome' => null, 'attempts' => []])
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
     })->with('trace inline connections');
 
     it('lists the jobs in the order their lineage began', function () {
@@ -408,9 +408,9 @@ describe('the lineage of a queued job', function () {
             trcDispatch('first', ['timestamp' => TRACE_AT + 0.125]),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect(array_column($envelope['result']['jobs'], 'job_id'))->toBe(['first', 'no-dispatch', 'later']);
+        expect(array_column($answer['result']['jobs'], 'job_id'))->toBe(['first', 'no-dispatch', 'later']);
     });
 
     it('uses the earliest dispatch of a job that was dispatched again', function () {
@@ -434,9 +434,9 @@ describe('the lineage of a queued job', function () {
             trcAttempt('also-only-attempts', 'other-attempt', 1),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['notes'])->toBe([
+        expect($answer['notes'])->toBe([
             __('firewatch::messages.trace_partial_no_attempts'),
             __('firewatch::messages.trace_partial_no_dispatch'),
         ]);
@@ -445,17 +445,17 @@ describe('the lineage of a queued job', function () {
     it('does not call a dispatch on an inline connection a partial lineage', function (string $connection) {
         ingest([trcRequest(), trcDispatch('job', ['connection' => $connection])]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['notes'])->toBe([]);
+        expect($answer['notes'])->toBe([]);
     })->with('trace inline connections');
 
     it('has no jobs for a trace that queued none', function () {
         ingest([trcRequest()]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['result']['jobs'])->toBe([]);
+        expect($answer['result']['jobs'])->toBe([]);
     });
 });
 
@@ -468,13 +468,13 @@ describe('by job id', function () {
             trcAttempt('job', 'attempt', 1, ['trace_id' => 'worker-trace']),
         ]);
 
-        $envelope = trcAnswer(['job_id' => 'job']);
+        $answer = trcAnswer(['job_id' => 'job']);
 
-        expect($envelope['result']['trace_id'])->toBe('trace')
-            ->and($envelope['result']['job_id'])->toBe('job')
-            ->and(array_column($envelope['result']['executions'], 'execution_id'))->toBe(['trace'])
-            ->and(array_column($envelope['result']['jobs'], 'job_id'))->toBe(['job'])
-            ->and($envelope['result']['jobs'][0]['attempts'][0]['trace_id'])->toBe('worker-trace');
+        expect($answer['result']['trace_id'])->toBe('trace')
+            ->and($answer['result']['job_id'])->toBe('job')
+            ->and(array_column($answer['result']['executions'], 'execution_id'))->toBe(['trace'])
+            ->and(array_column($answer['result']['jobs'], 'job_id'))->toBe(['job'])
+            ->and($answer['result']['jobs'][0]['attempts'][0]['trace_id'])->toBe('worker-trace');
     });
 
     it('starts from the first attempt, and its trace, when the dispatch is missing', function () {
@@ -483,19 +483,19 @@ describe('by job id', function () {
             trcAttempt('job', 'first', 1, ['timestamp' => TRACE_AT + 1, 'trace_id' => 'first-trace']),
         ]);
 
-        $envelope = trcAnswer(['job_id' => 'job']);
+        $answer = trcAnswer(['job_id' => 'job']);
 
-        expect($envelope['result']['trace_id'])->toBe('first-trace')
-            ->and(array_column($envelope['result']['executions'], 'execution_id'))->toBe(['first']);
+        expect($answer['result']['trace_id'])->toBe('first-trace')
+            ->and(array_column($answer['result']['executions'], 'execution_id'))->toBe(['first']);
     });
 
     it('names no trace for a trace request, and no job for a job request', function () {
         ingest([trcRequest()]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['result']['trace_id'])->toBe('trace')
-            ->and($envelope['result']['job_id'])->toBeNull();
+        expect($answer['result']['trace_id'])->toBe('trace')
+            ->and($answer['result']['job_id'])->toBeNull();
     });
 
     it('names the trace of an attempt only when it is not the one the dispatch started', function () {
@@ -505,9 +505,9 @@ describe('by job id', function () {
             trcAttempt('job', 'elsewhere', 2, ['trace_id' => 'worker-trace', 'timestamp' => TRACE_AT + 5]),
         ]);
 
-        $envelope = trcAnswer(['job_id' => 'job']);
+        $answer = trcAnswer(['job_id' => 'job']);
 
-        expect(array_column($envelope['result']['jobs'][0]['attempts'], 'trace_id'))->toBe([null, 'worker-trace']);
+        expect(array_column($answer['result']['jobs'][0]['attempts'], 'trace_id'))->toBe([null, 'worker-trace']);
     });
 });
 
@@ -520,22 +520,22 @@ describe('a trace with no execution in the store', function () {
             trcRequest('elsewhere'),
         ]);
 
-        $envelope = trcAnswer(['trace_id' => 'lost']);
+        $answer = trcAnswer(['trace_id' => 'lost']);
 
-        expect($envelope['empty'])->toBeNull()
-            ->and($envelope['result']['executions'])->toBe([])
-            ->and($envelope['result']['jobs'])->toBe([])
-            ->and($envelope['notes'])->toBe([__('firewatch::messages.trace_no_execution', ['id' => 'lost', 'counts' => '2 query, 1 log'])]);
+        expect($answer['empty'])->toBeNull()
+            ->and($answer['result']['executions'])->toBe([])
+            ->and($answer['result']['jobs'])->toBe([])
+            ->and($answer['notes'])->toBe([__('firewatch::messages.trace_no_execution', ['id' => 'lost', 'counts' => '2 query, 1 log'])]);
     });
 
     it('offers the records that carry the trace', function () {
         ingest([syntheticRecord(RecordType::QUERY)->with(['trace_id' => 'lost', 'execution_id' => 'lost'])]);
 
-        $envelope = trcAnswer(['trace_id' => 'lost']);
-        $call = $envelope['next'][0];
-        $listed = Envelope::assert(Occurrences::class, $call['arguments']);
+        $answer = trcAnswer(['trace_id' => 'lost']);
+        $call = $answer['next'][0];
+        $listed = Answers::assert(Occurrences::class, $call['arguments']);
 
-        expect($envelope['next'])->toHaveCount(1)
+        expect($answer['next'])->toHaveCount(1)
             ->and($call)->toBe(['tool' => 'occurrences', 'arguments' => ['trace_id' => 'lost'], 'why' => __('firewatch::messages.trace_next_occurrences')])
             ->and($listed['result']['rows'])->toHaveCount(1);
     });
@@ -543,12 +543,12 @@ describe('a trace with no execution in the store', function () {
     it('answers a job whose dispatching execution is missing with no executions, its lineage and the records of the job', function () {
         ingest([trcDispatch('job', ['connection' => 'redis'])]);
 
-        $envelope = trcAnswer(['job_id' => 'job']);
+        $answer = trcAnswer(['job_id' => 'job']);
 
-        expect($envelope['result']['executions'])->toBe([])
-            ->and($envelope['result']['jobs'][0]['job_id'])->toBe('job')
-            ->and($envelope['notes'])->toContain(__('firewatch::messages.trace_no_execution', ['id' => 'trace', 'counts' => '1 queued-job']))
-            ->and($envelope['next'])->toBe([['tool' => 'occurrences', 'arguments' => ['job_id' => 'job'], 'why' => __('firewatch::messages.trace_next_occurrences')]]);
+        expect($answer['result']['executions'])->toBe([])
+            ->and($answer['result']['jobs'][0]['job_id'])->toBe('job')
+            ->and($answer['notes'])->toContain(__('firewatch::messages.trace_no_execution', ['id' => 'trace', 'counts' => '1 queued-job']))
+            ->and($answer['next'])->toBe([['tool' => 'occurrences', 'arguments' => ['job_id' => 'job'], 'why' => __('firewatch::messages.trace_next_occurrences')]]);
     });
 });
 
@@ -572,11 +572,11 @@ describe('what is not found', function () {
     it('answers that the store is empty rather than refusing an id it cannot hold', function () {
         app(Writer::class)->transaction(fn () => null);
 
-        $envelope = trcAnswer(['trace_id' => 'abc']);
+        $answer = trcAnswer(['trace_id' => 'abc']);
 
-        expect($envelope['empty']['kind'])->toBe('store_empty')
-            ->and($envelope['result'])->toBe([])
-            ->and($envelope['next'])->toBe([]);
+        expect($answer['empty']['kind'])->toBe('store_empty')
+            ->and($answer['result'])->toBe([])
+            ->and($answer['next'])->toBe([]);
     });
 
 });
@@ -625,19 +625,19 @@ describe('the answer', function () {
     it('is not windowed, and says why', function () {
         ingest([trcRequest()]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['window']['windowed'])->toBeFalse()
-            ->and($envelope['window']['reason'])->toBe(__('firewatch::messages.trace_window_reason'));
+        expect($answer['window']['windowed'])->toBeFalse()
+            ->and($answer['window']['reason'])->toBe(__('firewatch::messages.trace_window_reason'));
     });
 
     it('states what it read and what it cannot see', function () {
         ingest([trcRequest()]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['coverage']['types_read'])->toBe(['request', 'command', 'job-attempt', 'scheduled-task', 'queued-job'])
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded', 'uninstrumented-dispatcher', 'dead-counters');
+        expect($answer['coverage']['types_read'])->toBe(['request', 'command', 'job-attempt', 'scheduled-task', 'queued-job'])
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded', 'uninstrumented-dispatcher', 'dead-counters');
     });
 
     it('summarises a trace by its executions and jobs', function (int $executions, int $jobs, string $shownExecutions, string $shownJobs) {
@@ -646,9 +646,9 @@ describe('the answer', function () {
             ...array_map(fn (int $number) => trcDispatch("job-{$number}"), ($jobs === 0 ? [] : range(1, $jobs))),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['summary'])->toBe(__('firewatch::messages.trace_summary', ['id' => 'trace', 'executions' => $shownExecutions, 'jobs' => $shownJobs]));
+        expect($answer['summary'])->toBe(__('firewatch::messages.trace_summary', ['id' => 'trace', 'executions' => $shownExecutions, 'jobs' => $shownJobs]));
     })->with([
         'one execution and no jobs' => [1, 0, '1 execution', '0 queued jobs'],
         'two executions and one job' => [2, 1, '2 executions', '1 queued job'],
@@ -658,9 +658,9 @@ describe('the answer', function () {
     it('summarises a job by its trace', function () {
         ingest([trcRequest(), trcDispatch('job')]);
 
-        $envelope = trcAnswer(['job_id' => 'job']);
+        $answer = trcAnswer(['job_id' => 'job']);
 
-        expect($envelope['summary'])->toBe(__('firewatch::messages.trace_job_summary', ['id' => 'job', 'executions' => '1 execution', 'jobs' => '1 queued job']));
+        expect($answer['summary'])->toBe(__('firewatch::messages.trace_job_summary', ['id' => 'job', 'executions' => '1 execution', 'jobs' => '1 queued job']));
     });
 });
 
@@ -674,10 +674,10 @@ describe('the next calls', function () {
             trcAttempt('job', 'quick', 3, ['status' => 'processed', 'timestamp' => TRACE_AT + 20, 'duration' => 500_000]),
         ]);
 
-        $envelope = trcAnswer();
-        $ran = array_map(fn (array $call) => Envelope::assert(Execution::class, $call['arguments']), $envelope['next']);
+        $answer = trcAnswer();
+        $ran = array_map(fn (array $call) => Answers::assert(Execution::class, $call['arguments']), $answer['next']);
 
-        expect($envelope['next'])->toBe([
+        expect($answer['next'])->toBe([
             ['tool' => 'execution', 'arguments' => ['execution_id' => 'trace'], 'why' => __('firewatch::messages.trace_next_failed')],
             ['tool' => 'execution', 'arguments' => ['execution_id' => 'attempt-1'], 'why' => __('firewatch::messages.trace_next_failed')],
             ['tool' => 'execution', 'arguments' => ['execution_id' => 'attempt-2'], 'why' => __('firewatch::messages.trace_next_slowest')],
@@ -688,10 +688,10 @@ describe('the next calls', function () {
     it('does not offer the same execution twice', function () {
         ingest([trcRequest(fields: ['status_code' => 500, 'duration' => 9_000_000])]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'trace']])
-            ->and($envelope['next'][0]['why'])->toBe(__('firewatch::messages.trace_next_failed'));
+        expect(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'trace']])
+            ->and($answer['next'][0]['why'])->toBe(__('firewatch::messages.trace_next_failed'));
     });
 
     it('judges each type by its own failure: a status of 400 or more, a non-zero exit, a failed or released attempt, a failed task', function (RecordType $type, array $fields, bool $fails) {
@@ -700,8 +700,8 @@ describe('the next calls', function () {
             trcRequest('other-trace'),
         ]);
 
-        $envelope = trcAnswer(['trace_id' => 'trace']);
-        $why = array_column($envelope['next'], 'why');
+        $answer = trcAnswer(['trace_id' => 'trace']);
+        $why = array_column($answer['next'], 'why');
 
         expect(in_array(__('firewatch::messages.trace_next_failed'), $why, true))->toBe($fails);
     })->with([
@@ -726,9 +726,9 @@ describe('the next calls', function () {
             trcAttempt('job', 'elsewhere', 1, ['trace_id' => 'worker-trace', 'duration' => 7_000_000]),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['next'])->toBe([['tool' => 'execution', 'arguments' => ['execution_id' => 'elsewhere'], 'why' => __('firewatch::messages.trace_next_slowest')]]);
+        expect($answer['next'])->toBe([['tool' => 'execution', 'arguments' => ['execution_id' => 'elsewhere'], 'why' => __('firewatch::messages.trace_next_slowest')]]);
     });
 
     it('does not offer an execution twice when its id is all digits', function () {
@@ -737,9 +737,9 @@ describe('the next calls', function () {
             trcAttempt('job', '42', 1, ['status' => 'failed', 'duration' => 9_000_000]),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['next'])->toBe([['tool' => 'execution', 'arguments' => ['execution_id' => '42'], 'why' => __('firewatch::messages.trace_next_failed')]]);
+        expect($answer['next'])->toBe([['tool' => 'execution', 'arguments' => ['execution_id' => '42'], 'why' => __('firewatch::messages.trace_next_failed')]]);
     });
 
     it('offers no execution for an attempt that has no execution id', function () {
@@ -748,18 +748,18 @@ describe('the next calls', function () {
             trcAttempt('job', 'attempt', 1, ['attempt_id' => null, 'status' => 'failed']),
         ]);
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['next'])->toBe([])
-            ->and(trcJob($envelope, 'job')['attempts'][0]['execution_id'])->toBeNull();
+        expect($answer['next'])->toBe([])
+            ->and(trcJob($answer, 'job')['attempts'][0]['execution_id'])->toBeNull();
     });
 
     it('offers at most five calls', function () {
         ingest(array_map(fn (int $number) => trcAttempt("job-{$number}", "attempt-{$number}", 1, ['status' => 'failed', 'timestamp' => TRACE_AT + $number]), range(1, 8)));
 
-        $envelope = trcAnswer();
+        $answer = trcAnswer();
 
-        expect($envelope['next'])->toHaveCount(5);
+        expect($answer['next'])->toHaveCount(5);
     });
 
     it('offers the records of the trace when no execution is shown, besides any link of the lineage', function () {
@@ -768,11 +768,11 @@ describe('the next calls', function () {
             trcAttempt('job', 'elsewhere', 1, ['trace_id' => 'worker-trace', 'status' => 'failed']),
         ]);
 
-        $envelope = trcAnswer(['job_id' => 'job']);
+        $answer = trcAnswer(['job_id' => 'job']);
 
-        expect($envelope['result']['executions'])->toBe([])
-            ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences'])
-            ->and($envelope['next'][0]['arguments'])->toBe(['execution_id' => 'elsewhere']);
+        expect($answer['result']['executions'])->toBe([])
+            ->and(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences'])
+            ->and($answer['next'][0]['arguments'])->toBe(['execution_id' => 'elsewhere']);
     });
 });
 

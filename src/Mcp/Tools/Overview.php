@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\BudgetSection;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Deadline;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
@@ -43,7 +43,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Overview extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -90,7 +90,7 @@ class Overview extends Tool
     }
 
     /**
-     * Read the store and put what it holds in the envelope.
+     * Read the store and put what it holds in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {

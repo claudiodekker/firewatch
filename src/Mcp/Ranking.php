@@ -70,23 +70,23 @@ class Ranking
     }
 
     /**
-     * Get the measure the groups are ordered by and their values of it, which is the fallback of the measure when no group has a value of the measure itself.
+     * Get the measure the groups are ordered by and their values of it, which is the substitute of the measure when no group has a value of the measure itself.
      *
      * @param  array<string, array{value: int|float|null, occurrences: int, hash: string, timed: int}>  $measured
      * @return array{Measure, array<string, array{value: int|float|null, occurrences: int, hash: string, timed: int}>}
      */
     protected function ordering(SQLite3 $connection, array $measured): array
     {
-        $fallback = $this->by->fallback();
+        $substitute = $this->by->substitute();
         $valued = array_filter(array_column($measured, 'value'), fn (int|float|null $value) => $value !== null);
 
-        if ($fallback === null || $measured === [] || $valued !== []) {
+        if ($substitute === null || $measured === [] || $valued !== []) {
             return [$this->by, $measured];
         }
 
-        $values = $this->population->measured($connection, $fallback);
+        $values = $this->population->measured($connection, $substitute);
 
-        return [$fallback, array_intersect_key($values, $measured)];
+        return [$substitute, array_intersect_key($values, $measured)];
     }
 
     /**

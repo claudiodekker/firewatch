@@ -25,7 +25,7 @@ use Throwable;
 /**
  * @internal
  */
-trait AnswersInEnvelope
+trait BuildsAnswers
 {
     /**
      * Get the argument every tool takes.

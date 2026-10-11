@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Route;
 
@@ -60,7 +60,7 @@ function overBudgetTraffic(): void
 it('judges the groups of a ranking against their budgets, from the real sensors', function () {
     overBudgetTraffic();
 
-    $verdicts = collect(Envelope::assert(Rank::class, ['type' => 'request'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['label'] => $row['budget']]);
+    $verdicts = collect(Answers::assert(Rank::class, ['type' => 'request'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['label'] => $row['budget']]);
 
     expect($verdicts['/slow'])->toBe(overBudgetCell('exceeded', 'max', 1))
         ->and($verdicts['/quick'])->toBe(overBudgetCell('within', 'max', 1));
@@ -69,7 +69,7 @@ it('judges the groups of a ranking against their budgets, from the real sensors'
 it('does not judge a task that was skipped, and judges the one that ran', function () {
     overBudgetTraffic();
 
-    $verdicts = collect(Envelope::assert(Rank::class, ['type' => 'scheduled-task'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['label'] => $row['budget']]);
+    $verdicts = collect(Answers::assert(Rank::class, ['type' => 'scheduled-task'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['label'] => $row['budget']]);
 
     expect($verdicts['send-digest'])->toBe(overBudgetCell('within', 'max', 1))
         ->and($verdicts['sync-stock'])->toBe(overBudgetCell('not_evaluated', 'not_run', 1));
@@ -78,24 +78,24 @@ it('does not judge a task that was skipped, and judges the one that ran', functi
 it('lists the exceeded groups in the overview and counts the rest', function () {
     overBudgetTraffic();
 
-    $envelope = Envelope::assert(Overview::class);
-    $rows = $envelope['result']['budgets_exceeded'];
+    $answer = Answers::assert(Overview::class);
+    $rows = $answer['result']['budgets_exceeded'];
 
-    expect($envelope['result']['budgets'])->toMatchArray(['exceeded' => 1, 'ignored_entries' => 1])
-        ->and($envelope['result']['budgets']['within'])->toBeGreaterThanOrEqual(2)
+    expect($answer['result']['budgets'])->toMatchArray(['exceeded' => 1, 'ignored_entries' => 1])
+        ->and($answer['result']['budgets']['within'])->toBeGreaterThanOrEqual(2)
         ->and($rows)->toHaveCount(1)
         ->and($rows[0])->toMatchArray(['type' => 'request', 'label' => '/slow', 'measure' => 'duration', 'ceiling' => 1, 'measured_on' => 'max'])
-        ->and($envelope['summary'])->toContain(trans_choice('firewatch::messages.overview_budgets_over', 1, ['count' => 1]));
+        ->and($answer['summary'])->toContain(trans_choice('firewatch::messages.overview_budgets_over', 1, ['count' => 1]));
 });
 
 it('opens the group an overview row points at, and finds it exceeded', function () {
     overBudgetTraffic();
 
-    $row = Envelope::assert(Overview::class)['result']['budgets_exceeded'][0];
+    $row = Answers::assert(Overview::class)['result']['budgets_exceeded'][0];
 
     expect($row['next'])->toBe('rank(group: "'.$row['group'].'")');
 
-    $deploys = Envelope::assert(Rank::class, ['group' => $row['group']])['result']['deploys'];
+    $deploys = Answers::assert(Rank::class, ['group' => $row['group']])['result']['deploys'];
 
     expect($deploys[0]['budget'])->toBe(overBudgetCell('exceeded', 'max', 1));
 });

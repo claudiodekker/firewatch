@@ -3,7 +3,7 @@
 use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 
 /**
  * Store one record of every type a few seconds ago, linked as the sensors link them, so that every example finds rows.
@@ -33,12 +33,12 @@ function dscxSeed(): void
 it('runs every example a describe answer offers through the SQL tool and gets rows', function (?string $type) {
     dscxSeed();
 
-    $examples = Envelope::assert(Describe::class, $type === null ? [] : ['type' => $type])['result']['examples'];
+    $examples = Answers::assert(Describe::class, $type === null ? [] : ['type' => $type])['result']['examples'];
 
     expect($examples)->toHaveCount($type === null ? 5 : 3);
 
     foreach ($examples as $example) {
-        $answer = Envelope::assert(Query::class, ['sql' => $example['sql']]);
+        $answer = Answers::assert(Query::class, ['sql' => $example['sql']]);
 
         expect($answer['result']['stop'])->toBe('complete', $example['sql'])
             ->and($answer['result']['rows'])->not->toBe([], $example['sql']);

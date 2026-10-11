@@ -11,7 +11,7 @@ use ClaudioDekker\Firewatch\Store\PruneReason;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Exceptions;
 
 const PRUNE_NOW = '2026-09-30 14:00:00';
@@ -96,9 +96,9 @@ describe('by age', function () {
         $this->travelTo(PRUNE_NOW);
         requestsStartedAt([PRUNE_CUTOFF - 1, PRUNE_CUTOFF + 1]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['coverage']['history'])->toMatchArray(['from' => 1790171999.0, 'reason' => 'pruned-age']);
+        expect($answer['coverage']['history'])->toMatchArray(['from' => 1790171999.0, 'reason' => 'pruned-age']);
     });
 
     it('writes no marker when it removes nothing', function () {

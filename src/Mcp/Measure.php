@@ -142,9 +142,9 @@ enum Measure: string
     }
 
     /**
-     * Get the measure a percentile falls back to when no group has enough records for it, or null for one that is no percentile.
+     * Get the measure a percentile is ordered by instead when no group has enough records for it, or null for one that is no percentile.
      */
-    public function fallback(): ?self
+    public function substitute(): ?self
     {
         return match ($this) {
             self::P95_DURATION, self::P50_DURATION => self::MAX_DURATION,

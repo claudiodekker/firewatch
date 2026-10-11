@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trend;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -65,7 +65,7 @@ function trendIngest(array $records, float $now = TREND_NOW): void
  */
 function trendAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Trend::class, ['type' => 'request', ...$arguments]);
+    return Answers::assert(Trend::class, ['type' => 'request', ...$arguments]);
 }
 
 /**
@@ -78,7 +78,7 @@ function trendFollow(array $call): array
 {
     $tool = ['occurrences' => Occurrences::class][$call['tool']];
 
-    return Envelope::assert($tool, $call['arguments']);
+    return Answers::assert($tool, $call['arguments']);
 }
 
 /**
@@ -111,9 +111,9 @@ function trendBucket(int $index, float $since, float $until, int|float|null $val
 it('cuts the window derived from the records into equal buckets, says the count rose, names the peak and the idle time, and every call it offers runs', function () {
     trendIngest(trendRising(), now: TREND_START + 4500);
 
-    $envelope = trendAnswer(['buckets' => 6]);
+    $answer = trendAnswer(['buckets' => 6]);
 
-    expect($envelope)->toEqual([
+    expect($answer)->toEqual([
         'tool' => 'trend',
         'now' => TREND_START + 4500,
         'window' => [
@@ -146,7 +146,7 @@ it('cuts the window derived from the records into equal buckets, says the count 
             ],
         ],
         'coverage' => [
-            ...$envelope['coverage'],
+            ...$answer['coverage'],
             'state' => 'ok',
             'reason' => null,
             'oldest_at' => TREND_START,
@@ -155,16 +155,16 @@ it('cuts the window derived from the records into equal buckets, says the count 
             'types_read' => ['request'],
             'straddling' => null,
         ],
-        'blind_spots' => $envelope['blind_spots'],
+        'blind_spots' => $answer['blind_spots'],
         'notes' => [__('firewatch::messages.trend_idle_note', ['duration' => '15m'])],
         'truncated' => [],
         'next' => [
             ['tool' => 'occurrences', 'arguments' => ['type' => 'request', 'since' => TREND_START + 3000, 'until' => TREND_START + 4500], 'why' => __('firewatch::messages.trend_next_occurrences')],
         ],
     ])
-        ->and($envelope['coverage']['history']['from'])->toEqual(TREND_CREATED)
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion')
-        ->and(trendFollow($envelope['next'][0])['result']['rows'])->toHaveCount(11);
+        ->and($answer['coverage']['history']['from'])->toEqual(TREND_CREATED)
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('visible-at-completion')
+        ->and(trendFollow($answer['next'][0])['result']['rows'])->toHaveCount(11);
 });
 
 /**
@@ -208,14 +208,14 @@ it('keeps a window given whole as given: half-open, nothing derived, and no idle
         trendRecord(RecordType::REQUEST, 'a', TREND_START + 1200),
     ], now: TREND_START + 86400);
 
-    $envelope = trendAnswer(['since' => TREND_START, 'until' => TREND_START + 1200, 'buckets' => 2]);
+    $answer = trendAnswer(['since' => TREND_START, 'until' => TREND_START + 1200, 'buckets' => 2]);
 
-    expect($envelope['window'])->toEqual(['windowed' => true, 'basis' => 'started_at', 'since' => TREND_START, 'until' => TREND_START + 1200, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description'), 'derived' => []])
-        ->and($envelope['result']['buckets'])->toEqual([
+    expect($answer['window'])->toEqual(['windowed' => true, 'basis' => 'started_at', 'since' => TREND_START, 'until' => TREND_START + 1200, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description'), 'derived' => []])
+        ->and($answer['result']['buckets'])->toEqual([
             trendBucket(0, TREND_START, TREND_START + 600, 2, 2),
             trendBucket(1, TREND_START + 600, TREND_START + 1200, 1, 1),
         ])
-        ->and($envelope['notes'])->toBe([]);
+        ->and($answer['notes'])->toBe([]);
 });
 
 it('derives each missing bound on its own, and only a derived until includes the record at it and has an idle time', function (array $arguments, array $derived, float $since, float $until, array $counts) {
@@ -225,12 +225,12 @@ it('derives each missing bound on its own, and only a derived until includes the
         trendRecord(RecordType::REQUEST, 'a', TREND_START + 1200),
     ], now: TREND_START + 86400);
 
-    $envelope = trendAnswer([...$arguments, 'buckets' => 2]);
+    $answer = trendAnswer([...$arguments, 'buckets' => 2]);
 
-    expect($envelope['window'])->toMatchArray(['since' => $since, 'until' => $until, 'derived' => $derived])
-        ->and(array_column($envelope['result']['buckets'], 'occurrences'))->toBe($counts)
-        ->and($envelope['result']['buckets'][1]['until_at'])->toEqual($until)
-        ->and($envelope['notes'])->toHaveCount($derived === ['until'] ? 1 : 0);
+    expect($answer['window'])->toMatchArray(['since' => $since, 'until' => $until, 'derived' => $derived])
+        ->and(array_column($answer['result']['buckets'], 'occurrences'))->toBe($counts)
+        ->and($answer['result']['buckets'][1]['until_at'])->toEqual($until)
+        ->and($answer['notes'])->toHaveCount($derived === ['until'] ? 1 : 0);
 })->with([
     'since given, until derived' => [['since' => TREND_START], ['until'], TREND_START, TREND_START + 1200, [1, 2]],
     'since derived, until given' => [['until' => TREND_START + 1200], ['since'], TREND_START + 100, TREND_START + 1200, [1, 1]],
@@ -251,11 +251,11 @@ it('states the idle time once the store clock is a bucket width past the last re
 it('cuts the window into 12 buckets by default, and into 2 to 60 when asked', function (?int $buckets, int $rows) {
     trendIngest(trendRecords(2, 0));
 
-    $envelope = trendAnswer(['since' => TREND_START, 'until' => TREND_START + 3600, ...($buckets === null ? [] : ['buckets' => $buckets])]);
+    $answer = trendAnswer(['since' => TREND_START, 'until' => TREND_START + 3600, ...($buckets === null ? [] : ['buckets' => $buckets])]);
 
-    expect($envelope['result']['buckets'])->toHaveCount($rows)
-        ->and($envelope['result']['width_ms'])->toEqual(3600000.0 / $rows)
-        ->and($envelope['truncated'])->toBe([]);
+    expect($answer['result']['buckets'])->toHaveCount($rows)
+        ->and($answer['result']['width_ms'])->toEqual(3600000.0 / $rows)
+        ->and($answer['truncated'])->toBe([]);
 })->with([
     'default' => [null, 12],
     'fewest' => [2, 2],
@@ -265,11 +265,11 @@ it('cuts the window into 12 buckets by default, and into 2 to 60 when asked', fu
 it('gives one bucket of no width when every selected record started at one instant, and evaluates no direction', function (int $records) {
     trendIngest(array_fill(0, $records, trendRecord(RecordType::REQUEST, 'a', TREND_START)), now: TREND_START + 86400);
 
-    $envelope = trendAnswer();
+    $answer = trendAnswer();
 
-    expect($envelope['window'])->toMatchArray(['since' => TREND_START, 'until' => TREND_START, 'derived' => ['since', 'until']])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.trend_sample_too_small_summary', ['have' => 1, 'buckets' => 1, 'by' => 'occurrences', 'needed' => 4]))
-        ->and($envelope['result'])->toEqual([
+    expect($answer['window'])->toMatchArray(['since' => TREND_START, 'until' => TREND_START, 'derived' => ['since', 'until']])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.trend_sample_too_small_summary', ['have' => 1, 'buckets' => 1, 'by' => 'occurrences', 'needed' => 4]))
+        ->and($answer['result'])->toEqual([
             'type' => 'request',
             'by' => 'occurrences',
             'width_ms' => 0.0,
@@ -280,8 +280,8 @@ it('gives one bucket of no width when every selected record started at one insta
             'peak' => null,
             'buckets' => [trendBucket(0, TREND_START, TREND_START, $records, $records)],
         ])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.trend_width_zero_note')])
-        ->and($envelope['next'])->toBe([]);
+        ->and($answer['notes'])->toBe([__('firewatch::messages.trend_width_zero_note')])
+        ->and($answer['next'])->toBe([]);
 })->with([
     'one record' => [1],
     'three at one instant' => [3],
@@ -377,12 +377,12 @@ it('flags the buckets that start before the coverage start partial, counts nothi
         ...array_fill(0, 3, trendRecord(RecordType::REQUEST, 'a', TREND_CREATED + 750)),
     ]);
 
-    $envelope = trendAnswer(['since' => TREND_CREATED - 150, 'until' => TREND_CREATED + 1050, 'buckets' => 4]);
+    $answer = trendAnswer(['since' => TREND_CREATED - 150, 'until' => TREND_CREATED + 1050, 'buckets' => 4]);
 
-    expect(array_column($envelope['result']['buckets'], 'partial'))->toBe([true, false, false, false])
-        ->and(array_column($envelope['result']['buckets'], 'occurrences'))->toBe([10, 1, 2, 3])
-        ->and($envelope['result'])->toMatchArray(['direction' => null, 'reason' => 'sample_too_small', 'have' => 3, 'peak' => ['index' => 3, 'occurrences' => 3]])
-        ->and($envelope['notes'])->toBe([trans_choice('firewatch::messages.trend_partial_note', 1, ['count' => 1, 'type' => 'request'])]);
+    expect(array_column($answer['result']['buckets'], 'partial'))->toBe([true, false, false, false])
+        ->and(array_column($answer['result']['buckets'], 'occurrences'))->toBe([10, 1, 2, 3])
+        ->and($answer['result'])->toMatchArray(['direction' => null, 'reason' => 'sample_too_small', 'have' => 3, 'peak' => ['index' => 3, 'occurrences' => 3]])
+        ->and($answer['notes'])->toBe([trans_choice('firewatch::messages.trend_partial_note', 1, ['count' => 1, 'type' => 'request'])]);
 });
 
 it('evaluates nothing when the window ends at or before the coverage start of the type', function () {
@@ -395,12 +395,12 @@ it('evaluates nothing when the window ends at or before the coverage start of th
     ingest(trendRecords(3, 1200));
     $this->travelTo(Date::createFromTimestamp(TREND_NOW));
 
-    $envelope = trendAnswer(['since' => TREND_START, 'until' => TREND_START + 600]);
+    $answer = trendAnswer(['since' => TREND_START, 'until' => TREND_START + 600]);
 
-    expect($envelope['window'])->toMatchArray(['since' => TREND_START, 'until' => TREND_START + 600, 'derived' => []])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.trend_outside_coverage_summary', ['type' => 'request']))
-        ->and($envelope['empty'])->toBeNull()
-        ->and($envelope['result'])->toEqual([
+    expect($answer['window'])->toMatchArray(['since' => TREND_START, 'until' => TREND_START + 600, 'derived' => []])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.trend_outside_coverage_summary', ['type' => 'request']))
+        ->and($answer['empty'])->toBeNull()
+        ->and($answer['result'])->toEqual([
             'type' => 'request',
             'by' => 'occurrences',
             'width_ms' => null,
@@ -411,8 +411,8 @@ it('evaluates nothing when the window ends at or before the coverage start of th
             'peak' => null,
             'buckets' => [],
         ])
-        ->and($envelope['notes'])->toBe([])
-        ->and($envelope['next'])->toBe([]);
+        ->and($answer['notes'])->toBe([])
+        ->and($answer['next'])->toBe([]);
 });
 
 it('trends one group, a job group as its attempts with a note, and the dispatches when asked, and the call it offers lists that group', function () {
@@ -426,8 +426,8 @@ it('trends one group, a job group as its attempts with a note, and the dispatche
     ]);
 
     $group = trendAnswer(['group' => trendHash('a'), ...trendGrid(4)]);
-    $attempts = Envelope::assert(Trend::class, ['group' => trendHash('c'), ...trendGrid(2)]);
-    $dispatches = Envelope::assert(Trend::class, ['group' => trendHash('c'), 'type' => 'queued-job', ...trendGrid(2)]);
+    $attempts = Answers::assert(Trend::class, ['group' => trendHash('c'), ...trendGrid(2)]);
+    $dispatches = Answers::assert(Trend::class, ['group' => trendHash('c'), 'type' => 'queued-job', ...trendGrid(2)]);
 
     expect(array_column($group['result']['buckets'], 'occurrences'))->toBe([1, 2, 3, 4])
         ->and($group['next'][0]['arguments'])->toEqual(['group' => trendHash('a'), 'since' => TREND_START + 1800, 'until' => TREND_START + 2400])
@@ -439,8 +439,8 @@ it('trends one group, a job group as its attempts with a note, and the dispatche
         ->and($dispatches['notes'])->toBe([])
         ->and($dispatches['next'][0]['arguments'])->toEqual(['group' => trendHash('c'), 'type' => 'queued-job', 'since' => TREND_START + 600, 'until' => TREND_START + 1200]);
 
-    foreach ([$group, $attempts, $dispatches] as $envelope) {
-        expect(trendFollow($envelope['next'][0])['empty'])->toBeNull();
+    foreach ([$group, $attempts, $dispatches] as $answer) {
+        expect(trendFollow($answer['next'][0])['empty'])->toBeNull();
     }
 });
 
@@ -450,11 +450,11 @@ it('counts only the records of one deploy, alone or with a group, and the call i
         ...trendCounts([5, 5], ['deploy' => 'v2']),
     ]);
 
-    $envelope = trendAnswer([...$arguments, ...trendGrid(2), 'deploy' => 'v1']);
+    $answer = trendAnswer([...$arguments, ...trendGrid(2), 'deploy' => 'v1']);
 
-    expect(array_column($envelope['result']['buckets'], 'occurrences'))->toBe([1, 2])
-        ->and($envelope['next'][0]['arguments'])->toEqual([...$selector, 'deploy' => 'v1', 'since' => TREND_START + 600, 'until' => TREND_START + 1200])
-        ->and(trendFollow($envelope['next'][0])['result']['rows'])->toHaveCount(2);
+    expect(array_column($answer['result']['buckets'], 'occurrences'))->toBe([1, 2])
+        ->and($answer['next'][0]['arguments'])->toEqual([...$selector, 'deploy' => 'v1', 'since' => TREND_START + 600, 'until' => TREND_START + 1200])
+        ->and(trendFollow($answer['next'][0])['result']['rows'])->toHaveCount(2);
 })->with([
     'alone' => [[], ['type' => 'request']],
     'with a group' => [['group' => trendHash('a')], ['group' => trendHash('a')]],
@@ -467,7 +467,7 @@ it('answers nothing for no store, a window before every record, a type with no r
     trendIngest(trendRecords(3, 0));
     $emptyWindow = trendAnswer(['until' => TREND_START - 1]);
     $noMatch = trendAnswer(['type' => 'query']);
-    $noGroup = Envelope::assert(Trend::class, ['group' => trendHash('e')]);
+    $noGroup = Answers::assert(Trend::class, ['group' => trendHash('e')]);
 
     expect($missing['window']['derived'])->toBe([])
         ->and($emptyWindow['empty'])->toMatchArray(['kind' => 'window_empty', 'population' => 3])
@@ -476,10 +476,10 @@ it('answers nothing for no store, a window before every record, a type with no r
         ->and($noGroup['result'])->toBe([])
         ->and($noGroup['next'])->toBe([]);
 
-    foreach ([$missing, $emptyWindow, $noMatch] as $envelope) {
-        expect($envelope['result'])->toBe([])
-            ->and($envelope['next'])->toBe([])
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion');
+    foreach ([$missing, $emptyWindow, $noMatch] as $answer) {
+        expect($answer['result'])->toBe([])
+            ->and($answer['next'])->toBe([])
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('visible-at-completion');
     }
 });
 
@@ -487,12 +487,12 @@ it('answers that the store is empty, with the coverage of the type it would tren
     $this->travelTo(Date::createFromTimestamp(TREND_CREATED));
     app(Writer::class)->transaction(fn () => null);
 
-    $envelope = trendAnswer();
+    $answer = trendAnswer();
 
-    expect($envelope['empty'])->toBe(['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => app(Configuration::class)->database])])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0, 'oldest_at' => null, 'types_read' => ['request']])
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['next'])->toBe([]);
+    expect($answer['empty'])->toBe(['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => app(Configuration::class)->database])])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0, 'oldest_at' => null, 'types_read' => ['request']])
+        ->and($answer['result'])->toBe([])
+        ->and($answer['next'])->toBe([]);
 });
 
 it('refuses what it can not trend, naming what it accepts', function (array $arguments, string $key, string $argument, string $accepted, string $example, ?string $expected = null, ?string $value = null) {

@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 
 const RANK_BUDGET_AT = 1790776000.0;
@@ -48,7 +48,7 @@ function rankBudgetCell(string $state, string $details): string
  */
 function rankBudgetOf(RecordType $type, array $arguments = []): string
 {
-    return Envelope::assert(Rank::class, ['type' => $type->value, ...$arguments])['result']['groups'][0]['budget'];
+    return Answers::assert(Rank::class, ['type' => $type->value, ...$arguments])['result']['groups'][0]['budget'];
 }
 
 describe('a group against its budget', function () {
@@ -119,7 +119,7 @@ describe('a group against its budget', function () {
             ...rankBudgetGroup(RecordType::REQUEST, 'b', [300], ['route_methods' => ['GET'], 'route_path' => 'invoices/{invoice}']),
         ]);
 
-        $cells = collect(Envelope::assert(Rank::class, ['type' => 'request'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['group'] => $row['budget']]);
+        $cells = collect(Answers::assert(Rank::class, ['type' => 'request'])['result']['groups'])->mapWithKeys(fn (array $row) => [$row['group'] => $row['budget']]);
 
         expect($cells->all())->toBe([
             str_repeat('a', 32) => rankBudgetCell('exceeded', 'max'),
@@ -167,7 +167,7 @@ describe('the deploys of a group', function () {
             ...rankBudgetGroup(RecordType::COMMAND, 'a', [30], ['deploy' => '', 'timestamp' => RANK_BUDGET_AT + 200]),
         ]);
 
-        $deploys = Envelope::assert(Rank::class, ['group' => str_repeat('a', 32)])['result']['deploys'];
+        $deploys = Answers::assert(Rank::class, ['group' => str_repeat('a', 32)])['result']['deploys'];
 
         expect(array_column($deploys, 'deploy'))->toBe(['v1', 'v2', __('firewatch::messages.rank_no_deploy')])
             ->and(array_column($deploys, 'budget'))->toBe([
@@ -181,7 +181,7 @@ describe('the deploys of a group', function () {
         rankBudgetsAre([['type' => 'command', 'duration' => 100], ['type' => 'bogus']]);
         ingest(rankBudgetGroup(RecordType::COMMAND, 'a', [10], ['deploy' => 'v1']));
 
-        $deploys = Envelope::assert(Rank::class, ['group' => str_repeat('a', 32)])['result']['deploys'];
+        $deploys = Answers::assert(Rank::class, ['group' => str_repeat('a', 32)])['result']['deploys'];
 
         expect($deploys[0]['budget'])->toBe(rankBudgetCell('within', 'max'.__('firewatch::messages.budget_ignored', ['count' => 1])));
     });
@@ -192,7 +192,7 @@ describe('the types without a budget', function () {
         rankBudgetsAre([['type' => 'command', 'duration' => 100]]);
         ingest(rankBudgetGroup($type, 'a', [10]));
 
-        expect(Envelope::assert(Rank::class, ['type' => $type->value])['result']['groups'][0])->not->toHaveKey('budget');
+        expect(Answers::assert(Rank::class, ['type' => $type->value])['result']['groups'][0])->not->toHaveKey('budget');
     })->with([RecordType::QUERY, RecordType::OUTGOING_REQUEST, RecordType::QUEUED_JOB]);
 
     it('gives the row of each execution type a budget cell', function (RecordType $type) {

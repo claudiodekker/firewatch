@@ -42,9 +42,9 @@ function bulkyRows(int $count, string $column = 'text', int $length = 1900): arr
     return array_map(fn (int $number) => [$column => $number.str_repeat('x', $length)], range(1, $count));
 }
 
-function jsonCharacters(Answer $answer): int
+function jsonCharacters(Answer $built): int
 {
-    return mb_strlen(json_encode($answer->toArray(), RecordMapper::JSON_FLAGS));
+    return mb_strlen(json_encode($built->toArray(), RecordMapper::JSON_FLAGS));
 }
 
 describe('rows', function () {
@@ -83,28 +83,28 @@ describe('rows', function () {
 
 describe('cells', function () {
     it('leaves a cell of 2,000 characters whole', function () {
-        $answer = boundedAnswer(['text' => str_repeat('é', 2000)]);
+        $built = boundedAnswer(['text' => str_repeat('é', 2000)]);
 
-        expect($answer->toArray()['result']['text'])->toBe(str_repeat('é', 2000))
-            ->and($answer->toArray()['truncated'])->toBe([]);
+        expect($built->toArray()['result']['text'])->toBe(str_repeat('é', 2000))
+            ->and($built->toArray()['truncated'])->toBe([]);
     });
 
     it('cuts a longer cell at 2,000 characters and says how many it cut', function (string $character) {
-        $answer = boundedAnswer(['text' => str_repeat($character, 2013)]);
+        $built = boundedAnswer(['text' => str_repeat($character, 2013)]);
 
-        expect($answer->toArray()['result']['text'])->toBe(str_repeat($character, 2000).'... [truncated, 13 characters]');
+        expect($built->toArray()['result']['text'])->toBe(str_repeat($character, 2000).'... [truncated, 13 characters]');
     })->with(['an ASCII character' => ['x'], 'two bytes' => ['é'], 'four bytes' => ['😀']]);
 
     it('cuts cells inside a list, a table and a nested value, and states each section once', function () {
         $long = str_repeat('x', 2001);
 
-        $answer = boundedAnswer([
+        $built = boundedAnswer([
             'plain' => $long,
             'rows' => [['a' => $long, 'b' => 'short'], ['a' => $long, 'b' => $long]],
             'untouched' => 'short',
         ]);
 
-        expect($answer->toArray()['truncated'])->toBe([
+        expect($built->toArray()['truncated'])->toBe([
             ['section' => 'plain', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => capHow()],
             ['section' => 'rows', 'shown' => 3, 'matched' => null, 'reason' => 'cap', 'how' => capHow()],
         ]);
@@ -120,101 +120,101 @@ describe('cells', function () {
     it('does not cut a key or a number', function () {
         $key = str_repeat('k', 2001);
 
-        $answer = boundedAnswer([$key => 12345678901234567890.5]);
+        $built = boundedAnswer([$key => 12345678901234567890.5]);
 
-        expect(array_keys($answer->toArray()['result']))->toBe([$key]);
+        expect(array_keys($built->toArray()['result']))->toBe([$key]);
     });
 });
 
 describe('the answer budget', function () {
     it('keeps an answer under 24,000 characters whole', function () {
-        $answer = boundedAnswer(['rows' => bulkyRows(10)]);
+        $built = boundedAnswer(['rows' => bulkyRows(10)]);
 
-        expect($answer->toArray()['result']['rows'])->toHaveCount(10)
-            ->and($answer->toArray()['truncated'])->toBe([]);
+        expect($built->toArray()['result']['rows'])->toHaveCount(10)
+            ->and($built->toArray()['truncated'])->toBe([]);
     });
 
     it('drops whole rows from the tail of the lowest-priority list, and says so', function () {
-        $answer = boundedAnswer(['first' => bulkyRows(5), 'second' => bulkyRows(30)]);
-        $envelope = $answer->toArray();
+        $built = boundedAnswer(['first' => bulkyRows(5), 'second' => bulkyRows(30)]);
+        $answer = $built->toArray();
 
-        expect($envelope['result']['first'])->toHaveCount(5)
-            ->and(count($envelope['result']['second']))->toBeLessThan(30)->toBeGreaterThan(0)
-            ->and(jsonCharacters($answer))->toBeLessThanOrEqual(24000)
-            ->and(jsonCharacters($answer) + mb_strlen(json_encode(bulkyRows(1)[0])))->toBeGreaterThan(24000)
-            ->and($envelope['result']['second'])->toBe(array_slice(bulkyRows(30), 0, count($envelope['result']['second'])))
-            ->and($envelope['truncated'])->toBe([
-                ['section' => 'second', 'shown' => count($envelope['result']['second']), 'matched' => 30, 'reason' => 'size', 'how' => sizeHow()],
+        expect($answer['result']['first'])->toHaveCount(5)
+            ->and(count($answer['result']['second']))->toBeLessThan(30)->toBeGreaterThan(0)
+            ->and(jsonCharacters($built))->toBeLessThanOrEqual(24000)
+            ->and(jsonCharacters($built) + mb_strlen(json_encode(bulkyRows(1)[0])))->toBeGreaterThan(24000)
+            ->and($answer['result']['second'])->toBe(array_slice(bulkyRows(30), 0, count($answer['result']['second'])))
+            ->and($answer['truncated'])->toBe([
+                ['section' => 'second', 'shown' => count($answer['result']['second']), 'matched' => 30, 'reason' => 'size', 'how' => sizeHow()],
             ]);
     });
 
     it('empties the lowest-priority list before it touches the one above', function () {
-        $answer = boundedAnswer(['first' => bulkyRows(10), 'second' => bulkyRows(10), 'third' => bulkyRows(10)]);
-        $envelope = $answer->toArray();
+        $built = boundedAnswer(['first' => bulkyRows(10), 'second' => bulkyRows(10), 'third' => bulkyRows(10)]);
+        $answer = $built->toArray();
 
-        expect($envelope['result']['third'])->toBe([])
-            ->and($envelope['result']['first'])->toHaveCount(10)
-            ->and(count($envelope['result']['second']))->toBeLessThan(10)
-            ->and(array_column($envelope['truncated'], 'section'))->toBe(['third', 'second'])
-            ->and($envelope['truncated'][0])->toMatchArray(['shown' => 0, 'matched' => 10, 'reason' => 'size']);
+        expect($answer['result']['third'])->toBe([])
+            ->and($answer['result']['first'])->toHaveCount(10)
+            ->and(count($answer['result']['second']))->toBeLessThan(10)
+            ->and(array_column($answer['truncated'], 'section'))->toBe(['third', 'second'])
+            ->and($answer['truncated'][0])->toMatchArray(['shown' => 0, 'matched' => 10, 'reason' => 'size']);
     });
 
     it('never drops the first row of the first list', function () {
-        $answer = boundedAnswer(['first' => [array_fill_keys(range('a', 'n'), str_repeat('x', 1900))], 'second' => bulkyRows(3)]);
+        $built = boundedAnswer(['first' => [array_fill_keys(range('a', 'n'), str_repeat('x', 1900))], 'second' => bulkyRows(3)]);
 
-        expect($answer->toArray()['result']['first'])->toHaveCount(1)
-            ->and($answer->toArray()['result']['second'])->toBe([])
-            ->and(jsonCharacters($answer))->toBeGreaterThan(24000);
+        expect($built->toArray()['result']['first'])->toHaveCount(1)
+            ->and($built->toArray()['result']['second'])->toBe([])
+            ->and(jsonCharacters($built))->toBeGreaterThan(24000);
     });
 
     it('drops the tail of the first list when nothing below it is left', function () {
-        $answer = boundedAnswer(['first' => bulkyRows(30)]);
-        $envelope = $answer->toArray();
+        $built = boundedAnswer(['first' => bulkyRows(30)]);
+        $answer = $built->toArray();
 
-        expect(count($envelope['result']['first']))->toBeLessThan(30)->toBeGreaterThan(0)
-            ->and($envelope['result']['first'][0])->toBe(bulkyRows(1)[0])
-            ->and(jsonCharacters($answer))->toBeLessThanOrEqual(24000);
+        expect(count($answer['result']['first']))->toBeLessThan(30)->toBeGreaterThan(0)
+            ->and($answer['result']['first'][0])->toBe(bulkyRows(1)[0])
+            ->and(jsonCharacters($built))->toBeLessThanOrEqual(24000);
     });
 
     it('drops rows only from the lists it is told it may cut, in the order they are named', function () {
-        $answer = boundedAnswer(['first' => bulkyRows(8), 'second' => bulkyRows(8), 'third' => bulkyRows(8), 'fourth' => bulkyRows(2)], cuttable: ['second', 'first']);
-        $envelope = $answer->toArray();
+        $built = boundedAnswer(['first' => bulkyRows(8), 'second' => bulkyRows(8), 'third' => bulkyRows(8), 'fourth' => bulkyRows(2)], cuttable: ['second', 'first']);
+        $answer = $built->toArray();
 
-        expect($envelope['result']['second'])->toBe([])
-            ->and(count($envelope['result']['first']))->toBeLessThan(8)->toBeGreaterThan(0)
-            ->and($envelope['result']['third'])->toHaveCount(8)
-            ->and($envelope['result']['fourth'])->toHaveCount(2)
-            ->and(jsonCharacters($answer))->toBeLessThanOrEqual(24000)
-            ->and(array_column($envelope['truncated'], 'section'))->toBe(['second', 'first']);
+        expect($answer['result']['second'])->toBe([])
+            ->and(count($answer['result']['first']))->toBeLessThan(8)->toBeGreaterThan(0)
+            ->and($answer['result']['third'])->toHaveCount(8)
+            ->and($answer['result']['fourth'])->toHaveCount(2)
+            ->and(jsonCharacters($built))->toBeLessThanOrEqual(24000)
+            ->and(array_column($answer['truncated'], 'section'))->toBe(['second', 'first']);
     });
 
     it('keeps the first row of the last list it may cut, and every list it may not, when the answer stays over its budget', function () {
-        $answer = boundedAnswer(['first' => bulkyRows(5), 'second' => bulkyRows(14)], cuttable: ['first']);
-        $envelope = $answer->toArray();
+        $built = boundedAnswer(['first' => bulkyRows(5), 'second' => bulkyRows(14)], cuttable: ['first']);
+        $answer = $built->toArray();
 
-        expect($envelope['result']['first'])->toBe(bulkyRows(1))
-            ->and($envelope['result']['second'])->toHaveCount(14)
-            ->and(jsonCharacters($answer))->toBeGreaterThan(24000)
-            ->and($envelope['truncated'])->toBe([['section' => 'first', 'shown' => 1, 'matched' => 5, 'reason' => 'size', 'how' => sizeHow()]]);
+        expect($answer['result']['first'])->toBe(bulkyRows(1))
+            ->and($answer['result']['second'])->toHaveCount(14)
+            ->and(jsonCharacters($built))->toBeGreaterThan(24000)
+            ->and($answer['truncated'])->toBe([['section' => 'first', 'shown' => 1, 'matched' => 5, 'reason' => 'size', 'how' => sizeHow()]]);
     });
 
     it('never drops the summary, the blind spots, the notes or the next calls', function () {
-        $envelope = boundedAnswer(['first' => bulkyRows(2), 'second' => bulkyRows(40)])->toArray();
+        $answer = boundedAnswer(['first' => bulkyRows(2), 'second' => bulkyRows(40)])->toArray();
 
-        expect($envelope['summary'])->toBe('A summary.')
-            ->and($envelope['blind_spots'])->toHaveCount(1)
-            ->and($envelope['notes'])->toBe(['A note.'])
-            ->and($envelope['next'])->toHaveCount(1);
+        expect($answer['summary'])->toBe('A summary.')
+            ->and($answer['blind_spots'])->toHaveCount(1)
+            ->and($answer['notes'])->toBe(['A note.'])
+            ->and($answer['next'])->toHaveCount(1);
     });
 
     it('turns a cut by the limit into a cut by size, keeping the count it matched', function () {
-        $answer = boundedAnswer(
+        $built = boundedAnswer(
             ['first' => bulkyRows(5), 'second' => bulkyRows(30)],
             [['section' => 'second', 'shown' => 30, 'matched' => 45, 'reason' => 'limit', 'how' => 'Pass the cursor.']],
         );
 
-        expect($answer->toArray()['truncated'])->toHaveCount(1)
-            ->and($answer->toArray()['truncated'][0])->toMatchArray(['section' => 'second', 'matched' => 45, 'reason' => 'size', 'how' => sizeHow()]);
+        expect($built->toArray()['truncated'])->toHaveCount(1)
+            ->and($built->toArray()['truncated'][0])->toMatchArray(['section' => 'second', 'matched' => 45, 'reason' => 'size', 'how' => sizeHow()]);
     });
 
     it('keeps a cut by the limit that the budget did not touch', function () {
@@ -224,11 +224,11 @@ describe('the answer budget', function () {
     });
 
     it('answers in markdown with the rows the JSON keeps', function () {
-        $answer = boundedAnswer(['first' => bulkyRows(5), 'second' => bulkyRows(30)]);
-        $kept = count($answer->toArray()['result']['second']);
+        $built = boundedAnswer(['first' => bulkyRows(5), 'second' => bulkyRows(30)]);
+        $kept = count($built->toArray()['result']['second']);
 
-        expect(substr_count($answer->toMarkdown(), "\n| "))->toBe(5 + $kept + 4)
-            ->and($answer->toMarkdown())->toContain("Truncated: second shows {$kept} of 30 (size). ".sizeHow());
+        expect(substr_count($built->toMarkdown(), "\n| "))->toBe(5 + $kept + 4)
+            ->and($built->toMarkdown())->toContain("Truncated: second shows {$kept} of 30 (size). ".sizeHow());
     });
 
     it('keeps an answer of exactly 24,000 characters and drops a row from one of 24,001', function () {
@@ -251,12 +251,12 @@ describe('the answer budget', function () {
         $long = str_repeat('x', 2001);
         $rows = array_map(fn (int $number) => ['text' => $long], range(1, 30));
 
-        $envelope = boundedAnswer(['first' => bulkyRows(1), 'second' => $rows])->toArray();
-        $kept = count($envelope['result']['second']);
+        $answer = boundedAnswer(['first' => bulkyRows(1), 'second' => $rows])->toArray();
+        $kept = count($answer['result']['second']);
 
         expect($kept)->toBeLessThan(30)
-            ->and($envelope['truncated'])->toHaveCount(2)
-            ->and($envelope['truncated'])->toContain(['section' => 'second', 'shown' => $kept, 'matched' => null, 'reason' => 'cap', 'how' => capHow()])
-            ->and(array_column($envelope['truncated'], 'reason'))->toEqualCanonicalizing(['cap', 'size']);
+            ->and($answer['truncated'])->toHaveCount(2)
+            ->and($answer['truncated'])->toContain(['section' => 'second', 'shown' => $kept, 'matched' => null, 'reason' => 'cap', 'how' => capHow()])
+            ->and(array_column($answer['truncated'], 'reason'))->toEqualCanonicalizing(['cap', 'size']);
     });
 });

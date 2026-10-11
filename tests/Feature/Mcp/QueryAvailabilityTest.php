@@ -11,7 +11,7 @@ use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 
 beforeEach(function () {
     $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
@@ -78,7 +78,7 @@ describe('the static reasons', function () {
     it('runs at exactly SQLite 3.41.0', function () {
         app()->instance(Availability::class, new Availability(sqliteVersion: fn () => '3.41.0'));
 
-        expect(Envelope::assert(Query::class, ['sql' => 'SELECT 1 AS n'])['result']['rows'])->toBe([[1]]);
+        expect(Answers::assert(Query::class, ['sql' => 'SELECT 1 AS n'])['result']['rows'])->toBe([[1]]);
     })->group('process');
 
     it('answers again once the cause is fixed, with no restart', function () {
@@ -91,7 +91,7 @@ describe('the static reasons', function () {
         symlink(PHP_BINARY, $binary);
 
         try {
-            expect(Envelope::assert(Query::class, ['sql' => 'SELECT 1 AS n'])['result']['rows'])->toBe([[1]]);
+            expect(Answers::assert(Query::class, ['sql' => 'SELECT 1 AS n'])['result']['rows'])->toBe([[1]]);
         } finally {
             unlink($binary);
         }

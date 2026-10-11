@@ -410,7 +410,7 @@ _Avoid_: SQL health, SQL support
 ### Analysis
 
 **Occurrence**:
-One stored record of one type as a single observation in a statistic.
+One stored record of one type as a single observation in a statistic. The `samples` field of a baseline or a trend bucket and the `sample_too_small` reason count occurrences that carry the measured quantity, the unit of the Sample floor; they keep their name because a trend bucket already has an `occurrences` field of its own.
 _Avoid_: Sample, data point
 
 **Group**:

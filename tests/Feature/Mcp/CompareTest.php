@@ -6,7 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
@@ -65,7 +65,7 @@ function compareIngest(array $records): void
  */
 function compareAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Compare::class, ['type' => 'request', 'split_at' => COMPARE_SPLIT, ...$arguments]);
+    return Answers::assert(Compare::class, ['type' => 'request', 'split_at' => COMPARE_SPLIT, ...$arguments]);
 }
 
 /**
@@ -92,9 +92,9 @@ it('compares one group before and after the split by its 95th percentile and say
         ...compareRecords(RecordType::REQUEST, 'a', 600, array_fill(0, 20, 150), ['route_path' => '/orders', 'method' => 'GET']),
     ]);
 
-    $envelope = compareAnswer();
+    $answer = compareAnswer();
 
-    expect($envelope)->toEqual([
+    expect($answer)->toEqual([
         'tool' => 'compare',
         'now' => COMPARE_NOW,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => COMPARE_CREATED, 'until' => COMPARE_NOW, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
@@ -130,10 +130,10 @@ it('compares one group before and after the split by its 95th percentile and say
             'deploys' => null,
         ],
         'coverage' => [
-            ...$envelope['coverage'],
+            ...$answer['coverage'],
             'straddling' => 0,
         ],
-        'blind_spots' => $envelope['blind_spots'],
+        'blind_spots' => $answer['blind_spots'],
         'notes' => [],
         'truncated' => [],
         'next' => [
@@ -141,8 +141,8 @@ it('compares one group before and after the split by its 95th percentile and say
             ['tool' => 'rank', 'arguments' => ['group' => compareHash('a'), 'since' => COMPARE_CREATED, 'until' => COMPARE_NOW], 'why' => __('firewatch::messages.compare_next_rank')],
         ],
     ])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 40, 'types_read' => ['request']])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion', 'console-requests');
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'records' => 40, 'types_read' => ['request']])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('visible-at-completion', 'console-requests');
 });
 
 /**
@@ -305,9 +305,9 @@ it('evaluates nothing when the after side is empty, says it is no "no regression
         ...compareCopies(RecordType::REQUEST, 'c', -200, 1),
     ]);
 
-    $envelope = compareAnswer();
+    $answer = compareAnswer();
 
-    expect($envelope)->toEqual([
+    expect($answer)->toEqual([
         'tool' => 'compare',
         'now' => COMPARE_NOW,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => COMPARE_CREATED, 'until' => COMPARE_NOW, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
@@ -328,24 +328,24 @@ it('evaluates nothing when the after side is empty, says it is no "no regression
                 ['deploy' => 'v2', 'records' => 2, 'first_at' => COMPARE_SPLIT - 300],
             ],
         ],
-        'coverage' => $envelope['coverage'],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => $answer['coverage'],
+        'blind_spots' => $answer['blind_spots'],
         'notes' => [__('firewatch::messages.compare_not_evaluated_note')],
         'truncated' => [],
         'next' => [],
     ])
-        ->and($envelope['coverage']['straddling'])->toBe(0)
-        ->and($envelope['summary'])->toContain('"no regression"');
+        ->and($answer['coverage']['straddling'])->toBe(0)
+        ->and($answer['summary'])->toContain('"no regression"');
 });
 
 it('evaluates nothing when the before side is empty, and says which side it is', function () {
     compareIngest(compareCopies(RecordType::REQUEST, 'a', 600, 3));
 
-    $envelope = compareAnswer();
+    $answer = compareAnswer();
 
-    expect($envelope['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'empty_side', 'side' => 'before', 'rollup' => null, 'groups' => [], 'deploys' => []])
-        ->and($envelope['result']['after']['records'])->toBe(3)
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.compare_empty_side_summary', ['side' => 'before', 'type' => 'request']));
+    expect($answer['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'empty_side', 'side' => 'before', 'rollup' => null, 'groups' => [], 'deploys' => []])
+        ->and($answer['result']['after']['records'])->toBe(3)
+        ->and($answer['summary'])->toBe(__('firewatch::messages.compare_empty_side_summary', ['side' => 'before', 'type' => 'request']));
 });
 
 it('puts a record that started exactly at the split on the after side', function () {
@@ -383,9 +383,9 @@ it('accepts a split just inside either end of the window', function (array $argu
         ...compareCopies(RecordType::REQUEST, 'a', 50, 3),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['type' => 'request', ...$arguments]);
+    $answer = Answers::assert(Compare::class, ['type' => 'request', ...$arguments]);
 
-    expect($envelope['result']['type'])->toBe('request');
+    expect($answer['result']['type'])->toBe('request');
 })->with([
     'just after since' => [['since' => COMPARE_SPLIT - 100, 'split_at' => COMPARE_SPLIT - 99.999999]],
     'just before until' => [['until' => COMPARE_SPLIT + 100, 'split_at' => COMPARE_SPLIT + 99.999999]],
@@ -400,12 +400,12 @@ it('reads an omitted since as the coverage start of the type and an omitted unti
         compareRecord(RecordType::REQUEST, 'a', COMPARE_NOW + 60, 10000),
     ]);
 
-    $envelope = compareAnswer();
+    $answer = compareAnswer();
 
-    expect($envelope['window'])->toMatchArray(['since' => COMPARE_CREATED, 'until' => COMPARE_NOW])
-        ->and($envelope['result']['before'])->toMatchArray(['since_at' => COMPARE_CREATED, 'clipped' => false])
-        ->and($envelope['result']['after'])->toMatchArray(['until_at' => COMPARE_NOW, 'records' => 0])
-        ->and($envelope['result']['reason'])->toBe('empty_side');
+    expect($answer['window'])->toMatchArray(['since' => COMPARE_CREATED, 'until' => COMPARE_NOW])
+        ->and($answer['result']['before'])->toMatchArray(['since_at' => COMPARE_CREATED, 'clipped' => false])
+        ->and($answer['result']['after'])->toMatchArray(['until_at' => COMPARE_NOW, 'records' => 0])
+        ->and($answer['result']['reason'])->toBe('empty_side');
 });
 
 it('reads an omitted since as the instant a rebuild recreated the store', function () {
@@ -418,10 +418,10 @@ it('reads an omitted since as the instant a rebuild recreated the store', functi
     ]);
     $this->travelTo(Date::createFromTimestamp(COMPARE_NOW));
 
-    $envelope = compareAnswer(['by' => 'p50_duration']);
+    $answer = compareAnswer(['by' => 'p50_duration']);
 
-    expect($envelope['window']['since'])->toEqual(COMPARE_SPLIT - 1000)
-        ->and($envelope['result']['before'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'clipped' => false, 'records' => 3]);
+    expect($answer['window']['since'])->toEqual(COMPARE_SPLIT - 1000)
+        ->and($answer['result']['before'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'clipped' => false, 'records' => 3]);
 });
 
 it('clips a side that begins before the coverage start of the type, and says so', function () {
@@ -434,12 +434,12 @@ it('clips a side that begins before the coverage start of the type, and says so'
     ]);
     $this->travelTo(Date::createFromTimestamp(COMPARE_NOW));
 
-    $envelope = compareAnswer(['by' => 'p50_duration', 'since' => COMPARE_CREATED]);
+    $answer = compareAnswer(['by' => 'p50_duration', 'since' => COMPARE_CREATED]);
 
-    expect($envelope['window']['since'])->toEqual(COMPARE_CREATED)
-        ->and($envelope['result']['before'])->toEqual(['since_at' => COMPARE_SPLIT - 1000, 'until_at' => COMPARE_SPLIT, 'clipped' => true, 'records' => 3, 'observed_span_ms' => 2000.0, 'earlier_records' => 0, 'earlier_more' => false])
-        ->and($envelope['result']['after']['clipped'])->toBeFalse()
-        ->and($envelope['result']['groups'][0]['change'])->toBe('steady');
+    expect($answer['window']['since'])->toEqual(COMPARE_CREATED)
+        ->and($answer['result']['before'])->toEqual(['since_at' => COMPARE_SPLIT - 1000, 'until_at' => COMPARE_SPLIT, 'clipped' => true, 'records' => 3, 'observed_span_ms' => 2000.0, 'earlier_records' => 0, 'earlier_more' => false])
+        ->and($answer['result']['after']['clipped'])->toBeFalse()
+        ->and($answer['result']['groups'][0]['change'])->toBe('steady');
 });
 
 it('evaluates nothing when the before side lies wholly before the coverage start of the type', function () {
@@ -449,13 +449,13 @@ it('evaluates nothing when the before side lies wholly before the coverage start
     ingest(compareCopies(RecordType::REQUEST, 'a', 600, 3));
     $this->travelTo(Date::createFromTimestamp(COMPARE_NOW));
 
-    $envelope = compareAnswer(['since' => COMPARE_CREATED, 'split_at' => COMPARE_SPLIT - 2000]);
+    $answer = compareAnswer(['since' => COMPARE_CREATED, 'split_at' => COMPARE_SPLIT - 2000]);
 
-    expect($envelope['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'outside_coverage', 'side' => 'before', 'rollup' => null, 'groups' => [], 'deploys' => null])
-        ->and($envelope['result']['before'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'until_at' => COMPARE_SPLIT - 2000, 'clipped' => true, 'records' => 0])
-        ->and($envelope['result']['after'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'clipped' => true, 'records' => 3])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.compare_outside_coverage_summary', ['side' => 'before', 'type' => 'request']))
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.compare_not_evaluated_note')]);
+    expect($answer['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'outside_coverage', 'side' => 'before', 'rollup' => null, 'groups' => [], 'deploys' => null])
+        ->and($answer['result']['before'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'until_at' => COMPARE_SPLIT - 2000, 'clipped' => true, 'records' => 0])
+        ->and($answer['result']['after'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'clipped' => true, 'records' => 3])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.compare_outside_coverage_summary', ['side' => 'before', 'type' => 'request']))
+        ->and($answer['notes'])->toBe([__('firewatch::messages.compare_not_evaluated_note')]);
 });
 
 /**
@@ -485,36 +485,36 @@ it('lists the moved groups by the size of their change, then the new, then the g
         ...compareGroup('a', 100, 150),
     ]);
 
-    $envelope = compareAnswer(['by' => 'p50_duration']);
-    $rows = $envelope['result']['groups'];
+    $answer = compareAnswer(['by' => 'p50_duration']);
+    $rows = $answer['result']['groups'];
 
     expect(array_column($rows, 'group'))->toBe(array_map(compareHash(...), ['b', 'a', 'c', 'e', 'd', 'f', 'g', 'j', 'h', 'i']))
         ->and(array_column($rows, 'change'))->toBe(['faster', 'slower', 'slower', 'new', 'new', 'gone', 'steady', 'steady', 'steady', 'not_evaluated'])
         ->and(array_map(array_keys(...), $rows))->each->toBe(array_keys($rows[0]))
-        ->and($envelope['result']['rollup'])->toBe(compareRollup(10, ['slower' => 2, 'faster' => 1, 'steady' => 3, 'new' => 2, 'gone' => 1, 'not_evaluated' => 1]))
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 10, ['groups' => 10, 'type' => 'request', 'by' => 'p50_duration', 'changes' => '2 slower, 1 faster, 3 steady, 2 new, 1 gone, 1 not_evaluated']));
+        ->and($answer['result']['rollup'])->toBe(compareRollup(10, ['slower' => 2, 'faster' => 1, 'steady' => 3, 'new' => 2, 'gone' => 1, 'not_evaluated' => 1]))
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 10, ['groups' => 10, 'type' => 'request', 'by' => 'p50_duration', 'changes' => '2 slower, 1 faster, 3 steady, 2 new, 1 gone, 1 not_evaluated']));
 });
 
 it('cuts the rows at the limit, says how many groups were cut and how to narrow, and counts every group in the rollup', function () {
     compareIngest(array_merge(...array_map(fn (int $index) => compareGroup(chr(ord('a') + $index), 100, 200 + $index * 10), range(0, 24))));
 
-    $envelope = compareAnswer(['by' => 'p50_duration', 'limit' => 10]);
+    $answer = compareAnswer(['by' => 'p50_duration', 'limit' => 10]);
 
-    expect($envelope['result']['groups'])->toHaveCount(10)
-        ->and($envelope['result']['groups'][0]['group'])->toBe(compareHash('y'))
-        ->and($envelope['truncated'])->toBe([['section' => 'groups', 'shown' => 10, 'matched' => 25, 'reason' => 'limit', 'how' => __('firewatch::messages.compare_truncated_how')]])
-        ->and($envelope['result']['rollup'])->toBe(compareRollup(25, ['slower' => 25], cut: 15))
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 25, ['groups' => 25, 'type' => 'request', 'by' => 'p50_duration', 'changes' => '25 slower']));
+    expect($answer['result']['groups'])->toHaveCount(10)
+        ->and($answer['result']['groups'][0]['group'])->toBe(compareHash('y'))
+        ->and($answer['truncated'])->toBe([['section' => 'groups', 'shown' => 10, 'matched' => 25, 'reason' => 'limit', 'how' => __('firewatch::messages.compare_truncated_how')]])
+        ->and($answer['result']['rollup'])->toBe(compareRollup(25, ['slower' => 25], cut: 15))
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 25, ['groups' => 25, 'type' => 'request', 'by' => 'p50_duration', 'changes' => '25 slower']));
 });
 
 it('lists every group when they are no more than the limit, from a limit of 1 to one of 100, and 20 when none is given', function (?int $limit, int $groups, int $shown, int $cut) {
     compareIngest(array_merge(...array_map(fn (int $index) => compareGroup(chr(ord('a') + $index), 100, 100), range(0, $groups - 1))));
 
-    $envelope = compareAnswer(['by' => 'p50_duration', ...($limit === null ? [] : ['limit' => $limit])]);
+    $answer = compareAnswer(['by' => 'p50_duration', ...($limit === null ? [] : ['limit' => $limit])]);
 
-    expect($envelope['result']['groups'])->toHaveCount($shown)
-        ->and($envelope['result']['rollup']['cut'])->toBe($cut)
-        ->and($envelope['truncated'])->toHaveCount($cut > 0 ? 1 : 0);
+    expect($answer['result']['groups'])->toHaveCount($shown)
+        ->and($answer['result']['rollup']['cut'])->toBe($cut)
+        ->and($answer['truncated'])->toHaveCount($cut > 0 ? 1 : 0);
 })->with([
     'a limit of 1 over one group' => [1, 1, 1, 0],
     'a limit of 1 over two groups' => [1, 2, 1, 1],
@@ -530,12 +530,12 @@ it('compares one group alone, by its type, when it is given without one', functi
         ...compareGroup('b', 100, 300),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
+    $answer = Answers::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
 
-    expect(array_column($envelope['result']['groups'], 'group'))->toBe([compareHash('a')])
-        ->and($envelope['result'])->toMatchArray(['type' => 'request', 'rollup' => compareRollup(1, ['slower' => 1])])
-        ->and($envelope['result']['before']['records'])->toBe(3)
-        ->and($envelope['coverage']['types_read'])->toBe(['request']);
+    expect(array_column($answer['result']['groups'], 'group'))->toBe([compareHash('a')])
+        ->and($answer['result'])->toMatchArray(['type' => 'request', 'rollup' => compareRollup(1, ['slower' => 1])])
+        ->and($answer['result']['before']['records'])->toBe(3)
+        ->and($answer['coverage']['types_read'])->toBe(['request']);
 });
 
 it('compares the job attempts of a job group when no type is given, and says so', function () {
@@ -545,12 +545,12 @@ it('compares the job attempts of a job group when no type is given, and says so'
         ...compareCopies(RecordType::QUEUED_JOB, 'a', -600, 3, ['duration' => 1000]),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
-    $dispatches = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'type' => 'queued-job', 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
+    $answer = Answers::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
+    $dispatches = Answers::assert(Compare::class, ['group' => compareHash('a'), 'type' => 'queued-job', 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
 
-    expect($envelope['result']['type'])->toBe('job-attempt')
-        ->and($envelope['result']['groups'][0]['change'])->toBe('slower')
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.rank_job_group', ['group' => compareHash('a')])])
+    expect($answer['result']['type'])->toBe('job-attempt')
+        ->and($answer['result']['groups'][0]['change'])->toBe('slower')
+        ->and($answer['notes'])->toBe([__('firewatch::messages.rank_job_group', ['group' => compareHash('a')])])
         ->and($dispatches['result'])->toMatchArray(['type' => 'queued-job', 'reason' => 'empty_side', 'side' => 'after'])
         ->and($dispatches['notes'])->toBe([__('firewatch::messages.compare_not_evaluated_note')]);
 });
@@ -558,10 +558,10 @@ it('compares the job attempts of a job group when no type is given, and says so'
 it('answers that the store holds no such group, with the filters', function () {
     compareIngest(compareGroup('a', 100, 150));
 
-    $envelope = Envelope::assert(Compare::class, ['group' => compareHash('f'), 'split_at' => COMPARE_SPLIT]);
+    $answer = Answers::assert(Compare::class, ['group' => compareHash('f'), 'split_at' => COMPARE_SPLIT]);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'group: '.compareHash('f')])])
-        ->and($envelope['result'])->toBe([]);
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'group: '.compareHash('f')])])
+        ->and($answer['result'])->toBe([]);
 });
 
 it('refuses what it can not compare, naming what it accepts', function (array $arguments, string $key, string $argument, string $accepted, string $example, ?string $expected = null, ?string $value = null) {
@@ -619,7 +619,7 @@ it('counts the work of the type that started in the hour before the split and en
     ]);
 
     $all = compareAnswer();
-    $one = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT]);
+    $one = Answers::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT]);
     $later = compareAnswer(['since' => COMPARE_SPLIT - 5]);
 
     expect($all['coverage']['straddling'])->toBe(3)
@@ -631,7 +631,7 @@ it('counts the work of the type that started in the hour before the split and en
 it('states no straddling count on the answers of other tools', function () {
     compareIngest(compareGroup('a', 100, 150));
 
-    $ranked = Envelope::assert(Rank::class, ['type' => 'request']);
+    $ranked = Answers::assert(Rank::class, ['type' => 'request']);
 
     expect($ranked['coverage'])->toHaveKey('straddling', null)
         ->and(array_column($ranked['blind_spots'], 'id'))->not->toContain('visible-at-completion');
@@ -643,9 +643,9 @@ it('says to move since when it is left out and the store holds records from more
         ...compareGroup('a', 100, 150),
     ]);
 
-    $envelope = compareAnswer($arguments);
+    $answer = compareAnswer($arguments);
 
-    expect($envelope['notes'])->toBe(array_map(fn (string $key) => __("firewatch::messages.{$key}"), $notes));
+    expect($answer['notes'])->toBe(array_map(fn (string $key) => __("firewatch::messages.{$key}"), $notes));
 })->with([
     'a record from just over an hour before' => [-3600.000001, [], ['compare_move_since_note']],
     'a record from exactly an hour before' => [-3600, [], []],
@@ -658,16 +658,16 @@ it('offers the records and the deploy breakdown of the group that changed most, 
         ...compareGroup('b', 100, 400),
     ]);
 
-    $envelope = compareAnswer(['by' => 'p50_duration']);
+    $answer = compareAnswer(['by' => 'p50_duration']);
     $this->travelTo(Date::createFromTimestamp(COMPARE_NOW + 7200));
     ingest(compareCopies(RecordType::REQUEST, 'b', COMPARE_NOW - COMPARE_SPLIT + 600, 3, ['duration' => 900000]));
 
     $window = ['since' => COMPARE_CREATED, 'until' => COMPARE_NOW];
-    $records = Envelope::assert(Occurrences::class, $envelope['next'][0]['arguments']);
-    $breakdown = Envelope::assert(Rank::class, $envelope['next'][1]['arguments']);
+    $records = Answers::assert(Occurrences::class, $answer['next'][0]['arguments']);
+    $breakdown = Answers::assert(Rank::class, $answer['next'][1]['arguments']);
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['occurrences', 'rank'])
-        ->and(array_column($envelope['next'], 'arguments'))->toEqual([['group' => compareHash('b'), ...$window], ['group' => compareHash('b'), ...$window]])
+    expect(array_column($answer['next'], 'tool'))->toBe(['occurrences', 'rank'])
+        ->and(array_column($answer['next'], 'arguments'))->toEqual([['group' => compareHash('b'), ...$window], ['group' => compareHash('b'), ...$window]])
         ->and($records['empty'])->toBeNull()
         ->and($records['window'])->toMatchArray($window)
         ->and($records['result']['rows'])->toHaveCount(6)
@@ -681,15 +681,15 @@ it('offers the dispatch breakdown of a job group compared as dispatches', functi
         ...compareCopies(RecordType::QUEUED_JOB, 'a', 600, 3, ['duration' => 9000]),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['type' => 'queued-job', 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
+    $answer = Answers::assert(Compare::class, ['type' => 'queued-job', 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
 
-    expect(array_column($envelope['next'], 'arguments'))->toEqual([
+    expect(array_column($answer['next'], 'arguments'))->toEqual([
         ['group' => compareHash('a'), 'type' => 'queued-job', 'since' => COMPARE_CREATED, 'until' => COMPARE_NOW],
         ['group' => compareHash('a'), 'type' => 'queued-job', 'since' => COMPARE_CREATED, 'until' => COMPARE_NOW],
     ]);
 
-    foreach ($envelope['next'] as $call) {
-        expect(Envelope::assert(['occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']], $call['arguments'])['empty'])->toBeNull();
+    foreach ($answer['next'] as $call) {
+        expect(Answers::assert(['occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']], $call['arguments'])['empty'])->toBeNull();
     }
 });
 
@@ -709,8 +709,8 @@ it('answers nothing for a window with no record, a type with none on either side
         ->and($noMatch['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'type: query'])])
         ->and($noMatch['result'])->toBe([]);
 
-    foreach ([$missing, $emptyStore, $emptyWindow, $noMatch] as $envelope) {
-        expect(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion');
+    foreach ([$missing, $emptyStore, $emptyWindow, $noMatch] as $answer) {
+        expect(array_column($answer['blind_spots'], 'id'))->toContain('visible-at-completion');
     }
 });
 
@@ -746,16 +746,16 @@ it('gives one group that is on one side only its one row, new or gone, while oth
         ...compareGroup('c', 70, null),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['group' => compareHash($letter), 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
-    $result = $envelope['result'];
+    $answer = Answers::assert(Compare::class, ['group' => compareHash($letter), 'split_at' => COMPARE_SPLIT, 'by' => 'p50_duration']);
+    $result = $answer['result'];
 
     expect($result)->toMatchArray(['type' => 'request', 'change' => null, 'reason' => null, 'side' => null, 'rollup' => compareRollup(1, [$row['change'] => 1]), 'deploys' => null])
         ->and($result['groups'])->toHaveCount(1)
         ->and($result['groups'][0])->toMatchArray(['group' => compareHash($letter), 'change_pct' => null, ...$row])
         ->and($result['before'])->toMatchArray(['records' => $before, 'observed_span_ms' => $before === 0 ? null : 2000.0])
         ->and($result['after'])->toMatchArray(['records' => $after, 'observed_span_ms' => $after === 0 ? null : 2000.0])
-        ->and($envelope['notes'])->toBe([])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 1, ['groups' => 1, 'type' => 'request', 'by' => 'p50_duration', 'changes' => "1 {$row['change']}"]));
+        ->and($answer['notes'])->toBe([])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.compare_summary', 1, ['groups' => 1, 'type' => 'request', 'by' => 'p50_duration', 'changes' => "1 {$row['change']}"]));
 })->with([
     'a group after the split only' => ['a', ['before_records' => 0, 'after_records' => 3, 'before_ms' => null, 'after_ms' => 150.0, 'change' => 'new'], 0, 3],
     'a group before the split only' => ['c', ['before_records' => 3, 'after_records' => 0, 'before_ms' => 70.0, 'after_ms' => null, 'change' => 'gone'], 3, 0],
@@ -767,10 +767,10 @@ it('evaluates nothing for one group when a side holds no record of its type at a
         ...compareGroup('b', null, 100),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT]);
+    $answer = Answers::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT]);
 
-    expect($envelope['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'empty_side', 'side' => 'before', 'rollup' => null, 'groups' => []])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.compare_empty_side_summary', ['side' => 'before', 'type' => 'request']));
+    expect($answer['result'])->toMatchArray(['change' => 'not_evaluated', 'reason' => 'empty_side', 'side' => 'before', 'rollup' => null, 'groups' => []])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.compare_empty_side_summary', ['side' => 'before', 'type' => 'request']));
 });
 
 it('answers that nothing matches one group with no record in the window, while its type has records on both sides', function () {
@@ -779,10 +779,10 @@ it('answers that nothing matches one group with no record in the window, while i
         ...compareGroup('b', 100, 150),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'since' => COMPARE_SPLIT - 1000]);
+    $answer = Answers::assert(Compare::class, ['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'since' => COMPARE_SPLIT - 1000]);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'group: '.compareHash('a')])])
-        ->and($envelope['result'])->toBe([]);
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'group: '.compareHash('a')])])
+        ->and($answer['result'])->toBe([]);
 });
 
 it('judges a volume measure at a span ratio of exactly 2 whatever the fractions of a second, and not a microsecond past it', function (float $beforeSpan, float $afterSpan, ?string $reason) {
@@ -815,13 +815,13 @@ it('counts the straddling work of an execution type only, and states none for a 
     ]);
 
     $arguments = ['type' => $type, 'split_at' => COMPARE_SPLIT, 'by' => 'occurrences'];
-    $envelope = Envelope::assert(Compare::class, $arguments);
+    $answer = Answers::assert(Compare::class, $arguments);
     $markdown = (fn () => $this->content())->call(FirewatchServer::tool(Compare::class, $arguments))[0];
     $storeLine = collect(explode("\n", $markdown))->first(fn (string $line) => str_starts_with($line, 'Store: '));
     $stated = $straddling === null ? [] : [__('firewatch::messages.store_straddling', ['count' => $straddling])];
 
-    expect($envelope['result']['before']['records'])->toBe(2)
-        ->and($envelope['coverage']['straddling'])->toBe($straddling)
+    expect($answer['result']['before']['records'])->toBe(2)
+        ->and($answer['coverage']['straddling'])->toBe($straddling)
         ->and(array_values(preg_grep('/straddling/', explode(', ', explode('; ', $storeLine)[0]))))->toBe($stated);
 })->with([
     'request' => ['request', 1],
@@ -841,13 +841,13 @@ it('says how many records of the type started before what the store covers, whic
         ...compareCopies(RecordType::REQUEST, 'a', 600, 3),
     ]);
 
-    $envelope = compareAnswer($arguments);
+    $answer = compareAnswer($arguments);
     $said = $earlier === 0 ? [] : [trans_choice('firewatch::messages.compare_earlier_note', $earlier, ['count' => $earlier, 'type' => 'request'])];
 
-    expect($envelope['result']['before'])->toMatchArray(['since_at' => COMPARE_CREATED, 'records' => $records, 'earlier_records' => $earlier, 'earlier_more' => false])
-        ->and($envelope['result']['after'])->not->toHaveKeys(['earlier_records', 'earlier_more'])
-        ->and($envelope['result']['reason'])->toBe($records === 0 ? 'empty_side' : null)
-        ->and($envelope['notes'])->toBe([
+    expect($answer['result']['before'])->toMatchArray(['since_at' => COMPARE_CREATED, 'records' => $records, 'earlier_records' => $earlier, 'earlier_more' => false])
+        ->and($answer['result']['after'])->not->toHaveKeys(['earlier_records', 'earlier_more'])
+        ->and($answer['result']['reason'])->toBe($records === 0 ? 'empty_side' : null)
+        ->and($answer['notes'])->toBe([
             ...($records === 0 ? [__('firewatch::messages.compare_not_evaluated_note')] : []),
             ...$said,
             ...($arguments === [] ? [__('firewatch::messages.compare_move_since_note')] : []),
@@ -864,10 +864,10 @@ it('says nothing of the records before what the store covers when since leaves t
         ...compareGroup('a', 100, 100),
     ]);
 
-    $envelope = compareAnswer(['by' => 'p50_duration', 'since' => COMPARE_SPLIT - 1000]);
+    $answer = compareAnswer(['by' => 'p50_duration', 'since' => COMPARE_SPLIT - 1000]);
 
-    expect($envelope['result']['before'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'clipped' => false, 'records' => 3, 'earlier_records' => 0, 'earlier_more' => false])
-        ->and($envelope['notes'])->toBe([]);
+    expect($answer['result']['before'])->toMatchArray(['since_at' => COMPARE_SPLIT - 1000, 'clipped' => false, 'records' => 3, 'earlier_records' => 0, 'earlier_more' => false])
+        ->and($answer['notes'])->toBe([]);
 });
 
 it('counts at most 100 records before what the store covers, and says when there are more', function (int $stored, int $earlier, bool $more, string $key) {
@@ -876,10 +876,10 @@ it('counts at most 100 records before what the store covers, and says when there
         ...compareGroup('a', 100, 100),
     ]);
 
-    $envelope = compareAnswer(['by' => 'p50_duration']);
+    $answer = compareAnswer(['by' => 'p50_duration']);
 
-    expect($envelope['result']['before'])->toMatchArray(['records' => 3, 'earlier_records' => $earlier, 'earlier_more' => $more])
-        ->and($envelope['notes'])->toBe([
+    expect($answer['result']['before'])->toMatchArray(['records' => 3, 'earlier_records' => $earlier, 'earlier_more' => $more])
+        ->and($answer['notes'])->toBe([
             trans_choice("firewatch::messages.{$key}", $earlier, ['count' => $earlier, 'type' => 'request']),
             __('firewatch::messages.compare_move_since_note'),
         ]);
@@ -896,13 +896,13 @@ it('counts the groups the size budget dropped as cut in the rollup, which agrees
 
     compareIngest(array_merge(...$records));
 
-    $envelope = compareAnswer(['type' => 'query', 'by' => 'p50_duration', 'limit' => 100]);
-    $shown = count($envelope['result']['groups']);
+    $answer = compareAnswer(['type' => 'query', 'by' => 'p50_duration', 'limit' => 100]);
+    $shown = count($answer['result']['groups']);
 
     expect($shown)->toBeGreaterThan(0)->toBeLessThan(100)
-        ->and($envelope['truncated'])->toBe([['section' => 'groups', 'shown' => $shown, 'matched' => 100, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]])
-        ->and($envelope['result']['rollup'])->toBe(compareRollup(100, ['steady' => 100], cut: 100 - $shown))
-        ->and(mb_strlen(json_encode($envelope, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION)))->toBeLessThanOrEqual(24000);
+        ->and($answer['truncated'])->toBe([['section' => 'groups', 'shown' => $shown, 'matched' => 100, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]])
+        ->and($answer['result']['rollup'])->toBe(compareRollup(100, ['steady' => 100], cut: 100 - $shown))
+        ->and(mb_strlen(json_encode($answer, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION)))->toBeLessThanOrEqual(24000);
 });
 
 it('lists at most ten deploys beside an empty side, and says so when the window holds more', function (int $deploys, array $truncated) {
@@ -910,11 +910,11 @@ it('lists at most ten deploys beside an empty side, and says so when the window 
 
     compareIngest($records);
 
-    $envelope = compareAnswer();
+    $answer = compareAnswer();
 
-    expect($envelope['result']['reason'])->toBe('empty_side')
-        ->and(array_column($envelope['result']['deploys'], 'deploy'))->toBe(['v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09', 'v10'])
-        ->and($envelope['truncated'])->toBe($truncated);
+    expect($answer['result']['reason'])->toBe('empty_side')
+        ->and(array_column($answer['result']['deploys'], 'deploy'))->toBe(['v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09', 'v10'])
+        ->and($answer['truncated'])->toBe($truncated);
 })->with([
     'ten deploys' => [10, []],
     'eleven deploys' => fn () => [11, [['section' => 'deploys', 'shown' => 10, 'matched' => null, 'reason' => 'limit', 'how' => __('firewatch::messages.compare_deploys_truncated_how')]]],

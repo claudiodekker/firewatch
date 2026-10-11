@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -101,7 +101,7 @@ function qltEvidence(array $arguments = []): array
  */
 function qltAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'queue-latency', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'queue-latency', ...$arguments]);
 }
 
 /**
@@ -120,12 +120,12 @@ describe('the verdict', function () {
     it('has findings when a job of a group waited the threshold for its first attempt, over every dispatch examined', function () {
         ingest([...qltWaited('a', 6000), ...qltWaited('b', 20), ...qltWaited('c', 30, 'SendInvoice')]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'queue-latency', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => QLT_SAW])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'queue-latency', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.queue-latency')]))
-            ->and($envelope['result']['threshold'])->toBe(['name' => 'ms', 'value' => 5000, 'default' => 5000, 'unit' => 'ms', 'range' => ['min' => 1, 'max' => null], 'is_default' => true])
-            ->and($envelope['result']['findings'][0])->toMatchArray(['group' => md5('ShipOrder'), 'count' => 6000.0]);
+        expect($answer['result'])->toMatchArray(['detector' => 'queue-latency', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => QLT_SAW])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'queue-latency', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.queue-latency')]))
+            ->and($answer['result']['threshold'])->toBe(['name' => 'ms', 'value' => 5000, 'default' => 5000, 'unit' => 'ms', 'range' => ['min' => 1, 'max' => null], 'is_default' => true])
+            ->and($answer['result']['findings'][0])->toMatchArray(['group' => md5('ShipOrder'), 'count' => 6000.0]);
     });
 
     it('tells a wait just under the threshold from one that reaches it', function (?int $threshold, int|float $waitMs, string $verdict) {
@@ -180,38 +180,38 @@ describe('the verdict', function () {
     it('is clean over the dispatches examined when none waited or is pending that long, and says how many', function () {
         ingest([...qltWaited('a', 10), ...qltWaited('b', 4000)]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => [], 'saw' => QLT_SAW])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'queue-latency', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.queue-latency')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => [], 'saw' => QLT_SAW])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'queue-latency', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.queue-latency')]));
     });
 
     it('is not evaluated when the window holds no dispatch and no attempt, never clean', function () {
         ingest([syntheticRecord(RecordType::REQUEST)]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => [], 'saw' => QLT_SAW])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'queue-latency', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => [], 'saw' => QLT_SAW])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'queue-latency', 'reason' => 'no_records']));
     });
 
     it('is not evaluated for want of its prerequisite when attempts ran and no dispatch is stored, and says how many', function () {
         ingest([qltAttempt('a', 100), qltAttempt('a', 900, 2), qltAttempt('b', 200, name: 'SendInvoice')]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'prerequisite_missing', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 3, 'without_first_attempt' => 0])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'queue-latency', 'reason' => 'prerequisite_missing']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'prerequisite_missing', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 3, 'without_first_attempt' => 0])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'queue-latency', 'reason' => 'prerequisite_missing']));
     });
 
     it('is not evaluated for want of records when every dispatch ran inline, and says how many it set aside', function (string $connection) {
         ingest([qltDispatch('a', fields: ['connection' => $connection]), qltDispatch('b', fields: ['connection' => $connection])]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['result']['saw'])->toBe(['inline_excluded' => 2, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['result']['saw'])->toBe(['inline_excluded' => 2, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0]);
     })->with(['sync' => 'sync', 'deferred' => 'deferred', 'background' => 'background', 'null' => 'null']);
 
     it('wants records, not its prerequisite, when only inline dispatches sit next to attempts without one', function () {
@@ -239,18 +239,18 @@ describe('the verdict', function () {
             ...qltWaited('ended-inside', 9000, dispatchFields: ['timestamp' => QLT_AT + 1, 'duration' => 2_000_000]),
         ]);
 
-        $envelope = qltAnswer(['since' => (string) QLT_AT, 'until' => (string) (QLT_AT + 10)]);
+        $answer = qltAnswer(['since' => (string) QLT_AT, 'until' => (string) (QLT_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 
     it('reads the attempts of a job whole, also the first attempt that started after the window', function () {
         ingest(qltWaited('a', 60_000));
 
-        $envelope = qltAnswer(['until' => (string) (QLT_AT + 10)]);
+        $answer = qltAnswer(['until' => (string) (QLT_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'saw' => QLT_SAW])
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['waits_over_threshold' => 1, 'pending' => 0, 'worst_wait_ms' => 60000.0]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'saw' => QLT_SAW])
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['waits_over_threshold' => 1, 'pending' => 0, 'worst_wait_ms' => 60000.0]);
     });
 });
 
@@ -258,10 +258,10 @@ describe('the wait', function () {
     it('runs from the end of the dispatch to the start of the first attempt', function () {
         ingest([qltDispatch('a', fields: ['timestamp' => QLT_AT + 2, 'duration' => 1_500_000]), qltAttempt('a', 8250)]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['result']['findings'][0])->toMatchArray(['count' => 6250.0, 'first_seen_at' => QLT_AT + 0.5, 'last_seen_at' => QLT_AT + 0.5])
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['worst_wait_ms' => 6250.0, 'waits_over_threshold' => 1]);
+        expect($answer['result']['findings'][0])->toMatchArray(['count' => 6250.0, 'first_seen_at' => QLT_AT + 0.5, 'last_seen_at' => QLT_AT + 0.5])
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['worst_wait_ms' => 6250.0, 'waits_over_threshold' => 1]);
     });
 
     it('runs from the instant a dispatch is stamped with when it carries no duration', function () {
@@ -341,12 +341,12 @@ describe('the pending dispatches', function () {
     it('ages a dispatch that no attempt followed by the store clock', function () {
         ingest([qltPending('old', 90_000), qltPending('young', 2000), ...qltWaited('worked', 10)]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['now'])->toEqual(QLT_NOW)
-            ->and($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 3, 'total' => 1])
-            ->and($envelope['result']['findings'][0])->toMatchArray(['count' => 90000.0, 'latest_execution_id' => 'dispatch-old'])
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['jobs' => 3, 'waits_over_threshold' => 0, 'pending' => 2, 'worst_wait_ms' => 10.0, 'oldest_pending_age_ms' => 90000.0]);
+        expect($answer['now'])->toEqual(QLT_NOW)
+            ->and($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 3, 'total' => 1])
+            ->and($answer['result']['findings'][0])->toMatchArray(['count' => 90000.0, 'latest_execution_id' => 'dispatch-old'])
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['jobs' => 3, 'waits_over_threshold' => 0, 'pending' => 2, 'worst_wait_ms' => 10.0, 'oldest_pending_age_ms' => 90000.0]);
     });
 
     it('ages a dispatch from its end, not its start', function () {
@@ -433,9 +433,9 @@ describe('the finding', function () {
             qltDispatch('fresh', fields: ['timestamp' => QLT_NOW - 1, 'user' => 'u2', 'queue' => 'high']),
         ]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => md5('ShipOrder'),
             'name' => 'ShipOrder',
             'count' => 3_420_000.0,
@@ -453,7 +453,7 @@ describe('the finding', function () {
                 'queues' => ['default', 'high', 'low'],
                 'connections' => ['database', 'redis'],
             ],
-        ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
+        ]])->and($answer['result']['findings'][0])->not->toHaveKey('worst_execution_id');
     });
 
     it('is one for a group whose jobs waited long and are pending, counted by the greater of the two', function (int $waitMs, int $ageMs, float $count) {
@@ -623,19 +623,19 @@ describe('the order', function () {
     it('shows the findings up to the limit, with the exact total and a note of the cut', function () {
         ingest(array_merge(...array_map(fn (int $job) => qltWaited("job-{$job}", 5000 + $job, "Job{$job}"), range(1, 4))));
 
-        $envelope = qltAnswer(['limit' => 3]);
+        $answer = qltAnswer(['limit' => 3]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['Job4', 'Job3', 'Job2'])
-            ->and($envelope['result'])->toMatchArray(['examined' => 4, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['Job4', 'Job3', 'Job2'])
+            ->and($answer['result'])->toMatchArray(['examined' => 4, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest(array_merge(...array_map(fn (int $job) => qltWaited("job-{$job}", 9000, "Job{$job}"), range(1, 3))));
 
-        $envelope = qltAnswer(['limit' => 3]);
+        $answer = qltAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 });
 
@@ -653,13 +653,13 @@ describe('one group', function () {
             qltAttempt('partial-b', 10, 2, 'SendInvoice'),
         ]);
 
-        $envelope = qltAnswer(['group' => md5('ShipOrder')]);
+        $answer = qltAnswer(['group' => md5('ShipOrder')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-            ->and($envelope['result']['saw'])->toBe(['inline_excluded' => 1, 'attempts_without_dispatch' => 1, 'without_first_attempt' => 0])
-            ->and($envelope['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_wait')])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['ShipOrder'])
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['jobs' => 1, 'pending' => 0, 'worst_wait_ms' => 9000.0]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($answer['result']['saw'])->toBe(['inline_excluded' => 1, 'attempts_without_dispatch' => 1, 'without_first_attempt' => 0])
+            ->and($answer['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_wait')])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['ShipOrder'])
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['jobs' => 1, 'pending' => 0, 'worst_wait_ms' => 9000.0]);
     });
 
     it('is clean when the group has dispatches and none waited or is pending that long', function () {
@@ -671,19 +671,19 @@ describe('one group', function () {
     it('answers that no dispatch matches a group that holds none', function () {
         ingest([...qltWaited('a', 9000), ...qltWaited('b', 10, 'SendInvoice')]);
 
-        $envelope = qltAnswer(['group' => md5('Missing')]);
+        $answer = qltAnswer(['group' => md5('Missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'saw' => QLT_SAW])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 4]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'saw' => QLT_SAW])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 4]);
     });
 
     it('does not answer that nothing matches a group whose records it set aside', function (RecordBuilder $record, string $reason) {
         ingest([$record, ...qltWaited('b', 10, 'SendInvoice')]);
 
-        $envelope = qltAnswer(['group' => md5('ShipOrder')]);
+        $answer = qltAnswer(['group' => md5('ShipOrder')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => $reason, 'examined' => 0])
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => $reason, 'examined' => 0])
+            ->and($answer['empty'])->toBeNull();
     })->with([
         'attempts without a dispatch' => [fn () => qltAttempt('lost', 10), 'no_records'],
         'inline dispatches' => [fn () => qltDispatch('inline', fields: ['connection' => 'sync']), 'no_records'],
@@ -692,11 +692,11 @@ describe('one group', function () {
     it('misses its prerequisite for a group only when no group has a dispatch in the window', function () {
         ingest([qltAttempt('lost', 10), qltAttempt('other', 10, name: 'SendInvoice')]);
 
-        $envelope = qltAnswer(['group' => md5('ShipOrder')]);
+        $answer = qltAnswer(['group' => md5('ShipOrder')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'prerequisite_missing', 'examined' => 0])
-            ->and($envelope['result']['saw']['attempts_without_dispatch'])->toBe(1)
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'prerequisite_missing', 'examined' => 0])
+            ->and($answer['result']['saw']['attempts_without_dispatch'])->toBe(1)
+            ->and($answer['empty'])->toBeNull();
     });
 });
 
@@ -726,14 +726,14 @@ describe('what to look at next', function () {
             ...qltWaited('c', 10, 'Works'),
         ]);
 
-        $envelope = qltAnswer();
+        $answer = qltAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
-            ->and(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'a-1'], ['group' => md5('ShipOrder')], ['group' => md5('ShipOrder')], ['execution_id' => 'dispatch-b']]);
+        expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
+            ->and(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'a-1'], ['group' => md5('ShipOrder')], ['group' => md5('ShipOrder')], ['execution_id' => 'dispatch-b']]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -747,7 +747,7 @@ describe('with the other shapes', function () {
             qltDispatch('inline', 'Works', ['connection' => 'sync']),
         ]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'queue-latency');
 
         expect($row)->toBe([
@@ -763,7 +763,7 @@ describe('with the other shapes', function () {
     it('is run between failing-jobs and memory when no shape is named', function () {
         ingest(qltWaited('a', 9000));
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[4])->toMatchArray(['verdict' => 'findings', 'total' => 1]);

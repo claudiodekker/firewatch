@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 
 beforeEach(function () {
     $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
@@ -24,10 +24,10 @@ function qclText(int $length, string $character = 'x'): string
 
 describe('the cell cap', function () {
     it('shows 2,000 characters of a longer cell with a notice for the rest, and says to read it with substr()', function (string $character) {
-        $envelope = Envelope::assert(Query::class, ['sql' => 'SELECT '.qclText(2500, $character).' AS text, 7 AS n']);
+        $answer = Answers::assert(Query::class, ['sql' => 'SELECT '.qclText(2500, $character).' AS text, 7 AS n']);
 
-        expect($envelope['result']['rows'])->toBe([[str_repeat($character, 2000).__('firewatch::messages.cell_truncated', ['count' => 500]), 7]])
-            ->and($envelope['truncated'])->toBe([[
+        expect($answer['result']['rows'])->toBe([[str_repeat($character, 2000).__('firewatch::messages.cell_truncated', ['count' => 500]), 7]])
+            ->and($answer['truncated'])->toBe([[
                 'section' => 'rows',
                 'shown' => 1,
                 'matched' => null,
@@ -37,10 +37,10 @@ describe('the cell cap', function () {
     })->with(['ascii' => ['x'], 'multibyte' => ['é']])->group('process');
 
     it('leaves a cell of exactly 2,000 characters whole', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => 'SELECT '.qclText(2000).' AS text']);
+        $answer = Answers::assert(Query::class, ['sql' => 'SELECT '.qclText(2000).' AS text']);
 
-        expect($envelope['result']['rows'])->toBe([[str_repeat('x', 2000)]])
-            ->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['rows'])->toBe([[str_repeat('x', 2000)]])
+            ->and($answer['truncated'])->toBe([]);
     })->group('process');
 });
 
@@ -70,41 +70,41 @@ function qclAnswerText(array $arguments): string
 
 describe('the row budget', function () {
     it('returns rows that sum to exactly 16,000 bytes, as complete', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => qclRows(8, 1996)]);
+        $answer = Answers::assert(Query::class, ['sql' => qclRows(8, 1996)]);
 
-        expect($envelope['result']['rows'])->toHaveCount(8)
-            ->and($envelope['result']['stop'])->toBe('complete')
-            ->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['rows'])->toHaveCount(8)
+            ->and($answer['result']['stop'])->toBe('complete')
+            ->and($answer['truncated'])->toBe([]);
     })->group('process');
 
     it('stops at the budget when one more byte would not fit', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => qclRows(8, 1996, 1997)]);
+        $answer = Answers::assert(Query::class, ['sql' => qclRows(8, 1996, 1997)]);
 
-        expect($envelope['result']['rows'])->toHaveCount(7)
-            ->and($envelope['result']['stop'])->toBe('budget')
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.query_summary_more', ['rows' => '7 rows', 'columns' => '1 column', 'shown' => 7]))
-            ->and($envelope['truncated'])->toBe([[
+        expect($answer['result']['rows'])->toHaveCount(7)
+            ->and($answer['result']['stop'])->toBe('budget')
+            ->and($answer['summary'])->toBe(__('firewatch::messages.query_summary_more', ['rows' => '7 rows', 'columns' => '1 column', 'shown' => 7]))
+            ->and($answer['truncated'])->toBe([[
                 'section' => 'rows',
                 'shown' => 7,
                 'matched' => null,
                 'reason' => 'size',
                 'how' => __('firewatch::messages.query_budget_how'),
             ]])
-            ->and($envelope['next'])->toBe([]);
+            ->and($answer['next'])->toBe([]);
     })->group('process');
 
     it('stops at the budget when a row follows rows that fill it', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => qclRows(9, 1996)]);
+        $answer = Answers::assert(Query::class, ['sql' => qclRows(9, 1996)]);
 
-        expect($envelope['result']['rows'])->toHaveCount(8)
-            ->and($envelope['result']['stop'])->toBe('budget');
+        expect($answer['result']['rows'])->toHaveCount(8)
+            ->and($answer['result']['stop'])->toBe('budget');
     })->group('process');
 
     it('stops at the limit, whatever the size of the row beyond it', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => qclRows(2, 1, 2000, columns: 9), 'limit' => 1]);
+        $answer = Answers::assert(Query::class, ['sql' => qclRows(2, 1, 2000, columns: 9), 'limit' => 1]);
 
-        expect($envelope['result']['rows'])->toHaveCount(1)
-            ->and($envelope['result']['stop'])->toBe('limit');
+        expect($answer['result']['rows'])->toHaveCount(1)
+            ->and($answer['result']['stop'])->toBe('limit');
     })->group('process');
 
     it('answers a first row over the budget as row_too_large', function () {
@@ -141,10 +141,10 @@ describe('the heap ceiling', function () {
         $big = "(SELECT length(group_concat(n || '".str_repeat('x', 100)."')) FROM c)";
         $sql = "WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 400000), small(i) AS (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) SELECT i, CASE WHEN i = 3 THEN {$big} ELSE 0 END FROM small";
 
-        $envelope = Envelope::assert(Query::class, ['sql' => $sql]);
+        $answer = Answers::assert(Query::class, ['sql' => $sql]);
 
-        expect($envelope['result']['rows'])->toBe([[1, 0], [2, 0]])
-            ->and($envelope['result']['stop'])->toBe('memory')
-            ->and($envelope['truncated'][0]['reason'])->toBe('partial');
+        expect($answer['result']['rows'])->toBe([[1, 0], [2, 0]])
+            ->and($answer['result']['stop'])->toBe('memory')
+            ->and($answer['truncated'][0]['reason'])->toBe('partial');
     })->group('process');
 });

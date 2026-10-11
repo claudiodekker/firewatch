@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -76,7 +76,7 @@ function cchExecution(string $execution): RecordBuilder
  */
 function cchAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'cache', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'cache', ...$arguments]);
 }
 
 /**
@@ -93,12 +93,12 @@ describe('the verdict', function () {
     it('has findings when a key was read with a low hit rate, over every cache event examined, and states the threshold', function () {
         ingest([...cchReads('prices', hits: 1, misses: 2), ...cchReads('settings', hits: 3, misses: 1), cchEvent('write', 'settings')]);
 
-        $envelope = cchAnswer();
+        $answer = cchAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'cache', 'verdict' => 'findings', 'reason' => null, 'examined' => 8, 'total' => 1])
-            ->and($envelope['result']['threshold'])->toBe(['name' => 'percent', 'value' => 50, 'default' => 50, 'unit' => 'percent', 'range' => ['min' => 1, 'max' => 100], 'is_default' => true])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'cache', 'total' => 1, 'examined' => 8, 'input' => __('firewatch::messages.detect_input.cache')]))
-            ->and($envelope['result']['findings'][0]['group'])->toBe(cchGroup('prices'));
+        expect($answer['result'])->toMatchArray(['detector' => 'cache', 'verdict' => 'findings', 'reason' => null, 'examined' => 8, 'total' => 1])
+            ->and($answer['result']['threshold'])->toBe(['name' => 'percent', 'value' => 50, 'default' => 50, 'unit' => 'percent', 'range' => ['min' => 1, 'max' => 100], 'is_default' => true])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'cache', 'total' => 1, 'examined' => 8, 'input' => __('firewatch::messages.detect_input.cache')]))
+            ->and($answer['result']['findings'][0]['group'])->toBe(cchGroup('prices'));
     });
 
     it('takes a hit rate strictly below 50 percent over 3 or more reads for low by default', function (int $hits, int $misses, string $verdict) {
@@ -173,19 +173,19 @@ describe('the verdict', function () {
     it('is clean over the cache events examined when no key is read badly and nothing failed, and says how many', function () {
         ingest([...cchReads('prices', hits: 2, misses: 2), ...cchEvents('settings', ['miss', 'write', 'hit', 'delete'])]);
 
-        $envelope = cchAnswer();
+        $answer = cchAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 8, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'cache', 'examined' => 8, 'input' => __('firewatch::messages.detect_input.cache')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 8, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'cache', 'examined' => 8, 'input' => __('firewatch::messages.detect_input.cache')]));
     });
 
     it('is not evaluated when the window holds no cache event, never clean', function () {
         ingest([syntheticRecord(RecordType::REQUEST), syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = cchAnswer();
+        $answer = cchAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'cache', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'cache', 'reason' => 'no_records']));
     });
 
     it('judges the cache events that started in the window, the start included and the end not', function () {
@@ -195,10 +195,10 @@ describe('the verdict', function () {
             cchEvent('write-failure', fields: ['timestamp' => CCH_AT + 10]),
         ]);
 
-        $envelope = cchAnswer(['since' => (string) CCH_AT, 'until' => (string) (CCH_AT + 10)]);
+        $answer = cchAnswer(['since' => (string) CCH_AT, 'until' => (string) (CCH_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1])
-            ->and($envelope['result']['saw']['activity']['total'])->toBe([...CCH_NOTHING, 'hits' => 1, 'hit_rate_pct' => 100]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1])
+            ->and($answer['result']['saw']['activity']['total'])->toBe([...CCH_NOTHING, 'hits' => 1, 'hit_rate_pct' => 100]);
     });
 
     it('finds a write that failed at the start of the window, and not one that failed at its end', function () {
@@ -207,10 +207,10 @@ describe('the verdict', function () {
             cchEvent('write-failure', 'settings', fields: ['timestamp' => CCH_AT + 10, 'execution_id' => 'at-until']),
         ]);
 
-        $envelope = cchAnswer(['since' => (string) CCH_AT, 'until' => (string) (CCH_AT + 10)]);
+        $answer = cchAnswer(['since' => (string) CCH_AT, 'until' => (string) (CCH_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['latest_execution_id'])->toBe('at-since');
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($answer['result']['findings'][0]['latest_execution_id'])->toBe('at-since');
     });
 
     it('counts a cache event of a kind it does not know as examined, and nowhere else', function () {
@@ -235,9 +235,9 @@ describe('the finding', function () {
             cchEvent('delete', fields: ['timestamp' => CCH_AT + 300, 'execution_id' => 'f', 'user' => '11']),
         ]);
 
-        $envelope = cchAnswer();
+        $answer = cchAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => cchGroup('prices'),
             'name' => 'prices',
             'count' => 5,
@@ -257,7 +257,7 @@ describe('the finding', function () {
                 'delete_failures' => 0,
                 'hit_rate_pct' => 40.0,
             ],
-        ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
+        ]])->and($answer['result']['findings'][0])->not->toHaveKey('worst_execution_id');
     });
 
     it('states a key with a failed write or delete by its failures, and takes when it was seen, its latest execution and whom it reached from them', function () {
@@ -270,9 +270,9 @@ describe('the finding', function () {
             cchEvent('miss', fields: ['timestamp' => CCH_AT + 300, 'execution_id' => 'f', 'user' => '9']),
         ]);
 
-        $envelope = cchAnswer();
+        $answer = cchAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => cchGroup('prices'),
             'name' => 'prices',
             'count' => 3,
@@ -455,19 +455,19 @@ describe('the order', function () {
     it('shows the findings up to the limit, with the exact total and a note of the cut', function () {
         ingest(array_merge(...array_map(fn (int $key) => cchEvents("key-{$key}", array_fill(0, $key, 'write-failure')), range(1, 4))));
 
-        $envelope = cchAnswer(['limit' => 3]);
+        $answer = cchAnswer(['limit' => 3]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['key-4', 'key-3', 'key-2'])
-            ->and($envelope['result'])->toMatchArray(['examined' => 10, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['key-4', 'key-3', 'key-2'])
+            ->and($answer['result'])->toMatchArray(['examined' => 10, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest(array_merge(...array_map(fn (int $key) => cchEvents("key-{$key}", ['write-failure']), range(1, 3))));
 
-        $envelope = cchAnswer(['limit' => 3]);
+        $answer = cchAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 });
 
@@ -516,11 +516,11 @@ describe('one group', function () {
     it('restricts the judgement and the activity to the key, and examines only its cache events', function () {
         ingest([...cchReads('prices', hits: 1, misses: 3), ...cchEvents('session', ['write-failure', 'write-failure'], 'redis')]);
 
-        $envelope = cchAnswer(['group' => cchGroup('prices')]);
+        $answer = cchAnswer(['group' => cchGroup('prices')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 4, 'total' => 1])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['prices'])
-            ->and($envelope['result']['saw']['activity'])->toBe([
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 4, 'total' => 1])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['prices'])
+            ->and($answer['result']['saw']['activity'])->toBe([
                 'stores' => [['store' => 'array', ...CCH_NOTHING, 'hits' => 1, 'misses' => 3, 'hit_rate_pct' => 25]],
                 'total' => [...CCH_NOTHING, 'hits' => 1, 'misses' => 3, 'hit_rate_pct' => 25],
             ]);
@@ -538,11 +538,11 @@ describe('one group', function () {
     it('answers that no cache event matches a group that holds none, with an activity of nothing', function () {
         ingest([...cchEvents('prices', ['write-failure']), ...cchReads('settings', hits: 3, misses: 0)]);
 
-        $envelope = cchAnswer(['group' => cchGroup('missing')]);
+        $answer = cchAnswer(['group' => cchGroup('missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['result']['saw'])->toBe(['activity' => ['stores' => [], 'total' => CCH_NOTHING]])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 4]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['result']['saw'])->toBe(['activity' => ['stores' => [], 'total' => CCH_NOTHING]])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 4]);
     });
 });
 
@@ -590,14 +590,14 @@ describe('what to look at next', function () {
             cchEvent('hit', 'prices', fields: ['execution_id' => 'a', 'timestamp' => CCH_AT + 50]),
         ]);
 
-        $envelope = cchAnswer();
+        $answer = cchAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
-            ->and(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => cchGroup('session')], ['group' => cchGroup('session')], ['execution_id' => 'c']]);
+        expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
+            ->and(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => cchGroup('session')], ['group' => cchGroup('session')], ['execution_id' => 'c']]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -610,7 +610,7 @@ describe('with the other shapes', function () {
             ...cchReads('settings', hits: 3, misses: 0),
         ]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'cache');
 
         expect($row)->toBe([
@@ -626,7 +626,7 @@ describe('with the other shapes', function () {
     it('is run between failing-http and memory when no shape is named', function () {
         ingest([cchEvent('write-failure')]);
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[9])->toMatchArray(['verdict' => 'findings', 'total' => 1]);

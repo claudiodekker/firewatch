@@ -99,7 +99,7 @@ class History
     }
 
     /**
-     * Get the history as the `history` key of the envelope's coverage.
+     * Get the history as the `history` key of the answer's coverage.
      *
      * @return array<string, mixed>
      */

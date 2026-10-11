@@ -16,7 +16,7 @@ use ClaudioDekker\Firewatch\Store\RebuildReason;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 
 /**
  * @param  array<string, mixed>  $arguments
@@ -24,7 +24,7 @@ use ClaudioDekker\Firewatch\Tests\Support\Envelope;
  */
 function conditionsOf(array $arguments = []): array
 {
-    return array_values(array_filter(Envelope::assert(Overview::class, $arguments)['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'condition'));
+    return array_values(array_filter(Answers::assert(Overview::class, $arguments)['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'condition'));
 }
 
 /**
@@ -348,7 +348,7 @@ it('attaches the conditions after the structural blind spots, in the order of th
 
     expect(array_column($conditions, 'id'))->toBe(['history-pruned', 'store-rebuilt', 'drift', 'nightwatch-unverified', 'redaction-active']);
 
-    $kinds = array_column(Envelope::assert(Overview::class)['blind_spots'], 'kind');
+    $kinds = array_column(Answers::assert(Overview::class)['blind_spots'], 'kind');
 
     expect(end($kinds))->toBe('condition')
         ->and(array_search('condition', $kinds, true))->toBe(count($kinds) - 1)

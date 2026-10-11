@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Date;
 
 const BUDGET_AT = 1790776000.0;
@@ -26,7 +26,7 @@ function budgetAnswer(RecordType $type, array $fields = []): array
 {
     ingest([syntheticRecord($type)->inExecution('judged')->with(['timestamp' => BUDGET_AT, ...$fields])]);
 
-    return Envelope::assert(Execution::class, ['execution_id' => 'judged']);
+    return Answers::assert(Execution::class, ['execution_id' => 'judged']);
 }
 
 /**
