@@ -8,8 +8,11 @@ use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
 use ClaudioDekker\Firewatch\Mcp\Call;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Frame;
+use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\RecordType;
+use Closure;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\JsonSchema\Types\IntegerType;
@@ -35,9 +38,7 @@ trait AnswersInEnvelope
     public function schema(JsonSchema $schema): array
     {
         return [
-            'format' => $schema->string()
-                ->enum(array_column(AnswerFormat::cases(), 'value'))
-                ->description(__('firewatch::messages.format_argument')),
+            'format' => $schema->string()->enum(AnswerFormat::class)->default(AnswerFormat::MARKDOWN->value),
         ];
     }
 
@@ -55,15 +56,37 @@ trait AnswersInEnvelope
     }
 
     /**
+     * Get the type argument of a tool that reads groups.
+     */
+    protected function groupedTypeArgument(JsonSchema $schema): StringType
+    {
+        return $schema->string()
+            ->enum(array_column(Measure::types(), 'value'))
+            ->description(__('firewatch::messages.grouped_type_argument'));
+    }
+
+    /**
+     * Get the measure argument of a tool, which takes the measures any type with groups takes.
+     *
+     * @param  Closure(RecordType): list<Measure>  $taken
+     */
+    protected function measureArgument(JsonSchema $schema, Closure $taken): StringType
+    {
+        $measures = Measure::forAnyType($taken);
+
+        return $schema->string()->enum(array_column($measures, 'value'));
+    }
+
+    /**
      * Get the limit argument, from the bounds of the tool and what it lists.
      */
     protected function limitArgument(JsonSchema $schema, int $maximum, int $default): IntegerType
     {
-        return $schema->integer()->description(__('firewatch::messages.limit_argument', [
-            'items' => __("firewatch::messages.limit_items.{$this->name()}"),
-            'maximum' => $maximum,
-            'default' => $default,
-        ]));
+        return $schema->integer()
+            ->min(1)
+            ->max($maximum)
+            ->default($default)
+            ->description(__("firewatch::messages.limit_argument.{$this->name()}"));
     }
 
     /**

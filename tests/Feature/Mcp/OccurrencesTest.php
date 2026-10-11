@@ -580,6 +580,18 @@ it('cuts the list at the limit', function () {
         ->and($envelope['truncated'][0])->toMatchArray(['section' => 'rows', 'shown' => 2, 'matched' => null, 'reason' => 'limit']);
 });
 
+it('cuts the list at the limit the schema declares as the default when none is given', function () {
+    $default = listedArgument(Occurrences::class, 'limit')['default'];
+
+    ingest(array_map(fn (int $second) => occRecord(RecordType::REQUEST, ['timestamp' => OCC_AT + $second]), range(1, 21)));
+
+    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request']);
+
+    expect($default)->toBe(20)
+        ->and($envelope['result']['rows'])->toHaveCount(20)
+        ->and($envelope['truncated'][0])->toMatchArray(['section' => 'rows', 'shown' => 20, 'reason' => 'limit']);
+});
+
 it('lists a list of exactly the limit as complete', function () {
     ingest(array_map(fn (int $second) => occRecord(RecordType::REQUEST, ['timestamp' => OCC_AT + $second]), range(1, 2)));
 

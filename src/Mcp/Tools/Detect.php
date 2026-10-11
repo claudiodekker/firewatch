@@ -111,11 +111,11 @@ class Detect extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $shape = $this->shape($arguments);
         $threshold = $this->threshold($request, $shape);
         $group = $this->group($arguments, $shape);
-        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['shape' => $this->detectors->names()[0]]);
+        $limit = $arguments->limit(['shape' => $this->detectors->names()[0]]);
 
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());

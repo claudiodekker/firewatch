@@ -127,11 +127,11 @@ class Actor extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $who = $this->who($arguments);
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
-        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['who' => 'taylor']);
+        $limit = $arguments->limit(['who' => 'taylor']);
 
         $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR]);
 

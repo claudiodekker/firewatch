@@ -93,10 +93,16 @@ class Trend extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->description(__('firewatch::messages.grouped_type_argument')),
+            'type' => $this->groupedTypeArgument($schema),
             'group' => $schema->string()->description(__('firewatch::messages.trend_group_argument')),
-            'by' => $schema->string()->description(__('firewatch::messages.trend_by_argument')),
-            'buckets' => $schema->integer()->description(__('firewatch::messages.trend_buckets_argument')),
+            'by' => $this->measureArgument($schema, Measure::trended(...))
+                ->default(Measure::OCCURRENCES->value)
+                ->description(__('firewatch::messages.trend_by_argument')),
+            'buckets' => $schema->integer()
+                ->min(self::FEWEST_BUCKETS)
+                ->max(self::MOST_BUCKETS)
+                ->default(self::DEFAULT_BUCKETS)
+                ->description(__('firewatch::messages.trend_buckets_argument')),
             ...$this->windowSchema($schema, 'trend'),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             ...$this->formatSchema($schema),
@@ -116,10 +122,10 @@ class Trend extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $group = $arguments->group('trend(group: "<group id>")');
         $explicit = $arguments->typeWithGroups($group, self::EXAMPLE);
-        $count = $arguments->between('buckets', minimum: self::FEWEST_BUCKETS, maximum: self::MOST_BUCKETS, default: self::DEFAULT_BUCKETS, alongside: ['type' => 'request']);
+        $count = $arguments->between('buckets', ['type' => 'request']);
         $deploy = $arguments->deploy('trend(type: "request", deploy: "v1")');
 
         if ($explicit !== null) {
@@ -333,6 +339,6 @@ class Trend extends Tool
             throw $arguments->invalid(argument: 'by', expected: 'a measure per bucket; a percentile per bucket is never shown', accepted: implode(', ', array_map(fn (Measure $measure) => $measure->value, $fitting)), example: "rank(type: \"{$type->value}\", by: \"{$measure->value}\")");
         }
 
-        return $arguments->choice('by', $fitting, "a measure of {$type->value} per bucket", "trend(type: \"{$type->value}\", by: \"occurrences\")") ?? Measure::OCCURRENCES;
+        return $arguments->amongOrDefault('by', $fitting, "a measure of {$type->value} per bucket", "trend(type: \"{$type->value}\", by: \"occurrences\")");
     }
 }

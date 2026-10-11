@@ -106,11 +106,11 @@ class Trace extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $traceId = $this->id($arguments, 'trace_id');
         $jobId = $this->id($arguments, 'job_id');
         $this->requireOne($traceId, $jobId);
-        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['trace_id' => '<trace id>']);
+        $limit = $arguments->limit(['trace_id' => '<trace id>']);
 
         $frame = $this->frame($now);
 

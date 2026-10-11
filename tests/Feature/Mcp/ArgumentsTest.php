@@ -63,6 +63,19 @@ it('refuses a limit that is no whole number of the range, never clamping it', fu
     'trace' => [Trace::class, ['trace_id' => 'trace'], 100, 'trace(trace_id: "<trace id>", limit: 50)'],
 ]);
 
+it('declares the limit range and default it enforces', function (string $tool, int $maximum, int $default) {
+    expect(listedArgument($tool, 'limit'))->toMatchArray(['minimum' => 1, 'maximum' => $maximum, 'default' => $default]);
+})->with([
+    'actor' => [Actor::class, 100, 20],
+    'compare' => [Compare::class, 100, 20],
+    'detect' => [Detect::class, 100, 20],
+    'execution' => [Execution::class, 100, 50],
+    'occurrences' => [Occurrences::class, 100, 20],
+    'query' => [Query::class, 500, 50],
+    'rank' => [Rank::class, 100, 20],
+    'trace' => [Trace::class, 100, 50],
+]);
+
 it('accepts a limit of 1 and of the maximum', function (string $tool, array $arguments, int $maximum) {
     foreach ([1, $maximum] as $limit) {
         $text = argumentText($tool, [...$arguments, 'limit' => $limit]);
