@@ -13,7 +13,7 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingRoutes implements Thresholded
+class FailingRoutes implements Detector
 {
     /**
      * Get the name of the shape the detector judges.

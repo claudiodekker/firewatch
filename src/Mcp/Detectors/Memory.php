@@ -13,7 +13,7 @@ use SQLite3;
 /**
  * @internal
  */
-class Memory implements Thresholded
+class Memory implements Detector
 {
     /**
      * Get the name of the shape the detector judges.

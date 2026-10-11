@@ -2,18 +2,19 @@
 
 namespace ClaudioDekker\Firewatch\Tests\Support;
 
+use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Finding;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
-use ClaudioDekker\Firewatch\Mcp\Detectors\Thresholdless;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Threshold;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Markers;
 use Closure;
 use SQLite3;
 
-class FakeDetector implements Thresholdless
+class FakeDetector implements Detector
 {
     /**
      * Create a new fake detector instance.
@@ -51,6 +52,11 @@ class FakeDetector implements Thresholdless
         return $this->name;
     }
 
+    public function threshold(): ?Threshold
+    {
+        return null;
+    }
+
     /**
      * @return list<RecordType>
      */
@@ -59,7 +65,7 @@ class FakeDetector implements Thresholdless
         return [RecordType::REQUEST];
     }
 
-    public function judge(SQLite3 $connection, Markers $meta, Window $window, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         if ($this->during !== null) {
             ($this->during)();

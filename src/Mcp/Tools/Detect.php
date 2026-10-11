@@ -14,7 +14,6 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Reason;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Threshold;
-use ClaudioDekker\Firewatch\Mcp\Detectors\Thresholded;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Ungrouped;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
@@ -132,7 +131,7 @@ class Detect extends Tool
         ]);
 
         if ($read === null) {
-            $judgements = array_map(fn (Detector $detector) => Judgement::notEvaluated($detector->name(), $detector instanceof Thresholded ? $detector->threshold()->describe($threshold) : null, Reason::STORE_UNAVAILABLE), $detectors);
+            $judgements = array_map(fn (Detector $detector) => Judgement::notEvaluated($detector->name(), $detector->threshold()?->describe($threshold), Reason::STORE_UNAVAILABLE), $detectors);
 
             return $this->answerFor($frame, $window, $shape, $judgements, $frame->unusable());
         }
@@ -353,11 +352,11 @@ class Detect extends Tool
             throw Refusal::conflicting(argument: 'threshold', with: 'all shapes', accepted: 'a call with `shape` naming one shape', example: $this->thresholdedExample());
         }
 
-        if (! $shape instanceof Thresholded) {
+        $threshold = $shape->threshold();
+
+        if ($threshold === null) {
             throw Refusal::conflicting(argument: 'threshold', with: 'shape: '.$shape->name()->value, accepted: 'a call without `threshold`', example: "detect(shape: \"{$shape->name()->value}\")");
         }
-
-        $threshold = $shape->threshold();
 
         return $threshold->read($value, $this->example($shape, $threshold));
     }
@@ -390,8 +389,8 @@ class Detect extends Tool
     protected function thresholdedExample(): string
     {
         foreach ($this->detectors->all() as $detector) {
-            if ($detector instanceof Thresholded) {
-                return $this->example($detector, $detector->threshold());
+            if (($threshold = $detector->threshold()) !== null) {
+                return $this->example($detector, $threshold);
             }
         }
 
