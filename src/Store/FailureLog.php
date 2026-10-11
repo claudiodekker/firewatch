@@ -34,11 +34,16 @@ class FailureLog
     protected bool $reported = false;
 
     /**
+     * The path of the failure file.
+     */
+    protected string $path;
+
+    /**
      * Create a new failure log instance.
      */
-    public function __construct(protected Configuration $configuration)
+    public function __construct(Configuration $configuration)
     {
-        //
+        $this->path = dirname($configuration->database).'/'.static::FILE;
     }
 
     /**
@@ -107,14 +112,12 @@ class FailureLog
     }
 
     /**
-     * Empty the file under its lock, keeping the file, and say whether there was one.
+     * Empty the file under its lock, keeping the file.
      */
-    public function clear(): bool
+    public function clear(): void
     {
-        $path = dirname($this->configuration->database).'/'.static::FILE;
-
-        if (! is_file($path) || ($handle = @fopen($path, 'r+')) === false) {
-            return false;
+        if (! is_file($this->path) || ($handle = @fopen($this->path, 'r+')) === false) {
+            return;
         }
 
         try {
@@ -123,8 +126,6 @@ class FailureLog
         } finally {
             fclose($handle);
         }
-
-        return true;
     }
 
     /**
@@ -152,7 +153,7 @@ class FailureLog
      */
     protected function entries(FailureEntry $entry): array
     {
-        $lines = @file(dirname($this->configuration->database).'/'.static::FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $lines = @file($this->path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $entries = [];
 
         foreach ($lines ?: [] as $line) {
@@ -191,22 +192,21 @@ class FailureLog
      */
     protected function append(string $line): void
     {
-        $path = dirname($this->configuration->database).'/'.static::FILE;
-        $created = ! file_exists($path);
-        $handle = @fopen($path, 'c+');
+        $created = ! file_exists($this->path);
+        $handle = @fopen($this->path, 'c+');
 
         if ($handle === false) {
-            throw new RuntimeException("Firewatch could not open [{$path}].");
+            throw new RuntimeException("Firewatch could not open [{$this->path}].");
         }
 
         try {
             if ($created) {
-                chmod($path, static::FILE_MODE);
+                chmod($this->path, static::FILE_MODE);
             }
 
             // A lock held elsewhere loses this line rather than holding up the request.
             if (! flock($handle, LOCK_EX | LOCK_NB)) {
-                throw new RuntimeException("Firewatch could not lock [{$path}].");
+                throw new RuntimeException("Firewatch could not lock [{$this->path}].");
             }
 
             $lines = preg_split('/\R/', (string) stream_get_contents($handle), flags: PREG_SPLIT_NO_EMPTY) ?: [];
