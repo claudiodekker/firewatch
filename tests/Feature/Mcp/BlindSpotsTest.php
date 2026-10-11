@@ -43,6 +43,7 @@ it('attaches the blind spots of how the call read the records, for the types it 
     'a read by actor' => [CallFact::ACTOR, ['named-log-channels', 'actor-partial']],
     'a read anchored in time' => [CallFact::ANCHORED, ['named-log-channels', 'visible-at-completion']],
     'a store-level answer' => [CallFact::STORE_LEVEL, ['named-log-channels', 'application-opt-outs', 'values-truncated']],
+    'an answer that names a compiled view\'s template' => [CallFact::COMPILED_VIEW, ['named-log-channels', 'compiled-view-templates']],
 ]);
 
 it('gives each blind spot its kind and sentence', function () {

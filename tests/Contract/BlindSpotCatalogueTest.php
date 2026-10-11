@@ -22,6 +22,7 @@ test('the structural blind spot catalogue pins its ids and sentences', function 
         'application-opt-outs' => 'Anything the application\'s opt-outs excluded (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.',
         'values-truncated' => 'Long values are cut at ingest (65,535 bytes per string, bindings 16,384 bytes in all) and again to 2,000 characters when printed; the SQL tool shows the stored value up to that cap, and substr() reads the rest of a cell.',
         'octane-bootstrap' => 'Under Octane the request bootstrap stage is always 0, because the worker is already booted; compare stage shares only between requests served the same way.',
+        'compiled-view-templates' => 'A compiled view\'s template is read from its compiled file at answer time; the line is the compiled file\'s at capture, not the template\'s. A null template means the compiled file is gone or names none, as after view:clear.',
     ]);
 });
 

@@ -140,6 +140,7 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - Work still running is absent. An execution is recorded when it finishes.
 - Anything the application opted out of (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.
 - Under Octane the request bootstrap stage is zero, so do not compare durations across Octane and PHP-FPM.
+- A location in a compiled Blade view names its template beside it, but the line is the compiled file's. After `view:clear` the template reads null.
 - A memory peak is the whole process's peak. In a long-lived worker every execution inherits what the process already held, so compare executions to each other, not to an absolute number.
 
 Answers state these themselves, and `clean` means "none among what was captured".

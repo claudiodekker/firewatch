@@ -96,6 +96,7 @@ class ExceptionSection
             $missing = $missing || $code === null;
             $frames[] = [
                 'file' => $file,
+                ...CompiledView::of($file),
                 'source' => Cell::blank($frame['source'] ?? null),
                 'code' => $code,
             ];

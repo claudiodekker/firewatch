@@ -312,8 +312,12 @@ A blind spot measured from the store at call time (pruned or cleared history, re
 _Avoid_: Warning, alert
 
 **Call fact**:
-What holds of a call beyond the record types it examined (it reads by actor, anchors on the latest execution, a split or a trend, or is about the whole store), deciding which structural blind spots that depend on it attach.
+What holds of a call beyond the record types it examined (it reads by actor, anchors on the latest execution, a split or a trend, is about the whole store, or names a compiled view's template), deciding which structural blind spots that depend on it attach.
 _Avoid_: Flag, mode
+
+**Compiled view**:
+A file under the application's compiled view path (`view.compiled`) that Blade compiled a template into, which a query or frame run from the template names as its location. An answer prints the template its footer names beside the stored location, read at answer time and never at capture, or null when the file is gone; the line stays the compiled file's.
+_Avoid_: Cached view, view cache
 
 **Empty kind**:
 The named reason an answer has nothing to show: no store, unusable store, empty store, empty window or no match.

@@ -95,6 +95,7 @@ class Timeline
             'duration_ms' => Stored::milliseconds($child['duration'] ?? null),
             'name' => self::name($type, $child),
             'location' => Stored::location(file: $child['file'] ?? null, line: $child['line'] ?? null),
+            ...CompiledView::of($child['file'] ?? null),
             'count' => 1,
             'total_ms' => null,
             'detail' => self::detail($type, $child),

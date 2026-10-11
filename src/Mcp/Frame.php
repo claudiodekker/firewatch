@@ -200,6 +200,8 @@ class Frame
      */
     public function answer(string $summary, array $result, ?Emptiness $empty = null, array $notes = [], array $truncated = [], array $next = [], ?array $cuttable = null, ?Closure $recount = null, ?string $capHow = null): Answer
     {
+        $found = CompiledView::appearsIn($result) ? [CallFact::COMPILED_VIEW] : [];
+
         return new Answer(
             tool: $this->tool,
             now: $this->now,
@@ -209,7 +211,7 @@ class Frame
             empty: $empty,
             result: $result,
             coverage: $this->coverage(),
-            blindSpots: $this->blindSpots(),
+            blindSpots: $this->blindSpots($found),
             notes: $notes,
             truncated: $truncated,
             next: $next,
@@ -242,14 +244,15 @@ class Frame
     /**
      * Get the blind spots of the record types: the structural ones first, then the conditions the store's facts state.
      *
+     * @param  list<CallFact>  $found  the facts the result itself shows
      * @return list<array<string, mixed>>
      */
-    protected function blindSpots(): array
+    protected function blindSpots(array $found = []): array
     {
         $store = $this->store instanceof StoreFacts ? $this->store : null;
 
         return [
-            ...BlindSpots::for($this->types, $this->facts),
+            ...BlindSpots::for($this->types, [...$this->facts, ...$found]),
             ...$this->conditions->for($store, $this->types, $this->window),
         ];
     }

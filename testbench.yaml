@@ -10,3 +10,4 @@ workbench:
   start: '/'
   discovers:
     web: true
+    views: true
