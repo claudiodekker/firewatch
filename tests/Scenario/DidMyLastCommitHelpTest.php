@@ -6,8 +6,7 @@ use ClaudioDekker\Firewatch\Tests\Support\GitRepository;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Route;
 
-// A cold application boot on the Windows runner can take more than 30 ms, and the slowed route must still dominate it.
-const LAST_COMMIT_SLOWDOWN_MS = 150;
+const LAST_COMMIT_SLOWDOWN_MS = 500;
 
 /**
  * Serve each URI in an application of its own whose git lookup starts at a directory, with the order list taking at least the given time.

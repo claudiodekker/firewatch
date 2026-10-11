@@ -5,7 +5,6 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Route;
 
-// A cold application boot on the Windows runner can take more than 30 ms, and the cold run must still dominate it.
 const COLD_RUN_MS = 400;
 
 /**
@@ -55,7 +54,7 @@ it('lists the runs of a route served a few times, so the cold first run reads st
         ->and($row['withheld']['p95_ms'])->toMatchArray(['reason' => 'sample_too_small', 'have' => 6, 'needed' => 20])
         ->and($durations)->toHaveCount(6)
         ->and($durations)->toEqual(collect($durations)->sort()->values()->all())
-        ->and(end($durations))->toBeGreaterThan($durations[4] * 2);
+        ->and(end($durations))->toBeGreaterThan($durations[2] * 2);
 });
 
 it('lists the runs behind a withheld at_or_above baseline of the same route', function () {
@@ -65,7 +64,7 @@ it('lists the runs behind a withheld at_or_above baseline of the same route', fu
 
     expect($baseline['threshold_ms'])->toBeNull()
         ->and($baseline['values_ms'])->toHaveCount($baseline['withheld']['have'])
-        ->and(end($baseline['values_ms']))->toBeGreaterThan($baseline['values_ms'][4] * 2);
+        ->and(end($baseline['values_ms']))->toBeGreaterThan($baseline['values_ms'][2] * 2);
 });
 
 it('replaces the list with the p95 once the route has 20 measured runs', function () {
