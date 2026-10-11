@@ -56,8 +56,9 @@ it('says plainly that no store has been written yet, in every tool', function ()
             ->and($answer['next'])->toBe([], $name);
     }
 
-    // The tools state the blind spots of the record types they read; the SQL tool reads none until a statement runs.
-    foreach (array_diff_key($answers, ['query' => true]) as $name => $answer) {
+    $readsNoRecordTypesUntilAStatementRuns = ['query' => true];
+
+    foreach (array_diff_key($answers, $readsNoRecordTypesUntilAStatementRuns) as $name => $answer) {
         expect($answer['blind_spots'])->not->toBeEmpty($name);
     }
 });

@@ -169,7 +169,6 @@ class Ingest implements IngestContract
             } catch (Throwable $exception) {
                 $this->failures->record($exception, dropped: count($records));
 
-                // A full store fails every batch until it is trimmed, so its pass can't wait for one to succeed.
                 if (FailureKind::of($exception) === FailureKind::FULL) {
                     $this->prune($this->pruner->runNow(...));
                 }
