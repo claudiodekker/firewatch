@@ -97,7 +97,7 @@ class Listing
             ];
         }
 
-        $bindings['offset'] = intdiv($samples * $percentile->share() + Ranking::PERCENT - 1, Ranking::PERCENT) - 1;
+        $bindings['offset'] = intdiv($samples * $percentile->share() + Percentile::PERCENT - 1, Percentile::PERCENT) - 1;
         $row = Stored::rows($connection, "SELECT {$duration} AS duration FROM records WHERE {$selection} AND {$duration} IS NOT NULL ORDER BY {$duration} LIMIT 1 OFFSET :offset", $bindings, $this->window)[0];
 
         return [

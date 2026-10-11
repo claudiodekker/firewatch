@@ -38,7 +38,7 @@ enum Change: string
         [$floor, $rises, $falls] = $measure->movement() ?? throw new InvalidArgumentException("No change rule judges {$measure->value}.");
         $difference = abs($after - $before);
 
-        if ($difference * Ranking::PERCENT <= self::BAND_PCT * $before || $difference <= $floor) {
+        if ($difference * Percentile::PERCENT <= self::BAND_PCT * $before || $difference <= $floor) {
             return self::STEADY;
         }
 

@@ -84,8 +84,8 @@ class Comparison
     {
         [$before, $after] = $boundary->sides($window, $coverageStart);
 
-        $beforeOfType = self::statistics($connection, $type, $by, $before, $window->timezone());
-        $afterOfType = self::statistics($connection, $type, $by, $after, $window->timezone());
+        $beforeOfType = self::statistics($connection, $type, $before, $window->timezone());
+        $afterOfType = self::statistics($connection, $type, $after, $window->timezone());
         $beforeGroups = self::selected($beforeOfType, $group);
         $afterGroups = self::selected($afterOfType, $group);
 
@@ -348,15 +348,15 @@ class Comparison
      * @param  Side  $side
      * @return array<string, array<string, mixed>>
      */
-    protected static function statistics(SQLite3 $connection, RecordType $type, Measure $by, array $side, string $timezone): array
+    protected static function statistics(SQLite3 $connection, RecordType $type, array $side, string $timezone): array
     {
         if ($side['outside']) {
             return [];
         }
 
-        $ranking = new Ranking($type, $by, Window::between($side['since'], $side['until'], $timezone), deploy: $side['deploy']);
+        $population = new Population($type, Window::between($side['since'], $side['until'], $timezone), $side['deploy']);
 
-        return $ranking->statistics($connection);
+        return $population->statistics($connection);
     }
 
     /**
@@ -479,8 +479,8 @@ class Comparison
 
         $have = min(self::have($before, $by), self::have($after, $by));
         $measure = self::measured($by, $have);
-        $beforeValue = Ranking::value($before, $measure);
-        $afterValue = Ranking::value($after, $measure);
+        $beforeValue = Population::value($before, $measure);
+        $afterValue = Population::value($after, $measure);
 
         if ($beforeValue === null || $afterValue === null) {
             return [
@@ -518,7 +518,7 @@ class Comparison
     protected static function oneSided(Measure $by, array $present, string $side): array
     {
         $measure = self::measured($by, self::have($present, $by));
-        $value = Ranking::value($present, $measure);
+        $value = Population::value($present, $measure);
 
         return [
             'before' => $side === 'before' ? $value : null,
@@ -570,7 +570,7 @@ class Comparison
             return null;
         }
 
-        return ($after - $before) / $before * Ranking::PERCENT;
+        return ($after - $before) / $before * Percentile::PERCENT;
     }
 
     /**

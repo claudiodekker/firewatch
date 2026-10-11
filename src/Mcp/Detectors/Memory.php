@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
-use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -67,7 +66,7 @@ class Memory implements Thresholded
      */
     protected function groups(SQLite3 $connection, Window $window, Fragment $executions, int|float $megabytes): array
     {
-        $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
+        $rank = Percentile::MEDIAN->nearestRank();
 
         return Stored::rows($connection, "{$executions->sql}, measured AS (
             SELECT *, peak >= :bytes AS reached FROM executions WHERE peak IS NOT NULL

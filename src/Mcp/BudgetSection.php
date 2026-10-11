@@ -52,7 +52,7 @@ class BudgetSection
 
         foreach (ExecutionType::records() as $record) {
             $type = ExecutionType::from($record->value);
-            $budgets = (new Ranking($record, Measure::default($record), $window, null))->budgets($connection);
+            $budgets = (new Population($record, $window))->budgets($connection);
 
             foreach ($budgets as $hash => $budget) {
                 $verdict = BudgetVerdict::ofGroup($configuration, $type, $budget);

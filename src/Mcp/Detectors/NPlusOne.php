@@ -4,7 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\History;
-use ClaudioDekker\Firewatch\Mcp\Ranking;
+use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -218,7 +218,7 @@ class NPlusOne implements Thresholded
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
         $label = RecordType::from($worst['type'])->groupLabel($worst['label']);
-        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(Ranking::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
+        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(Percentile::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
 
         return [
             'group' => $row['eg'],

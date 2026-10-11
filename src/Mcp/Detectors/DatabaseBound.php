@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
-use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -49,7 +48,7 @@ class DatabaseBound implements Thresholded
      */
     public function threshold(): Threshold
     {
-        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: Ranking::PERCENT, whole: false);
+        return new Threshold(name: 'percent', unit: 'percent', default: 60, minimum: 1, maximum: Percentile::PERCENT, whole: false);
     }
 
     /**
@@ -130,7 +129,7 @@ class DatabaseBound implements Thresholded
      */
     protected function groups(SQLite3 $connection, Window $window, Fragment $selected): array
     {
-        $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
+        $rank = Percentile::MEDIAN->nearestRank();
         $durationMicros = Stored::number('duration');
 
         return Stored::rows($connection, "WITH judged AS (
@@ -196,7 +195,7 @@ class DatabaseBound implements Thresholded
             return false;
         }
 
-        return $percent * $typical['duration_micros'] <= $typical['query_micros'] * Ranking::PERCENT;
+        return $percent * $typical['duration_micros'] <= $typical['query_micros'] * Percentile::PERCENT;
     }
 
     /**
@@ -231,7 +230,7 @@ class DatabaseBound implements Thresholded
      */
     protected function share(array $typical): float
     {
-        return round(Ranking::PERCENT * $typical['query_micros'] / $typical['duration_micros'], self::PERCENT_DECIMALS);
+        return round(Percentile::PERCENT * $typical['query_micros'] / $typical['duration_micros'], self::PERCENT_DECIMALS);
     }
 
     /**
@@ -245,7 +244,7 @@ class DatabaseBound implements Thresholded
     protected function finding(array $group, array $typical, array $queries): array
     {
         $share = $this->share($typical);
-        $aggregate = round(Ranking::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
+        $aggregate = round(Percentile::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
 
         return [
             'group' => $group['group_hash'],

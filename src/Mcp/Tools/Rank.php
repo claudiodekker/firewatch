@@ -13,6 +13,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\Population;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
@@ -152,16 +153,16 @@ class Rank extends Tool
             }
 
             $measure = $by ?? $this->measure($arguments, $type, $group);
-            $ranking = new Ranking($type, $measure, $window, $deploy, $matching, $group, $this->configuration);
+            $ranking = new Ranking(new Population($type, $window, $deploy, $group), $measure, $matching, $this->configuration);
 
             if ($inWindow === 0) {
                 return [$type, $unranked];
             }
 
             if ($group === null) {
-                $ranked = $ranking->read($connection);
+                $ranked = $ranking->read($connection, $cursor?->last, $limit);
 
-                return [$type, fn (Frame $frame) => $this->ranking($request, $frame, $window, $filters, $inWindow, $type, $measure, $cursor, $limit, $ranked)];
+                return [$type, fn (Frame $frame) => $this->ranking($request, $frame, $window, $filters, $inWindow, $type, $measure, $ranked)];
             }
 
             $broken = $ranking->breakdown($connection, $limit);
@@ -219,37 +220,35 @@ class Rank extends Tool
      * Put the groups, worst first, in the envelope.
      *
      * @param  list<string>  $filters
-     * @param  Cursor<array{value: int|float|null, occurrences: int, hash: string}>|null  $cursor
-     * @param  array{rows: list<array<string, mixed>>, keys: list<array{value: int|float|null, occurrences: int, hash: string}>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
+     * @param  array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
      */
-    protected function ranking(Request $request, Frame $frame, Window $window, array $filters, int $inWindow, RecordType $type, Measure $by, ?Cursor $cursor, int $limit, array $ranked): Answer
+    protected function ranking(Request $request, Frame $frame, Window $window, array $filters, int $inWindow, RecordType $type, Measure $by, array $ranked): Answer
     {
-        if ($ranked['rows'] === []) {
+        if ($ranked['ranked'] === 0) {
             return $frame->empty(Emptiness::noMatch($inWindow, $filters));
         }
 
-        $page = array_keys(array_filter($ranked['keys'], fn (array $key) => $cursor === null || Ranking::compare($key, $cursor->last) > 0));
-        $rows = Rows::bound(array_map(fn (int $index) => $ranked['rows'][$index], $page), $limit);
+        $page = $ranked['page'];
         $truncated = [];
 
-        if ($rows->more) {
-            $last = $ranked['keys'][$page[count($rows->rows) - 1]];
+        if ($page->more) {
             $arguments = array_diff_key($request->all(), array_flip(['cursor', 'format']));
-            $arguments['cursor'] = Cursor::make(tool: $this->name(), arguments: $request->all(), createdAt: $frame->facts()->meta->createdAt, last: $last, since: $window->since(), until: $window->until() ?? $frame->now);
+            $arguments['cursor'] = Cursor::make(tool: $this->name(), arguments: $request->all(), createdAt: $frame->facts()->meta->createdAt, last: $page->rows[count($page->rows) - 1], since: $window->since(), until: $window->until() ?? $frame->now);
             $call = $this->call($arguments);
             $how = __('firewatch::messages.rank_cursor_how', ['call' => $call]);
-            $entry = $rows->truncation(section: 'groups', how: $how);
+            $entry = $page->truncation(section: 'groups', how: $how);
             $truncated = $entry === null ? [] : [$entry];
         }
 
-        $groupsRanked = count($ranked['rows']);
+        $rows = $ranked['rows'];
+        $groupsRanked = $ranked['ranked'];
         $summary = trans_choice('firewatch::messages.rank_summary', $groupsRanked, [
             'count' => $groupsRanked,
             'type' => $type->value,
             'by' => $by->value,
         ]);
         $notes = $this->notes($by, $ranked);
-        $next = $rows->rows === [] ? [] : [$this->breakdownCall($window, $rows->rows[0]['group'], $type)];
+        $next = $rows === [] ? [] : [$this->breakdownCall($window, $rows[0]['group'], $type)];
 
         return $frame->answer(
             summary: $summary,
@@ -260,7 +259,7 @@ class Rank extends Tool
                 'records' => $ranked['records'],
                 'groups_ranked' => $groupsRanked,
                 'records_without_group' => $ranked['withoutGroup'],
-                'groups' => $rows->rows,
+                'groups' => $rows,
             ],
             notes: $notes,
             truncated: $truncated,
@@ -362,7 +361,7 @@ class Rank extends Tool
     /**
      * Get the notes of the answer.
      *
-     * @param  array{rows: list<array<string, mixed>>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
+     * @param  array{untimed: int, orderedBy: Measure}  $ranked
      * @return list<string>
      */
     protected function notes(Measure $by, array $ranked): array

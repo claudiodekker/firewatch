@@ -186,10 +186,10 @@ enum Measure: string
     public function floor(): ?array
     {
         return match ($this) {
-            self::P95_DURATION => ['p95', Ranking::P95_FLOOR],
-            self::P50_DURATION => ['p50', Ranking::P50_FLOOR],
-            self::P95_MEMORY => ['p95 memory', Ranking::P95_FLOOR],
-            self::P50_MEMORY => ['p50 memory', Ranking::P50_FLOOR],
+            self::P95_DURATION => ['p95', Percentile::P95->floor()],
+            self::P50_DURATION => ['p50', Percentile::MEDIAN->floor()],
+            self::P95_MEMORY => ['p95 memory', Percentile::P95->floor()],
+            self::P50_MEMORY => ['p50 memory', Percentile::MEDIAN->floor()],
             default => null,
         };
     }

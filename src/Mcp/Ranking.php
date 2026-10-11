@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Stage;
-use LogicException;
 use SQLite3;
 
 /**
@@ -14,31 +13,6 @@ use SQLite3;
  */
 class Ranking
 {
-    /**
-     * The records a group needs before its median is shown.
-     */
-    public const P50_FLOOR = 3;
-
-    /**
-     * The records a group needs before its 95th percentile is shown.
-     */
-    public const P95_FLOOR = 20;
-
-    /**
-     * The nearest rank of the median, as a percentile.
-     */
-    protected const P50_RANK = 50;
-
-    /**
-     * The nearest rank of the 95th percentile, as a percentile.
-     */
-    protected const P95_RANK = 95;
-
-    /**
-     * The whole of a percentile scale.
-     */
-    public const PERCENT = 100;
-
     /**
      * The decimals a failure percentage is rounded to.
      */
@@ -53,52 +27,92 @@ class Ranking
      * Create a new ranking instance.
      */
     public function __construct(
-        protected RecordType $type,
+        protected Population $population,
         protected Measure $by,
-        protected Window $window,
-        protected ?string $deploy,
         protected ?string $matching = null,
-        protected ?string $group = null,
         protected ?Configuration $configuration = null,
     ) {
         //
     }
 
     /**
-     * Read the groups of the type in the window, worst first by the measure.
+     * Read one page of the groups of the type in the window, worst first by the measure: at most the limit, after the key of the last row of the page before.
      *
-     * @return array{rows: list<array<string, mixed>>, keys: list<array{value: int|float|null, occurrences: int, hash: string}>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
+     * @param  array{value: int|float|null, occurrences: int, hash: string}|null  $after
+     * @return array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
      */
-    public function read(SQLite3 $connection): array
+    public function read(SQLite3 $connection, ?array $after, int $limit): array
     {
-        [$records, $withoutGroup] = array_values($this->query($connection, 'SELECT count(*) AS records, count(*) FILTER (WHERE group_hash IS NULL) AS without FROM base')[0]);
+        [$records, $withoutGroup] = array_values($this->population->query($connection, 'SELECT count(*) AS records, count(*) FILTER (WHERE group_hash IS NULL) AS without FROM base')[0]);
 
-        $groups = $this->groups($connection);
+        $measured = $this->population->measured($connection, $this->by);
+        $measured = $this->matched($connection, $measured);
 
-        if ($this->matching !== null) {
-            $groups = array_values(array_filter($groups, fn (array $group) => mb_stripos($this->label($group), $this->matching) !== false));
-        }
+        [$orderedBy, $measured] = $this->ordering($connection, $measured);
 
-        $orderedBy = $this->by;
+        $untimed = $this->population->hasDuration() ? array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $measured)) : 0;
+        $keys = array_map(fn (array $group) => [
+            'value' => $group['value'],
+            'occurrences' => $group['occurrences'],
+            'hash' => $group['hash'],
+        ], array_values($measured));
 
-        if (($fallback = $this->by->fallback()) !== null && $groups !== [] && array_filter($groups, fn (array $group) => self::value($group, $this->by) !== null) === []) {
-            $orderedBy = $fallback;
-        }
+        usort($keys, self::compare(...));
 
-        usort($groups, fn (array $a, array $b) => self::compare($this->key($a, $orderedBy), $this->key($b, $orderedBy)));
-
-        $timedGroups = $this->hasDuration() ? $groups : [];
-        $untimedPerGroup = array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $timedGroups);
-        $untimed = array_sum($untimedPerGroup);
+        $following = array_filter($keys, fn (array $key) => $after === null || self::compare($key, $after) > 0);
+        $fetched = array_slice(array_values($following), 0, Rows::fetch($limit));
+        $page = Rows::bound($fetched, $limit);
+        $groups = $this->page($connection, array_column($page->rows, 'hash'));
 
         return [
-            'rows' => array_map($this->row(...), $groups),
-            'keys' => array_map(fn (array $group) => $this->key($group, $orderedBy), $groups),
+            'page' => $page,
+            'rows' => array_map(fn (array $key) => $this->row($groups[$key['hash']]), $page->rows),
+            'ranked' => count($keys),
             'records' => $records,
             'withoutGroup' => $withoutGroup,
             'untimed' => $untimed,
             'orderedBy' => $orderedBy,
         ];
+    }
+
+    /**
+     * Get the measure the groups are ordered by and their values of it, which is the fallback of the measure when no group has a value of the measure itself.
+     *
+     * @param  array<string, array{value: int|float|null, occurrences: int, hash: string, timed: int}>  $measured
+     * @return array{Measure, array<string, array{value: int|float|null, occurrences: int, hash: string, timed: int}>}
+     */
+    protected function ordering(SQLite3 $connection, array $measured): array
+    {
+        $fallback = $this->by->fallback();
+        $valued = array_filter(array_column($measured, 'value'), fn (int|float|null $value) => $value !== null);
+
+        if ($fallback === null || $measured === [] || $valued !== []) {
+            return [$this->by, $measured];
+        }
+
+        $values = $this->population->measured($connection, $fallback);
+
+        return [$fallback, array_intersect_key($values, $measured)];
+    }
+
+    /**
+     * Keep the groups whose label contains the text the ranking matches, or every group when it matches no text.
+     *
+     * @template TGroup
+     *
+     * @param  array<string, TGroup>  $groups
+     * @return array<string, TGroup>
+     */
+    protected function matched(SQLite3 $connection, array $groups): array
+    {
+        if ($this->matching === null) {
+            return $groups;
+        }
+
+        $latest = $this->population->latest($connection);
+        $labels = array_column($latest, 'label', 'group_hash');
+
+        return array_filter($groups, fn (string $hash) => mb_stripos($this->population->type->groupLabel($labels[$hash] ?? null), $this->matching) !== false, ARRAY_FILTER_USE_KEY);
     }
 
     /**
@@ -108,9 +122,9 @@ class Ranking
      */
     public function breakdown(SQLite3 $connection, int $limit): array
     {
-        [$records] = array_values($this->query($connection, 'SELECT count(*) AS records FROM base')[0]);
+        [$records] = array_values($this->population->query($connection, 'SELECT count(*) AS records FROM base')[0]);
 
-        $deploys = $this->groups($connection);
+        $deploys = array_values($this->statistics($connection, $this->population));
         $label = '';
 
         if ($deploys !== []) {
@@ -138,7 +152,7 @@ class Ranking
      */
     protected function stages(SQLite3 $connection, int $records): ?StageView
     {
-        $stages = Stage::of($this->type);
+        $stages = Stage::of($this->population->type);
 
         if ($stages === []) {
             return null;
@@ -147,8 +161,8 @@ class Ranking
         $complete = implode(' AND ', array_map(fn (Stage $stage) => "{$stage->value} IS NOT NULL", $stages));
         $sumColumns = implode(', ', array_map(fn (Stage $stage) => "sum({$stage->value}) AS {$stage->value}", $stages));
 
-        $totals = $this->query($connection, "SELECT count(*) AS executions, {$sumColumns} FROM base WHERE {$complete}")[0];
-        $row = $this->query($connection, "SELECT * FROM base WHERE {$complete} AND d IS NOT NULL ORDER BY d DESC, id DESC LIMIT 1")[0] ?? null;
+        $totals = $this->population->query($connection, "SELECT count(*) AS executions, {$sumColumns} FROM base WHERE {$complete}")[0];
+        $row = $this->population->query($connection, "SELECT * FROM base WHERE {$complete} AND d IS NOT NULL ORDER BY d DESC, id DESC LIMIT 1")[0] ?? null;
 
         $sums = [];
 
@@ -159,57 +173,7 @@ class Ranking
         $executions = $totals['executions'];
         $slowest = $row === null ? null : new SlowestExecution($row['execution_id'], $row['d'], array_intersect_key($row, $sums));
 
-        return new StageView($this->type, $executions, $records - $executions, $sums, $slowest);
-    }
-
-    /**
-     * Find when the first and the last record the filters select started, or null when they select none.
-     *
-     * @return array{float, float}|null
-     */
-    public function extent(SQLite3 $connection): ?array
-    {
-        $row = $this->query($connection, 'SELECT min(started_at) AS first, max(started_at) AS last FROM base')[0];
-
-        if ($row['first'] === null) {
-            return null;
-        }
-
-        return [$row['first'], $row['last']];
-    }
-
-    /**
-     * Read the records and the value of the measure of each bucket of an equal grid that holds a record, keyed by bucket index; the last bucket takes every record at or past its start.
-     *
-     * @return array<int, array{samples: int, value: int|float|null}>
-     */
-    public function buckets(SQLite3 $connection, float $origin, float $width, int $count): array
-    {
-        $value = match ($this->by) {
-            Measure::OCCURRENCES => 'count(*)',
-            Measure::MAX_DURATION => 'max(d)',
-            Measure::AVG_DURATION => 'avg(d)',
-            Measure::TOTAL_DURATION => 'sum(d)',
-            Measure::MAX_MEMORY => 'max(m)',
-            default => throw new LogicException("No trend states {$this->by->value}."),
-        };
-
-        $rows = $this->query($connection, "SELECT CASE WHEN :width = 0 THEN 0 ELSE min(:last, CAST((started_at - :origin) / :width AS INTEGER)) END AS bucket, count(*) AS samples, {$value} AS value FROM base GROUP BY bucket", bindings: [
-            'origin' => $origin,
-            'width' => $width,
-            'last' => $count - 1,
-        ]);
-
-        $buckets = [];
-
-        foreach ($rows as $row) {
-            $buckets[$row['bucket']] = [
-                'samples' => $row['samples'],
-                'value' => $row['value'],
-            ];
-        }
-
-        return $buckets;
+        return new StageView($this->population->type, $executions, $records - $executions, $sums, $slowest);
     }
 
     /**
@@ -236,230 +200,53 @@ class Ranking
     }
 
     /**
-     * Read what a budget judges of every group of the type in the window, keyed like the statistics.
+     * Read what the records of the groups of a page add up to, with when each was first seen in the store and its slowest execution, keyed by group hash.
      *
-     * The figure of each quantity is the nearest-rank 95th percentile when every quantity that has a value has at least 20 of them, else the maximum.
-     *
-     * @return array<string, array{
-     *     ran: int,
-     *     duration: int|float|null,
-     *     memory: int|float|null,
-     *     measured_on: string,
-     *     label: mixed,
-     *     route_methods: mixed,
-     *     route_path: mixed,
-     *     name: mixed,
-     * }>
-     */
-    public function budgets(SQLite3 $connection): array
-    {
-        $matchers = $this->type === RecordType::REQUEST ? ', route_methods, route_path' : ', name';
-
-        $latest = $this->query($connection, "SELECT group_hash, ran, label{$matchers} FROM (SELECT group_hash, label{$matchers}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n, COUNT(*) FILTER (WHERE NOT skipped) OVER (PARTITION BY group_hash) AS ran FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
-        $durations = $this->percentiles($connection, 'd', 'NOT skipped');
-        $memories = $this->percentiles($connection, 'm', 'NOT skipped');
-        $budgets = [];
-
-        foreach ($latest as $row) {
-            $hash = $row['group_hash'];
-            $counts = array_filter([$durations[$hash]['n'] ?? null, $memories[$hash]['n'] ?? null]);
-            $percentile = $counts !== [] && min($counts) >= self::P95_FLOOR ? 'p95' : 'max';
-
-            $budgets[$hash] = [
-                'ran' => $row['ran'],
-                'duration' => ($durations[$hash] ?? null)[$percentile] ?? null,
-                'memory' => ($memories[$hash] ?? null)[$percentile] ?? null,
-                'measured_on' => $percentile,
-                'label' => $row['label'],
-                'route_methods' => $row['route_methods'] ?? null,
-                'route_path' => $row['route_path'] ?? null,
-                'name' => $row['name'] ?? null,
-            ];
-        }
-
-        return $budgets;
-    }
-
-    /**
-     * Read what the records of every group of the window add up to, with when each was first seen in the store and its slowest execution.
-     *
-     * @return list<array<string, mixed>>
-     */
-    protected function groups(SQLite3 $connection): array
-    {
-        $groups = $this->statistics($connection);
-
-        $firsts = $this->group !== null ? [] : $this->query($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash', filtered: false);
-
-        foreach ($firsts as $row) {
-            if (isset($groups[$row['group_hash']])) {
-                $groups[$row['group_hash']]['first'] = $row['first'];
-            }
-        }
-
-        if ($this->hasDuration() && $this->group === null) {
-            $slowest = $this->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1');
-
-            foreach ($slowest as $row) {
-                $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
-            }
-        }
-
-        if ($this->configuration !== null && $this->type->isExecution()) {
-            $type = ExecutionType::from($this->type->value);
-
-            foreach ($this->budgets($connection) as $hash => $budget) {
-                $groups[$hash]['budget'] = BudgetVerdict::ofGroup($this->configuration, $type, $budget)->cell();
-            }
-        }
-
-        return array_values($groups);
-    }
-
-    /**
-     * Read the unrounded statistics of every group of the type in the window, keyed by group hash.
-     *
+     * @param  list<string>  $hashes
      * @return array<string, array<string, mixed>>
      */
-    public function statistics(SQLite3 $connection): array
+    protected function page(SQLite3 $connection, array $hashes): array
     {
-        $executions = $this->type->isExecution();
-        $failure = Failure::expression($this->type) !== null;
+        $population = $this->population->only($hashes);
+        $groups = $this->statistics($connection, $population);
 
-        $aggregates = $this->query($connection, 'SELECT group_hash, count(*) AS occurrences, count(d) AS timed, min(d) AS min, avg(d) AS avg, max(d) AS max, sum(d) AS total, max(started_at) AS last, min(started_at) AS wfirst, count(DISTINCT deploy) AS deploys'
-            .($executions ? ', max(m) AS mem_max, sum(q) AS queries' : '')
-            .($failure ? ', sum(f) AS failed, count(f) AS failed_of' : '')
-            .' FROM base WHERE group_hash IS NOT NULL GROUP BY group_hash');
-
-        $groups = [];
-
-        foreach ($aggregates as $aggregate) {
-            $groups[$aggregate['group_hash']] = [
-                ...$aggregate,
-                'hash' => $aggregate['group_hash'],
-                'p50' => null,
-                'p95' => null,
-                'raw' => null,
-                'mem_p95' => null,
-                'mem_p50' => null,
-                'mem_timed' => 0,
-                'first' => null,
-                'slowest' => null,
-                'label' => '',
-                'method' => null,
-            ];
+        foreach ($population->firstSeen($connection) as $hash => $first) {
+            $groups[$hash]['first'] = $first;
         }
 
-        foreach ($this->percentiles($connection, 'd') as $hash => $percentiles) {
-            $groups[$hash] = [
-                ...$groups[$hash],
-                'p50' => $percentiles['p50'],
-                'p95' => $percentiles['p95'],
-                'raw' => $percentiles['raw'],
-            ];
+        if (! $population->hasDuration()) {
+            return $groups;
         }
 
-        if ($executions) {
-            foreach ($this->percentiles($connection, 'm') as $hash => $percentiles) {
-                $groups[$hash] = [
-                    ...$groups[$hash],
-                    'mem_p95' => $percentiles['p95'],
-                    'mem_p50' => $percentiles['p50'],
-                    'mem_timed' => $percentiles['n'],
-                ];
-            }
-        }
+        $slowest = $population->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1');
 
-        $method = $this->hasMethod() ? ', method' : '';
-
-        $latest = $this->query($connection, "SELECT group_hash, label{$method} FROM (SELECT group_hash, label{$method}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
-
-        foreach ($latest as $row) {
-            $groups[$row['group_hash']]['label'] = is_string($row['label']) ? $row['label'] : '';
-            $groups[$row['group_hash']]['method'] = $row['method'] ?? null;
+        foreach ($slowest as $row) {
+            $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
         }
 
         return $groups;
     }
 
     /**
-     * Read the nearest-rank median and 95th percentile of one quantity of every group, and the values of a group too small to have a median.
+     * Read the statistics of every group of a population, with the budget verdict of each when the type has budgets, keyed by group hash.
      *
-     * @return array<string, array{n: int, p50: int|float|null, p95: int|float|null, max: int|float|null, raw: list<int|float>|null}>
+     * @return array<string, array<string, mixed>>
      */
-    protected function percentiles(SQLite3 $connection, string $column, string $where = '1'): array
+    protected function statistics(SQLite3 $connection, Population $population): array
     {
-        $percentiles = [];
+        $groups = $population->statistics($connection);
 
-        $p50Rank = self::nearestRank(self::P50_RANK);
-        $p95Rank = self::nearestRank(self::P95_RANK);
-        $p50Floor = self::P50_FLOOR;
-
-        $rows = $this->query($connection, "SELECT group_hash, n, max(CASE WHEN rn = {$p50Rank} THEN v END) AS p50, max(CASE WHEN rn = {$p95Rank} THEN v END) AS p95, max(CASE WHEN rn = n THEN v END) AS max, group_concat(CASE WHEN n < {$p50Floor} THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL AND {$where}) GROUP BY group_hash");
-
-        foreach ($rows as $row) {
-            /** @var list<int|float>|null $raw */
-            $raw = is_string($row['raw']) ? json_decode("[{$row['raw']}]", associative: true, flags: JSON_THROW_ON_ERROR) : null;
-
-            if ($raw !== null) {
-                sort($raw);
-            }
-
-            $percentiles[$row['group_hash']] = [
-                'n' => $row['n'],
-                'p50' => $row['p50'],
-                'p95' => $row['p95'],
-                'max' => $row['max'],
-                'raw' => $raw,
-            ];
+        if ($this->configuration === null || ! $population->type->isExecution()) {
+            return $groups;
         }
 
-        return $percentiles;
-    }
+        $type = ExecutionType::from($population->type->value);
 
-    /**
-     * Get the SQL expression of the row a nearest-rank percentile of `n` values takes.
-     */
-    public static function nearestRank(int $percentile): string
-    {
-        return 'max(1, (n * '.$percentile.' + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
-    }
+        foreach ($population->budgets($connection) as $hash => $budget) {
+            $groups[$hash]['budget'] = BudgetVerdict::ofGroup($this->configuration, $type, $budget)->cell();
+        }
 
-    /**
-     * Get the unrounded value of a measure for a group, or null when too few of its records have the quantity.
-     *
-     * @param  array<string, mixed>  $group
-     */
-    public static function value(array $group, Measure $measure): int|float|null
-    {
-        return match ($measure) {
-            Measure::P95_DURATION => $group['timed'] >= self::P95_FLOOR ? $group['p95'] : null,
-            Measure::P50_DURATION => $group['timed'] >= self::P50_FLOOR ? $group['p50'] : null,
-            Measure::MAX_DURATION => $group['max'],
-            Measure::AVG_DURATION => $group['avg'],
-            Measure::TOTAL_DURATION => $group['total'],
-            Measure::OCCURRENCES => $group['occurrences'],
-            Measure::P95_MEMORY => $group['mem_timed'] >= self::P95_FLOOR ? $group['mem_p95'] : null,
-            Measure::P50_MEMORY => $group['mem_timed'] >= self::P50_FLOOR ? $group['mem_p50'] : null,
-            Measure::MAX_MEMORY => $group['mem_max'] ?? null,
-            Measure::LAST_SEEN => $group['last'],
-            Measure::QUERIES => $group['queries'] ?? null,
-        };
-    }
-
-    /**
-     * Get the sort key of a group.
-     *
-     * @param  array<string, mixed>  $group
-     * @return array{value: int|float|null, occurrences: int, hash: string}
-     */
-    protected function key(array $group, Measure $measure): array
-    {
-        return [
-            'value' => self::value($group, $measure),
-            'occurrences' => $group['occurrences'],
-            'hash' => $group['hash'],
-        ];
+        return $groups;
     }
 
     /**
@@ -484,7 +271,7 @@ class Ranking
      */
     protected function label(array $group): string
     {
-        return $this->type->groupLabel($group['label']);
+        return $this->population->type->groupLabel($group['label']);
     }
 
     /**
@@ -500,7 +287,7 @@ class Ranking
             'label' => $this->label($group),
         ];
 
-        if ($this->hasMethod()) {
+        if ($this->population->hasMethod()) {
             $row['method'] = $group['method'];
         }
 
@@ -508,9 +295,9 @@ class Ranking
 
         $withheld = [];
 
-        if ($this->hasDuration()) {
-            $p50 = $this->floored($group, 'p50_ms', $group['timed'], self::P50_FLOOR, $withheld);
-            $p95 = $this->floored($group, 'p95_ms', $group['timed'], self::P95_FLOOR, $withheld);
+        if ($this->population->hasDuration()) {
+            $p50 = $this->floored($group, 'p50_ms', $group['timed'], Percentile::MEDIAN->floor(), $withheld);
+            $p95 = $this->floored($group, 'p95_ms', $group['timed'], Percentile::P95->floor(), $withheld);
 
             $row += [
                 'min_ms' => Stored::milliseconds($group['min']),
@@ -522,8 +309,8 @@ class Ranking
             ];
         }
 
-        if ($this->type->isExecution()) {
-            $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
+        if ($this->population->type->isExecution()) {
+            $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], Percentile::P95->floor(), $withheld, 'mem_p95');
 
             $row += [
                 'p95_memory_mb' => Stored::megabytes($memory),
@@ -535,13 +322,13 @@ class Ranking
         $failed = $group['failed_of'] ?? 0;
 
         $row += [
-            'failure_pct' => $failed > 0 ? round(self::PERCENT * $group['failed'] / $failed, self::PERCENT_DECIMALS) : null,
+            'failure_pct' => $failed > 0 ? round(Percentile::PERCENT * $group['failed'] / $failed, self::PERCENT_DECIMALS) : null,
             'first_seen_at' => $group['first'],
             'last_seen_at' => $group['last'],
             'deploys' => $group['deploys'],
         ];
 
-        if ($this->hasDuration()) {
+        if ($this->population->hasDuration()) {
             $row += [
                 'slowest_execution_id' => $group['slowest'],
                 'withheld' => $withheld === [] ? null : $withheld,
@@ -570,9 +357,9 @@ class Ranking
         ];
         $withheld = [];
 
-        if ($this->hasDuration()) {
-            $p50 = $this->floored($deploy, 'p50_ms', $deploy['timed'], self::P50_FLOOR, $withheld);
-            $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], self::P95_FLOOR, $withheld);
+        if ($this->population->hasDuration()) {
+            $p50 = $this->floored($deploy, 'p50_ms', $deploy['timed'], Percentile::MEDIAN->floor(), $withheld);
+            $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], Percentile::P95->floor(), $withheld);
 
             $row += [
                 'p50_ms' => Stored::milliseconds($p50),
@@ -586,7 +373,7 @@ class Ranking
             'last_at' => $deploy['last'],
         ];
 
-        if ($this->hasDuration()) {
+        if ($this->population->hasDuration()) {
             $row += [
                 'withheld' => $withheld === [] ? null : $withheld,
                 'values_ms' => $deploy['raw'] === null ? null : array_map(Stored::milliseconds(...), $deploy['raw']),
@@ -623,69 +410,5 @@ class Ranking
         }
 
         return null;
-    }
-
-    /**
-     * Determine if the type has a duration.
-     */
-    protected function hasDuration(): bool
-    {
-        return $this->type !== RecordType::EXCEPTION;
-    }
-
-    /**
-     * Determine if a group of the type is shown with the method of its latest record.
-     */
-    protected function hasMethod(): bool
-    {
-        return in_array($this->type, [RecordType::REQUEST, RecordType::OUTGOING_REQUEST], true);
-    }
-
-    /**
-     * Run a query over the records of the type that the window and the deploy leave, as the table `base`.
-     *
-     * @param  array<string, int|float>  $bindings  bound by name after the window, the deploy and the group
-     * @return list<array<string, mixed>>
-     */
-    protected function query(SQLite3 $connection, string $sql, bool $filtered = true, array $bindings = []): array
-    {
-        if ($filtered) {
-            $deploy = "NULLIF(deploy, '')";
-            $duration = $this->hasDuration() ? Stored::duration($this->type) : 'NULL';
-            $label = $this->type->labelColumn();
-            $columns = [$this->group === null ? 'group_hash' : "COALESCE({$deploy}, char(1)) AS group_hash", 'id', 'started_at', "{$deploy} AS deploy", 'execution_id', "{$duration} AS d", "{$label} AS label"];
-
-            if ($this->hasMethod()) {
-                $columns[] = 'method';
-            }
-
-            foreach (Stage::of($this->type) as $stage) {
-                $columns[] = Stored::number($stage->value)." AS {$stage->value}";
-            }
-
-            if ($this->type->isExecution()) {
-                array_push($columns, Stored::number('peak_memory_usage').' AS m', Stored::number('queries').' AS q', $this->type === RecordType::SCHEDULED_TASK ? "COALESCE(status = '".Outcome::SKIPPED->value."', 0) AS skipped" : '0 AS skipped');
-                array_push($columns, ...($this->type === RecordType::REQUEST ? ['route_methods', 'route_path'] : ['name']));
-            }
-
-            $failure = Failure::expression($this->type);
-
-            if ($failure !== null) {
-                $columns[] = "{$failure} AS f";
-            }
-
-            $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->type->view().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
-        }
-
-        if (! $filtered) {
-            return Stored::rows($connection, $sql, $bindings);
-        }
-
-        $filters = [
-            'deploy' => $this->deploy,
-            'group' => $this->group,
-        ];
-
-        return Stored::rows($connection, $sql, [...$filters, ...$bindings], $this->window);
     }
 }
