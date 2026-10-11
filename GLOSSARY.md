@@ -272,6 +272,10 @@ _Avoid_: Missing children, orphaned
 The single fixed-shape result of a tool call: the store clock, the window, a summary, the result, coverage, blind spots and the ways to go on.
 _Avoid_: Response, output, report
 
+**Answer frame**:
+What every answer of one call states besides its result: the store clock, the window, the coverage, the blind spots, and why the store gave nothing when it was missing, unusable or empty. A tool supplies only its result; the frame reads the store in one snapshot and states the rest.
+_Avoid_: Envelope, answer context
+
 **Store clock**:
 The wall clock of the machine running the MCP server, shared with the writers, read once per call and stated on every answer.
 _Avoid_: Server time, current time
