@@ -7,11 +7,26 @@ test('the package requires exactly what the install decision lists', function ()
 
     expect($require)->toBe([
         'php' => '^8.3',
+        'ext-mbstring' => '*',
+        'ext-ctype' => '*',
         'ext-sqlite3' => '*',
+        'illuminate/console' => '^12.0|^13.0',
+        'illuminate/contracts' => '^12.0|^13.0',
+        'illuminate/database' => '^12.0|^13.0',
+        'illuminate/events' => '^12.0|^13.0',
+        'illuminate/json-schema' => '^12.0|^13.0',
         'illuminate/support' => '^12.0|^13.0',
         'laravel/mcp' => '^1.0.1',
         'laravel/nightwatch' => '^1.30.2',
     ]);
+});
+
+test('every Illuminate component and extension the source uses is required', function () {
+    $require = array_keys(PackageSource::manifest()['require']);
+    $needed = PackageSource::requiredPackages();
+
+    expect($needed)->not->toBeEmpty();
+    expect(array_values(array_diff($needed, $require)))->toBe([]);
 });
 
 test('the package suggests nothing', function () {

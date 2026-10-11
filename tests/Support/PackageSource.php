@@ -35,6 +35,38 @@ class PackageSource
     }
 
     /**
+     * The composer packages `src` imports: one `illuminate/*` component per `Illuminate\X` namespace and one `ext-*` per extension function prefix.
+     * `Illuminate\Foundation` has no split package and is left out: the host Laravel application provides it.
+     *
+     * @return list<string>
+     */
+    public static function requiredPackages(): array
+    {
+        $packages = [];
+
+        foreach (static::files() as $contents) {
+            preg_match_all('/Illuminate\\\\(\w+)\\\\/', $contents, $namespaces);
+
+            foreach ($namespaces[1] as $namespace) {
+                if ($namespace !== 'Foundation') {
+                    $packages[] = 'illuminate/'.strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $namespace));
+                }
+            }
+
+            foreach (['mb_' => 'ext-mbstring', 'ctype_' => 'ext-ctype'] as $prefix => $extension) {
+                if (preg_match('/(?<![\w>:$])'.$prefix.'\w+\(/', $contents) === 1) {
+                    $packages[] = $extension;
+                }
+            }
+        }
+
+        $packages = array_values(array_unique($packages));
+        sort($packages);
+
+        return $packages;
+    }
+
+    /**
      * @return list<string>
      */
     public static function commandNames(): array

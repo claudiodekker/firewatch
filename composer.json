@@ -3,10 +3,28 @@
     "description": "Local Laravel Nightwatch telemetry for AI assistants over MCP.",
     "type": "library",
     "keywords": ["laravel", "nightwatch", "mcp", "telemetry"],
+    "homepage": "https://github.com/claudiodekker/firewatch",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Claudio Dekker",
+            "homepage": "https://github.com/claudiodekker"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/claudiodekker/firewatch/issues",
+        "source": "https://github.com/claudiodekker/firewatch"
+    },
     "require": {
         "php": "^8.3",
+        "ext-mbstring": "*",
+        "ext-ctype": "*",
         "ext-sqlite3": "*",
+        "illuminate/console": "^12.0|^13.0",
+        "illuminate/contracts": "^12.0|^13.0",
+        "illuminate/database": "^12.0|^13.0",
+        "illuminate/events": "^12.0|^13.0",
+        "illuminate/json-schema": "^12.0|^13.0",
         "illuminate/support": "^12.0|^13.0",
         "laravel/mcp": "^1.0.1",
         "laravel/nightwatch": "^1.30.2"
