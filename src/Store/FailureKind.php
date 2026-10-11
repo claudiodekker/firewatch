@@ -62,6 +62,10 @@ enum FailureKind: string
             return $exception->kind;
         }
 
+        if ($exception instanceof StoreUnusable) {
+            return $exception->state === StoreState::BUSY ? self::BUSY : self::OTHER;
+        }
+
         if (! $exception instanceof SQLite3Exception) {
             return self::OTHER;
         }
