@@ -389,7 +389,9 @@ class Detect extends Tool
     protected function thresholdedExample(): string
     {
         foreach ($this->detectors->all() as $detector) {
-            if (($threshold = $detector->threshold()) !== null) {
+            $threshold = $detector->threshold();
+
+            if ($threshold !== null) {
                 return $this->example($detector, $threshold);
             }
         }
