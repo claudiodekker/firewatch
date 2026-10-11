@@ -1,5 +1,6 @@
 <?php
 
+use ClaudioDekker\Firewatch\GitHead;
 use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\IngestReplacer;
 use ClaudioDekker\Firewatch\NullIngest;
@@ -124,3 +125,7 @@ foreach (['Store', 'Actions', 'Capture', 'Configuration', 'Ingest'] as $area) {
         ->expect("ClaudioDekker\\Firewatch\\{$area}")
         ->not->toUse('ClaudioDekker\\Firewatch\\Mcp');
 }
+
+arch('the git HEAD reader starts no process, because it runs at every boot')
+    ->expect(GitHead::class)
+    ->not->toUse(['proc_open', 'popen', 'exec', 'shell_exec', 'system', 'passthru', 'pcntl_exec', 'Symfony\\Component\\Process', 'Illuminate\\Support\\Facades\\Process', 'Illuminate\\Process']);

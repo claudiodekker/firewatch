@@ -24,6 +24,7 @@ use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Events\IngestingEvents;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
+use ReflectionClass;
 use RuntimeException;
 use SQLite3;
 use Throwable;
@@ -113,6 +114,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->registerNotices();
         $this->registerNightwatchInstall();
         $this->registerConfiguration();
+        $this->registerGitHead();
         $this->registerSqlRunner();
         $this->resolveMode();
         $this->redirectStrayServerOutput();
@@ -197,6 +199,11 @@ class FirewatchServiceProvider extends ServiceProvider
         $configuration = $normaliser->resolve(is_array($raw) ? $raw : []);
 
         $this->app->instance(Configuration::class, $configuration);
+    }
+
+    protected function registerGitHead(): void
+    {
+        $this->app->bindIf(GitHead::class, fn () => new GitHead($this->app->basePath()));
     }
 
     /**
@@ -310,7 +317,28 @@ class FirewatchServiceProvider extends ServiceProvider
     {
         $deploy = $this->app->make(Configuration::class)->deploy;
 
+        if ($deploy === null && ! $this->nightwatchHasDeployment()) {
+            $deploy = $this->app->make(GitHead::class)->commit();
+        }
+
         return $deploy === null ? [] : ['nightwatch.deployment' => $deploy];
+    }
+
+    protected function nightwatchHasDeployment(): bool
+    {
+        $config = $this->app->make('config');
+
+        if ($config->has('nightwatch.deployment')) {
+            $deployment = $config->get('nightwatch.deployment');
+        } else {
+            // Nightwatch merges its defaults under the published file in its own register(), after this one.
+            $provider = (new ReflectionClass(NightwatchServiceProvider::class))->getFileName();
+            $path = dirname((string) $provider).'/../config/nightwatch.php';
+            $defaults = is_file($path) ? require $path : [];
+            $deployment = is_array($defaults) ? ($defaults['deployment'] ?? null) : null;
+        }
+
+        return is_string($deployment) && $deployment !== '';
     }
 
     /**

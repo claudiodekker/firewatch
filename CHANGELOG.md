@@ -54,3 +54,4 @@
 - `rank` with `group` gives a request or command group's stage view: the mean of each stage over its executions with every stage, each one's share, the `dominant_stage` and the stages of its slowest execution.
 - A README covering the quick start, install, a configuration snippet for each assistant client, the dev-only warning, what is stored and never redacted, the tools, the blind spots, configuration, retention, commands and troubleshooting. A contract test fails when its configuration, tool, detector or command tables disagree with the code.
 - Firewatch is released under the MIT license.
+- Records are labelled with the commit git HEAD points to when neither `FIREWATCH_DEPLOY` nor Nightwatch has a deploy, so a deploy pair can compare the last commit with the one before it. Firewatch reads the commit from the repository's files and starts no `git` process.

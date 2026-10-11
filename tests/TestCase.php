@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Tests;
 
 use ClaudioDekker\Firewatch\FirewatchServiceProvider;
+use ClaudioDekker\Firewatch\GitHead;
 use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\NullIngest;
@@ -21,6 +22,8 @@ abstract class TestCase extends Orchestra
 
     protected string $storeDirectory;
 
+    public string $gitStart;
+
     /**
      * The notices Firewatch writes during the test, in every application the test creates.
      */
@@ -31,6 +34,8 @@ abstract class TestCase extends Orchestra
         $this->notices = new FakeNotices;
 
         $this->storeDirectory = sys_get_temp_dir().'/firewatch-tests/'.bin2hex(random_bytes(8));
+
+        $this->gitStart = $this->storeDirectory;
 
         // Firewatch resolves its configuration while it registers, before defineEnvironment() runs.
         $this->setStorePath($this->storeDirectory.'/firewatch.sqlite');
@@ -92,7 +97,10 @@ abstract class TestCase extends Orchestra
      */
     protected function overrideApplicationBindings($app): array
     {
-        return [Notices::class => fn () => $this->notices];
+        return [
+            Notices::class => fn () => $this->notices,
+            GitHead::class => fn () => new GitHead($this->gitStart),
+        ];
     }
 
     protected function getPackageProviders($app): array
