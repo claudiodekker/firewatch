@@ -77,7 +77,7 @@ class Overview extends Tool
     {
         return [
             ...$this->windowSchema($schema),
-            'by_deploy' => $schema->boolean()->description(__('firewatch::messages.overview_by_deploy_argument')),
+            'by_deploy' => $schema->boolean()->default(false)->description(__('firewatch::messages.overview_by_deploy_argument')),
             ...$this->formatSchema($schema),
         ];
     }
@@ -97,7 +97,7 @@ class Overview extends Tool
     {
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
-        $byDeploy = $this->byDeploy(new Arguments($request, $this->name()));
+        $byDeploy = $this->byDeploy(new Arguments($request, $this));
 
         $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR, CallFact::STORE_LEVEL]);
 

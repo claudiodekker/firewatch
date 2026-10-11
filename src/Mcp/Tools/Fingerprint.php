@@ -119,14 +119,14 @@ class Fingerprint extends Tool
         $text = fn (string $argument) => $schema->string()->description(__("firewatch::messages.fingerprint_arguments.{$argument}"));
 
         return [
-            'type' => $text('type'),
+            'type' => $schema->string()->enum(array_keys(self::ARGUMENTS))->required(),
             'methods' => $schema->array()->items($schema->string())->description(__('firewatch::messages.fingerprint_arguments.methods')),
             'path' => $text('path'),
             'domain' => $text('domain'),
             'name' => $text('name'),
             'cron' => $text('cron'),
             'timezone' => $text('timezone'),
-            'repeat_seconds' => $schema->integer()->description(__('firewatch::messages.fingerprint_arguments.repeat_seconds')),
+            'repeat_seconds' => $schema->integer()->enum(self::REPEAT_SECONDS)->default(0)->description(__('firewatch::messages.fingerprint_arguments.repeat_seconds')),
             'connection' => $text('connection'),
             'sql' => $text('sql'),
             'driver' => $text('driver'),
@@ -151,7 +151,7 @@ class Fingerprint extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $type = $this->type($arguments);
         $fields = $this->fields($arguments, $type);
         $driver = $this->driver($arguments);
@@ -233,7 +233,7 @@ class Fingerprint extends Tool
             throw Refusal::noRecipe($named->value, $accepted, $example);
         }
 
-        return $arguments->requiredType(array_map(RecordType::from(...), array_keys(self::ARGUMENTS)), 'one of the ten types with a recipe', $example);
+        return $arguments->requiredType('one of the ten types with a recipe', $example);
     }
 
     /**

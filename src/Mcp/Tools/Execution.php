@@ -93,7 +93,7 @@ class Execution extends Tool
     {
         return [
             'execution_id' => $schema->string()->description(__('firewatch::messages.execution_id_argument')),
-            'type' => $schema->string()->description(__('firewatch::messages.execution_type_argument')),
+            'type' => $schema->string()->enum(ExecutionType::class)->description(__('firewatch::messages.execution_type_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
@@ -112,10 +112,10 @@ class Execution extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $id = $this->executionId($arguments);
         $type = $this->type($arguments, $id);
-        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT);
+        $limit = $arguments->limit();
 
         $frame = $this->frame($now);
         $window = Window::none(reason: __('firewatch::messages.execution_window_reason'), timezone: $frame->timezone);
@@ -380,7 +380,7 @@ class Execution extends Tool
      */
     protected function type(Arguments $arguments, ?string $id): ?ExecutionType
     {
-        $type = $arguments->choice('type', ExecutionType::cases(), 'one of the four execution types', 'execution(type: "request")');
+        $type = $arguments->choice('type', ExecutionType::class, 'one of the four execution types', 'execution(type: "request")');
 
         if ($type !== null && $id !== null) {
             throw Refusal::conflicting(argument: 'type', with: 'execution_id', accepted: 'a call with `execution_id` or with `type`, not both', example: 'execution(execution_id: "<execution id>")');

@@ -784,5 +784,5 @@ test('the tool is listed with its description, arguments and annotations', funct
         ->and(str_word_count($tool['description']))->toBeLessThanOrEqual(150)
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['trace_id', 'job_id', 'limit', 'format'])
         ->and($tool['annotations'])->toBe(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false])
-        ->and(array_map(fn (array $property) => str_word_count($property['description']), $tool['inputSchema']['properties']))->each->toBeLessThanOrEqual(30);
+        ->and(array_map(fn (array $property) => str_word_count($property['description'] ?? ''), $tool['inputSchema']['properties']))->each->toBeLessThanOrEqual(30);
 });

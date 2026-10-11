@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Sleep;
+use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -257,14 +258,6 @@ function windowArgument(string $bound, string $kind = 'unbounded'): string
 }
 
 /**
- * Get the description of the limit argument of a tool.
- */
-function limitArgument(string $tool, int $maximum, int $default): string
-{
-    return __('firewatch::messages.limit_argument', ['items' => __("firewatch::messages.limit_items.{$tool}"), 'maximum' => $maximum, 'default' => $default]);
-}
-
-/**
  * Get what `tools/list` answers, without a session.
  *
  * @return array<string, mixed>
@@ -272,4 +265,17 @@ function limitArgument(string $tool, int $maximum, int $default): string
 function toolListing(): array
 {
     return app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
+}
+
+/**
+ * Get the schema `tools/list` answers for one argument of a tool.
+ *
+ * @param  class-string<Tool>  $tool
+ * @return array<string, mixed>
+ */
+function listedArgument(string $tool, string $argument): array
+{
+    $listed = collect(toolListing()['tools'])->firstWhere('name', app($tool)->name());
+
+    return $listed['inputSchema']['properties'][$argument];
 }

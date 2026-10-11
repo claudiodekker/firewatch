@@ -122,9 +122,9 @@ class Query extends Tool
             throw Refusal::sql(SqlFailure::unavailable($reason), $this->runner->limits());
         }
 
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $sql = $this->sql($arguments);
-        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['sql' => 'SELECT * FROM requests']);
+        $limit = $arguments->limit(['sql' => 'SELECT * FROM requests']);
 
         $frame = $this->frame($now);
         $window = Window::none(reason: __('firewatch::messages.query_window_reason'), timezone: $frame->timezone);

@@ -91,12 +91,12 @@ class Compare extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->description(__('firewatch::messages.grouped_type_argument')),
+            'type' => $this->groupedTypeArgument($schema),
             'group' => $schema->string()->description(__('firewatch::messages.compare_group_argument')),
             'split_at' => $schema->string()->description(__('firewatch::messages.compare_split_at_argument')),
             'deploy_before' => $schema->string()->description(__('firewatch::messages.compare_deploy_before_argument')),
             'deploy_after' => $schema->string()->description(__('firewatch::messages.compare_deploy_after_argument')),
-            'by' => $schema->string()->description(__('firewatch::messages.compare_by_argument')),
+            'by' => $this->measureArgument($schema, Measure::compared(...))->description(__('firewatch::messages.compare_by_argument')),
             ...$this->windowSchema($schema, 'compare'),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
@@ -116,7 +116,7 @@ class Compare extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $group = $arguments->group('compare(group: "<group id>", split_at: "<time>")');
         $explicit = $arguments->typeWithGroups($group, SplitPoint::EXAMPLE);
         $limit = $this->limit($arguments, $group);
@@ -335,7 +335,7 @@ class Compare extends Tool
     {
         $default = Measure::default($type);
 
-        return $arguments->choice('by', Measure::compared($type), "a measure of {$type->value}", "compare(type: \"{$type->value}\", split_at: \"<time>\", by: \"{$default->value}\")") ?? $default;
+        return $arguments->among('by', Measure::compared($type), "a measure of {$type->value}", "compare(type: \"{$type->value}\", split_at: \"<time>\", by: \"{$default->value}\")") ?? $default;
     }
 
     /**
@@ -352,7 +352,7 @@ class Compare extends Tool
             'split_at' => '<time>',
         ];
 
-        return $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: $alongside);
+        return $arguments->limit($alongside);
     }
 
     /**

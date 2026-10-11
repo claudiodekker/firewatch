@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
+use Closure;
 
 /**
  * @internal
@@ -89,6 +90,27 @@ enum Measure: string
     public static function trended(RecordType $type): array
     {
         return array_values(array_filter(self::TRENDED, fn (self $measure) => $measure->fits($type)));
+    }
+
+    /**
+     * Get the measures some type with groups takes, in the order the types list them.
+     *
+     * @param  Closure(RecordType): list<self>  $taken
+     * @return list<self>
+     */
+    public static function forAnyType(Closure $taken): array
+    {
+        $measures = [];
+
+        foreach (self::types() as $type) {
+            foreach ($taken($type) as $measure) {
+                if (! in_array($measure, $measures, true)) {
+                    $measures[] = $measure;
+                }
+            }
+        }
+
+        return $measures;
     }
 
     /**

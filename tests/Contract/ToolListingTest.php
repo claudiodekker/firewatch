@@ -38,7 +38,7 @@ test('every argument description is at most 30 words', function () {
 
     foreach (toolListing()['tools'] as $tool) {
         foreach ($tool['inputSchema']['properties'] as $argument => $schema) {
-            $words["{$tool['name']}.{$argument}"] = str_word_count($schema['description']);
+            $words["{$tool['name']}.{$argument}"] = str_word_count($schema['description'] ?? '');
         }
     }
 
@@ -63,7 +63,7 @@ function namesValue(string $text, string $value): bool
     return preg_match('/(?<![\w-])'.preg_quote($value, '/').'(?![\w-])/', $text) === 1;
 }
 
-test('every closed value of an argument is named in its description or its tool description', function () {
+test('every closed argument declares exactly the values it accepts as its schema enum, and no other argument declares one', function () {
     $recordTypes = ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'];
     $groupTypes = array_values(array_diff($recordTypes, ['log']));
     $closed = [
@@ -81,22 +81,39 @@ test('every closed value of an argument is named in its description or its tool 
         'occurrences.outcome' => ['processed', 'failed', 'released', 'skipped'],
         'occurrences.level' => ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'],
         'occurrences.at_or_above' => ['median', 'p95'],
+        'fingerprint.repeat_seconds' => [0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30],
         'detect.shape' => ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'],
     ];
 
-    $unnamed = [];
+    $declared = [];
+    $formats = [];
 
     foreach (toolListing()['tools'] as $tool) {
         foreach ($tool['inputSchema']['properties'] as $argument => $schema) {
-            $values = [...($closed["{$tool['name']}.{$argument}"] ?? []), ...($schema['enum'] ?? [])];
-
-            foreach (array_unique($values) as $value) {
-                if (! namesValue($schema['description'], $value) && ! namesValue($tool['description'], $value)) {
-                    $unnamed[] = "{$tool['name']}.{$argument}: {$value}";
-                }
+            if ($argument === 'format') {
+                $formats[$tool['name']] = $schema['enum'];
+            } elseif (array_key_exists('enum', $schema)) {
+                $declared["{$tool['name']}.{$argument}"] = $schema['enum'];
             }
         }
     }
 
-    expect($unnamed)->toBe([]);
+    expect($declared)->toEqual($closed)
+        ->and($formats)->each->toBe(['markdown', 'json']);
+});
+
+test('no argument description lists the values its schema enum declares', function () {
+    $listed = [];
+
+    foreach (toolListing()['tools'] as $tool) {
+        foreach ($tool['inputSchema']['properties'] as $argument => $schema) {
+            $named = array_filter($schema['enum'] ?? [], fn (string $value) => namesValue($schema['description'] ?? '', $value));
+
+            if ($named !== [] && count($named) === count($schema['enum'])) {
+                $listed[] = "{$tool['name']}.{$argument}";
+            }
+        }
+    }
+
+    expect($listed)->toBe([]);
 });

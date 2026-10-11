@@ -101,18 +101,18 @@ class Occurrences extends Tool
     {
         return [
             'group' => $schema->string()->description(__('firewatch::messages.occurrences_group_argument')),
-            'type' => $schema->string()->description(__('firewatch::messages.occurrences_type_argument')),
+            'type' => $schema->string()->enum(array_column(RecordType::events(), 'value')),
             'execution_id' => $schema->string()->description(__('firewatch::messages.occurrences_execution_id_argument')),
             'trace_id' => $schema->string()->description(__('firewatch::messages.occurrences_trace_id_argument')),
             'job_id' => $schema->string()->description(__('firewatch::messages.occurrences_job_id_argument')),
             'user_id' => $schema->string()->description(__('firewatch::messages.occurrences_user_id_argument')),
-            'order' => $schema->string()->description(__('firewatch::messages.occurrences_order_argument')),
+            'order' => $schema->string()->enum(Order::class)->default(Order::RECENT->value)->description(__('firewatch::messages.occurrences_order_argument')),
             'method' => $schema->string()->description(__('firewatch::messages.occurrences_method_argument')),
             'status' => $schema->string()->description(__('firewatch::messages.occurrences_status_argument')),
-            'outcome' => $schema->string()->description(__('firewatch::messages.occurrences_outcome_argument')),
-            'level' => $schema->string()->description(__('firewatch::messages.occurrences_level_argument')),
+            'outcome' => $schema->string()->enum(Outcome::class)->description(__('firewatch::messages.occurrences_outcome_argument')),
+            'level' => $schema->string()->enum(LogLevel::class)->description(__('firewatch::messages.occurrences_level_argument')),
             'slower_than_ms' => $schema->number()->description(__('firewatch::messages.occurrences_slower_than_ms_argument')),
-            'at_or_above' => $schema->string()->description(__('firewatch::messages.occurrences_at_or_above_argument')),
+            'at_or_above' => $schema->string()->enum(Percentile::class)->description(__('firewatch::messages.occurrences_at_or_above_argument')),
             'matching' => $schema->string()->description(__('firewatch::messages.occurrences_matching_argument')),
             ...$this->windowSchema($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
@@ -135,17 +135,17 @@ class Occurrences extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $group = $arguments->group('occurrences(group: "<group id>")');
-        $type = $arguments->type(RecordType::events(), 'one of the record types', self::EXAMPLE);
+        $type = $arguments->type('one of the record types', self::EXAMPLE);
         $ids = $this->ids($arguments);
 
         if ($group === null && $type === null && array_filter($ids) === []) {
             throw Refusal::missing(argument: 'selector', accepted: 'group, type, execution_id, trace_id, job_id or user_id', example: self::EXAMPLE);
         }
 
-        $order = $arguments->choice('order', Order::cases(), 'one of the orders', 'occurrences(type: "request", order: "slowest")') ?? Order::RECENT;
-        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['type' => 'request']);
+        $order = $arguments->choiceOrDefault('order', Order::class, 'one of the orders', 'occurrences(type: "request", order: "slowest")');
+        $limit = $arguments->limit(['type' => 'request']);
         $deploy = $arguments->deploy('occurrences(type: "request", deploy: "v1")');
         $selector = $group !== null ? 'group' : (array_key_first(array_filter($ids)) ?? 'type');
         $filters = $this->filters($arguments);
@@ -499,10 +499,10 @@ class Occurrences extends Tool
             'method' => $arguments->text('method', self::EXAMPLE),
             'status' => $status === null ? null : $this->status($arguments, $status),
             'status_text' => $status,
-            'outcome' => $this->choice($arguments, 'outcome', Outcome::cases(), 'an outcome', 'occurrences(type: "job-attempt", outcome: "failed")'),
-            'level' => $this->choice($arguments, 'level', LogLevel::cases(), 'a log level', 'occurrences(type: "log", level: "error")'),
+            'outcome' => $this->choice($arguments, 'outcome', Outcome::class, 'an outcome', 'occurrences(type: "job-attempt", outcome: "failed")'),
+            'level' => $this->choice($arguments, 'level', LogLevel::class, 'a log level', 'occurrences(type: "log", level: "error")'),
             'slower_than_ms' => $this->slowerThan($arguments),
-            'at_or_above' => $this->choice($arguments, 'at_or_above', Percentile::cases(), 'median or p95', 'occurrences(type: "request", at_or_above: "p95")'),
+            'at_or_above' => $this->choice($arguments, 'at_or_above', Percentile::class, 'median or p95', 'occurrences(type: "request", at_or_above: "p95")'),
             'matching' => $this->matching($arguments),
         ];
     }
@@ -543,16 +543,16 @@ class Occurrences extends Tool
      *
      * @template TCase of BackedEnum
      *
-     * @param  list<TCase>  $accepted
+     * @param  class-string<TCase>  $enum
      * @return TCase|null
      */
-    protected function choice(Arguments $arguments, string $argument, array $accepted, string $expected, string $example): ?BackedEnum
+    protected function choice(Arguments $arguments, string $argument, string $enum, string $expected, string $example): ?BackedEnum
     {
         if ($arguments->text($argument, self::EXAMPLE) === null) {
             return null;
         }
 
-        return $arguments->choice($argument, $accepted, $expected, $example);
+        return $arguments->choice($argument, $enum, $expected, $example);
     }
 
     /**

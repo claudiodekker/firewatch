@@ -91,10 +91,10 @@ class Rank extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->description(__('firewatch::messages.grouped_type_argument')),
+            'type' => $this->groupedTypeArgument($schema),
             'group' => $schema->string()->description(__('firewatch::messages.rank_group_argument')),
             'matching' => $schema->string()->description(__('firewatch::messages.rank_matching_argument')),
-            'by' => $schema->string()->description(__('firewatch::messages.rank_by_argument')),
+            'by' => $this->measureArgument($schema, Measure::for(...))->description(__('firewatch::messages.rank_by_argument')),
             ...$this->windowSchema($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
@@ -116,11 +116,11 @@ class Rank extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $arguments = new Arguments($request, $this->name());
+        $arguments = new Arguments($request, $this);
         $group = $arguments->group('rank(group: "<group id>")');
         $matching = $this->matching($arguments);
         $explicit = $arguments->typeWithGroups($group, 'rank(type: "request", by: "p95_duration")');
-        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: $explicit === null ? ['group' => '<group id>'] : ['type' => $explicit->value]);
+        $limit = $arguments->limit($explicit === null ? ['group' => '<group id>'] : ['type' => $explicit->value]);
         $deploy = $arguments->deploy($this->call([
             'type' => ($explicit ?? RecordType::REQUEST)->value,
             'deploy' => 'v1',
@@ -391,7 +391,7 @@ class Rank extends Tool
         $fitting = $group === null ? Measure::for($type) : Measure::forBreakdown($type);
         $expected = "a measure of {$type->value}".($group === null ? '' : ' in a breakdown of one group');
 
-        return $arguments->choice('by', $fitting, $expected, "rank(type: \"{$type->value}\", by: \"{$default->value}\")") ?? $default;
+        return $arguments->among('by', $fitting, $expected, "rank(type: \"{$type->value}\", by: \"{$default->value}\")") ?? $default;
     }
 
     /**

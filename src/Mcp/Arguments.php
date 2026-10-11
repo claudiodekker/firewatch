@@ -4,7 +4,11 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use BackedEnum;
 use ClaudioDekker\Firewatch\RecordType;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
+use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
+use Laravel\Mcp\Server\Tool;
+use LogicException;
 use SQLite3;
 
 /**
@@ -17,10 +21,17 @@ class Arguments
      */
     public function __construct(
         protected Request $request,
-        protected string $tool,
+        protected Tool $tool,
     ) {
         //
     }
+
+    /**
+     * The tool's schema, read once.
+     *
+     * @var array<string, array<string, mixed>>|null
+     */
+    protected ?array $schema = null;
 
     /**
      * Get the value the call gives the argument, as it was sent.
@@ -57,22 +68,26 @@ class Arguments
     }
 
     /**
-     * Read the most rows to list, or the default when none is given.
+     * Read the most rows to list, or the declared default when none is given.
      *
      * @param  array<string, mixed>  $alongside
      */
-    public function limit(int $maximum, int $default, array $alongside = []): int
+    public function limit(array $alongside = []): int
     {
-        return $this->between('limit', minimum: 1, maximum: $maximum, default: $default, alongside: $alongside);
+        return $this->between('limit', $alongside);
     }
 
     /**
-     * Read a whole number of the range, or the default when none is given.
+     * Read a whole number of the declared range, or the declared default when none is given.
      *
      * @param  array<string, mixed>  $alongside
      */
-    public function between(string $argument, int $minimum, int $maximum, int $default, array $alongside = []): int
+    public function between(string $argument, array $alongside = []): int
     {
+        /** @var array{minimum: int, maximum: int, default: int} $declared */
+        $declared = $this->declared($argument);
+        ['minimum' => $minimum, 'maximum' => $maximum, 'default' => $default] = $declared;
+
         $value = $this->get($argument);
 
         if ($value === null) {
@@ -88,7 +103,7 @@ class Arguments
             'maximum' => $maximum,
         ];
 
-        $example = Call::written($this->tool, [
+        $example = Call::written($this->tool->name(), [
             ...$alongside,
             $argument => $default,
         ]);
@@ -98,22 +113,18 @@ class Arguments
 
     /**
      * Read the record type, or null when none is given.
-     *
-     * @param  list<RecordType>  $accepted
      */
-    public function type(array $accepted, string $expected, string $example): ?RecordType
+    public function type(string $expected, string $example): ?RecordType
     {
-        return $this->choice('type', $accepted, $expected, $example);
+        return $this->choice('type', RecordType::class, $expected, $example);
     }
 
     /**
      * Read the record type a call can't go without.
-     *
-     * @param  list<RecordType>  $accepted
      */
-    public function requiredType(array $accepted, string $expected, string $example): RecordType
+    public function requiredType(string $expected, string $example): RecordType
     {
-        return $this->type($accepted, $expected, $example) ?? throw Refusal::missing(argument: 'type', accepted: $this->listed($accepted), example: $example);
+        return $this->type($expected, $example) ?? throw Refusal::missing(argument: 'type', accepted: $this->listed($this->cases('type', RecordType::class)), example: $example);
     }
 
     /**
@@ -124,35 +135,95 @@ class Arguments
         $expected = __('firewatch::messages.argument_values.grouped_type');
 
         if ($group === null) {
-            return $this->requiredType(Measure::types(), $expected, $example);
+            return $this->requiredType($expected, $example);
         }
 
-        return $this->type(Measure::types(), $expected, $example);
+        return $this->type($expected, $example);
     }
 
     /**
-     * Read one of the accepted cases, matched exactly, or null when none is given.
+     * Read one of the declared cases, or the declared default when none is given.
      *
      * @template TCase of BackedEnum
      *
-     * @param  list<TCase>  $accepted
+     * @param  class-string<TCase>  $enum
      * @return TCase|null
      */
-    public function choice(string $argument, array $accepted, string $expected, string $example): ?BackedEnum
+    public function choice(string $argument, string $enum, string $expected, string $example): ?BackedEnum
+    {
+        return $this->among($argument, $this->cases($argument, $enum), $expected, $example);
+    }
+
+    /**
+     * Read one of the declared cases, or the default an argument that declares one falls back to.
+     *
+     * @template TCase of BackedEnum
+     *
+     * @param  class-string<TCase>  $enum
+     * @return TCase
+     */
+    public function choiceOrDefault(string $argument, string $enum, string $expected, string $example): BackedEnum
+    {
+        return $this->amongOrDefault($argument, $this->cases($argument, $enum), $expected, $example);
+    }
+
+    /**
+     * Read one of the fitting cases, or the default an argument that declares one falls back to.
+     *
+     * @template TCase of BackedEnum
+     *
+     * @param  list<TCase>  $fitting
+     * @return TCase
+     */
+    public function amongOrDefault(string $argument, array $fitting, string $expected, string $example): BackedEnum
+    {
+        return $this->among($argument, $fitting, $expected, $example) ?? throw new LogicException("`{$argument}` declares no default that fits.");
+    }
+
+    /**
+     * Read one of the fitting cases, matched exactly, or the declared default when none is given.
+     *
+     * @template TCase of BackedEnum
+     *
+     * @param  list<TCase>  $fitting
+     * @return TCase|null
+     */
+    public function among(string $argument, array $fitting, string $expected, string $example): ?BackedEnum
     {
         $value = $this->get($argument);
 
         if ($value === null) {
-            return null;
+            return $this->fallback($argument, $fitting);
         }
 
-        foreach ($accepted as $case) {
+        foreach ($fitting as $case) {
             if ($case->value === $value) {
                 return $case;
             }
         }
 
-        throw $this->invalid(argument: $argument, expected: $expected, accepted: $this->listed($accepted), example: $example);
+        throw $this->invalid(argument: $argument, expected: $expected, accepted: $this->listed($fitting), example: $example);
+    }
+
+    /**
+     * Get the case the declared default names, or null when the argument declares none.
+     *
+     * @template TCase of BackedEnum
+     *
+     * @param  list<TCase>  $cases
+     * @return TCase|null
+     */
+    protected function fallback(string $argument, array $cases): ?BackedEnum
+    {
+        $default = $this->declared($argument)['default'] ?? null;
+
+        foreach ($cases as $case) {
+            if ($case->value === $default) {
+                return $case;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -215,6 +286,34 @@ class Arguments
         $shown = json_encode($this->get($argument), JSON_THROW_ON_ERROR);
 
         return Refusal::invalid(argument: $argument, expected: $expected, value: $shown, accepted: $accepted, example: $example);
+    }
+
+    /**
+     * Get the cases the tool's schema declares for the argument, in its order.
+     *
+     * @template TCase of BackedEnum
+     *
+     * @param  class-string<TCase>  $enum
+     * @return list<TCase>
+     */
+    protected function cases(string $argument, string $enum): array
+    {
+        /** @var list<string> $values */
+        $values = $this->declared($argument)['enum'];
+
+        return array_map($enum::from(...), $values);
+    }
+
+    /**
+     * Get what the tool's schema declares for the argument.
+     *
+     * @return array<string, mixed>
+     */
+    protected function declared(string $argument): array
+    {
+        $this->schema ??= array_map(fn (Type $type) => $type->toArray(), $this->tool->schema(new JsonSchemaTypeFactory));
+
+        return $this->schema[$argument];
     }
 
     /**

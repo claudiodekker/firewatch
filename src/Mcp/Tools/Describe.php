@@ -99,7 +99,7 @@ class Describe extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->description(__('firewatch::messages.describe_type_argument')),
+            'type' => $schema->string()->enum(RecordType::class),
             ...$this->formatSchema($schema),
         ];
     }
@@ -117,7 +117,7 @@ class Describe extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $type = (new Arguments($request, $this->name()))->type(RecordType::cases(), 'one of the twelve record types or user', 'describe(type: "request")');
+        $type = (new Arguments($request, $this))->type('one of the twelve record types or user', 'describe(type: "request")');
         $catalogue = new Catalogue;
 
         $frame = $this->frame($now);

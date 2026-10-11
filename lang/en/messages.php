@@ -401,8 +401,6 @@ return [
 
     'next' => 'Next:',
 
-    'format_argument' => 'markdown (default) or json.',
-
     'missing_argument' => "error: missing_argument\n`:argument` is required.\nargument: :argument\naccepted: :accepted\nexample: :example",
 
     'invalid_argument' => "error: invalid_argument\n`:argument` must be :expected; got :value.\nargument: :argument\naccepted: :accepted\nexample: :example",
@@ -479,7 +477,7 @@ return [
 
     'failed' => "error: failed\nThe SQL tool failed unexpectedly; the failure was reported to the application's exception handler. Run `php artisan firewatch:doctor`.",
 
-    'rank_by_argument' => 'p95_duration (default; occurrences for exception), p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen or queries. Memory and queries: execution types.',
+    'rank_by_argument' => 'Default p95_duration, occurrences for exception. Memory and queries: execution types.',
 
     'rank_summary' => 'Ranked :count :type group by :by, worst first.|Ranked :count :type groups by :by, worst first.',
 
@@ -521,7 +519,7 @@ return [
 
     'compare_deploy_after_argument' => 'The after deploy, matched exactly, not deploy_before. Needs deploy_before.',
 
-    'compare_by_argument' => 'p95_duration (default; occurrences for exception), p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory or queries.',
+    'compare_by_argument' => 'Default p95_duration, occurrences for exception.',
 
     'compare_summary' => 'Compared :groups :type group by :by before and after the split: :changes.|Compared :groups :type groups by :by before and after the split: :changes.',
 
@@ -563,9 +561,9 @@ return [
 
     'trend_group_argument' => 'A group id (32 hex).',
 
-    'trend_by_argument' => 'occurrences (default), max_duration, avg_duration, total_duration or max_memory (execution types only).',
+    'trend_by_argument' => 'max_memory: execution types only.',
 
-    'trend_buckets_argument' => '2 to 60. Default 12.',
+    'trend_buckets_argument' => 'How many time buckets.',
 
     'trend_summary' => ':type :by :direction over :buckets buckets; the peak is bucket :peak.',
 
@@ -613,8 +611,6 @@ return [
 
     'query_next_more' => 'The same statement with the most rows an answer holds.',
 
-    'describe_type_argument' => 'request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request, queued-job or user.',
-
     'describe_window_reason' => 'the schema and the store facts are not bounded by time',
 
     'describe_summary' => 'The store holds :records record of :types types; the SQL tool is :sql.|The store holds :records records of :types types; the SQL tool is :sql.',
@@ -650,7 +646,6 @@ return [
     'describe_next_query' => 'Run the first example statement.',
 
     'fingerprint_arguments' => [
-        'type' => 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail or notification.',
         'methods' => 'request: all its methods, such as GET and HEAD.',
         'path' => 'request: the full route path.',
         'domain' => 'request, optional.',
@@ -906,7 +901,7 @@ return [
 
     'execution_id_argument' => 'A request\'s trace id is its execution id. Absent: the latest finished. Excludes type.',
 
-    'execution_type_argument' => 'request, command, job-attempt or scheduled-task: the latest finished of that kind. Not with execution_id.',
+    'execution_type_argument' => 'The latest finished of that kind. Not with execution_id.',
 
     'execution_window_reason' => 'one execution, found by its id or as the latest one that finished',
 
@@ -1016,7 +1011,7 @@ return [
 
     'actor_unknown_note' => 'An actor exists only once recorded acting; the directory holds users seen within retention.',
 
-    'detect_shape_argument' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, exception-clusters, error-logs, failing-http, cache or memory. Absent: every shape.',
+    'detect_shape_argument' => 'Absent: every shape.',
     'detect_threshold_argument' => 'In the shape\'s unit; whole except percent and MB. Out of range is refused. Needs shape.',
     'detect_group_argument' => 'A group id (32 hex) restricting the shape; for n-plus-one an execution group. Refused for error-logs. Needs shape.',
     'detect_input' => [
@@ -1077,8 +1072,6 @@ return [
     ],
     'occurrences_group_argument' => 'A group id. A job group lists dispatches and attempts together.',
 
-    'occurrences_type_argument' => 'request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request or queued-job.',
-
     'occurrences_execution_id_argument' => 'An execution id: its record and everything inside it.',
 
     'occurrences_trace_id_argument' => 'A trace id: a request\'s records and the jobs and commands it caused.',
@@ -1087,19 +1080,19 @@ return [
 
     'occurrences_user_id_argument' => 'A user id: records carrying that user, as recorded.',
 
-    'occurrences_order_argument' => 'recent (default), slowest, memory or queries. Records without the measure last; memory and queries need an execution type.',
+    'occurrences_order_argument' => 'Records without the measure last; memory and queries need an execution type.',
 
     'occurrences_method_argument' => 'An HTTP method, any case. Only request and outgoing-request.',
 
     'occurrences_status_argument' => 'A code (500), class (5xx) or range (400-499). Only request and outgoing-request.',
 
-    'occurrences_outcome_argument' => 'processed, failed, released or skipped; released only job-attempt, skipped only scheduled-task.',
+    'occurrences_outcome_argument' => 'released only job-attempt, skipped only scheduled-task.',
 
-    'occurrences_level_argument' => 'debug, info, notice, warning, error, critical, alert or emergency: that level and worse. log only.',
+    'occurrences_level_argument' => 'That level and worse. log only.',
 
     'occurrences_slower_than_ms_argument' => 'Milliseconds; only records strictly slower. Records without a duration are left out.',
 
-    'occurrences_at_or_above_argument' => 'median or p95 of the selection\'s durations. Too few records: not applied, every row returns, with a note.',
+    'occurrences_at_or_above_argument' => 'A percentile of the selection\'s durations. Too few records: not applied, every row returns, with a note.',
 
     'occurrences_matching_argument' => 'A substring, 1 to 200 characters, ASCII case ignored, in the type\'s fields. Needs type.',
 
@@ -1123,20 +1116,18 @@ return [
         'trend' => ['since' => 'derived from the records', 'until' => 'derived, then included'],
     ],
 
-    'limit_argument' => '1 to :maximum :items. Default :default.',
-
-    'limit_items' => [
-        'rank' => 'groups',
-        'occurrences' => 'rows',
-        'execution' => 'timeline entries; identical queries collapse first',
-        'trace' => 'executions; jobs are not capped',
-        'detect' => 'findings per shape',
-        'actor' => 'executions',
-        'compare' => 'groups',
-        'query' => 'rows; your own LIMIT applies inside it',
+    'limit_argument' => [
+        'rank' => 'The most groups.',
+        'occurrences' => 'The most rows.',
+        'execution' => 'The most timeline entries; identical queries collapse first.',
+        'trace' => 'The most executions; jobs are not capped.',
+        'detect' => 'The most findings per shape.',
+        'actor' => 'The most executions.',
+        'compare' => 'The most groups.',
+        'query' => 'The most rows; your own LIMIT applies inside it.',
     ],
 
-    'grouped_type_argument' => 'Required unless group: request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request or queued-job.',
+    'grouped_type_argument' => 'Required unless group.',
 
     'deploy_argument' => 'An exact deploy string: only its records count.',
 

@@ -57,3 +57,4 @@
 - Firewatch is released under the MIT license.
 - Records are labelled with the commit git HEAD points to when neither `FIREWATCH_DEPLOY` nor Nightwatch has a deploy, so a deploy pair can compare the last commit with the one before it. Firewatch reads the commit from the repository's files and starts no `git` process.
 - `overview` takes `by_deploy` to break the slowest groups down per deploy: one block for each of the five most recent deploys, with an `avg_ms` per group, and a `compare` of the two newest offered.
+- Every tool's input schema declares its closed values as an `enum`, its defaults, and the range of `limit` and `buckets`, so a client sees the valid choices before a call. Argument descriptions no longer list the values.
