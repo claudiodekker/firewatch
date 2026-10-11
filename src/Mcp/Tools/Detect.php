@@ -127,7 +127,7 @@ class Detect extends Tool
         $frame->about($types, $window, facts: [CallFact::ACTOR]);
 
         $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => [
-            $this->inWindow($connection, $window),
+            $window->count($connection),
             array_map(fn (Detector $detector) => $this->detectors->judge($connection, $facts->meta, $detector, $window, $threshold, $group, $limit), $detectors),
         ]);
 

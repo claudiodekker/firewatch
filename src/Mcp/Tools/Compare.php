@@ -201,7 +201,7 @@ class Compare extends Tool
 
         $boundary->refuseOutside($window);
 
-        $inWindow = $this->inWindow($connection, $window);
+        $inWindow = $window->count($connection);
 
         $comparison = $type === null || $by === null || $inWindow === 0
             ? null

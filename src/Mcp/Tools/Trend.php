@@ -210,7 +210,7 @@ class Trend extends Tool
 
         $window = $buckets === null ? $given->derive(null, null) : $buckets->window;
 
-        return [$type, $held, $window, $this->inWindow($connection, $window), $buckets];
+        return [$type, $held, $window, $window->count($connection), $buckets];
     }
 
     /**
