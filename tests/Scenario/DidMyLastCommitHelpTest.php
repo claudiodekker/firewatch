@@ -10,8 +10,6 @@ use Illuminate\Support\Facades\Route;
 const LAST_COMMIT_SLOWDOWN_MS = 150;
 
 /**
- * Serve each request in an application of its own, started inside the repository, with the order list as the code at the repository's HEAD runs it.
- *
  * @param  list<string>  $uris
  */
 function lastCommitServe(GitRepository $repository, bool $slowed, array $uris): void
@@ -41,8 +39,6 @@ function lastCommitServe(GitRepository $repository, bool $slowed, array $uris): 
 }
 
 /**
- * Serve the application at its first commit, then at a second commit that slows the order list, and get both commits.
- *
  * @return array{string, string}
  */
 function lastCommitServeBothCommits(): array

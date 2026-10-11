@@ -22,9 +22,6 @@ abstract class TestCase extends Orchestra
 
     protected string $storeDirectory;
 
-    /**
-     * Where the git lookup of every application the test creates starts: a directory outside any repository, so the package's own checkout never labels a record.
-     */
     public string $gitStart;
 
     /**

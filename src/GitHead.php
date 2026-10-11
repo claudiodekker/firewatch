@@ -5,10 +5,6 @@ namespace ClaudioDekker\Firewatch;
 use Throwable;
 
 /**
- * The commit the git HEAD of the repository around a path points to, read from the repository's files.
- *
- * It starts a process never: it runs at every boot of the application.
- *
  * @internal
  */
 class GitHead
@@ -17,9 +13,6 @@ class GitHead
 
     protected const ABSOLUTE_PATH = '#^(?:[A-Za-z]:)?[\\\\/]#';
 
-    /**
-     * Create a new reader that looks for the repository at a directory, then at each parent.
-     */
     public function __construct(protected string $start)
     {
         //
@@ -37,9 +30,6 @@ class GitHead
         }
     }
 
-    /**
-     * Follow the git directory to HEAD and HEAD to a commit.
-     */
     protected function resolve(): ?string
     {
         $directory = $this->gitDirectory();
@@ -65,9 +55,6 @@ class GitHead
         return $this->looseRef($common, $ref) ?? $this->packedRef($common, $ref);
     }
 
-    /**
-     * Find the git directory: the `.git` directory at the start or a parent, or the one a `.git` file names.
-     */
     protected function gitDirectory(): ?string
     {
         $directory = $this->start;
@@ -93,9 +80,6 @@ class GitHead
         }
     }
 
-    /**
-     * Get the directory a linked worktree's or submodule's `.git` file names.
-     */
     protected function linkedDirectory(string $file, string $directory): ?string
     {
         $line = $this->read($file);
@@ -109,9 +93,6 @@ class GitHead
         return is_dir($path) ? $path : null;
     }
 
-    /**
-     * Get the directory that holds the refs: the one a worktree's `commondir` file names, or the git directory itself.
-     */
     protected function commonDirectory(string $directory): string
     {
         $path = $this->read("{$directory}/commondir");
@@ -125,9 +106,6 @@ class GitHead
         return is_dir($common) ? $common : $directory;
     }
 
-    /**
-     * Get the commit a loose ref file holds.
-     */
     protected function looseRef(string $common, string $ref): ?string
     {
         $contents = $this->read("{$common}/{$ref}");
@@ -135,9 +113,6 @@ class GitHead
         return $contents !== null && preg_match(static::COMMIT, $contents) === 1 ? strtolower($contents) : null;
     }
 
-    /**
-     * Get the commit a ref has in `packed-refs`, skipping its header and peeled lines.
-     */
     protected function packedRef(string $common, string $ref): ?string
     {
         $contents = $this->read("{$common}/packed-refs");
@@ -157,17 +132,11 @@ class GitHead
         return null;
     }
 
-    /**
-     * Anchor a relative path at a directory.
-     */
     protected function resolvePath(string $path, string $directory): string
     {
         return preg_match(static::ABSOLUTE_PATH, $path) === 1 ? $path : "{$directory}/{$path}";
     }
 
-    /**
-     * Get a file's trimmed contents, or null when it can't be read.
-     */
     protected function read(string $path): ?string
     {
         $contents = is_file($path) ? @file_get_contents($path) : false;

@@ -3,9 +3,6 @@
 use ClaudioDekker\Firewatch\Tests\Support\GitRepository;
 use Illuminate\Filesystem\Filesystem;
 
-/**
- * Get the deploy Nightwatch ends up with in a new application whose git lookup starts at a path.
- */
 function deployUnderGit(string $start): ?string
 {
     test()->gitStart = $start;
@@ -14,9 +11,6 @@ function deployUnderGit(string $start): ?string
     return config('nightwatch.deployment');
 }
 
-/**
- * Get a repository removed when the test ends.
- */
 function gitRepository(bool $commit = true, string $format = 'sha1'): GitRepository
 {
     $repository = GitRepository::create($commit, $format);
@@ -31,9 +25,6 @@ function gitCleanup(string $path): void
     test()->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($path));
 }
 
-/**
- * Get a directory removed when the test ends.
- */
 function gitDirectory(): string
 {
     $path = GitRepository::temporaryPath();
