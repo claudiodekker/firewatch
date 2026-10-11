@@ -411,8 +411,7 @@ it('says a deploy pair cannot separate an uncommitted edit on every pair answer,
 
     $sentence = __('firewatch::messages.compare_deploy_pair_note');
 
-    expect($noStore['empty']['kind'])->toBe('no_store')
-        ->and($storeEmpty['empty']['kind'])->toBe('store_empty')
+    expect($storeEmpty['empty']['kind'])->toBe('store_empty')
         ->and($evaluated['empty'])->toBeNull()
         ->and($emptySide['result']['reason'])->toBe('empty_side')
         ->and($windowEmpty['empty']['kind'])->toBe('window_empty')

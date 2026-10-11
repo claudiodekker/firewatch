@@ -5,15 +5,12 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Bounds;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\ErrorCode;
-use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
@@ -24,9 +21,7 @@ use ClaudioDekker\Firewatch\Sql\QueryStop;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use ClaudioDekker\Firewatch\Sql\SqlRows;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -131,21 +126,35 @@ class Query extends Tool
         $sql = $this->sql($request);
         $limit = $this->limit($request);
 
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::none(reason: __('firewatch::messages.query_window_reason'), timezone: $timezone);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
+        $frame = $this->frame($now);
+        $window = Window::none(reason: __('firewatch::messages.query_window_reason'), timezone: $frame->timezone);
+
+        $frame->about([], $window);
+
+        $rows = $frame->attempt(fn () => $this->run($sql, $limit));
+
+        if ($rows === null) {
+            return $frame->empty();
+        }
+
+        $frame->about($rows->typesRead, $window);
+
+        $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $facts);
+
+        return $this->rows($frame, $rows, $sql, $limit);
+    }
+
+    /**
+     * Run the statement on a store that can be read, refusing a statement that fails.
+     *
+     * @param  int<1, 500>  $limit
+     */
+    protected function run(string $sql, int $limit): SqlRows
+    {
+        $this->reader->ensureUsable();
 
         try {
-            $this->reader->ensureUsable();
-
-            $rows = $this->runner->run($sql, $limit);
-        } catch (StoreUnusable $unusable) {
-            $blindSpots = $this->conditions->for(null, [], $window);
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, [], History::unknown(...$retention));
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $this->runner->run($sql, $limit);
         } catch (SqlFailure $failure) {
             if ($failure->error === ErrorCode::FAILED) {
                 report($failure);
@@ -153,36 +162,16 @@ class Query extends Tool
 
             throw Refusal::sql($failure);
         }
-
-        return $this->rows(rows: $rows, sql: $sql, limit: $limit, epoch: $epoch, timezone: $timezone, window: $window, retention: $retention);
     }
 
     /**
      * Put the rows in the envelope, with the coverage and blind spots of the types the statement read.
-     *
-     * @param  array{int|null, int|null}  $retention
      */
-    protected function rows(SqlRows $rows, string $sql, int $limit, float $epoch, string $timezone, Window $window, array $retention): Answer
+    protected function rows(Frame $frame, SqlRows $rows, string $sql, int $limit): Answer
     {
-        $types = $rows->typesRead;
-
-        try {
-            [$total, $oldest, $newest, $facts] = $this->reader->snapshot($this->span(...));
-            $history = History::of($facts->meta, $types, ...$retention);
-            $coverage = new Coverage($total === 0 ? CoverageState::EMPTY : CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
-        } catch (StoreUnusable $unusable) {
-            $facts = null;
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
-        }
-
-        $blindSpots = [...BlindSpots::for($types), ...$this->conditions->for($facts, $types, $window)];
         $empty = $rows->rows === [] ? Emptiness::noRows() : null;
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $empty === null ? $this->summary($rows) : $empty->message,
             empty: $empty,
             result: [
@@ -191,8 +180,6 @@ class Query extends Tool
                 'stop' => $rows->stop->value,
                 'elapsed_ms' => $rows->elapsedMilliseconds,
             ],
-            coverage: $coverage,
-            blindSpots: $blindSpots,
             notes: $this->notes($rows),
             truncated: $rows->stop === QueryStop::COMPLETE ? [] : [$this->truncation($rows)],
             next: $rows->stop === QueryStop::LIMIT && $limit < self::MAXIMUM_LIMIT ? [$this->more($sql)] : [],
@@ -284,20 +271,6 @@ class Query extends Tool
             ],
             'why' => __('firewatch::messages.query_next_more'),
         ];
-    }
-
-    /**
-     * Read the store's span and facts in one snapshot.
-     *
-     * @return array{int, float|null, float|null, StoreFacts}
-     */
-    protected function span(SQLite3 $connection): array
-    {
-        $span = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
-        $total = is_int($span['total']) ? $span['total'] : 0;
-        $facts = StoreFacts::read($connection);
-
-        return [$total, $span['oldest'], $span['newest'], $facts];
     }
 
     /**

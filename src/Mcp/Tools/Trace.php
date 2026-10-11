@@ -6,28 +6,21 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
-use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\ExecutionHeader;
 use ClaudioDekker\Firewatch\Mcp\Failure;
-use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\JobOutcome;
 use ClaudioDekker\Firewatch\Mcp\Lineage;
 use ClaudioDekker\Firewatch\Mcp\LineageState;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\Stored;
-use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TraceRecords;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -117,48 +110,31 @@ class Trace extends Tool
         $this->requireOne($traceId, $jobId);
         $limit = $this->limit($request);
 
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::none(reason: __('firewatch::messages.trace_window_reason'), timezone: $timezone);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
-        $types = [...ExecutionType::records(), RecordType::QUEUED_JOB];
+        $frame = $this->frame($now);
 
-        try {
-            [$total, $oldest, $newest, $facts, $found] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $traceId, $jobId));
-        } catch (StoreUnusable $unusable) {
-            $blindSpots = [...BlindSpots::for($types), ...$this->conditions->for(null, $types, $window)];
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
+        $frame->about([...ExecutionType::records(), RecordType::QUEUED_JOB], Window::none(reason: __('firewatch::messages.trace_window_reason'), timezone: $frame->timezone));
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
-        }
+        $found = $frame->read(fn (SQLite3 $connection) => $jobId === null
+            ? TraceRecords::ofTrace($connection, (string) $traceId)
+            : TraceRecords::ofJob($connection, $jobId));
 
-        $blindSpots = [...BlindSpots::for($types), ...$this->conditions->for($facts, $types, $window)];
-        $history = History::of($facts->meta, $types, ...$retention);
-
-        if ($found === null) {
-            $empty = Emptiness::storeEmpty($this->configuration->database);
-            $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($found === null || $frame->isEmpty()) {
+            return $frame->empty();
         }
 
         if (! $found->held) {
             throw $this->notFound($traceId, $jobId);
         }
 
-        $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
-
-        return $this->trace(epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, found: $found, jobId: $jobId, limit: $limit);
+        return $this->trace($frame, $found, $jobId, $limit);
     }
 
     /**
      * Put the trace in the envelope.
      *
-     * @param  list<array<string, mixed>>  $blindSpots
      * @param  string|null  $jobId  the job asked for, or null when the trace was
      */
-    protected function trace(float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, TraceRecords $found, ?string $jobId, int $limit): Answer
+    protected function trace(Frame $frame, TraceRecords $found, ?string $jobId, int $limit): Answer
     {
         $executions = Rows::bound(array_map($this->link(...), $found->executions), $limit);
         $jobs = Lineage::jobs($found);
@@ -178,21 +154,14 @@ class Trace extends Tool
                 ...$counts,
             ]);
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $summary,
-            empty: null,
             result: [
                 'trace_id' => $found->trace,
                 'job_id' => $jobId,
                 'executions' => $executions->rows,
                 'jobs' => $jobs,
             ],
-            coverage: $coverage,
-            blindSpots: $blindSpots,
             notes: $this->notes($found, $jobs),
             truncated: array_filter([
                 $executions->truncation(section: 'executions', how: __('firewatch::messages.trace_executions_how'), matched: count($found->executions)),
@@ -336,28 +305,6 @@ class Trace extends Tool
             'duration_ms' => Stored::milliseconds($execution['duration']),
             'outcome' => ExecutionHeader::outcome($type, $execution),
         ];
-    }
-
-    /**
-     * Read the store's span and facts, and the records of the trace or the job, in one snapshot.
-     *
-     * @return array{int, float|null, float|null, StoreFacts, TraceRecords|null}
-     */
-    protected function load(SQLite3 $connection, ?string $traceId, ?string $jobId): array
-    {
-        $span = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
-        $total = is_int($span['total']) ? $span['total'] : 0;
-        $facts = StoreFacts::read($connection);
-
-        if ($total === 0) {
-            return [$total, $span['oldest'], $span['newest'], $facts, null];
-        }
-
-        $found = $jobId === null
-            ? TraceRecords::ofTrace($connection, (string) $traceId)
-            : TraceRecords::ofJob($connection, $jobId);
-
-        return [$total, $span['oldest'], $span['newest'], $facts, $found];
     }
 
     /**

@@ -6,14 +6,11 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Listing;
 use ClaudioDekker\Firewatch\Mcp\LogLevel;
 use ClaudioDekker\Firewatch\Mcp\Order;
@@ -22,13 +19,10 @@ use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\Stored;
-use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Mcp\WithheldReason;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -161,53 +155,32 @@ class Occurrences extends Tool
         $cursorValue = $request->get('cursor');
         $cursor = $cursorValue === null ? null : Cursor::read(value: $cursorValue, tool: $this->name(), arguments: $request->all(), key: $this->key(...));
 
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = $this->window($request, $now, $timezone, $cursor);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
-        $typesRead = $type === null ? RecordType::events() : [$type];
-        $structural = BlindSpots::for($typesRead, actor: $ids['user_id'] !== null);
+        $frame = $this->frame($now);
+        $window = $this->window($request, $now, $frame->timezone, $cursor);
 
-        try {
-            $read = $this->reader->snapshot(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $deploy, $filters, $limit, $selector, $cursor));
-        } catch (StoreUnusable $unusable) {
-            $blindSpots = [...$structural, ...$this->conditions->for(null, $typesRead, $window)];
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, $typesRead, History::unknown(...$retention));
+        $frame->about($type === null ? RecordType::events() : [$type], $window, actor: $ids['user_id'] !== null);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        $read = $frame->read(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $deploy, $filters, $limit, $selector, $cursor));
+
+        if ($read === null) {
+            return $frame->empty();
         }
 
-        $createdAt = $read['facts']->meta->createdAt;
+        $cursor?->belongsTo($frame->facts()->meta->createdAt, $this->name());
 
-        $cursor?->belongsTo($createdAt, $this->name());
-
-        $blindSpots = [...$structural, ...$this->conditions->for($read['facts'], $typesRead, $window)];
-        $history = History::of($read['facts']->meta, $typesRead, ...$retention);
-
-        if ($read['total'] === 0) {
-            $empty = Emptiness::storeEmpty($this->configuration->database);
-            $coverage = new Coverage(CoverageState::EMPTY, $typesRead, $history, records: 0);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($frame->isEmpty()) {
+            return $frame->empty();
         }
-
-        $coverage = new Coverage(CoverageState::OK, $typesRead, $history, oldest: $read['oldest'], newest: $read['newest'], records: $read['total']);
 
         if ($read['inWindow'] === 0) {
-            $empty = Emptiness::windowEmpty($read['total']);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records));
         }
 
         if ($read['listed'] === null || $read['listed']['rows'] === []) {
-            $given = $this->given($group, $type, $ids, $deploy, $filters);
-            $empty = Emptiness::noMatch($read['inWindow'], $given);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $frame->empty(Emptiness::noMatch($read['inWindow'], $this->given($group, $type, $ids, $deploy, $filters)));
         }
 
-        return $this->listing($request, epoch: $epoch, timezone: $timezone, window: $window, coverage: $coverage, blindSpots: $blindSpots, order: $order, group: $group, userId: $ids['user_id'], limit: $limit, createdAt: $createdAt, read: $read);
+        return $this->listing($request, $frame, $window, $order, $group, $ids['user_id'], $limit, $read);
     }
 
     /**
@@ -216,18 +189,13 @@ class Occurrences extends Tool
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
      * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
-     * @return array{total: int, inWindow: int, oldest: float|null, newest: float|null, facts: StoreFacts, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
+     * @return array{inWindow: int, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
      */
     protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, array $filters, int $limit, string $selector, ?Cursor $cursor): array
     {
-        [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
-        $facts = StoreFacts::read($connection);
+        $inWindow = $this->inWindow($connection, $window);
         $nothing = [
-            'total' => $total,
             'inWindow' => $inWindow,
-            'oldest' => $oldest,
-            'newest' => $newest,
-            'facts' => $facts,
             'baseline' => null,
             'listed' => null,
             'sites' => null,
@@ -291,10 +259,9 @@ class Occurrences extends Tool
     /**
      * Put the rows, newest or worst first, in the envelope.
      *
-     * @param  list<array<string, mixed>>  $blindSpots
      * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read
      */
-    protected function listing(Request $request, float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, Order $order, ?string $group, ?string $userId, int $limit, ?float $createdAt, array $read): Answer
+    protected function listing(Request $request, Frame $frame, Window $window, Order $order, ?string $group, ?string $userId, int $limit, array $read): Answer
     {
         /** @var array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>} $listed */
         $listed = $read['listed'];
@@ -317,18 +284,11 @@ class Occurrences extends Tool
             'count' => $count,
             'order' => $order->value,
         ]);
-        $truncated = $this->truncated($request, $rows, $listed['keys'], $epoch, $window, $createdAt);
+        $truncated = $this->truncated($request, $rows, $listed['keys'], $frame->now, $window, $frame->facts()->meta->createdAt);
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $summary,
-            empty: null,
             result: $result,
-            coverage: $coverage,
-            blindSpots: $blindSpots,
             notes: $this->notes($read['baseline'], $userId),
             truncated: $truncated,
             next: $this->next($window, $group, $listed['rows'][0]['group']),

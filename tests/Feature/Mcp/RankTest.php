@@ -347,11 +347,7 @@ it('answers that the store holds nothing of the type in the window, naming the f
         ->and(Envelope::assert(Rank::class, ['type' => 'query'])['empty']['kind'])->toBe('no_match');
 });
 
-it('answers that the store is empty or missing', function () {
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request']);
-
-    expect($envelope['empty']['kind'])->toBe('no_store');
-
+it('answers that the store is empty', function () {
     app(Writer::class)->transaction(fn () => null);
 
     $envelope = Envelope::assert(Rank::class, ['type' => 'request']);

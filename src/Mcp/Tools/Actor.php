@@ -6,24 +6,16 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Attribution;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Identification;
 use ClaudioDekker\Firewatch\Mcp\MatchedBy;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
-use ClaudioDekker\Firewatch\Mcp\Stored;
-use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -134,71 +126,45 @@ class Actor extends Tool
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
         $who = $this->who($request);
-        $timezone = config()->string('app.timezone');
-        $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
+        $frame = $this->frame($now);
+        $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
         $limit = $this->limit($request);
 
-        $epoch = Instant::of($now);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
-        $types = RecordType::events();
+        $frame->about(RecordType::events(), $window, actor: true);
 
-        try {
-            [$total, $oldest, $newest, $facts, $identification, $attribution] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $who, $window, $limit));
-        } catch (StoreUnusable $unusable) {
-            $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for(null, $types, $window)];
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
+        $read = $frame->read(fn (SQLite3 $connection) => $this->load($connection, $who, $window, $limit));
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($read === null) {
+            return $frame->empty();
         }
 
-        $blindSpots = [...BlindSpots::for($types, actor: true), ...$this->conditions->for($facts, $types, $window)];
-        $history = History::of($facts->meta, $types, ...$retention);
+        [$identification, $attribution] = $read;
 
-        $coverage = $total === 0
-            ? new Coverage(CoverageState::EMPTY, $types, $history, records: 0)
-            : new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
-
-        if ($total === 0 && $identification->knowsNoOne()) {
-            $empty = Emptiness::storeEmpty($this->configuration->database);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($frame->isEmpty() && $identification->knowsNoOne()) {
+            return $frame->empty();
         }
 
         if ($attribution?->total() === 0) {
-            $empty = Emptiness::noExecutions($total);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $frame->empty(Emptiness::noExecutions($frame->facts()->records));
         }
 
-        return new Answer(
-            ...$this->stated($who, $identification, $attribution, $window),
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
-            coverage: $coverage,
-            blindSpots: $blindSpots,
-        );
+        return $frame->answer(...$this->stated($who, $identification, $attribution, $window));
     }
 
     /**
-     * Read the store's span and facts, resolve who is meant and, for one person, attribute the window's work to them, in one snapshot.
+     * Resolve who is meant and, for one person, attribute the window's work to them.
      *
-     * @return array{int, float|null, float|null, StoreFacts, Identification, Attribution|null}
+     * @return array{Identification, Attribution|null}
      */
     protected function load(SQLite3 $connection, string $who, Window $window, int $limit): array
     {
-        $span = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
-        $total = is_int($span['total']) ? $span['total'] : 0;
-        $facts = StoreFacts::read($connection);
         $identification = Identification::of($connection, $who);
 
         $attribution = $identification->matchedBy === null || $identification->isAmbiguous()
             ? null
             : Attribution::of($connection, $window, $identification->found->rows[0]['id'], $limit);
 
-        return [$total, $span['oldest'], $span['newest'], $facts, $identification, $attribution];
+        return [$identification, $attribution];
     }
 
     /**

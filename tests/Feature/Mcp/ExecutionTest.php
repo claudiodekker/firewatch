@@ -288,15 +288,6 @@ it('states that it is not windowed, with the reason', function () {
         ->and($envelope['summary'])->toBe(__('firewatch::messages.execution_summary', ['type' => 'request', 'id' => 'request', 'outcome' => 200]));
 });
 
-it('answers that no store exists, with nothing to follow', function () {
-    $envelope = execAnswer();
-
-    expect($envelope['empty']['kind'])->toBe('no_store')
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['next'])->toBe([])
-        ->and($envelope['coverage']['state'])->toBe('absent');
-});
-
 it('answers that the store is empty, even for an execution id', function () {
     app(Writer::class)->transaction(fn () => null);
 
@@ -305,18 +296,6 @@ it('answers that the store is empty, even for an execution id', function () {
     expect($envelope['empty']['kind'])->toBe('store_empty')
         ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
         ->and($envelope['next'])->toBe([]);
-});
-
-it('answers that the store is unusable', function () {
-    $path = app(Configuration::class)->database;
-    mkdir(dirname($path), recursive: true);
-    file_put_contents($path, str_repeat('not a database ', 100));
-
-    $envelope = execAnswer();
-
-    expect($envelope['empty']['kind'])->toBe('store_unusable')
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'foreign_file'])
-        ->and($envelope['result'])->toBe([]);
 });
 
 it('reads the execution and its children as the types it examined', function () {

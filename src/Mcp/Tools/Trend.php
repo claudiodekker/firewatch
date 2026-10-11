@@ -5,15 +5,11 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Buckets;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
@@ -21,9 +17,7 @@ use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -135,70 +129,46 @@ class Trend extends Tool
             $this->measure($request, $explicit);
         }
 
-        $timezone = config()->string('app.timezone');
-        $given = Window::read($request, $now, timezone: $timezone, tool: $this->name());
+        $frame = $this->frame($now);
+        $given = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
 
-        $epoch = Instant::of($now);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
+        $frame->about($explicit === null ? [] : [$explicit], $given->derive(null, null), anchored: true);
 
-        try {
-            [$total, $inWindow, $oldest, $newest, $facts, $type, $held, $window, $buckets] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $request, $given, $explicit, $group, $deploy, $count));
-        } catch (StoreUnusable $unusable) {
-            $types = $explicit === null ? [] : [$explicit];
-            $window = $given->derive(null, null);
-            $blindSpots = [...BlindSpots::for($types, anchored: true), ...$this->conditions->for(null, $types, $window)];
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
+        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $request, $given, $explicit, $group, $deploy, $count));
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($read === null) {
+            return $frame->empty();
         }
 
-        $types = $type === null ? [] : [$type];
-        $blindSpots = [...BlindSpots::for($types, anchored: true), ...$this->conditions->for($facts, $types, $window)];
-        $history = History::of($facts->meta, $types, ...$retention);
+        [$type, $held, $window, $inWindow, $buckets] = $read;
 
-        if ($total === 0) {
-            $empty = Emptiness::storeEmpty($this->configuration->database);
-            $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
+        $frame->about($type === null ? [] : [$type], $window, anchored: true);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($frame->isEmpty()) {
+            return $frame->empty();
         }
 
-        $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
         $filters = $this->filters($group, $explicit, $deploy);
 
         if ($group !== null && $held === []) {
-            $empty = Emptiness::noMatch($inWindow, $filters);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $frame->empty(Emptiness::noMatch($inWindow, $filters));
         }
 
         if ($inWindow === 0) {
-            $empty = Emptiness::windowEmpty($total);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records));
         }
 
         if ($buckets === null) {
-            $empty = Emptiness::noMatch($inWindow, $filters);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $frame->empty(Emptiness::noMatch($inWindow, $filters));
         }
 
         $shared = $explicit === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $this->summary($buckets),
-            empty: null,
             result: $buckets->result(),
-            coverage: $coverage,
-            blindSpots: $blindSpots,
-            notes: $this->notes($buckets, $epoch, $shared ? $group : null),
-            next: $this->next($buckets, $group, $deploy, $epoch),
+            notes: $this->notes($buckets, $frame->now, $shared ? $group : null),
+            next: $this->next($buckets, $group, $deploy, $frame->now),
             cuttable: [],
         );
     }
@@ -230,11 +200,10 @@ class Trend extends Tool
     /**
      * Resolve the type, the measure and the coverage start, and read the buckets, in one snapshot.
      *
-     * @return array{int, int, float|null, float|null, StoreFacts, RecordType|null, list<RecordType>, Window, Buckets|null}
+     * @return array{RecordType|null, list<RecordType>, Window, int, Buckets|null}
      */
-    protected function load(SQLite3 $connection, Request $request, Window $given, ?RecordType $explicit, ?string $group, ?string $deploy, int $count): array
+    protected function load(SQLite3 $connection, StoreFacts $facts, Request $request, Window $given, ?RecordType $explicit, ?string $group, ?string $deploy, int $count): array
     {
-        $facts = StoreFacts::read($connection);
         $held = $group === null ? [] : Ranking::holders($connection, $group);
 
         if ($group !== null && $explicit !== null && $held !== [] && ! in_array($explicit, $held, true)) {
@@ -248,15 +217,13 @@ class Trend extends Tool
 
         if ($type !== null) {
             $by = $this->measure($request, $type);
-            $coverageStart = History::of($facts->meta, [$type])->from;
+            $coverageStart = $facts->historyFrom([$type]);
             $buckets = Buckets::read($connection, $type, $by, $given, $coverageStart, $group, $deploy, $count);
         }
 
         $window = $buckets === null ? $given->derive(null, null) : $buckets->window;
 
-        [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
-
-        return [$total, $inWindow, $oldest, $newest, $facts, $type, $held, $window, $buckets];
+        return [$type, $held, $window, $this->inWindow($connection, $window), $buckets];
     }
 
     /**

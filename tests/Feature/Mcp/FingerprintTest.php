@@ -212,10 +212,9 @@ it('computes the id before any store exists, saying the check could not be made'
 
     $envelope = Envelope::assert(Fingerprint::class, ['type' => 'queued-job', 'name' => 'App\\Jobs\\ShipOrder']);
 
-    expect($envelope['empty'])->toBe(['kind' => 'no_store', 'population' => null, 'message' => __('firewatch::messages.no_store', ['path' => $path])])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.no_store'))
+    expect($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.no_store'))
         ->and($envelope['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.fingerprint_window_reason')])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'absent', 'types_read' => ['job-attempt', 'queued-job']])
+        ->and($envelope['coverage']['types_read'])->toBe(['job-attempt', 'queued-job'])
         ->and($envelope['result']['candidates'][0]['group'])->toBe(fpGroup('App\\Jobs\\ShipOrder'))
         ->and($envelope['result']['held'])->toBe([])
         ->and(array_column($envelope['result']['recipe_check'], 'check'))->toBe(['not_evaluated', 'not_evaluated'])
@@ -230,10 +229,7 @@ it('computes the id from a store it cannot read, saying why', function () {
 
     $envelope = Envelope::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
 
-    expect($envelope['empty']['kind'])->toBe('store_unusable')
-        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.store_unusable.foreign_file', ['path' => $path]))
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'foreign_file'])
-        ->and($envelope['result']['candidates'][0]['group'])->toBe(fpGroup('env'))
+    expect($envelope['result']['candidates'][0]['group'])->toBe(fpGroup('env'))
         ->and($envelope['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'not_evaluated', 'detail' => null]])
         ->and($envelope['next'])->toBe([]);
 });

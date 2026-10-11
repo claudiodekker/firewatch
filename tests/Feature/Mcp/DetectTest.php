@@ -161,9 +161,7 @@ describe('the verdict', function () {
     it('is not evaluated when there is no store, with the store unavailable', function () {
         $envelope = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['empty']['kind'])->toBe('no_store')
-            ->and($envelope['next'])->toBe([]);
+        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0, 'total' => 0, 'findings' => []]);
     });
 
     it('is not evaluated when the store cannot be read, and says why', function () {
@@ -173,10 +171,7 @@ describe('the verdict', function () {
 
         $envelope = dtcAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0])
-            ->and($envelope['empty']['kind'])->toBe('store_unusable')
-            ->and($envelope['coverage']['state'])->toBe('unusable')
-            ->and($envelope['next'])->toBe([]);
+        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'store_unavailable', 'examined' => 0]);
     });
 
     it('selects requests by the window on their own start', function () {

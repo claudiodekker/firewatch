@@ -5,25 +5,18 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Holdings;
 use ClaudioDekker\Firewatch\Mcp\Recipe;
 use ClaudioDekker\Firewatch\Mcp\RecipeCheck;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
-use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -163,60 +156,44 @@ class Fingerprint extends Tool
         $candidates = Recipe::candidates($type, $fields, $driver);
         $types = $this->types($type);
 
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::none(reason: __('firewatch::messages.fingerprint_window_reason'), timezone: $timezone);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
-        $structural = BlindSpots::for($types);
+        $frame = $this->frame($now);
 
-        try {
-            [$holdings, $facts, $held, $checks, $ruledOut] = $this->reader->snapshot(fn (SQLite3 $connection) => [
-                Holdings::read($connection),
-                StoreFacts::read($connection),
-                $this->held($connection, $candidates, $types),
-                array_map(fn (RecordType $checked) => $this->check($connection, $checked), $types),
-                $this->ruledOut($connection, $type, $fields, $driver, $types),
-            ]);
-        } catch (StoreUnusable $unusable) {
-            $empty = Emptiness::of($unusable, $this->configuration->database);
+        $frame->about($types, Window::none(reason: __('firewatch::messages.fingerprint_window_reason'), timezone: $frame->timezone));
 
-            return new Answer(
-                tool: $this->name(),
-                now: $epoch,
-                timezone: $timezone,
-                window: $window,
+        $read = $frame->read(fn (SQLite3 $connection) => [
+            Holdings::read($connection),
+            $this->held($connection, $candidates, $types),
+            array_map(fn (RecordType $checked) => $this->check($connection, $checked), $types),
+            $this->ruledOut($connection, $type, $fields, $driver, $types),
+        ]);
+
+        if ($read === null) {
+            $empty = $frame->unusable();
+
+            return $frame->answer(
                 summary: $empty->summary(),
                 empty: $empty,
                 result: $this->result($type, $candidates, [], $this->unchecked($types)),
-                coverage: Coverage::of($unusable, $types, History::unknown(...$retention)),
-                blindSpots: [...$structural, ...$this->conditions->for(null, $types, $window)],
                 notes: $this->notes($request, $type),
             );
         }
 
+        [$holdings, $held, $checks, $ruledOut] = $read;
+
         $population = array_sum(array_map($holdings->of(...), $types));
         $filter = 'group: '.implode(' or ', array_column($candidates, 'group'));
         $empty = match (true) {
-            $holdings->records === 0 => Emptiness::storeEmpty($this->configuration->database),
+            $frame->isEmpty() => $frame->storeEmpty(),
             $held === [] => Emptiness::noMatch($population, [$filter]),
             default => null,
         };
-        $history = History::of($facts->meta, $types, ...$retention);
-        $check = RecipeCheck::together(array_map(fn (array $check) => RecipeCheck::from($check['check']), $checks));
-        $coverage = $holdings->records === 0
-            ? new Coverage(CoverageState::EMPTY, $types, $history, records: 0)
-            : new Coverage(CoverageState::OK, $types, $history, oldest: $holdings->oldest, newest: $holdings->newest, records: $holdings->records);
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        $check = RecipeCheck::together(array_map(fn (array $check) => RecipeCheck::from($check['check']), $checks));
+
+        return $frame->answer(
             summary: $this->summary($types, $candidates, $held, $check),
             empty: $empty,
             result: $this->result($type, $candidates, $held, $checks),
-            coverage: $coverage,
-            blindSpots: [...$structural, ...$this->conditions->for($facts, $types, $window)],
             notes: [...$this->notes($request, $type), ...$this->driverNotes($held, $ruledOut)],
             next: $this->next($held),
         );

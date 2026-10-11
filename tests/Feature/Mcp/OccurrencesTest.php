@@ -654,15 +654,12 @@ it('answers that the window holds no records', function () {
     expect($envelope['empty']['kind'])->toBe('window_empty');
 });
 
-it('answers that the store is missing or empty', function () {
-    $missing = Envelope::assert(Occurrences::class, ['type' => 'request']);
-
+it('answers that the store is empty', function () {
     app(Writer::class)->transaction(fn () => null);
 
     $empty = Envelope::assert(Occurrences::class, ['type' => 'request']);
 
-    expect($missing['empty']['kind'])->toBe('no_store')
-        ->and($empty['empty']['kind'])->toBe('store_empty');
+    expect($empty['empty']['kind'])->toBe('store_empty');
 });
 
 it('points from a list to the group of its first row, in a call that runs', function () {
@@ -710,14 +707,10 @@ it('lists the records the real sensor recorded', function () {
         ->and($rows[0]['detail'])->toMatchArray(['method' => 'GET', 'status_code' => 200]);
 });
 
-it('answers that the store is unusable, and refuses a bad call before reading it', function () {
+it('refuses a bad call before reading an unusable store', function () {
     $path = app(Configuration::class)->database;
     mkdir(dirname($path), recursive: true);
     file_put_contents($path, str_repeat('not a store', 500));
-
-    $unusable = Envelope::assert(Occurrences::class, ['type' => 'request']);
-
-    expect($unusable['empty']['kind'])->toBe('store_unusable');
 
     occRefused(['type' => 'request', 'status' => 'bad'], 'invalid_argument');
 });

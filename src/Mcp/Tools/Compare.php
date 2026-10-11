@@ -5,17 +5,13 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Boundary;
 use ClaudioDekker\Firewatch\Mcp\Comparison;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\DeployPair;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
@@ -24,9 +20,7 @@ use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TimeGrammar;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -134,70 +128,47 @@ class Compare extends Tool
             $this->measure($request, $explicit);
         }
 
-        $timezone = config()->string('app.timezone');
-        $given = Window::read($request, $now, timezone: $timezone, tool: $this->name());
-        $boundary = $this->boundary($request, $now, $timezone);
+        $frame = $this->frame($now);
+        $given = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
+        $boundary = $this->boundary($request, $now, $frame->timezone);
+        $notes = $boundary->fixedNotes();
 
-        $epoch = Instant::of($now);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
+        $frame->about($explicit === null ? [] : [$explicit], Window::between($given->since(), $given->until() ?? $frame->now, $frame->timezone), anchored: $boundary->isInstant());
 
-        try {
-            [$total, $inWindow, $oldest, $newest, $facts, $type, $held, $window, $comparison] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $request, $given, $epoch, $boundary, $explicit, $group, $limit));
-        } catch (StoreUnusable $unusable) {
-            $types = $explicit === null ? [] : [$explicit];
-            $window = Window::between($given->since(), $given->until() ?? $epoch, $timezone);
-            $blindSpots = [...BlindSpots::for($types, anchored: $boundary->isInstant()), ...$this->conditions->for(null, $types, $window)];
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
+        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $request, $given, $frame->now, $boundary, $explicit, $group, $limit));
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
+        if ($read === null) {
+            return $frame->empty(notes: $notes);
         }
 
-        $types = $type === null ? [] : [$type];
-        $blindSpots = [...BlindSpots::for($types, anchored: $boundary->isInstant()), ...$this->conditions->for($facts, $types, $window)];
-        $history = History::of($facts->meta, $types, ...$retention);
+        [$type, $held, $window, $inWindow, $comparison] = $read;
 
-        if ($total === 0) {
-            $empty = Emptiness::storeEmpty($this->configuration->database);
-            $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
+        $frame->about($type === null ? [] : [$type], $window, anchored: $boundary->isInstant(), straddling: $comparison?->straddling);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
+        if ($frame->isEmpty()) {
+            return $frame->empty(notes: $notes);
         }
 
-        $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total, straddling: $comparison?->straddling);
         $filters = [...$this->filters($group, $explicit), ...$boundary->filters()];
 
         if ($group !== null && $held === []) {
-            $empty = Emptiness::noMatch($inWindow, $filters);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
+            return $frame->empty(Emptiness::noMatch($inWindow, $filters), $notes);
         }
 
         if ($inWindow === 0) {
-            $empty = Emptiness::windowEmpty($total);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
+            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records), $notes);
         }
 
         if ($comparison === null || $comparison->isEmpty()) {
-            $empty = Emptiness::noMatch($inWindow, $filters);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots, notes: $boundary->fixedNotes());
+            return $frame->empty(Emptiness::noMatch($inWindow, $filters), $notes);
         }
 
         $shared = $explicit === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $this->summary($comparison),
-            empty: null,
             result: $comparison->result(),
-            coverage: $coverage,
-            blindSpots: $blindSpots,
-            notes: $this->notes($request, $comparison, $oldest, $shared ? $group : null),
+            notes: $this->notes($request, $comparison, $frame->facts()->oldest, $shared ? $group : null),
             truncated: $this->truncated($comparison),
             next: $this->next($comparison, $window),
             cuttable: ['groups'],
@@ -228,11 +199,10 @@ class Compare extends Tool
     /**
      * Resolve the type and the window against the store, refuse a split outside the window, and compare, in one snapshot.
      *
-     * @return array{int, int, float|null, float|null, StoreFacts, RecordType|null, list<RecordType>, Window, Comparison|null}
+     * @return array{RecordType|null, list<RecordType>, Window, int, Comparison|null}
      */
-    protected function load(SQLite3 $connection, Request $request, Window $given, float $epoch, Boundary $boundary, ?RecordType $explicit, ?string $group, int $limit): array
+    protected function load(SQLite3 $connection, StoreFacts $facts, Request $request, Window $given, float $epoch, Boundary $boundary, ?RecordType $explicit, ?string $group, int $limit): array
     {
-        $facts = StoreFacts::read($connection);
         $held = $group === null ? [] : Ranking::holders($connection, $group);
 
         if ($group !== null && $explicit !== null && $held !== [] && ! in_array($explicit, $held, true)) {
@@ -243,19 +213,19 @@ class Compare extends Tool
 
         $type = $explicit ?? Ranking::preferred($held);
         $by = $type === null ? null : $this->measure($request, $type);
-        $coverageStart = $type === null ? null : History::of($facts->meta, [$type])->from;
+        $coverageStart = $type === null ? null : $facts->historyFrom([$type]);
 
         $window = $this->window($given, $epoch, $coverageStart);
 
         $boundary->refuseOutside($window);
 
-        [$total, $inWindow, $oldest, $newest] = $this->count($connection, $window);
+        $inWindow = $this->inWindow($connection, $window);
 
         $comparison = $type === null || $by === null || $inWindow === 0
             ? null
             : Comparison::of($connection, $type, $by, $window, $boundary, $coverageStart, $group, $limit);
 
-        return [$total, $inWindow, $oldest, $newest, $facts, $type, $held, $window, $comparison];
+        return [$type, $held, $window, $inWindow, $comparison];
     }
 
     /**

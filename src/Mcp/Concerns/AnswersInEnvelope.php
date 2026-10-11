@@ -2,10 +2,12 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Concerns;
 
+use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
 use ClaudioDekker\Firewatch\Mcp\Call;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
+use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -118,23 +120,31 @@ trait AnswersInEnvelope
     }
 
     /**
-     * Count all records and those of the window, and find the span the records cover.
-     *
-     * @return array{int, int, float|null, float|null}
+     * Get the frame an answer of the call is stated in.
      */
-    protected function count(SQLite3 $connection, Window $window): array
+    protected function frame(CarbonImmutable $now): Frame
+    {
+        return new Frame($this->name(), $now, config()->string('app.timezone'), $this->configuration, $this->reader, $this->conditions);
+    }
+
+    /**
+     * Count the records of the window.
+     */
+    protected function inWindow(SQLite3 $connection, Window $window): int
     {
         $condition = $window->condition();
 
         /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*), count(*) FILTER (WHERE {$condition}), min(started_at), max(started_at) FROM records");
+        $statement = $connection->prepare("SELECT count(*) FROM records WHERE {$condition}");
 
         $window->bind($statement);
 
         /** @var SQLite3Result $result */
         $result = $statement->execute();
 
-        /** @var array{int, int, float|null, float|null} */
-        return $result->fetchArray(SQLITE3_NUM);
+        /** @var array{int} $row */
+        $row = $result->fetchArray(SQLITE3_NUM);
+
+        return $row[0];
     }
 }
