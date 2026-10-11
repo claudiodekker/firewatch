@@ -18,11 +18,6 @@ use SQLite3;
 class NPlusOne implements Thresholded
 {
     /**
-     * The decimals of a share in an answer.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * The most call sites a finding lists.
      */
     protected const CALL_SITES = 3;
@@ -76,9 +71,10 @@ class NPlusOne implements Thresholded
         }
 
         $ranked = $this->ranked($executions, $threshold, $from);
+        $reach = Fragment::reach();
+
         $groups = Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, max(runs) AS worst_runs, count(*) AS affected, sum(runs) AS total_runs, total(micros) AS total_micros,
-            min(started_at) AS first_seen, max(started_at) AS last_seen,
-            count(DISTINCT NULLIF(user_id, '')) AS actors, count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS anonymous
+            {$reach}
             FROM ranked GROUP BY eg, qg", $ranked->bindings, $window);
 
         if ($groups === []) {
@@ -208,30 +204,27 @@ class NPlusOne implements Thresholded
      *
      * @param  array<string, mixed>  $row
      * @param  array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>}  $details
-     * @return array<string, mixed>
      */
-    protected function finding(array $row, array $details): array
+    protected function finding(array $row, array $details): Finding
     {
         $key = $this->key($row);
         $worst = $details['executions'][$key]['worst'];
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
         $label = RecordType::from($worst['type'])->groupLabel($worst['label']);
-        $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(Percentile::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
+        $share = is_numeric($worst['duration']) ? Percentile::percent($worst['micros'], $worst['duration']) : null;
 
-        return [
-            'group' => $row['eg'],
-            'name' => "{$label}: {$query['sql']}",
-            'count' => $row['worst_runs'],
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
+        $reached = [
+            ...$row,
+            'group_hash' => $row['eg'],
             'latest_execution_id' => $latest['execution_id'],
-            'worst_execution_id' => $worst['execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
+        ];
+
+        return Finding::from(
+            $reached,
+            name: "{$label}: {$query['sql']}",
+            count: $row['worst_runs'],
+            evidence: [
                 'worst_runs' => $row['worst_runs'],
                 'executions_affected' => $row['affected'],
                 'total_runs' => $row['total_runs'],
@@ -244,7 +237,8 @@ class NPlusOne implements Thresholded
                 ],
                 'call_sites' => $details['sites'][$key],
             ],
-        ];
+            worstExecutionId: $worst['execution_id'],
+        );
     }
 
     /**

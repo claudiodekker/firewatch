@@ -38,11 +38,6 @@ class Comparison
     protected const SPAN_RATIO = 2;
 
     /**
-     * The decimals a change percentage is rounded to.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * The fewest records a side needs for a measure that is no percentile.
      */
     protected const ONE_RECORD = 1;
@@ -280,7 +275,7 @@ class Comparison
             "before{$unit}" => $this->by->shown($row['before']),
             "after{$unit}" => $this->by->shown($row['after']),
             "difference{$unit}" => $this->by->shown($difference),
-            'change_pct' => $percent === null ? null : round($percent, self::PERCENT_DECIMALS),
+            'change_pct' => $percent === null ? null : round($percent, Percentile::DECIMALS),
             'change' => $row['change']->value,
             'measured_on' => $row['steppedDown'] ? self::MEASURED_ON_MEDIAN : null,
             'reason' => $row['reason']?->value,

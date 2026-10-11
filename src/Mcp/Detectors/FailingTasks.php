@@ -63,6 +63,8 @@ class FailingTasks implements Thresholdless
     {
         $selected = Fragment::selecting($window, $group);
 
+        $reach = Fragment::reach('failing');
+
         return Stored::rows($connection, "WITH tasks AS (
             SELECT id, execution_id, started_at, group_hash, user_id, name,
                 status = :failed AS failed, status = :skipped AS skipped, status IN (:failed, :skipped) AS failing
@@ -73,9 +75,7 @@ class FailingTasks implements Thresholdless
         SELECT group_hash, count(*) AS runs, count(*) FILTER (WHERE failed) AS failed, count(*) FILTER (WHERE skipped) AS skipped,
             max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
             max(CASE WHEN by_latest = 1 THEN name END) AS name,
-            min(started_at) FILTER (WHERE failing) AS first_seen, max(started_at) FILTER (WHERE failing) AS last_seen,
-            count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE failing) AS actors,
-            count(*) FILTER (WHERE failing AND NULLIF(user_id, '') IS NULL) AS anonymous
+            {$reach}
         FROM placed GROUP BY group_hash", [
             ...$selected->bindings,
             'failed' => Outcome::FAILED->value,
@@ -87,27 +87,14 @@ class FailingTasks implements Thresholdless
      * Get the finding of a group with a scheduled task that failed or was skipped.
      *
      * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
      */
-    protected function finding(array $row): array
+    protected function finding(array $row): Finding
     {
-        return [
-            'group' => $row['group_hash'],
-            'name' => RecordType::SCHEDULED_TASK->groupLabel($row['name']),
-            'count' => $row['failed'] + $row['skipped'],
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
-                'kind' => TaskKind::of($row['failed'])->value,
-                'failed' => $row['failed'],
-                'skipped' => $row['skipped'],
-                'runs' => $row['runs'],
-            ],
-        ];
+        return Finding::from($row, name: RecordType::SCHEDULED_TASK->groupLabel($row['name']), count: $row['failed'] + $row['skipped'], evidence: [
+            'kind' => TaskKind::of($row['failed'])->value,
+            'failed' => $row['failed'],
+            'skipped' => $row['skipped'],
+            'runs' => $row['runs'],
+        ]);
     }
 }

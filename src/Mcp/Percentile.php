@@ -16,6 +16,11 @@ enum Percentile: string
     public const PERCENT = 100;
 
     /**
+     * The decimals a share is rounded to in an answer.
+     */
+    public const DECIMALS = 1;
+
+    /**
      * The records a group needs before its median is shown.
      */
     protected const MEDIAN_FLOOR = 3;
@@ -24,6 +29,17 @@ enum Percentile: string
      * The records a group needs before its 95th percentile is shown.
      */
     protected const P95_FLOOR = 20;
+
+    /**
+     * Get a part as a percentage of a whole, rounded to the decimals of an answer, or null for a whole of nothing.
+     *
+     * @param  int|float|numeric-string  $part
+     * @param  int|float|numeric-string  $whole
+     */
+    public static function percent(int|float|string $part, int|float|string $whole): ?float
+    {
+        return $whole <= 0 ? null : round(self::PERCENT * $part / $whole, self::DECIMALS);
+    }
 
     /**
      * Get the share of the records, in percent, that lie at or below the percentile.

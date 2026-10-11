@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Tests\Support;
 
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Finding;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Thresholdless;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -64,11 +65,17 @@ class FakeDetector implements Thresholdless
             ($this->during)();
         }
 
-        $findings = $this->total === 0 ? [] : [[
-            'group' => str_repeat('a', 32),
-            'name' => $this->name->value.' finding',
-            'count' => $this->total,
-        ]];
+        $findings = $this->total === 0 ? [] : [new Finding(
+            group: str_repeat('a', 32),
+            name: $this->name->value.' finding',
+            count: $this->total,
+            firstSeenAt: null,
+            lastSeenAt: null,
+            latestExecutionId: null,
+            signedInActors: 0,
+            withoutActor: 0,
+            evidence: [],
+        )];
 
         return Judgement::of($this->name, null, examined: $this->examined, total: $this->total, findings: $findings, saw: $this->saw);
     }

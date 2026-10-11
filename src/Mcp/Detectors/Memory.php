@@ -69,6 +69,8 @@ class Memory implements Thresholded
     {
         $rank = Percentile::MEDIAN->nearestRank();
 
+        $reach = Fragment::reach('reached');
+
         return Stored::rows($connection, "{$executions->sql}, measured AS (
             SELECT *, peak >= :bytes AS reached FROM executions WHERE peak IS NOT NULL
         ), ranked AS (
@@ -84,9 +86,7 @@ class Memory implements Thresholded
             max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
             max(CASE WHEN by_latest = 1 THEN type END) AS type,
             max(CASE WHEN by_latest = 1 THEN label END) AS label,
-            min(started_at) FILTER (WHERE reached) AS first_seen, max(started_at) FILTER (WHERE reached) AS last_seen,
-            count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE reached) AS actors,
-            count(*) FILTER (WHERE reached AND NULLIF(user_id, '') IS NULL) AS anonymous
+            {$reach}
         FROM ranked GROUP BY group_hash", [
             ...$executions->bindings,
             'bytes' => Stored::bytes($megabytes),
@@ -97,31 +97,17 @@ class Memory implements Thresholded
      * Get the finding of a group.
      *
      * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
      */
-    protected function finding(array $row): array
+    protected function finding(array $row): Finding
     {
         $peak = Stored::megabytes($row['peak']);
         $median = $row['executions'] >= Percentile::MEDIAN->floor() ? Stored::megabytes($row['median']) : null;
 
-        return [
-            'group' => $row['group_hash'],
-            'name' => RecordType::from($row['type'])->groupLabel($row['label']),
-            'count' => $peak,
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'worst_execution_id' => $row['worst_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
-                'peak_mb' => $peak,
-                'executions_over' => $row['executions_over'],
-                'executions' => $row['executions'],
-                'p50_mb' => $median,
-            ],
-        ];
+        return Finding::from($row, name: RecordType::from($row['type'])->groupLabel($row['label']), count: $peak, evidence: [
+            'peak_mb' => $peak,
+            'executions_over' => $row['executions_over'],
+            'executions' => $row['executions'],
+            'p50_mb' => $median,
+        ], worstExecutionId: $row['worst_execution_id']);
     }
 }

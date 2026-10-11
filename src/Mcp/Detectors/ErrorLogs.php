@@ -63,17 +63,16 @@ class ErrorLogs implements Thresholded, Ungrouped
     /**
      * Get the call that lists the lines at the level of a finding and worse, those that hold its fragment when it has one.
      *
-     * @param  array<string, mixed>  $finding
      * @return array{tool: string, arguments: array<string, mixed>, why: string}
      */
-    public function occurrencesOf(array $finding): array
+    public function occurrencesOf(Finding $finding): array
     {
         $arguments = [
             'type' => RecordType::LOG->value,
-            'level' => $finding['evidence']['level'],
+            'level' => $finding->evidence['level'],
         ];
 
-        $fragment = $finding['evidence']['fragment'];
+        $fragment = $finding->evidence['fragment'];
 
         if ($fragment === null) {
             return [
@@ -112,6 +111,8 @@ class ErrorLogs implements Thresholded, Ungrouped
     {
         $connection->createFunction('message_shape', fn (mixed $message) => $this->shape($message)->text, 1, SQLITE3_DETERMINISTIC);
 
+        $reach = Fragment::reach();
+
         return Stored::rows($connection, "WITH errors AS MATERIALIZED (
             SELECT id, started_at, lower(level) AS level, message_shape(message) AS shape,
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id
@@ -122,9 +123,7 @@ class ErrorLogs implements Thresholded, Ungrouped
             SELECT level, shape, count(*) AS occurrences,
                 max(CASE WHEN by_latest = 1 THEN id END) AS latest_id,
                 max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
-                min(started_at) AS first_seen, max(started_at) AS last_seen,
-                count(DISTINCT user_id) AS actors,
-                count(*) FILTER (WHERE user_id IS NULL) AS anonymous,
+                {$reach},
                 count(*) FILTER (WHERE execution_id IN (SELECT execution_id FROM exceptions WHERE execution_id IS NOT NULL)) AS with_exception
             FROM placed GROUP BY level, shape HAVING count(*) >= :occurrences
         ), ranked AS (
@@ -152,31 +151,18 @@ class ErrorLogs implements Thresholded, Ungrouped
      * Get the finding of a level and shape.
      *
      * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
      */
-    protected function finding(array $row): array
+    protected function finding(array $row): Finding
     {
         $shape = $this->shape($row['message']);
 
-        return [
-            'group' => null,
-            'name' => $shape->text,
-            'count' => $row['occurrences'],
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
-                'level' => $row['level'],
-                'message' => $row['message'],
-                'shape' => $shape->text,
-                'fragment' => $shape->fragment(),
-                'occurrences' => $row['occurrences'],
-                'in_executions_with_exception' => $row['with_exception'],
-            ],
-        ];
+        return Finding::from($row, $shape->text, $row['occurrences'], [
+            'level' => $row['level'],
+            'message' => $row['message'],
+            'shape' => $shape->text,
+            'fragment' => $shape->fragment(),
+            'occurrences' => $row['occurrences'],
+            'in_executions_with_exception' => $row['with_exception'],
+        ]);
     }
 }

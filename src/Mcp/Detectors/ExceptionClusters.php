@@ -95,6 +95,8 @@ class ExceptionClusters implements Thresholded
     {
         $selected = Fragment::selecting($window, $group);
 
+        $reach = Fragment::reach();
+
         return Stored::rows($connection, "WITH occurrences AS (
             SELECT id, execution_id, started_at, group_hash, user_id, class, message, file, line, handled, trace IS NULL AS fatal
             FROM exceptions WHERE {$selected->sql}
@@ -108,9 +110,7 @@ class ExceptionClusters implements Thresholded
             max(CASE WHEN by_latest = 1 THEN message END) AS message,
             max(CASE WHEN by_latest = 1 THEN file END) AS file,
             max(CASE WHEN by_latest = 1 THEN line END) AS line,
-            min(started_at) AS first_seen, max(started_at) AS last_seen,
-            count(DISTINCT NULLIF(user_id, '')) AS actors,
-            count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS anonymous
+            {$reach}
         FROM placed GROUP BY group_hash", $selected->bindings, $window);
     }
 
@@ -197,32 +197,19 @@ class ExceptionClusters implements Thresholded
      *
      * @param  array<string, mixed>  $row
      * @param  list<array{source: mixed, label: mixed, occurrences: int}>  $units
-     * @return array<string, mixed>
      */
-    protected function finding(array $row, mixed $trace, array $units): array
+    protected function finding(array $row, mixed $trace, array $units): Finding
     {
-        return [
-            'group' => $row['group_hash'],
-            'name' => is_string($row['class']) ? $row['class'] : '',
-            'count' => $row['occurrences'],
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
-                'class' => $row['class'],
-                'message' => $row['message'],
-                'file' => $row['file'],
-                'line' => $row['line'],
-                'app_frame' => ExceptionSection::applicationFrame($trace),
-                'escaped' => $row['escaped'],
-                'reported' => $row['reported'],
-                'fatal' => $row['fatal'] === 1,
-                'units' => $units,
-            ],
-        ];
+        return Finding::from($row, name: is_string($row['class']) ? $row['class'] : '', count: $row['occurrences'], evidence: [
+            'class' => $row['class'],
+            'message' => $row['message'],
+            'file' => $row['file'],
+            'line' => $row['line'],
+            'app_frame' => ExceptionSection::applicationFrame($trace),
+            'escaped' => $row['escaped'],
+            'reported' => $row['reported'],
+            'fatal' => $row['fatal'] === 1,
+            'units' => $units,
+        ]);
     }
 }

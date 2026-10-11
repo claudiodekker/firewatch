@@ -31,11 +31,6 @@ class DatabaseBound implements Thresholded
     protected const AGGREGATE = 'aggregate';
 
     /**
-     * The decimals of a share in an answer.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * Get the name of the shape the detector judges.
      */
     public function name(): DetectorName
@@ -131,6 +126,8 @@ class DatabaseBound implements Thresholded
         $rank = Percentile::MEDIAN->nearestRank();
         $durationMicros = Stored::number('duration');
 
+        $reach = Fragment::reach();
+
         return Stored::rows($connection, "WITH judged AS (
             SELECT group_hash, id, started_at, execution_id, route_path, NULLIF(user_id, '') AS user_id, duration_micros, query_micros FROM (
                 SELECT group_hash, id, started_at, execution_id, route_path, user_id, {$durationMicros} AS duration_micros,
@@ -149,8 +146,7 @@ class DatabaseBound implements Thresholded
             max(CASE WHEN by_duration = {$rank} THEN duration_micros END) AS median_duration_micros,
             max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
             max(CASE WHEN by_latest = 1 THEN route_path END) AS route_path,
-            min(started_at) AS first_seen, max(started_at) AS last_seen,
-            count(DISTINCT user_id) AS actors, count(*) FILTER (WHERE user_id IS NULL) AS anonymous
+            {$reach}
         FROM ranked GROUP BY group_hash", $selected->bindings, $window);
     }
 
@@ -229,7 +225,7 @@ class DatabaseBound implements Thresholded
      */
     protected function share(array $typical): float
     {
-        return round(Percentile::PERCENT * $typical['query_micros'] / $typical['duration_micros'], self::PERCENT_DECIMALS);
+        return Percentile::percent($typical['query_micros'], $typical['duration_micros']) ?? 0.0;
     }
 
     /**
@@ -238,33 +234,20 @@ class DatabaseBound implements Thresholded
      * @param  array<string, mixed>  $group
      * @param  array{basis: string, query_micros: int|float, duration_micros: int|float, microseconds: int|float}  $typical
      * @param  list<array<string, mixed>>  $queries
-     * @return array<string, mixed>
      */
-    protected function finding(array $group, array $typical, array $queries): array
+    protected function finding(array $group, array $typical, array $queries): Finding
     {
         $share = $this->share($typical);
-        $aggregate = round(Percentile::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
+        $aggregate = Percentile::percent($group['query_micros'], $group['duration_micros']);
 
-        return [
-            'group' => $group['group_hash'],
-            'name' => RecordType::REQUEST->groupLabel($group['route_path']),
-            'count' => $share,
-            'first_seen_at' => $group['first_seen'],
-            'last_seen_at' => $group['last_seen'],
-            'latest_execution_id' => $group['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $group['actors'],
-                'without_actor' => $group['anonymous'],
-            ],
-            'evidence' => [
-                'share_pct' => $share,
-                'basis' => $typical['basis'],
-                'aggregate_share_pct' => $aggregate,
-                'typical_ms' => Stored::milliseconds($typical['microseconds']),
-                'requests' => $group['requests'],
-                'top_queries' => $queries,
-            ],
-        ];
+        return Finding::from($group, name: RecordType::REQUEST->groupLabel($group['route_path']), count: $share, evidence: [
+            'share_pct' => $share,
+            'basis' => $typical['basis'],
+            'aggregate_share_pct' => $aggregate,
+            'typical_ms' => Stored::milliseconds($typical['microseconds']),
+            'requests' => $group['requests'],
+            'top_queries' => $queries,
+        ]);
     }
 
     /**

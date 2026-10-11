@@ -11,11 +11,6 @@ use ClaudioDekker\Firewatch\Stage;
 readonly class StageView
 {
     /**
-     * The decimals a share is rounded to.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * The stages of the type, in the order they run.
      *
      * @var list<Stage>
@@ -105,9 +100,7 @@ readonly class StageView
      */
     protected function share(Stage $stage): ?float
     {
-        $total = $this->total();
-
-        return $total <= 0 ? null : round(Percentile::PERCENT * $this->sums[$stage->value] / $total, self::PERCENT_DECIMALS);
+        return Percentile::percent($this->sums[$stage->value], $this->total());
     }
 
     /**
