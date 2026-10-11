@@ -97,7 +97,7 @@ class Overview extends Tool
     {
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
-        $byDeploy = $this->byDeploy(new Arguments($request, $this));
+        $byDeploy = (new Arguments($request, $this))->boolean('by_deploy', 'overview(by_deploy: true)');
 
         $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR, CallFact::STORE_LEVEL]);
 
@@ -129,20 +129,6 @@ class Overview extends Tool
             next: $this->next($window, $sections, $judgements),
             cuttable: ['slowest_by_total_time'],
         );
-    }
-
-    /**
-     * Read whether the slowest groups are broken down per deploy.
-     */
-    protected function byDeploy(Arguments $arguments): bool
-    {
-        $value = $arguments->get('by_deploy');
-
-        if ($value === null || is_bool($value)) {
-            return $value ?? false;
-        }
-
-        throw $arguments->invalid(argument: 'by_deploy', expected: 'true or false', accepted: 'true or false', example: 'overview(by_deploy: true)');
     }
 
     /**
