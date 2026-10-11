@@ -13,7 +13,6 @@ readonly class Configuration
      * @param  list<string>  $environments
      * @param  list<string>  $redactPayloadFields
      * @param  list<string>  $redactHeaders
-     * @param  list<BudgetEntry>  $budgets
      * @param  list<ConfigurationIssue>  $issues
      */
     public function __construct(
@@ -29,8 +28,7 @@ readonly class Configuration
         public bool $captureRequestPayload,
         public array $redactPayloadFields,
         public array $redactHeaders,
-        public array $budgets,
-        public int $ignoredBudgetEntries,
+        public Budgets $budgets,
         public array $issues,
     ) {
         //

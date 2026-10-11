@@ -44,9 +44,8 @@ it('resolves the package defaults when nothing is published or set', function ()
         'captureRequestPayload' => true,
         'redactPayloadFields' => [],
         'redactHeaders' => [],
-        'budgets' => [],
         'issues' => [],
-    ]);
+    ])->and($configuration->budgets->isEmpty())->toBeTrue();
 });
 
 it('fills the keys a partially published file leaves out', function () {

@@ -35,9 +35,9 @@ readonly class BudgetVerdict
      */
     public static function of(Configuration $configuration, ExecutionType $type, array $row): self
     {
-        $ignored = $configuration->ignoredBudgetEntries;
+        $ignored = $configuration->budgets->ignored;
 
-        if ($configuration->budgets === []) {
+        if ($configuration->budgets->isEmpty()) {
             return self::notEvaluated(BudgetReason::NO_BUDGET_CONFIGURED, $ignored);
         }
 
@@ -45,7 +45,7 @@ readonly class BudgetVerdict
             return self::notEvaluated(BudgetReason::NOT_RUN, $ignored);
         }
 
-        $entry = self::governing($configuration->budgets, $type, $row);
+        $entry = $configuration->budgets->governing($type, $row);
 
         if ($entry === null) {
             return self::notEvaluated(BudgetReason::NO_MATCHING_BUDGET, $ignored);
@@ -61,9 +61,9 @@ readonly class BudgetVerdict
      */
     public static function ofGroup(Configuration $configuration, ExecutionType $type, array $budget): self
     {
-        $ignored = $configuration->ignoredBudgetEntries;
+        $ignored = $configuration->budgets->ignored;
 
-        if ($configuration->budgets === []) {
+        if ($configuration->budgets->isEmpty()) {
             return self::notEvaluated(BudgetReason::NO_BUDGET_CONFIGURED, $ignored);
         }
 
@@ -71,7 +71,7 @@ readonly class BudgetVerdict
             return self::notEvaluated(BudgetReason::NOT_RUN, $ignored);
         }
 
-        $entry = self::governing($configuration->budgets, $type, $budget);
+        $entry = $configuration->budgets->governing($type, $budget);
 
         if ($entry === null) {
             return self::notEvaluated(BudgetReason::NO_MATCHING_BUDGET, $ignored);
@@ -203,30 +203,5 @@ readonly class BudgetVerdict
     protected static function shown(int|float|null $value, string $unit): string
     {
         return $unit === 'ms' ? sprintf('%.2f ms', $value) : sprintf('%.1f MB', $value);
-    }
-
-    /**
-     * Get the entry that governs the execution: the first specific entry that matches, else the first global entry.
-     *
-     * @param  list<BudgetEntry>  $budgets
-     * @param  array<string, mixed>  $row
-     */
-    protected static function governing(array $budgets, ExecutionType $type, array $row): ?BudgetEntry
-    {
-        $entries = array_filter($budgets, fn (BudgetEntry $entry) => $entry->type === $type);
-
-        foreach ($entries as $entry) {
-            if ($entry->matches($row)) {
-                return $entry;
-            }
-        }
-
-        foreach ($entries as $entry) {
-            if ($entry->isGlobal()) {
-                return $entry;
-            }
-        }
-
-        return null;
     }
 }

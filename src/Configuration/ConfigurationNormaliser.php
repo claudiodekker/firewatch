@@ -2,9 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Configuration;
 
-use ClaudioDekker\Firewatch\ExecutionType;
 use Closure;
-use Illuminate\Support\Arr;
 
 /**
  * @internal
@@ -66,11 +64,6 @@ class ConfigurationNormaliser
     protected const NOT_A_LIST = ' is not a list (an array or a comma-separated string)';
 
     /**
-     * The characters of a string value quoted in an issue's reason.
-     */
-    protected const DESCRIBED_VALUE_CHARACTERS = 60;
-
-    /**
      * The longest store path accepted, in bytes.
      */
     protected const MAXIMUM_PATH_BYTES = 4096;
@@ -79,31 +72,6 @@ class ConfigurationNormaliser
      * The length a deploy identity is cut at, in bytes.
      */
     protected const MAXIMUM_DEPLOY_BYTES = 255;
-
-    /**
-     * The HTTP verbs a request budget may match.
-     */
-    protected const HTTP_VERBS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
-
-    /**
-     * The matchers a request budget entry may hold.
-     */
-    protected const REQUEST_MATCHERS = ['methods', 'path'];
-
-    /**
-     * The matchers a command, job attempt or scheduled task budget entry may hold.
-     */
-    protected const NAME_MATCHERS = ['name'];
-
-    /**
-     * The largest duration ceiling accepted.
-     */
-    protected const MAXIMUM_DURATION_MILLISECONDS = 3600000;
-
-    /**
-     * The largest memory ceiling accepted.
-     */
-    protected const MAXIMUM_MEMORY_MEGABYTES = 65536;
 
     /**
      * The issues found while resolving the configuration.
@@ -146,9 +114,8 @@ class ConfigurationNormaliser
         $captureRequestPayload = $this->boolean($capture, 'request_payload', key: 'capture.request_payload', default: true);
         $redactPayloadFields = $this->redactList($capture, 'redact_payload_fields', key: 'capture.redact_payload_fields');
         $redactHeaders = $this->redactList($capture, 'redact_headers', key: 'capture.redact_headers');
-        $budgets = $this->budgets($raw);
+        $budgets = Budgets::parse($raw);
         $retentionAgeSeconds = $this->durationSeconds($retentionAge);
-        $ignoredBudgetEntries = $this->ignoredBudgetEntries($raw, $budgets);
 
         return new Configuration(
             enabled: $enabled,
@@ -164,8 +131,7 @@ class ConfigurationNormaliser
             redactPayloadFields: $redactPayloadFields,
             redactHeaders: $redactHeaders,
             budgets: $budgets,
-            ignoredBudgetEntries: $ignoredBudgetEntries,
-            issues: $this->issues,
+            issues: [...$this->issues, ...$budgets->issues],
         );
     }
 
@@ -210,7 +176,7 @@ class ConfigurationNormaliser
         }
 
         $accepted = implode(', ', array_keys(static::BOOLEANS));
-        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($value)." is not a boolean ({$accepted})", default: $default ? 'true' : 'false');
+        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: ConfigurationIssue::describe($value)." is not a boolean ({$accepted})", default: $default ? 'true' : 'false');
 
         return $default;
     }
@@ -244,7 +210,7 @@ class ConfigurationNormaliser
             return $integer;
         }
 
-        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($value)." is not an integer from {$minimum} to {$maximum}", default: (string) $default);
+        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: ConfigurationIssue::describe($value)." is not an integer from {$minimum} to {$maximum}", default: (string) $default);
 
         return $default;
     }
@@ -266,7 +232,7 @@ class ConfigurationNormaliser
             return $value;
         }
 
-        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($value)." is not a duration (digits then s, m, h, d or w, for example {$default})", default: $default);
+        $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: ConfigurationIssue::describe($value)." is not a duration (digits then s, m, h, d or w, for example {$default})", default: $default);
 
         return $default;
     }
@@ -297,7 +263,7 @@ class ConfigurationNormaliser
         $default = implode(',', static::DEFAULT_ENVIRONMENTS);
 
         if (! $this->isList($raw['environments'])) {
-            $this->issues[] = ConfigurationIssue::fallBack(key: 'environments', reason: $this->describe($raw['environments']).static::NOT_A_LIST, default: $default);
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'environments', reason: ConfigurationIssue::describe($raw['environments']).static::NOT_A_LIST, default: $default);
 
             return static::DEFAULT_ENVIRONMENTS;
         }
@@ -331,7 +297,7 @@ class ConfigurationNormaliser
         }
 
         if (! $this->isList($values[$name])) {
-            $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: $this->describe($values[$name]).static::NOT_A_LIST, default: 'none');
+            $this->issues[] = ConfigurationIssue::fallBack(key: $key, reason: ConfigurationIssue::describe($values[$name]).static::NOT_A_LIST, default: 'none');
 
             return [];
         }
@@ -367,7 +333,7 @@ class ConfigurationNormaliser
             }
 
             if ($trimmed === null || ! $accepts($trimmed)) {
-                $this->issues[] = ConfigurationIssue::droppedItem(key: $key, reason: $this->describe($item)." is not {$expected}");
+                $this->issues[] = ConfigurationIssue::droppedItem(key: $key, reason: ConfigurationIssue::describe($item)." is not {$expected}");
 
                 continue;
             }
@@ -394,7 +360,7 @@ class ConfigurationNormaliser
         $value = $raw['database'];
 
         if (! is_string($value)) {
-            $this->issues[] = ConfigurationIssue::fallBack(key: 'database', reason: $this->describe($value).' is not a file path', default: $default);
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'database', reason: ConfigurationIssue::describe($value).' is not a file path', default: $default);
 
             return $default;
         }
@@ -415,7 +381,7 @@ class ConfigurationNormaliser
      */
     protected function refusedPath(string $path): ?string
     {
-        $described = $this->describe($path);
+        $described = ConfigurationIssue::describe($path);
 
         return match (true) {
             $path === '' => "{$described} is not a file path",
@@ -490,7 +456,7 @@ class ConfigurationNormaliser
         }
 
         if (! is_string($value)) {
-            $this->issues[] = ConfigurationIssue::fallBack(key: 'deploy', reason: $this->describe($value).' is not a string', default: 'unset');
+            $this->issues[] = ConfigurationIssue::fallBack(key: 'deploy', reason: ConfigurationIssue::describe($value).' is not a string', default: 'unset');
 
             return null;
         }
@@ -510,190 +476,5 @@ class ConfigurationNormaliser
     protected function withoutInvalidUtf8(string $value): string
     {
         return (string) preg_replace('/([\x00-\x7F]|[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]|\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2})|./s', '$1', $value);
-    }
-
-    /**
-     * Read the valid budget entries, numbered by their place in the file.
-     *
-     * @param  array<mixed>  $raw
-     * @return list<BudgetEntry>
-     */
-    protected function budgets(array $raw): array
-    {
-        if (! array_key_exists('budgets', $raw)) {
-            return [];
-        }
-
-        if (! is_array($raw['budgets'])) {
-            $this->issues[] = ConfigurationIssue::fallBack(key: 'budgets', reason: $this->describe($raw['budgets']).' is not a list of budget entries', default: 'none');
-
-            return [];
-        }
-
-        $budgets = [];
-
-        foreach (array_values($raw['budgets']) as $index => $entry) {
-            $number = $index + 1;
-            $reason = $this->refusedBudgetEntry($entry);
-
-            if ($reason !== null) {
-                $this->issues[] = ConfigurationIssue::ignoredBudgetEntry(number: $number, reason: $reason);
-
-                continue;
-            }
-
-            /** @var array{type: string, methods?: list<string>, path?: string, name?: string, duration?: int|float, memory?: int|float} $entry */
-            $budgets[] = new BudgetEntry(
-                number: $number,
-                type: ExecutionType::from($entry['type']),
-                methods: isset($entry['methods']) ? array_map(strtoupper(...), $entry['methods']) : null,
-                path: $entry['path'] ?? null,
-                name: $entry['name'] ?? null,
-                durationMilliseconds: $entry['duration'] ?? null,
-                memoryMegabytes: $entry['memory'] ?? null,
-            );
-        }
-
-        return $budgets;
-    }
-
-    /**
-     * Count the budget entries that were ignored as invalid.
-     *
-     * @param  array<mixed>  $raw
-     * @param  list<BudgetEntry>  $budgets
-     */
-    protected function ignoredBudgetEntries(array $raw, array $budgets): int
-    {
-        return is_array($raw['budgets'] ?? null) ? count($raw['budgets']) - count($budgets) : 0;
-    }
-
-    /**
-     * Get the reason a budget entry is ignored, or null when it is valid.
-     */
-    protected function refusedBudgetEntry(mixed $entry): ?string
-    {
-        if (! is_array($entry)) {
-            return $this->describe($entry).' is not a budget entry';
-        }
-
-        if (! array_key_exists('type', $entry)) {
-            return 'type is missing';
-        }
-
-        $type = is_string($entry['type']) ? ExecutionType::tryFrom($entry['type']) : null;
-
-        if ($type === null) {
-            $types = array_map(fn (ExecutionType $type) => $type->value, ExecutionType::cases());
-
-            return 'type '.$this->describe($entry['type']).' is not '.Arr::join($types, ', ', ' or ');
-        }
-
-        return $this->refusedBudgetKeys($entry, $type)
-            ?? $this->refusedMethods($entry)
-            ?? $this->refusedPattern($entry, 'path')
-            ?? $this->refusedPattern($entry, 'name')
-            ?? $this->refusedCeiling($entry, 'duration', static::MAXIMUM_DURATION_MILLISECONDS)
-            ?? $this->refusedCeiling($entry, 'memory', static::MAXIMUM_MEMORY_MEGABYTES)
-            ?? (isset($entry['duration']) || isset($entry['memory']) ? null : 'no duration or memory ceiling');
-    }
-
-    /**
-     * Get the reason a budget entry holds a key its type does not allow.
-     *
-     * @param  array<mixed>  $entry
-     */
-    protected function refusedBudgetKeys(array $entry, ExecutionType $type): ?string
-    {
-        $matchers = match ($type) {
-            ExecutionType::REQUEST => static::REQUEST_MATCHERS,
-            ExecutionType::COMMAND, ExecutionType::JOB_ATTEMPT, ExecutionType::SCHEDULED_TASK => static::NAME_MATCHERS,
-        };
-
-        foreach (array_keys($entry) as $key) {
-            if (in_array($key, ['type', 'duration', 'memory', ...$matchers], true)) {
-                continue;
-            }
-
-            return in_array($key, [...static::REQUEST_MATCHERS, ...static::NAME_MATCHERS], true)
-                ? "matcher \"{$key}\" is not allowed for type {$type->value}"
-                : 'key '.$this->describe($key).' is not allowed';
-        }
-
-        return null;
-    }
-
-    /**
-     * Get the reason a budget entry's methods are refused.
-     *
-     * @param  array<mixed>  $entry
-     */
-    protected function refusedMethods(array $entry): ?string
-    {
-        if (! array_key_exists('methods', $entry)) {
-            return null;
-        }
-
-        $methods = $entry['methods'];
-
-        if (! is_array($methods) || $methods === [] || ! array_is_list($methods)) {
-            return 'methods '.$this->describe($methods).' is not a non-empty list of HTTP verbs';
-        }
-
-        foreach ($methods as $method) {
-            if (! is_string($method) || ! in_array(strtoupper($method), static::HTTP_VERBS, true)) {
-                return 'method '.$this->describe($method).' is not '.Arr::join(static::HTTP_VERBS, ', ', ' or ');
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Get the reason a budget entry's path or name pattern is refused.
-     *
-     * @param  array<mixed>  $entry
-     */
-    protected function refusedPattern(array $entry, string $matcher): ?string
-    {
-        if (! array_key_exists($matcher, $entry) || is_string($entry[$matcher])) {
-            return null;
-        }
-
-        return "{$matcher} ".$this->describe($entry[$matcher]).' is not a string';
-    }
-
-    /**
-     * Get the reason a budget entry's duration or memory ceiling is refused.
-     *
-     * @param  array<mixed>  $entry
-     */
-    protected function refusedCeiling(array $entry, string $ceiling, int $maximum): ?string
-    {
-        if (! array_key_exists($ceiling, $entry)) {
-            return null;
-        }
-
-        $value = $entry[$ceiling];
-
-        if ((is_int($value) || is_float($value)) && $value > 0 && $value <= $maximum) {
-            return null;
-        }
-
-        return "{$ceiling} ".$this->describe($value)." is not a number greater than 0 and at most {$maximum}";
-    }
-
-    /**
-     * Describe a value for an issue's reason.
-     */
-    protected function describe(mixed $value): string
-    {
-        return match (true) {
-            is_string($value) => json_encode(mb_substr($value, 0, static::DESCRIBED_VALUE_CHARACTERS), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR),
-            $value === null => 'null',
-            $value === [] => '[]',
-            is_scalar($value) => var_export($value, true),
-            default => get_debug_type($value),
-        };
     }
 }
