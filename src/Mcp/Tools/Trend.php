@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Buckets;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -128,7 +129,7 @@ class Trend extends Tool
         $frame = $this->frame($now);
         $given = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
 
-        $frame->about($explicit === null ? [] : [$explicit], $given->derive(null, null), anchored: true);
+        $frame->about($explicit === null ? [] : [$explicit], $given->derive(null, null), facts: [CallFact::ANCHORED]);
 
         $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $arguments, $given, $explicit, $group, $deploy, $count));
 
@@ -138,7 +139,7 @@ class Trend extends Tool
 
         [$type, $held, $window, $inWindow, $buckets] = $read;
 
-        $frame->about($type === null ? [] : [$type], $window, anchored: true);
+        $frame->about($type === null ? [] : [$type], $window, facts: [CallFact::ANCHORED]);
 
         if ($frame->isEmpty()) {
             return $frame->empty();

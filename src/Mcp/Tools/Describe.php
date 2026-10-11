@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Catalogue;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -124,8 +125,11 @@ class Describe extends Tool
         $frame->about(
             types: $type === null ? RecordType::events() : [$type],
             window: Window::none(reason: __('firewatch::messages.describe_window_reason'), timezone: $frame->timezone),
-            actor: $type === RecordType::USER,
-            storeLevel: $type === null,
+            facts: match ($type) {
+                null => [CallFact::STORE_LEVEL],
+                RecordType::USER => [CallFact::ACTOR],
+                default => [],
+            },
         );
 
         $read = $frame->read(fn (SQLite3 $connection) => [

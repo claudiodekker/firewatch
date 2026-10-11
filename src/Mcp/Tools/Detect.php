@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
@@ -122,7 +123,7 @@ class Detect extends Tool
         $detectors = $shape === null ? $this->detectors->all() : [$shape];
         $types = array_values(array_unique(array_merge(...array_map(fn (Detector $detector) => $detector->types(), $detectors)), SORT_REGULAR));
 
-        $frame->about($types, $window, actor: true);
+        $frame->about($types, $window, facts: [CallFact::ACTOR]);
 
         $read = $frame->read(fn (SQLite3 $connection) => [
             $this->inWindow($connection, $window),

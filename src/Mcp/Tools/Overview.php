@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\BudgetSection;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Deadline;
@@ -97,7 +98,7 @@ class Overview extends Tool
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
         $byDeploy = $this->byDeploy(new Arguments($request, $this->name()));
 
-        $frame->about(RecordType::events(), $window, actor: true, storeLevel: true);
+        $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR, CallFact::STORE_LEVEL]);
 
         $read = $frame->read(fn (SQLite3 $connection) => [
             $byDeploy ? FixedSections::readByDeploy($connection, $window) : FixedSections::read($connection, $window),

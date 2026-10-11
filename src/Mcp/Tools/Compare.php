@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Boundary;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Comparison;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
@@ -129,7 +130,7 @@ class Compare extends Tool
         $boundary = $this->boundary($request, $now, $frame->timezone);
         $notes = $boundary->fixedNotes();
 
-        $frame->about($explicit === null ? [] : [$explicit], Window::between($given->since(), $given->until() ?? $frame->now, $frame->timezone), anchored: $boundary->isInstant());
+        $frame->about($explicit === null ? [] : [$explicit], Window::between($given->since(), $given->until() ?? $frame->now, $frame->timezone), facts: $boundary->isInstant() ? [CallFact::ANCHORED] : []);
 
         $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $arguments, $given, $frame->now, $boundary, $explicit, $group, $limit));
 
@@ -139,7 +140,7 @@ class Compare extends Tool
 
         [$type, $held, $window, $inWindow, $comparison] = $read;
 
-        $frame->about($type === null ? [] : [$type], $window, anchored: $boundary->isInstant(), straddling: $comparison?->straddling);
+        $frame->about($type === null ? [] : [$type], $window, facts: $boundary->isInstant() ? [CallFact::ANCHORED] : [], straddling: $comparison?->straddling);
 
         if ($frame->isEmpty()) {
             return $frame->empty(notes: $notes);

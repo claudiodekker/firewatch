@@ -1,11 +1,12 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\BlindSpots;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\RecordType;
 
-function blindSpotIds(array $types, bool $actor = false, bool $anchored = false, bool $storeLevel = false): array
+function blindSpotIds(array $types, array $facts = []): array
 {
-    return array_column(BlindSpots::for($types, $actor, $anchored, $storeLevel), 'id');
+    return array_column(BlindSpots::for($types, $facts), 'id');
 }
 
 it('attaches the blind spots of the types a call examined', function (RecordType $type, array $ids) {
@@ -33,15 +34,15 @@ it('attaches each blind spot once, in catalogue order', function () {
 });
 
 it('attaches nothing when no type was examined', function () {
-    expect(blindSpotIds([], actor: true, anchored: true, storeLevel: true))->toBe([]);
+    expect(blindSpotIds([], CallFact::cases()))->toBe([]);
 });
 
-it('attaches the blind spots of how the call read the records, for the types it examined', function (array $flags, array $ids) {
-    expect(blindSpotIds([RecordType::LOG], ...$flags))->toBe($ids);
+it('attaches the blind spots of how the call read the records, for the types it examined', function (CallFact $fact, array $ids) {
+    expect(blindSpotIds([RecordType::LOG], [$fact]))->toBe($ids);
 })->with([
-    'a read by actor' => [['actor' => true], ['named-log-channels', 'actor-partial']],
-    'a read anchored in time' => [['anchored' => true], ['named-log-channels', 'visible-at-completion']],
-    'a store-level answer' => [['storeLevel' => true], ['named-log-channels', 'application-opt-outs', 'values-truncated']],
+    'a read by actor' => [CallFact::ACTOR, ['named-log-channels', 'actor-partial']],
+    'a read anchored in time' => [CallFact::ANCHORED, ['named-log-channels', 'visible-at-completion']],
+    'a store-level answer' => [CallFact::STORE_LEVEL, ['named-log-channels', 'application-opt-outs', 'values-truncated']],
 ]);
 
 it('gives each blind spot its kind and sentence', function () {

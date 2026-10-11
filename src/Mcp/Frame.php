@@ -35,19 +35,11 @@ class Frame
     protected Window $window;
 
     /**
-     * Whether the answer reads by actor.
+     * What holds of the call beyond the types it read.
+     *
+     * @var list<CallFact>
      */
-    protected bool $actor = false;
-
-    /**
-     * Whether the answer anchors on the latest execution, a split or a trend.
-     */
-    protected bool $anchored = false;
-
-    /**
-     * Whether the answer is about the whole store.
-     */
-    protected bool $storeLevel = false;
+    protected array $facts = [];
 
     /**
      * The number of executions of a compared type that straddle the split, or null when nothing is compared.
@@ -77,15 +69,14 @@ class Frame
      * Set what the answer covers: the record types it read, its window and the structural blind spots beyond the types.
      *
      * @param  list<RecordType>  $types
+     * @param  list<CallFact>  $facts
      * @return $this
      */
-    public function about(array $types, Window $window, bool $actor = false, bool $anchored = false, bool $storeLevel = false, ?int $straddling = null): static
+    public function about(array $types, Window $window, array $facts = [], ?int $straddling = null): static
     {
         $this->types = $types;
         $this->window = $window;
-        $this->actor = $actor;
-        $this->anchored = $anchored;
-        $this->storeLevel = $storeLevel;
+        $this->facts = $facts;
         $this->straddling = $straddling;
 
         return $this;
@@ -236,11 +227,11 @@ class Frame
      */
     protected function blindSpots(): array
     {
-        $facts = $this->store instanceof StoreFacts ? $this->store : null;
+        $store = $this->store instanceof StoreFacts ? $this->store : null;
 
         return [
-            ...BlindSpots::for($this->types, actor: $this->actor, anchored: $this->anchored, storeLevel: $this->storeLevel),
-            ...$this->conditions->for($facts, $this->types, $this->window),
+            ...BlindSpots::for($this->types, $this->facts),
+            ...$this->conditions->for($store, $this->types, $this->window),
         ];
     }
 }
