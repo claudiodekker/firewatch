@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use Illuminate\Support\Facades\Exceptions;
 
 const PRUNE_NOW = '2026-09-30 14:00:00';
 const PRUNE_CUTOFF = 1790172000.0;
@@ -326,6 +327,38 @@ describe('the pass', function () {
         $connection->exec('ROLLBACK');
 
         expect(file_exists(dirname(app(Configuration::class)->database).'/failures.jsonl'))->toBeFalse();
+    });
+
+    it('stops silently when a read of the pass finds the store busy', function () {
+        registerFirewatch();
+        requestsStartedAt([PRUNE_CUTOFF + 1]);
+        $this->endCapture();
+        $this->travelTo('2026-09-30 14:03:00');
+        $heldReader = new class(app(Configuration::class)) extends Reader
+        {
+            protected const BUSY_TIMEOUT_MILLISECONDS = 20;
+
+            public function snapshot(Closure $callback): mixed
+            {
+                $holder = new SQLite3($this->configuration->database);
+                $holder->exec('PRAGMA journal_mode = DELETE');
+                $holder->exec('BEGIN EXCLUSIVE');
+
+                try {
+                    return parent::snapshot($callback);
+                } finally {
+                    $holder->exec('ROLLBACK');
+                    $holder->close();
+                }
+            }
+        };
+        app()->instance(Pruner::class, new Pruner(app(Writer::class), $heldReader, app(Configuration::class)));
+        registerFirewatch();
+
+        requestsStartedAt([PRUNE_CUTOFF + 2]);
+
+        expect(pruneFailures())->toBe([]);
+        Exceptions::assertNothingReported();
     });
 
     it('reports a step that fails for another reason, never throws it, and keeps the batch', function () {
