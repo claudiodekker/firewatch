@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
 /**
@@ -48,7 +49,7 @@ class FailingRoutes implements Thresholded
     /**
      * Judge the requests of the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $selected = Fragment::selecting($window, $group);
         $bindings = [

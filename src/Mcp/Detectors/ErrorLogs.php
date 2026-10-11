@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\LogLevel;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
 /**
@@ -42,7 +43,7 @@ class ErrorLogs implements Thresholded, Ungrouped
     /**
      * Judge the message shapes of the logs at error or worse that were written in the window, over the logs of every level.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_log_capture')];

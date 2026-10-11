@@ -47,7 +47,7 @@ class QueueLatency implements Thresholded
     /**
      * Judge the dispatches that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
 
@@ -71,7 +71,7 @@ class QueueLatency implements Thresholded
         ];
 
         if ($examined + $inline === 0 && $orphans > 0 && ! $this->hasDispatches($connection, $window)) {
-            $removed = History::removedThrough(Markers::read($connection), [RecordType::QUEUED_JOB]);
+            $removed = History::removedThrough($meta, [RecordType::QUEUED_JOB]);
             $reason = $removed !== null && ($window->since() === null || $window->since() < $removed) ? Reason::OUTSIDE_COVERAGE : Reason::PREREQUISITE_MISSING;
 
             return Judgement::notEvaluated($this->name(), $described, $reason, saw: $saw, caveats: $caveats);

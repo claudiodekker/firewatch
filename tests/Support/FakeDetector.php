@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Thresholdless;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use Closure;
 use SQLite3;
 
@@ -57,7 +58,7 @@ class FakeDetector implements Thresholdless
         return [RecordType::REQUEST];
     }
 
-    public function judge(SQLite3 $connection, Window $window, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, ?string $group, int $limit): Judgement
     {
         if ($this->during !== null) {
             ($this->during)();

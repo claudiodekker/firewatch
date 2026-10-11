@@ -50,7 +50,7 @@ class ExceptionClusters implements Thresholded
     /**
      * Judge the exception groups that occurred in the window, over the executions that started in it.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
 
@@ -60,7 +60,7 @@ class ExceptionClusters implements Thresholded
             return $this->withoutOccurrences($described);
         }
 
-        $examined = $this->examined($connection, $window);
+        $examined = $this->examined($connection, $meta, $window);
         $flagged = array_values(array_filter($groups, fn (array $row) => $row['occurrences'] >= $threshold));
 
         if ($flagged === []) {
@@ -117,9 +117,8 @@ class ExceptionClusters implements Thresholded
     /**
      * Count the executions that started in the window after a clear or a prune last removed exceptions, whatever their group.
      */
-    protected function examined(SQLite3 $connection, Window $window): int
+    protected function examined(SQLite3 $connection, Markers $meta, Window $window): int
     {
-        $meta = Markers::read($connection);
         $executions = Executions::table($window, group: null);
         $bindings = [
             ...$executions->bindings,
