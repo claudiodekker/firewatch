@@ -3,7 +3,13 @@
 use ClaudioDekker\Firewatch\GitHead;
 use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\IngestReplacer;
+use ClaudioDekker\Firewatch\Mcp\Coverage;
+use ClaudioDekker\Firewatch\Mcp\CoverageState;
+use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\NullIngest;
+use ClaudioDekker\Firewatch\Store\Instant;
+use ClaudioDekker\Firewatch\Store\StoreState;
+use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Tests\Support\PackageSource;
 
 const OFF_MACHINE = [
@@ -74,6 +80,10 @@ foreach (['Ingest' => Ingest::class, 'IngestReplacer' => IngestReplacer::class, 
         ->expect($ingest)
         ->not->toUse([...OFF_MACHINE, ...array_diff(NIGHTWATCH_INGEST, ['Laravel\\Nightwatch\\Contracts\\Ingest'])]);
 }
+
+arch('tools state the clock, coverage and unusable store of an answer only through its frame')
+    ->expect('ClaudioDekker\\Firewatch\\Mcp\\Tools')
+    ->not->toUse([Instant::class, History::class, Coverage::class, CoverageState::class, StoreUnusable::class, StoreState::class]);
 
 foreach (['Store', 'Actions'] as $area) {
     arch("{$area} is never reached through Laravel's database layer")
