@@ -166,7 +166,6 @@ class InstallChecks
             'reason' => (string) $this->install->ingestKept(),
         ];
 
-        // The doctor runs Off, and Off passes through the same swap guard as Active.
         if ($this->install->ingestKept() !== null) {
             return CheckResult::fail(
                 __('firewatch::messages.doctor.nightwatch.ingest_kept', $facts),
