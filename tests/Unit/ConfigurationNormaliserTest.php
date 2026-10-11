@@ -258,6 +258,27 @@ it('falls back to the default store path for a refused path', function (mixed $v
     'under the public directory through a dot segment' => ['storage/../public/store.sqlite', '"storage/../public/store.sqlite" is under the public directory'],
 ]);
 
+it('refuses a Windows store path under the public directory whatever its case', function (string $path) {
+    $normaliser = new ConfigurationNormaliser(basePath: 'C:\\app', publicPath: 'C:\\app\\public', storagePath: 'C:\\app\\storage');
+
+    $configuration = $normaliser->resolve(['database' => $path]);
+
+    expect($configuration->database)->toBe('C:\\app\\storage/firewatch/firewatch.sqlite')
+        ->and(configurationIssueLines($configuration))->toHaveCount(1)
+        ->and(configurationIssueLines($configuration)[0])->toContain('is under the public directory');
+})->with([
+    'drive letter in another case' => ['c:\\app\\public\\firewatch.sqlite'],
+    'directories in another case' => ['C:\\APP\\Public\\firewatch.sqlite'],
+    'forward slashes in another case' => ['c:/APP/public/firewatch.sqlite'],
+]);
+
+it('keeps a POSIX store path that differs from the public directory only in case', function () {
+    $configuration = configurationNormaliser()->resolve(['database' => '/app/Public/firewatch.sqlite']);
+
+    expect($configuration->database)->toBe('/app/Public/firewatch.sqlite')
+        ->and($configuration->issues)->toBe([]);
+});
+
 it('normalises the deploy identity', function (mixed $value, ?string $expected) {
     $configuration = configurationNormaliser()->resolve(['deploy' => $value]);
 

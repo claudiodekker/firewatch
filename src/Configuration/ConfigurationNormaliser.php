@@ -418,8 +418,21 @@ class ConfigurationNormaliser
     protected function isUnderPublicPath(string $path): bool
     {
         $public = rtrim($this->withoutDotSegments($this->publicPath), '/').'/';
+        $normalised = $this->withoutDotSegments($path);
 
-        return str_starts_with($this->withoutDotSegments($path), $public);
+        if ($this->isWindowsPath($path) || $this->isWindowsPath($this->publicPath)) {
+            return str_starts_with(strtolower($normalised), strtolower($public));
+        }
+
+        return str_starts_with($normalised, $public);
+    }
+
+    /**
+     * Determine if a path is written the Windows way, whose case doesn't matter.
+     */
+    protected function isWindowsPath(string $path): bool
+    {
+        return preg_match('#^[A-Za-z]:#', $path) === 1 || str_contains($path, '\\');
     }
 
     /**
