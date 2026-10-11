@@ -94,6 +94,23 @@ class Stored
     }
 
     /**
+     * Get rows by the hash of their group, in the order they came.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public static function byGroup(array $rows): array
+    {
+        $groups = [];
+
+        foreach ($rows as $row) {
+            $groups[$row['group_hash']][] = $row;
+        }
+
+        return $groups;
+    }
+
+    /**
      * Get bytes as megabytes to one decimal, or null for no number.
      */
     public static function megabytes(mixed $bytes): ?float

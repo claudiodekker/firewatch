@@ -20,11 +20,6 @@ class Cache implements Thresholded
     protected const READS_FLOOR = 3;
 
     /**
-     * The decimals of a share in an answer.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * The reason of a key whose hit rate is below the threshold.
      */
     protected const LOW_HIT_RATE = 'low_hit_rate';
@@ -118,6 +113,8 @@ class Cache implements Thresholded
         $whole = Percentile::PERCENT;
         $worstFirst = 'failures DESC, hit_rate IS NULL, hit_rate ASC, group_hash ASC';
 
+        $reach = Fragment::reach('qualifying');
+
         return Stored::rows($connection, "WITH events AS (
             SELECT id, started_at, group_hash, store, \"key\", event,
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
@@ -143,9 +140,7 @@ class Cache implements Thresholded
                 CASE WHEN count(*) FILTER (WHERE read) > 0
                     THEN CAST(count(*) FILTER (WHERE event = 'hit') AS REAL) / count(*) FILTER (WHERE read) END AS hit_rate,
                 max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
-                min(started_at) FILTER (WHERE qualifying) AS first_seen, max(started_at) FILTER (WHERE qualifying) AS last_seen,
-                count(DISTINCT user_id) FILTER (WHERE qualifying) AS actors,
-                count(*) FILTER (WHERE qualifying AND user_id IS NULL) AS anonymous
+                {$reach}
             FROM ranked GROUP BY group_hash
         ), weighed AS (
             SELECT *, reads >= :floor AND {$whole} * hits < :percent * reads AS low_hit_rate FROM keys
@@ -215,7 +210,7 @@ class Cache implements Thresholded
             'write_failures' => $row['write_failures'],
             'deletes' => $row['deletes'],
             'delete_failures' => $row['delete_failures'],
-            'hit_rate_pct' => $reads > 0 ? round(Percentile::PERCENT * $row['hits'] / $reads, self::PERCENT_DECIMALS) : null,
+            'hit_rate_pct' => Percentile::percent($row['hits'], $reads),
         ];
     }
 
@@ -223,28 +218,15 @@ class Cache implements Thresholded
      * Get the finding of a key, counted by its failures when it has any and by its reads when not.
      *
      * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
      */
-    protected function finding(array $row): array
+    protected function finding(array $row): Finding
     {
-        return [
-            'group' => $row['group_hash'],
-            'name' => is_string($row['key']) ? $row['key'] : '',
-            'count' => $row['failures'] > 0 ? $row['failures'] : $row['reads'],
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
-                'reasons' => $this->reasons($row),
-                'store' => $row['store'],
-                'key' => $row['key'],
-                ...$this->counters($row),
-            ],
-        ];
+        return Finding::from($row, name: is_string($row['key']) ? $row['key'] : '', count: $row['failures'] > 0 ? $row['failures'] : $row['reads'], evidence: [
+            'reasons' => $this->reasons($row),
+            'store' => $row['store'],
+            'key' => $row['key'],
+            ...$this->counters($row),
+        ]);
     }
 
     /**

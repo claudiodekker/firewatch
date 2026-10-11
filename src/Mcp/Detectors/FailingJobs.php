@@ -58,8 +58,9 @@ class FailingJobs implements Thresholded
         }
 
         $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['jobs_failed'], $b['failing_attempts'], $b['last_seen'], $a['group_hash']] <=> [$a['jobs_failed'], $a['failing_attempts'], $a['last_seen'], $b['group_hash']], $limit);
-        $exceptions = $this->exceptions($connection, $window, $attempts);
-        $findings = array_map(fn (array $row) => $this->finding($row, $this->ofGroup($exceptions, $row['group_hash'])), $shown);
+        $thrown = $this->exceptions($connection, $window, $attempts);
+        $exceptions = Stored::byGroup($thrown);
+        $findings = array_map(fn (array $row) => $this->finding($row, $exceptions[$row['group_hash']][0] ?? null), $shown);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: count($failing), findings: $findings);
     }
@@ -71,6 +72,8 @@ class FailingJobs implements Thresholded
      */
     protected function groups(SQLite3 $connection, Window $window, Fragment $attempts): array
     {
+        $reach = Fragment::reach('failing');
+
         return Stored::rows($connection, "{$attempts->sql}, placed AS (
             SELECT *, job IS NOT NULL AND ROW_NUMBER() OVER (PARTITION BY group_hash, job ORDER BY started_at DESC, attempt DESC, id DESC) = 1 AS is_last,
                 max(released) OVER (PARTITION BY group_hash, job) AS was_released,
@@ -86,9 +89,7 @@ class FailingJobs implements Thresholded
             max(attempt) AS max_attempt,
             max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
             max(CASE WHEN by_latest = 1 THEN name END) AS name,
-            min(started_at) FILTER (WHERE failing) AS first_seen, max(started_at) FILTER (WHERE failing) AS last_seen,
-            count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE failing) AS actors,
-            count(*) FILTER (WHERE failing AND NULLIF(user_id, '') IS NULL) AS anonymous
+            {$reach}
         FROM placed GROUP BY group_hash", [
             ...$attempts->bindings,
             'processed' => Outcome::PROCESSED->value,
@@ -136,46 +137,22 @@ class FailingJobs implements Thresholded
      *
      * @param  array<string, mixed>  $row
      * @param  array<string, mixed>|null  $exception
-     * @return array<string, mixed>
      */
-    protected function finding(array $row, ?array $exception): array
+    protected function finding(array $row, ?array $exception): Finding
     {
-        return [
-            'group' => $row['group_hash'],
-            'name' => RecordType::JOB_ATTEMPT->groupLabel($row['name']),
-            'count' => $row['failing_attempts'],
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
+        return Finding::from($row, name: RecordType::JOB_ATTEMPT->groupLabel($row['name']), count: $row['failing_attempts'], evidence: [
+            'failed_attempts' => $row['failed_attempts'],
+            'retried_attempts' => $row['retried_attempts'],
+            'jobs_failed' => $row['jobs_failed'],
+            'jobs_recovered' => $row['jobs_recovered'],
+            'jobs_retrying' => $row['jobs_retrying'],
+            'jobs' => $row['jobs'],
+            'max_attempt' => $row['max_attempt'],
+            'last_exception' => $exception === null ? null : [
+                'class' => $exception['class'],
+                'message' => $exception['message'],
+                'location' => Stored::location(file: $exception['file'], line: $exception['line']),
             ],
-            'evidence' => [
-                'failed_attempts' => $row['failed_attempts'],
-                'retried_attempts' => $row['retried_attempts'],
-                'jobs_failed' => $row['jobs_failed'],
-                'jobs_recovered' => $row['jobs_recovered'],
-                'jobs_retrying' => $row['jobs_retrying'],
-                'jobs' => $row['jobs'],
-                'max_attempt' => $row['max_attempt'],
-                'last_exception' => $exception === null ? null : [
-                    'class' => $exception['class'],
-                    'message' => $exception['message'],
-                    'location' => Stored::location(file: $exception['file'], line: $exception['line']),
-                ],
-            ],
-        ];
-    }
-
-    /**
-     * Get the row of one group, by its hash compared as text, so that two hashes that read as the same number stay apart.
-     *
-     * @param  list<array<string, mixed>>  $rows
-     * @return array<string, mixed>|null
-     */
-    protected function ofGroup(array $rows, ?string $group): ?array
-    {
-        return array_values(array_filter($rows, fn (array $row) => $row['group_hash'] === $group))[0] ?? null;
+        ]);
     }
 }

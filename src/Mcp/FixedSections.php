@@ -27,11 +27,6 @@ class FixedSections
     protected const SLOWEST_DEPLOYS = 5;
 
     /**
-     * The decimals of a share in an answer.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * Create a new fixed sections instance.
      *
      * @param  array{requests: int, with_status: int, server_errors: int, server_error_pct: float|null, client_errors: int, client_error_pct: float|null}  $errorRate
@@ -214,9 +209,9 @@ class FixedSections
             'requests' => $counts['requests'],
             'with_status' => $counts['with_status'],
             'server_errors' => $counts['server_errors'],
-            'server_error_pct' => self::share($counts['server_errors'], $counts['with_status']),
+            'server_error_pct' => Percentile::percent($counts['server_errors'], $counts['with_status']),
             'client_errors' => $counts['client_errors'],
-            'client_error_pct' => self::share($counts['client_errors'], $counts['with_status']),
+            'client_error_pct' => Percentile::percent($counts['client_errors'], $counts['with_status']),
         ];
     }
 
@@ -471,13 +466,5 @@ class FixedSections
         $placeholders = implode(', ', array_map(fn (string $name) => ":{$name}", array_keys($types)));
 
         return [$types, $placeholders];
-    }
-
-    /**
-     * Get a part as a percentage of a whole, or null for a whole of nothing.
-     */
-    protected static function share(int $part, int $whole): ?float
-    {
-        return $whole === 0 ? null : round(Percentile::PERCENT * $part / $whole, self::PERCENT_DECIMALS);
     }
 }

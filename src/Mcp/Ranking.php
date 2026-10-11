@@ -14,11 +14,6 @@ use SQLite3;
 class Ranking
 {
     /**
-     * The decimals a failure percentage is rounded to.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * The key a record without a deploy has among the deploys of a breakdown, which no deploy string is.
      */
     protected const NO_DEPLOY = "\x01";
@@ -324,7 +319,7 @@ class Ranking
         $failed = $group['failed_of'] ?? 0;
 
         $row += [
-            'failure_pct' => $failed > 0 ? round(Percentile::PERCENT * $group['failed'] / $failed, self::PERCENT_DECIMALS) : null,
+            'failure_pct' => Percentile::percent($group['failed'] ?? 0, $failed),
             'first_seen_at' => $group['first'],
             'last_seen_at' => $group['last'],
             'deploys' => $group['deploys'],

@@ -251,7 +251,7 @@ class Detect extends Tool
         $calls = [];
 
         foreach ($judgement->findings as $position => $finding) {
-            $execution = $finding['worst_execution_id'] ?? $finding['latest_execution_id'];
+            $execution = $finding->executionId();
 
             if ($execution !== null) {
                 $calls[] = [
@@ -261,11 +261,11 @@ class Detect extends Tool
                 ];
             }
 
-            if ($position === 0 && $finding['group'] !== null) {
+            if ($position === 0 && $finding->group !== null) {
                 $calls[] = [
                     'tool' => 'occurrences',
                     'arguments' => [
-                        'group' => $finding['group'],
+                        'group' => $finding->group,
                         ...$bounds,
                     ],
                     'why' => __('firewatch::messages.detect_next_occurrences'),
@@ -273,7 +273,7 @@ class Detect extends Tool
                 $calls[] = [
                     'tool' => 'rank',
                     'arguments' => [
-                        'group' => $finding['group'],
+                        'group' => $finding->group,
                         ...$bounds,
                     ],
                     'why' => __('firewatch::messages.detect_next_rank'),

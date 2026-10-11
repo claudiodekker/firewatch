@@ -14,7 +14,7 @@ class Judgement
      * Create a new judgement instance.
      *
      * @param  array<string, mixed>|null  $threshold
-     * @param  list<array<string, mixed>>  $findings  at most the limit, worst first
+     * @param  list<Finding>  $findings  at most the limit, worst first
      * @param  array<string, int|array<string, mixed>>  $saw  counts of input set aside, and any block of context a detector carries beside them
      * @param  list<string>  $caveats
      */
@@ -36,7 +36,7 @@ class Judgement
      * Get the judgement of what a detector examined.
      *
      * @param  array<string, mixed>|null  $threshold
-     * @param  list<array<string, mixed>>  $findings
+     * @param  list<Finding>  $findings
      * @param  array<string, int|array<string, mixed>>  $saw
      * @param  list<string>  $caveats
      */
@@ -54,7 +54,7 @@ class Judgement
     /**
      * Get the rows a detector lists: the first of them by its own order, at most the limit.
      *
-     * @template T of array<string, mixed>
+     * @template T
      *
      * @param  list<T>  $rows
      * @param  Closure(T, T): int  $order
@@ -115,7 +115,7 @@ class Judgement
             'reason' => $this->reason?->value,
             'examined' => $this->examined,
             'total' => $this->total,
-            'findings' => $this->findings,
+            'findings' => array_map(fn (Finding $finding) => $finding->toArray(), $this->findings),
             'saw' => $this->saw === [] ? new stdClass : $this->saw,
             'caveats' => $this->caveats,
         ];
@@ -137,8 +137,8 @@ class Judgement
             'examined' => $this->examined,
             'total' => $this->total,
             'worst' => $worst === null ? null : [
-                'name' => $worst['name'],
-                'group' => $worst['group'],
+                'name' => $worst->name,
+                'group' => $worst->group,
             ],
         ];
     }

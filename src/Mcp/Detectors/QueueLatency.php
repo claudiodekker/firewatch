@@ -94,6 +94,8 @@ class QueueLatency implements Thresholded
     {
         $rank = Percentile::MEDIAN->nearestRank();
 
+        $reach = Fragment::reach('late');
+
         return Stored::rows($connection, "{$dispatches->sql}, judged AS (
             SELECT *, coalesce(wait >= :microseconds, 0) AS waited_long, coalesce(wait >= :microseconds OR age >= :microseconds, 0) AS late FROM dispatches
         ), ranked AS (
@@ -112,9 +114,7 @@ class QueueLatency implements Thresholded
             max(CASE WHEN by_latest = 1 THEN name END) AS name,
             json_group_array(DISTINCT queue) FILTER (WHERE state != 'inline') AS queues,
             json_group_array(DISTINCT connection) FILTER (WHERE state != 'inline') AS connections,
-            min(started_at) FILTER (WHERE late) AS first_seen, max(started_at) FILTER (WHERE late) AS last_seen,
-            count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE late) AS actors,
-            count(*) FILTER (WHERE late AND NULLIF(user_id, '') IS NULL) AS anonymous
+            {$reach}
         FROM ranked GROUP BY group_hash", [
             ...$dispatches->bindings,
             'microseconds' => $milliseconds * Microseconds::PER_MILLISECOND,
@@ -187,32 +187,19 @@ class QueueLatency implements Thresholded
      * Get the finding of a group.
      *
      * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
      */
-    protected function finding(array $row): array
+    protected function finding(array $row): Finding
     {
-        return [
-            'group' => $row['group_hash'],
-            'name' => RecordType::QUEUED_JOB->groupLabel($row['name']),
-            'count' => Stored::milliseconds($row['worst']),
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
-                'jobs' => $row['jobs'],
-                'waits_over_threshold' => $row['waits_over_threshold'],
-                'pending' => $row['pending'],
-                'worst_wait_ms' => Stored::milliseconds($row['worst_wait']),
-                'median_wait_ms' => $row['waits'] >= Percentile::MEDIAN->floor() ? Stored::milliseconds($row['median_wait']) : null,
-                'oldest_pending_age_ms' => Stored::milliseconds($row['oldest_pending_age']),
-                'queues' => $this->seen($row['queues']),
-                'connections' => $this->seen($row['connections']),
-            ],
-        ];
+        return Finding::from($row, name: RecordType::QUEUED_JOB->groupLabel($row['name']), count: Stored::milliseconds($row['worst']), evidence: [
+            'jobs' => $row['jobs'],
+            'waits_over_threshold' => $row['waits_over_threshold'],
+            'pending' => $row['pending'],
+            'worst_wait_ms' => Stored::milliseconds($row['worst_wait']),
+            'median_wait_ms' => $row['waits'] >= Percentile::MEDIAN->floor() ? Stored::milliseconds($row['median_wait']) : null,
+            'oldest_pending_age_ms' => Stored::milliseconds($row['oldest_pending_age']),
+            'queues' => $this->seen($row['queues']),
+            'connections' => $this->seen($row['connections']),
+        ]);
     }
 
     /**

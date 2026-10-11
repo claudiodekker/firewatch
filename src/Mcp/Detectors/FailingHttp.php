@@ -21,11 +21,6 @@ class FailingHttp implements Thresholded
     protected const LISTED = 3;
 
     /**
-     * The decimals of a share in an answer.
-     */
-    protected const PERCENT_DECIMALS = 1;
-
-    /**
      * Get the name of the shape the detector judges.
      */
     public function name(): DetectorName
@@ -96,6 +91,8 @@ class FailingHttp implements Thresholded
         $listed = self::LISTED;
         $worstFirst = 'failures DESC, CAST(failures AS REAL) / answered DESC, last_seen DESC, group_hash ASC';
 
+        $reach = Fragment::reach('failed');
+
         // A group hash is compared with IS, so that the requests the wire sent without one stay one group.
         return Stored::rows($connection, "{$labels}, calls AS MATERIALIZED (
             SELECT id, started_at, group_hash, host, execution_source AS source,
@@ -109,9 +106,7 @@ class FailingHttp implements Thresholded
             SELECT group_hash, count(*) AS calls, count(status) AS answered, count(*) FILTER (WHERE failed) AS failures,
                 max(CASE WHEN by_latest = 1 THEN host END) AS host,
                 max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
-                min(started_at) FILTER (WHERE failed) AS first_seen, max(started_at) FILTER (WHERE failed) AS last_seen,
-                count(DISTINCT user_id) FILTER (WHERE failed) AS actors,
-                count(*) FILTER (WHERE failed AND user_id IS NULL) AS anonymous
+                {$reach}
             FROM placed GROUP BY group_hash HAVING count(*) FILTER (WHERE failed) > 0
         ), ranked AS (
             SELECT *, count(*) OVER () AS total FROM hosts
@@ -152,31 +147,18 @@ class FailingHttp implements Thresholded
      * Get the finding of a host.
      *
      * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
      */
-    protected function finding(array $row): array
+    protected function finding(array $row): Finding
     {
-        return [
-            'group' => $row['group_hash'],
-            'name' => is_string($row['host']) ? $row['host'] : '',
-            'count' => $row['failures'],
-            'first_seen_at' => $row['first_seen'],
-            'last_seen_at' => $row['last_seen'],
-            'latest_execution_id' => $row['latest_execution_id'],
-            'reaches' => [
-                'signed_in_actors' => $row['actors'],
-                'without_actor' => $row['anonymous'],
-            ],
-            'evidence' => [
-                'host' => $row['host'],
-                'calls' => $row['calls'],
-                'failures' => $row['failures'],
-                'failure_pct' => round(Percentile::PERCENT * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
-                'status_counts' => Cell::json($row['status_counts']),
-                'top_urls' => Cell::json($row['top_urls']),
-                'ran_in' => array_map($this->unit(...), Cell::json($row['ran_in'])),
-            ],
-        ];
+        return Finding::from($row, name: is_string($row['host']) ? $row['host'] : '', count: $row['failures'], evidence: [
+            'host' => $row['host'],
+            'calls' => $row['calls'],
+            'failures' => $row['failures'],
+            'failure_pct' => Percentile::percent($row['failures'], $row['answered']),
+            'status_counts' => Cell::json($row['status_counts']),
+            'top_urls' => Cell::json($row['top_urls']),
+            'ran_in' => array_map($this->unit(...), Cell::json($row['ran_in'])),
+        ]);
     }
 
     /**
