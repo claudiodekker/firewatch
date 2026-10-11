@@ -1,8 +1,10 @@
 <?php
 
+use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
 use ClaudioDekker\Firewatch\Console\Doctor\Check;
 use ClaudioDekker\Firewatch\Console\Doctor\CheckStatus;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Artisan;
 
 const README_FILE = __DIR__.'/../../README.md';
@@ -136,6 +138,14 @@ test('each default in the configuration table is the default of the shipped file
     foreach (readmeTable('Configuration') as [$key, , $default]) {
         expect($default)->toBe(renderDefault($config[$key]), "The default of {$key} differs.");
     }
+});
+
+test('the normaliser falls back to the defaults of the shipped file', function () {
+    $normaliser = new ConfigurationNormaliser(basePath: base_path(), publicPath: public_path(), storagePath: storage_path());
+
+    $resolved = fn (array $raw) => ['database' => str_replace('\\', '/', $normaliser->resolve($raw)->database)] + get_object_vars($normaliser->resolve($raw));
+
+    expect($resolved(Arr::undot(loadShippedConfig())))->toEqual($resolved([]));
 });
 
 test('the tool table lists exactly the tools the server lists', function () {
