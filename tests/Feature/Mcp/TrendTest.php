@@ -1,11 +1,13 @@
 <?php
 
+use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Compare;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trend;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
@@ -480,6 +482,18 @@ it('answers nothing for no store, a window before every record, a type with no r
             ->and($envelope['next'])->toBe([])
             ->and(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion');
     }
+});
+
+it('answers that the store is empty, with the coverage of the type it would trend', function () {
+    $this->travelTo(Date::createFromTimestamp(TREND_CREATED));
+    app(Writer::class)->transaction(fn () => null);
+
+    $envelope = trendAnswer();
+
+    expect($envelope['empty'])->toBe(['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => app(Configuration::class)->database])])
+        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0, 'oldest_at' => null, 'types_read' => ['request']])
+        ->and($envelope['result'])->toBe([])
+        ->and($envelope['next'])->toBe([]);
 });
 
 it('refuses what it can not trend, naming what it accepts', function (array $arguments, string $key, string $argument, string $accepted, string $example, ?string $expected = null, ?string $value = null) {
