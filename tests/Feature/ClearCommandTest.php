@@ -266,16 +266,18 @@ describe('clearing everything', function () {
         $last = max(clearIds());
         $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
         {
-            protected int $transactions = 0;
+            protected bool $arrived = false;
 
             public function transaction(Closure $callback): mixed
             {
-                // The clear reads the newest id in its first transaction and deletes from its second.
-                if (++$this->transactions === 2) {
+                $result = parent::transaction($callback);
+
+                if (! $this->arrived) {
+                    $this->arrived = true;
                     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776100.0])]);
                 }
 
-                return parent::transaction($callback);
+                return $result;
             }
         };
         app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => $writer]));
@@ -318,10 +320,11 @@ describe('clearing everything', function () {
 
         runClear()->run();
 
-        $deleting = array_filter($writer->commits, fn (array $commit) => $commit['records'] < 6);
+        $deleted = array_map(fn (array $commit) => $commit['records'] < 6, $writer->commits);
+        $stamped = array_map(fn (array $commit) => $commit['clearedAt'] === 1790778600.0, $writer->commits);
 
-        expect(array_column($writer->commits, 'records'))->toContain(6, 4, 2, 0)
-            ->and(array_values(array_unique(array_column($deleting, 'clearedAt'), SORT_REGULAR)))->toBe([1790778600.0]);
+        expect($stamped)->toBe($deleted)
+            ->and(array_slice(array_column($writer->commits, 'records'), 0, 4))->toBe([6, 4, 2, 0]);
     });
 
     it('returns the freed pages to the file', function () {
