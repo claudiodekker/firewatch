@@ -81,7 +81,7 @@ class Markers
     public function __construct(
         public readonly ?float $createdAt = null,
         public readonly ?float $rebuiltAt = null,
-        public readonly ?string $rebuiltWhy = null,
+        public readonly ?RebuildReason $rebuiltWhy = null,
         public readonly ?float $prunedThrough = null,
         public readonly ?PruneReason $prunedReason = null,
         public readonly ?float $clearedAt = null,
@@ -112,7 +112,7 @@ class Markers
         return new self(
             createdAt: self::instant($meta[self::CREATED_AT] ?? null),
             rebuiltAt: self::instant($meta[self::REBUILT_AT] ?? null),
-            rebuiltWhy: $meta[self::REBUILT_WHY] ?? null,
+            rebuiltWhy: RebuildReason::tryFrom($meta[self::REBUILT_WHY] ?? ''),
             prunedThrough: $prunedThrough,
             prunedReason: $prunedThrough === null ? null : PruneReason::tryFrom($meta[self::PRUNED_BY] ?? '') ?? self::DEFAULT_PRUNED_REASON,
             clearedAt: self::instant($meta[self::CLEARED_AT] ?? null),
@@ -148,10 +148,10 @@ class Markers
     /**
      * Record when and why a new store replaced another.
      */
-    public static function markRebuilt(SQLite3 $connection, CarbonInterface $at, string $why): void
+    public static function markRebuilt(SQLite3 $connection, CarbonInterface $at, RebuildReason $why): void
     {
         self::put($connection, key: self::REBUILT_AT, value: self::text($at));
-        self::put($connection, key: self::REBUILT_WHY, value: $why);
+        self::put($connection, key: self::REBUILT_WHY, value: $why->value);
     }
 
     /**

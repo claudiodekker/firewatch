@@ -175,7 +175,7 @@ describe('a store in another state', function () {
             ->and($result['output'])->toMatch(rebuiltPattern())
             ->and(storeRows('SELECT id FROM records'))->toBe([])
             ->and(storeRows('PRAGMA user_version'))->toBe([['user_version' => Schema::VERSION]])
-            ->and(dropMarkers()->rebuiltWhy)->toBe('schema')
+            ->and(dropMarkers()->rebuiltWhy?->value)->toBe('schema')
             ->and(fileinode(dropPath()))->toBe($inode);
     })->with([
         'an older schema' => 0,
@@ -196,7 +196,7 @@ describe('a store in another state', function () {
             ->and($result['output'])->toBe(__('firewatch::messages.clear.replaced_damaged', ['file' => basename(dropPath()).'.corrupt']))
             ->and(md5_file(dropPath().'.corrupt'))->toBe($damaged)
             ->and(storeRows('SELECT id FROM records'))->toBe([])
-            ->and(dropMarkers()->rebuiltWhy)->toBe('corrupt')
+            ->and(dropMarkers()->rebuiltWhy?->value)->toBe('corrupt')
             ->and(filesize(dropFailuresPath()))->toBe(0);
     });
 
@@ -215,7 +215,7 @@ describe('a store in another state', function () {
             ->and($result['output'])->toBe(__('firewatch::messages.clear.replaced_damaged', ['file' => basename(dropPath()).'.corrupt']))
             ->and(md5_file(dropPath().'.corrupt'))->toBe($damaged)
             ->and(storeRows('SELECT id FROM records'))->toBe([])
-            ->and(dropMarkers()->rebuiltWhy)->toBe('corrupt');
+            ->and(dropMarkers()->rebuiltWhy?->value)->toBe('corrupt');
     });
 
     it('leaves a file that is not a Firewatch store as it is', function (Closure $arrange) {

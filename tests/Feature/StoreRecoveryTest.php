@@ -265,7 +265,7 @@ describe('a damaged Firewatch store', function () {
             ->and(recoveryFailures()[0])->toMatchArray(['at' => (float) $now->format('U.u'), 'entry' => 'recovery', 'kind' => 'corrupt', 'code' => 11])
             ->and(recoveryFailures()[0])->not->toHaveKey('dropped')
             ->and(recoveryFailures()[0]['message'])->toEndWith('database disk image is malformed')
-            ->and(app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->rebuiltWhy))->toBe('corrupt');
+            ->and(app(Reader::class)->snapshot(fn (SQLite3 $connection) => Markers::read($connection)->rebuiltWhy?->value))->toBe('corrupt');
         Exceptions::assertNothingReported();
     })->with([
         'a writer that closes its connection per batch, damaged in its tables' => ['3.45.1', 4096],

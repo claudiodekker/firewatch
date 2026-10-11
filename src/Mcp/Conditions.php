@@ -94,10 +94,10 @@ class Conditions
 
         return [$this->condition('store-rebuilt', [
             'at' => Instant::format($at, $timezone),
-            'why' => $why,
+            'why' => $why->value,
         ], [
             'rebuilt_at' => $at,
-            'why' => $why,
+            'why' => $why->value,
         ])];
     }
 

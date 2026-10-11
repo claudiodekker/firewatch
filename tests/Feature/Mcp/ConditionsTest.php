@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\PruneReason;
+use ClaudioDekker\Firewatch\Store\RebuildReason;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
@@ -105,7 +106,7 @@ describe('history', function () {
 
 describe('a rebuilt store', function () {
     it('says earlier data is gone from the rebuild, with when and why', function (string $why) {
-        $conditions = conditionsFor(new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: $why));
+        $conditions = conditionsFor(new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: RebuildReason::from($why)));
 
         expect($conditions)->toBe([[
             'id' => 'store-rebuilt',
@@ -117,7 +118,7 @@ describe('a rebuilt store', function () {
     })->with(['a schema change' => 'schema', 'corruption' => 'corrupt']);
 
     it('attaches only while the window starts before the rebuild', function (?float $since, bool $attached) {
-        $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema');
+        $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: RebuildReason::SCHEMA);
 
         expect(array_column(conditionsFor($markers, since: $since), 'id'))->toBe($attached ? ['store-rebuilt'] : []);
     })->with([
@@ -324,7 +325,7 @@ it('attaches the conditions after the structural blind spots, in the order of th
     config()->set('firewatch.capture.redact_headers', ['Authorization']);
     registerFirewatch();
 
-    $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema', prunedThrough: 700.0, prunedReason: PruneReason::AGE, nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
+    $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: RebuildReason::SCHEMA, prunedThrough: 700.0, prunedReason: PruneReason::AGE, nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
 
     $conditions = conditionsFor($markers, drift: [['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen' => 5.0]]);
 

@@ -4,6 +4,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\PruneReason;
+use ClaudioDekker\Firewatch\Store\RebuildReason;
 
 function markerStore(): SQLite3
 {
@@ -27,12 +28,12 @@ it('reads the creation and the rebuild with their microseconds', function () {
     $at = CarbonImmutable::createFromFormat('U.u', '1790776800.250000');
 
     Markers::markCreated($connection, $at, '1.0.0');
-    Markers::markRebuilt($connection, $at->addSeconds(5), 'corrupt');
+    Markers::markRebuilt($connection, $at->addSeconds(5), RebuildReason::CORRUPT);
     $markers = Markers::read($connection);
 
     expect($markers->createdAt)->toBe(1790776800.25)
         ->and($markers->rebuiltAt)->toBe(1790776805.25)
-        ->and($markers->rebuiltWhy)->toBe('corrupt');
+        ->and($markers->rebuiltWhy?->value)->toBe('corrupt');
 });
 
 it('advances the pruned-through instant with the reason of the pass that advanced it', function () {

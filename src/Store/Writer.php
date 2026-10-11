@@ -65,7 +65,7 @@ class Writer
     /**
      * Why the next store this writer creates replaces one that was lost, until it stamps it.
      */
-    protected ?string $rebuildReason = null;
+    protected ?RebuildReason $rebuildReason = null;
 
     /**
      * The process the open connection was made in.
@@ -473,14 +473,14 @@ class Writer
                 throw $this->foreign();
             }
 
-            $this->build($connection, $stamp->isFresh() ? $this->rebuildReason : 'schema');
+            $this->build($connection, $stamp->isFresh() ? $this->rebuildReason : RebuildReason::SCHEMA);
         });
     }
 
     /**
      * Drop everything in the store and build the current schema and its stamps in its place.
      */
-    protected function build(SQLite3 $connection, ?string $why): void
+    protected function build(SQLite3 $connection, ?RebuildReason $why): void
     {
         $this->dropEverything($connection);
 
@@ -516,7 +516,7 @@ class Writer
      */
     public function replaceOtherSchema(): void
     {
-        $this->write(fn (SQLite3 $connection) => StoreStamp::read($connection)->isCurrent() ? null : $this->build($connection, 'schema'));
+        $this->write(fn (SQLite3 $connection) => StoreStamp::read($connection)->isCurrent() ? null : $this->build($connection, RebuildReason::SCHEMA));
     }
 
     /**
@@ -588,7 +588,7 @@ class Writer
 
         $this->failures->recovered($exception);
 
-        $this->rebuildReason = 'corrupt';
+        $this->rebuildReason = RebuildReason::CORRUPT;
 
         return true;
     }
