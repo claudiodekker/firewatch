@@ -158,7 +158,7 @@ it('orders by the maximum and says so when no group reaches the floor of the per
     'p50' => ['p50_duration', 'p50', 3],
 ]);
 
-it('sorts the groups below the floor after those above it, with no fallback', function () {
+it('sorts the groups below the floor after those above it, with no substitute', function () {
     ingest([
         ...rankGroup(RecordType::REQUEST, 'a', [900, 800]),
         ...rankGroup(RecordType::REQUEST, 'b', array_fill(0, 20, 1)),
@@ -443,7 +443,7 @@ it('leaves the duration of a skipped scheduled task out of the durations', funct
     expect($rows[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 30.0, 'total_ms' => 30.0]);
 });
 
-it('shows the 95th percentile of memory at 20 records and falls back to the maximum below it', function () {
+it('shows the 95th percentile of memory at 20 records and substitutes the maximum below it', function () {
     ingest([
         ...array_map(fn (int $mb) => rankRecord(RecordType::REQUEST, 'a', 10, ['peak_memory_usage' => $mb * 1048576]), range(1, 20)),
         ...array_map(fn (int $mb) => rankRecord(RecordType::REQUEST, 'b', 10, ['peak_memory_usage' => $mb * 1048576]), [50, 2]),
@@ -591,7 +591,7 @@ it('pages through ties and groups without the measure in the order of one unpage
     expect($seen)->toBe($expected)->and($expected)->toHaveCount(count($groups));
 })->with([
     'ties, then groups below the floor' => [['a' => array_fill(0, 20, 5), 'b' => array_fill(0, 20, 5), 'c' => [9, 9], 'd' => [9, 9], 'e' => [7]], 'p95_duration'],
-    'the fallback to the maximum' => [['a' => [5, 5], 'b' => [5, 5], 'c' => [8], 'd' => [1, 9], 'e' => [9, 1]], 'p95_duration'],
+    'the substitute of the maximum' => [['a' => [5, 5], 'b' => [5, 5], 'c' => [8], 'd' => [1, 9], 'e' => [9, 1]], 'p95_duration'],
     'the median with a null before ties' => [['a' => [4, 4, 4], 'b' => [4, 4, 4], 'c' => [4, 4], 'd' => [4]], 'p50_duration'],
 ]);
 
