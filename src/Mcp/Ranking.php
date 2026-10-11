@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
-use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Stage;
 use SQLite3;
 
@@ -171,16 +170,6 @@ class Ranking
         $slowest = $row === null ? null : new SlowestExecution($row['execution_id'], $row['d'], array_intersect_key($row, $sums));
 
         return new StageView($this->population->type, $executions, $records - $executions, $sums, $slowest);
-    }
-
-    /**
-     * Pick the type of a group that no type was asked for: a job group is held by job attempts and dispatches, and the attempts carry the execution measures.
-     *
-     * @param  list<RecordType>  $held
-     */
-    public static function preferred(array $held): ?RecordType
-    {
-        return in_array(RecordType::JOB_ATTEMPT, $held, true) ? RecordType::JOB_ATTEMPT : ($held[0] ?? null);
     }
 
     /**

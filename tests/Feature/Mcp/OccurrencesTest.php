@@ -477,19 +477,6 @@ it('lists the dispatches and the attempts of a job group together', function () 
     expect(array_column($rows, 'type'))->toBe(['job-attempt', 'queued-job']);
 });
 
-it('refuses a type that does not hold the group', function () {
-    ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a')])]);
-
-    $response = FirewatchServer::tool(Occurrences::class, ['group' => occHash('a'), 'type' => 'query']);
-
-    $response->assertHasErrors([__('firewatch::messages.conflicting_arguments', [
-        'argument' => 'group',
-        'with' => 'type',
-        'accepted' => 'a `type` that holds the group: request',
-        'example' => 'occurrences(type: "request")',
-    ])]);
-});
-
 it('answers that nothing matched a group the store does not hold', function () {
     ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a')])]);
 

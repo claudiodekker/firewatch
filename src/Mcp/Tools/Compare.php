@@ -13,6 +13,7 @@ use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\DeployPair;
+use ClaudioDekker\Firewatch\Mcp\GroupSelection;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\SplitPoint;
@@ -137,7 +138,7 @@ class Compare extends Tool
             return $frame->empty(notes: $notes);
         }
 
-        [$type, $held, $window, $inWindow, $comparison] = $read;
+        [$selection, $type, $window, $inWindow, $comparison] = $read;
 
         $frame->about($type === null ? [] : [$type], $window, facts: $boundary->isInstant() ? [CallFact::ANCHORED] : [], straddling: $comparison?->straddling);
 
@@ -145,20 +146,17 @@ class Compare extends Tool
             return $frame->empty(notes: $notes);
         }
 
-        $filters = [...$this->filters($group, $explicit), ...$boundary->filters()];
         $hasRows = $comparison !== null && ! $comparison->isEmpty();
-        $empty = $frame->vacancy(inWindow: $inWindow, groupHeld: $group === null || $held !== [], hasRows: $hasRows, filters: $filters);
+        $empty = $selection->vacancy($frame, $inWindow, $hasRows, $boundary->filters());
 
         if ($empty !== null || $comparison === null) {
             return $frame->empty($empty, $notes);
         }
 
-        $shared = $explicit === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
-
         return $frame->answer(
             summary: $this->summary($comparison),
             result: $comparison->result(),
-            notes: $this->notes($request, $comparison, $frame->facts()->oldest, $shared ? $group : null),
+            notes: [...$selection->notes(), ...$this->notes($request, $comparison, $frame->facts()->oldest)],
             truncated: $this->truncated($comparison),
             next: $this->next($comparison, $window),
             cuttable: ['groups'],
@@ -167,33 +165,14 @@ class Compare extends Tool
     }
 
     /**
-     * Get the filters of the call as an empty answer names them before the boundary's: the group when one is given, then the type the call names.
-     *
-     * @return list<string>
-     */
-    protected function filters(?string $group, ?RecordType $type): array
-    {
-        $filters = [];
-
-        if ($group !== null) {
-            $filters[] = "group: {$group}";
-        }
-
-        if ($type !== null) {
-            $filters[] = "type: {$type->value}";
-        }
-
-        return $filters;
-    }
-
-    /**
      * Resolve the type and the window against the store, refuse a split outside the window, and compare, in one snapshot.
      *
-     * @return array{RecordType|null, list<RecordType>, Window, int, Comparison|null}
+     * @return array{GroupSelection, RecordType|null, Window, int, Comparison|null}
      */
     protected function load(SQLite3 $connection, StoreFacts $facts, Arguments $arguments, Window $given, float $epoch, Boundary $boundary, ?RecordType $explicit, ?string $group, int $limit): array
     {
-        [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "compare(group: \"{$group}\", split_at: \"<time>\")");
+        $selection = GroupSelection::resolve($connection, $group, $explicit, null, "compare(group: \"{$group}\", split_at: \"<time>\")");
+        $type = $selection->measured();
         $by = $type === null ? null : $this->measure($arguments, $type);
         $coverageStart = $type === null ? null : $facts->historyFrom([$type]);
 
@@ -207,7 +186,7 @@ class Compare extends Tool
             ? null
             : Comparison::of($connection, $type, $by, $window, $boundary, $coverageStart, $group, $limit);
 
-        return [$type, $held, $window, $inWindow, $comparison];
+        return [$selection, $type, $window, $inWindow, $comparison];
     }
 
     /**
@@ -249,17 +228,13 @@ class Compare extends Tool
     }
 
     /**
-     * Get the notes of a comparison, in the fixed order: the shared job group, what a comparison that ran on nothing says, then the boundary's.
+     * Get the notes of a comparison, in the fixed order: what a comparison that ran on nothing says, then the boundary's.
      *
      * @return list<string>
      */
-    protected function notes(Request $request, Comparison $comparison, ?float $oldest, ?string $shared): array
+    protected function notes(Request $request, Comparison $comparison, ?float $oldest): array
     {
         $notes = [];
-
-        if ($shared !== null) {
-            $notes[] = __('firewatch::messages.rank_job_group', ['group' => $shared]);
-        }
 
         if ($comparison->unevaluated() !== null) {
             $notes[] = $comparison->boundary->notEvaluatedNote();

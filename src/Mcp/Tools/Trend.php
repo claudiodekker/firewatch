@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
+use ClaudioDekker\Firewatch\Mcp\GroupSelection;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
@@ -142,7 +143,7 @@ class Trend extends Tool
             return $frame->empty();
         }
 
-        [$type, $held, $window, $inWindow, $buckets] = $read;
+        [$selection, $type, $window, $inWindow, $buckets] = $read;
 
         $frame->about($type === null ? [] : [$type], $window, facts: [CallFact::ANCHORED]);
 
@@ -150,56 +151,30 @@ class Trend extends Tool
             return $frame->empty();
         }
 
-        $filters = $this->filters($group, $explicit, $deploy);
-        $empty = $frame->vacancy(inWindow: $inWindow, groupHeld: $group === null || $held !== [], hasRows: $buckets !== null, filters: $filters);
+        $empty = $selection->vacancy($frame, $inWindow, $buckets !== null);
 
         if ($empty !== null || $buckets === null) {
             return $frame->empty($empty);
         }
 
-        $shared = $explicit === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
-
         return $frame->answer(
             summary: $this->summary($buckets),
             result: $buckets->result(),
-            notes: $this->notes($buckets, $frame->now, $shared ? $group : null),
+            notes: [...$selection->notes(), ...$this->notes($buckets, $frame->now)],
             next: $this->next($buckets, $group, $deploy, $frame->now),
             cuttable: [],
         );
     }
 
     /**
-     * Get the filters of the call as an empty answer names them.
-     *
-     * @return list<string>
-     */
-    protected function filters(?string $group, ?RecordType $type, ?string $deploy): array
-    {
-        $filters = [];
-
-        if ($group !== null) {
-            $filters[] = "group: {$group}";
-        }
-
-        if ($type !== null) {
-            $filters[] = "type: {$type->value}";
-        }
-
-        if ($deploy !== null) {
-            $filters[] = "deploy: {$deploy}";
-        }
-
-        return $filters;
-    }
-
-    /**
      * Resolve the type, the measure and the coverage start, and read the buckets, in one snapshot.
      *
-     * @return array{RecordType|null, list<RecordType>, Window, int, Buckets|null}
+     * @return array{GroupSelection, RecordType|null, Window, int, Buckets|null}
      */
     protected function load(SQLite3 $connection, StoreFacts $facts, Arguments $arguments, Window $given, ?RecordType $explicit, ?string $group, ?string $deploy, int $count): array
     {
-        [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "trend(group: \"{$group}\")");
+        $selection = GroupSelection::resolve($connection, $group, $explicit, $deploy, "trend(group: \"{$group}\")");
+        $type = $selection->measured();
         $buckets = null;
 
         if ($type !== null) {
@@ -210,7 +185,7 @@ class Trend extends Tool
 
         $window = $buckets === null ? $given->derive(null, null) : $buckets->window;
 
-        return [$type, $held, $window, $window->count($connection), $buckets];
+        return [$selection, $type, $window, $window->count($connection), $buckets];
     }
 
     /**
@@ -249,17 +224,13 @@ class Trend extends Tool
     }
 
     /**
-     * Get the notes in the fixed order: the shared job group, the partial buckets, the window of no width, the idle time.
+     * Get the notes in the fixed order: the partial buckets, the window of no width, the idle time.
      *
      * @return list<string>
      */
-    protected function notes(Buckets $buckets, float $now, ?string $shared): array
+    protected function notes(Buckets $buckets, float $now): array
     {
         $notes = [];
-
-        if ($shared !== null) {
-            $notes[] = __('firewatch::messages.rank_job_group', ['group' => $shared]);
-        }
 
         $partial = $buckets->partialCount();
 

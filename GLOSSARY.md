@@ -519,6 +519,10 @@ _Avoid_: Header, statistics
 An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id.
 _Avoid_: Filter (a filter narrows a selection, a selector defines it)
 
+**Group selection**:
+The group a call names, with its type and deploy, resolved against the store: the types that hold the group, the one type a measure reads (job attempts for a job group), the one type a listing reads (none for a group two types hold, so both are listed), and whether the store holds the group at all. A type that does not hold the group is refused in one wording by `rank`, `compare`, `trend` and `occurrences`.
+_Avoid_: Group filter, group resolution
+
 **Next call**:
 A ready-to-run tool call offered at the end of an answer, built from that answer's own values.
 _Avoid_: Suggestion, hint

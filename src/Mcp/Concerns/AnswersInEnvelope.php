@@ -77,6 +77,14 @@ trait AnswersInEnvelope
     }
 
     /**
+     * Get the matching argument.
+     */
+    protected function matchingArgument(JsonSchema $schema): StringType
+    {
+        return $schema->string()->min(1)->max(200);
+    }
+
+    /**
      * Get the limit argument, from the bounds of the tool and what it lists.
      */
     protected function limitArgument(JsonSchema $schema, int $maximum, int $default): IntegerType

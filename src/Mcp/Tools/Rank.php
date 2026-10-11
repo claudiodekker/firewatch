@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Continuation;
 use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Frame;
+use ClaudioDekker\Firewatch\Mcp\GroupSelection;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Population;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
@@ -20,6 +21,7 @@ use ClaudioDekker\Firewatch\Mcp\StageView;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
+use Closure;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -58,11 +60,6 @@ class Rank extends Tool
     protected const MAXIMUM_LIMIT = 100;
 
     /**
-     * The most characters a label match has.
-     */
-    protected const MAXIMUM_MATCHING = 200;
-
-    /**
      * Create a new tool instance.
      */
     public function __construct(
@@ -91,7 +88,7 @@ class Rank extends Tool
         return [
             'type' => $this->groupedTypeArgument($schema),
             'group' => $schema->string()->description(__('firewatch::messages.rank_group_argument')),
-            'matching' => $schema->string()->description(__('firewatch::messages.rank_matching_argument')),
+            'matching' => $this->matchingArgument($schema)->description(__('firewatch::messages.rank_matching_argument')),
             'by' => $this->measureArgument($schema, Measure::for(...))->description(__('firewatch::messages.rank_by_argument')),
             ...$this->windowSchema($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
@@ -116,7 +113,7 @@ class Rank extends Tool
     {
         $arguments = new Arguments($request, $this);
         $group = $arguments->group('rank(group: "<group id>")');
-        $matching = $this->matching($arguments);
+        $matching = $arguments->matching('rank(type: "request", matching: "orders")');
         $explicit = $arguments->typeWithGroups($group, 'rank(type: "request", by: "p95_duration")');
         $limit = $arguments->limit($explicit === null ? ['group' => '<group id>'] : ['type' => $explicit->value]);
         $deploy = $arguments->deploy($this->call([
@@ -134,18 +131,16 @@ class Rank extends Tool
 
         $frame = $this->frame($now);
         $window = $continuation->window($now, $frame->timezone);
-        $filters = $group === null
-            ? ["type: {$explicit?->value}", ...($matching === null ? [] : ["matching: {$matching}"]), ...($deploy === null ? [] : ["deploy: {$deploy}"])]
-            : ["group: {$group}", ...($explicit === null ? [] : ["type: {$explicit->value}"])];
 
         $frame->about($explicit === null ? [] : [$explicit], $window);
 
-        $read = $frame->read(function (SQLite3 $connection) use ($request, $arguments, $window, $group, $explicit, $matching, $deploy, $limit, $by, $continuation, $filters) {
+        $read = $frame->read(function (SQLite3 $connection) use ($arguments, $window, $group, $explicit, $matching, $deploy, $limit, $by, $continuation) {
             $inWindow = $window->count($connection);
-            [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "rank(group: \"{$group}\")");
-            $unranked = fn (Frame $frame) => $this->unranked($frame, $filters, $inWindow, $group, $held);
+            $selection = GroupSelection::resolve($connection, $group, $explicit, $deploy, "rank(group: \"{$group}\")");
+            $type = $selection->measured();
+            $unranked = fn (Frame $frame) => $frame->empty($selection->vacancy($frame, $inWindow, hasRows: false, own: $matching === null ? [] : ["matching: {$matching}"]));
 
-            if ($type === null || ($group !== null && $held === [])) {
+            if ($type === null || ! $selection->isHeld()) {
                 return [$type, $unranked];
             }
 
@@ -159,12 +154,12 @@ class Rank extends Tool
             if ($group === null) {
                 $ranked = $ranking->read($connection, $continuation->after(), $limit);
 
-                return [$type, fn (Frame $frame) => $this->ranking($continuation, $frame, $window, $filters, $inWindow, $type, $measure, $ranked)];
+                return [$type, fn (Frame $frame) => $this->ranking($continuation, $frame, $window, $unranked, $type, $measure, $ranked)];
             }
 
             $broken = $ranking->breakdown($connection, $limit);
 
-            return [$type, fn (Frame $frame) => $this->breakdown($request, $frame, $filters, $inWindow, $type, $group, $held, $broken)];
+            return [$type, fn (Frame $frame) => $this->breakdown($frame, $unranked, $type, $group, $selection, $broken)];
         });
 
         if ($read === null) {
@@ -185,27 +180,16 @@ class Rank extends Tool
     }
 
     /**
-     * Say why nothing was ranked.
-     *
-     * @param  list<string>  $filters
-     * @param  list<RecordType>  $held
-     */
-    protected function unranked(Frame $frame, array $filters, int $inWindow, ?string $group, array $held): Answer
-    {
-        return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: $group === null || $held !== [], hasRows: false, filters: $filters));
-    }
-
-    /**
      * Put the groups, worst first, in the envelope.
      *
-     * @param  list<string>  $filters
      * @param  Continuation<array{value: int|float|null, occurrences: int, hash: string}>  $continuation
+     * @param  Closure(Frame): Answer  $unranked
      * @param  array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
      */
-    protected function ranking(Continuation $continuation, Frame $frame, Window $window, array $filters, int $inWindow, RecordType $type, Measure $by, array $ranked): Answer
+    protected function ranking(Continuation $continuation, Frame $frame, Window $window, Closure $unranked, RecordType $type, Measure $by, array $ranked): Answer
     {
         if ($ranked['ranked'] === 0) {
-            return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
+            return $unranked($frame);
         }
 
         $page = $ranked['page'];
@@ -241,17 +225,15 @@ class Rank extends Tool
     /**
      * Put the deploys one group was recorded under in the envelope.
      *
-     * @param  list<string>  $filters
-     * @param  list<RecordType>  $held
+     * @param  Closure(Frame): Answer  $unranked
      * @param  array{page: Rows<array<string, mixed>>, rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}  $breakdown
      */
-    protected function breakdown(Request $request, Frame $frame, array $filters, int $inWindow, RecordType $type, string $group, array $held, array $breakdown): Answer
+    protected function breakdown(Frame $frame, Closure $unranked, RecordType $type, string $group, GroupSelection $selection, array $breakdown): Answer
     {
         if ($breakdown['rows'] === []) {
-            return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
+            return $unranked($frame);
         }
 
-        $shared = $request->get('type') === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
         $entry = $breakdown['page']->truncation(section: 'deploys', how: __('firewatch::messages.rank_truncated_how'), matched: $breakdown['matched']);
         $truncated = $entry === null ? [] : [$entry];
         $stages = $breakdown['stages'];
@@ -260,7 +242,6 @@ class Rank extends Tool
             'count' => $breakdown['matched'],
         ]);
         $stageSummary = $stages?->summary() ?? '';
-        $jobNotes = $shared ? [__('firewatch::messages.rank_job_group', ['group' => $group])] : [];
         $stageNotes = $stages?->notes() ?? [];
         $stageFields = $stages?->fields() ?? StageView::none();
 
@@ -274,7 +255,7 @@ class Rank extends Tool
                 ...$stageFields,
                 'deploys' => $breakdown['rows'],
             ],
-            notes: [...$jobNotes, ...$stageNotes],
+            notes: [...$selection->notes(), ...$stageNotes],
             truncated: $truncated,
         );
     }
@@ -358,24 +339,6 @@ class Rank extends Tool
         $expected = "a measure of {$type->value}".($group === null ? '' : ' in a breakdown of one group');
 
         return $arguments->among('by', $fitting, $expected, "rank(type: \"{$type->value}\", by: \"{$default->value}\")") ?? $default;
-    }
-
-    /**
-     * Read the text a group's label must contain.
-     */
-    protected function matching(Arguments $arguments): ?string
-    {
-        $value = $arguments->get('matching');
-
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_string($value) && mb_strlen($value) >= 1 && mb_strlen($value) <= self::MAXIMUM_MATCHING) {
-            return $value;
-        }
-
-        throw $arguments->invalid(argument: 'matching', expected: '1 to '.self::MAXIMUM_MATCHING.' characters', accepted: 'a text of 1 to '.self::MAXIMUM_MATCHING.' characters', example: 'rank(type: "request", matching: "orders")');
     }
 
     /**

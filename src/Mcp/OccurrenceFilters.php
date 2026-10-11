@@ -18,11 +18,6 @@ class OccurrenceFilters
     public const EXAMPLE = 'occurrences(type: "request")';
 
     /**
-     * The longest `matching` there is.
-     */
-    protected const MAXIMUM_MATCHING = 200;
-
-    /**
      * Create a new occurrence filters instance.
      *
      * @param  array{int, int}|null  $status  the lowest and the highest status code that is kept
@@ -55,7 +50,7 @@ class OccurrenceFilters
             level: self::choice($arguments, 'level', LogLevel::class, 'a log level', 'occurrences(type: "log", level: "error")'),
             slowerThanMilliseconds: self::slowerThan($arguments),
             atOrAbove: self::choice($arguments, 'at_or_above', Percentile::class, 'median or p95', 'occurrences(type: "request", at_or_above: "p95")'),
-            matching: self::matchingText($arguments),
+            matching: $arguments->matching('occurrences(type: "log", matching: "timeout")'),
         );
     }
 
@@ -284,23 +279,5 @@ class OccurrenceFilters
         }
 
         throw $arguments->invalid(argument: 'slower_than_ms', expected: 'a number of milliseconds from 0', accepted: 'a number of milliseconds from 0', example: 'occurrences(type: "request", slower_than_ms: 500)');
-    }
-
-    /**
-     * Read the text a record must contain.
-     */
-    protected static function matchingText(Arguments $arguments): ?string
-    {
-        $value = $arguments->text('matching', self::EXAMPLE);
-
-        if ($value === null) {
-            return null;
-        }
-
-        if (mb_strlen($value) >= 1 && mb_strlen($value) <= self::MAXIMUM_MATCHING) {
-            return $value;
-        }
-
-        throw $arguments->invalid(argument: 'matching', expected: '1 to '.self::MAXIMUM_MATCHING.' characters', accepted: 'a substring of 1 to '.self::MAXIMUM_MATCHING.' characters', example: 'occurrences(type: "log", matching: "timeout")');
     }
 }

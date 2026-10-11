@@ -9,7 +9,6 @@ use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Server\Tool;
 use LogicException;
-use SQLite3;
 
 /**
  * @internal
@@ -243,6 +242,30 @@ class Arguments
     }
 
     /**
+     * Read the substring of the declared length a match must contain, or null when none is given.
+     */
+    public function matching(string $example): ?string
+    {
+        $value = $this->text('matching', $example);
+
+        if ($value === null) {
+            return null;
+        }
+
+        $declared = $this->declared('matching');
+        $length = [
+            'minimum' => $declared['minLength'],
+            'maximum' => $declared['maxLength'],
+        ];
+
+        if (mb_strlen($value) >= $length['minimum'] && mb_strlen($value) <= $length['maximum']) {
+            return $value;
+        }
+
+        throw $this->invalid(argument: 'matching', expected: __('firewatch::messages.argument_values.length', $length), accepted: __('firewatch::messages.argument_values.substring', $length), example: $example);
+    }
+
+    /**
      * Read the exact deploy the records are restricted to, or null for all of them.
      */
     public function deploy(string $example): ?string
@@ -256,26 +279,6 @@ class Arguments
         $deploy = __('firewatch::messages.argument_values.deploy');
 
         throw $this->invalid(argument: 'deploy', expected: $deploy, accepted: $deploy, example: $example);
-    }
-
-    /**
-     * Resolve the type a group is read as, with the types that hold it: the type the call names, else the one the group is best known by.
-     *
-     * @return array{RecordType|null, list<RecordType>}
-     */
-    public function resolveGroupType(SQLite3 $connection, ?string $group, ?RecordType $type, string $example): array
-    {
-        if ($group === null) {
-            return [$type, []];
-        }
-
-        $held = Stored::holders($connection, $group);
-
-        if ($type !== null && $held !== [] && ! in_array($type, $held, true)) {
-            throw Refusal::conflicting(argument: 'type', with: 'group', accepted: __('firewatch::messages.argument_values.holding', ['types' => $this->listed($held)]), example: $example);
-        }
-
-        return [$type ?? Ranking::preferred($held), $held];
     }
 
     /**
