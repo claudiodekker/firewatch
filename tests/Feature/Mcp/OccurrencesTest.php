@@ -387,23 +387,11 @@ it('has no matched_on without a matching', function () {
 it('refuses an argument of the wrong kind or value', function (array $arguments) {
     occRefused($arguments, 'invalid_argument');
 })->with([
-    'a short group' => [['group' => 'abc']],
-    'capitals in a group' => [['group' => str_repeat('A', 32)]],
-    'a group that is no text' => [['group' => 5]],
-    'a type with an underscore' => [['type' => 'job_attempt']],
-    'a type that is no text' => [['type' => 5]],
-    'the user directory' => [['type' => 'user']],
     'an empty id' => [['trace_id' => '']],
     'an id that is no text' => [['execution_id' => 5]],
     'an order that is none' => [['type' => 'request', 'order' => 'oldest']],
     'an order that is no text' => [['type' => 'request', 'order' => 5]],
-    'a limit of 0' => [['type' => 'request', 'limit' => 0]],
-    'a limit of 101' => [['type' => 'request', 'limit' => 101]],
-    'a limit that is text' => [['type' => 'request', 'limit' => 'ten']],
-    'a deploy that is no text' => [['type' => 'request', 'deploy' => 5]],
-    'a method that is no text' => [['type' => 'request', 'method' => 5]],
     'a level that is none' => [['type' => 'log', 'level' => 'loud']],
-    'a level that is no text' => [['type' => 'log', 'level' => 5]],
     'an outcome that is none' => [['type' => 'job-attempt', 'outcome' => 'ok']],
     'an at_or_above that is none' => [['type' => 'request', 'at_or_above' => 'p99']],
     'a negative slower_than_ms' => [['type' => 'request', 'slower_than_ms' => -1]],

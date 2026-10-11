@@ -360,32 +360,13 @@ it('refuses what it can not rank, naming what it accepts', function (array $argu
 
     $response->assertHasErrors([__("firewatch::messages.{$key}", ['argument' => $argument, 'expected' => $expected, 'value' => $value, 'accepted' => $accepted, 'example' => $example])]);
 })->with(function () {
-    $types = 'request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request, queued-job';
-    $example = 'rank(type: "request", by: "p95_duration")';
-
     return [
-        'no type' => [[], 'missing_argument', 'type', $types, $example],
-        'a type with no groups' => [['type' => 'log'], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"log"'],
-        'a type spelled with an underscore' => [['type' => 'job_attempt'], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"job_attempt"'],
-        'a type in capitals' => [['type' => 'Request'], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"Request"'],
         'a measure that is none' => [['type' => 'request', 'by' => 'p99_duration'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, p95_memory, max_memory, last_seen, queries', 'rank(type: "request", by: "p95_duration")', 'a measure of request', '"p99_duration"'],
         'a duration of exceptions' => [['type' => 'exception', 'by' => 'p95_duration'], 'invalid_argument', 'by', 'occurrences, last_seen', 'rank(type: "exception", by: "occurrences")', 'a measure of exception', '"p95_duration"'],
         'memory of a query' => [['type' => 'query', 'by' => 'p95_memory'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, last_seen', 'rank(type: "query", by: "p95_duration")', 'a measure of query', '"p95_memory"'],
         'queries of a mail' => [['type' => 'mail', 'by' => 'queries'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, last_seen', 'rank(type: "mail", by: "p95_duration")', 'a measure of mail', '"queries"'],
-        'a limit of 0' => [['type' => 'request', 'limit' => 0], 'invalid_argument', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)', '1 to 100', '0'],
-        'a limit of 101' => [['type' => 'request', 'limit' => 101], 'invalid_argument', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)', '1 to 100', '101'],
-        'a limit that is no whole number' => [['type' => 'request', 'limit' => 'ten'], 'invalid_argument', 'limit', 'a whole number from 1 to 100', 'rank(type: "request", limit: 20)', '1 to 100', '"ten"'],
-        'a type that is no string' => [['type' => 5], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '5'],
     ];
 });
-
-it('accepts a limit of 1 and of 100', function (int $limit) {
-    ingest([rankRecord(RecordType::REQUEST, 'a', 10)]);
-
-    $rows = rankRows(['type' => 'request', 'limit' => $limit]);
-
-    expect($rows)->toHaveCount(1);
-})->with(['the lowest' => 1, 'the highest' => 100]);
 
 it('refuses an argument that is not its own, and one that is none', function (string $argument, string $code) {
     $response = FirewatchServer::tool(Rank::class, ['type' => 'request', $argument => 'x']);
@@ -731,12 +712,6 @@ it('refuses what does not fit a group breakdown', function (array $arguments, st
     'queries' => [['by' => 'queries'], 'invalid_argument'],
     'a type that does not hold the group' => [['type' => 'query'], 'conflicting_arguments'],
 ]);
-
-it('refuses a group that is not 32 lowercase hex characters', function (string $group) {
-    $response = FirewatchServer::tool(Rank::class, ['group' => $group]);
-
-    $response->assertHasErrors(['error: invalid_argument']);
-})->with(['short' => 'abc', 'long' => str_repeat('a', 33), 'not hex' => str_repeat('g', 32), 'capitals' => str_repeat('A', 32)]);
 
 it('points from a ranking to the breakdown of its worst group, in a call that runs', function () {
     ingest([

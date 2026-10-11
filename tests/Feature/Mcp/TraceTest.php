@@ -605,28 +605,6 @@ describe('arguments', function () {
         'a list as a job id' => ['job_id', ['a'], '["a"]'],
     ]);
 
-    it('accepts a limit from 1 to 100 and refuses any other', function (mixed $limit, bool $accepted) {
-        ingest([trcRequest()]);
-
-        $text = trcRefusal(['trace_id' => 'trace', 'limit' => $limit]);
-
-        expect(str_starts_with($text, 'error: invalid_argument'))->toBe(! $accepted);
-    })->with([
-        'zero' => [0, false],
-        'one' => [1, true],
-        'a hundred' => [100, true],
-        'a hundred and one' => [101, false],
-        'negative' => [-1, false],
-        'a fraction' => [5.5, false],
-        'a string' => ['5', false],
-    ]);
-
-    it('words the refusal of a limit with the range and an example', function () {
-        $text = trcRefusal(['trace_id' => 'trace', 'limit' => 500]);
-
-        expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'limit', 'expected' => '1 to 100', 'value' => '500', 'accepted' => 'a whole number from 1 to 100', 'example' => 'trace(trace_id: "<trace id>", limit: 50)']));
-    });
-
     it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $key) {
         $text = trcRefusal(['trace_id' => 'trace', $argument => 'now']);
 

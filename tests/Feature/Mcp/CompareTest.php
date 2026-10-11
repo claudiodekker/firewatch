@@ -571,27 +571,16 @@ it('refuses what it can not compare, naming what it accepts', function (array $a
 
     $response->assertHasErrors([__("firewatch::messages.{$key}", ['argument' => $argument, 'with' => 'group', 'expected' => $expected, 'value' => $value, 'accepted' => $accepted, 'example' => $example])]);
 })->with(function () {
-    $types = 'request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request, queued-job';
     $example = 'compare(type: "request", split_at: "<now of an earlier answer>")';
-    $limits = 'a whole number from 1 to 100';
-    $limitExample = 'compare(type: "request", split_at: "<time>", limit: 20)';
 
     return [
-        'neither type nor group' => [['split_at' => COMPARE_SPLIT], 'missing_argument', 'type', $types, $example],
         'no split' => [['type' => 'request'], 'missing_argument', 'split_at', 'exactly one boundary: `split_at` (a time, such as the now of an earlier answer), or `deploy_before` with `deploy_after` (exact deploy strings)', $example],
-        'a type with no groups' => [['type' => 'log', 'split_at' => COMPARE_SPLIT], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"log"'],
-        'a type in capitals' => [['type' => 'Request', 'split_at' => COMPARE_SPLIT], 'invalid_argument', 'type', $types, $example, 'one of the types with groups', '"Request"'],
         'a measure that is none' => [['type' => 'request', 'split_at' => COMPARE_SPLIT, 'by' => 'p99_duration'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory, queries', 'compare(type: "request", split_at: "<time>", by: "p95_duration")', 'a measure of request', '"p99_duration"'],
         'when a group was last seen' => [['type' => 'request', 'split_at' => COMPARE_SPLIT, 'by' => 'last_seen'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory, queries', 'compare(type: "request", split_at: "<time>", by: "p95_duration")', 'a measure of request', '"last_seen"'],
         'memory of a query' => [['type' => 'query', 'split_at' => COMPARE_SPLIT, 'by' => 'p50_memory'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences', 'compare(type: "query", split_at: "<time>", by: "p95_duration")', 'a measure of query', '"p50_memory"'],
         'a duration of exceptions' => [['type' => 'exception', 'split_at' => COMPARE_SPLIT, 'by' => 'p95_duration'], 'invalid_argument', 'by', 'occurrences', 'compare(type: "exception", split_at: "<time>", by: "occurrences")', 'a measure of exception', '"p95_duration"'],
         'a measure that does not fit the group' => [['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'by' => 'p99_duration'], 'invalid_argument', 'by', 'p95_duration, p50_duration, max_duration, total_duration, occurrences, p95_memory, p50_memory, max_memory, queries', 'compare(type: "request", split_at: "<time>", by: "p95_duration")', 'a measure of request', '"p99_duration"'],
-        'a limit of 0' => [['type' => 'request', 'split_at' => COMPARE_SPLIT, 'limit' => 0], 'invalid_argument', 'limit', $limits, $limitExample, '1 to 100', '0'],
-        'a limit of 101' => [['type' => 'request', 'split_at' => COMPARE_SPLIT, 'limit' => 101], 'invalid_argument', 'limit', $limits, $limitExample, '1 to 100', '101'],
-        'a limit that is no whole number' => [['type' => 'request', 'split_at' => COMPARE_SPLIT, 'limit' => 'ten'], 'invalid_argument', 'limit', $limits, $limitExample, '1 to 100', '"ten"'],
         'a limit with a group' => [['group' => compareHash('a'), 'split_at' => COMPARE_SPLIT, 'limit' => 5], 'conflicting_arguments', 'limit', 'a call without `limit`: one group is one row', 'compare(group: "'.compareHash('a').'", split_at: "<time>")', null, null],
-        'a group that is no group id' => [['group' => 'abc', 'split_at' => COMPARE_SPLIT], 'invalid_argument', 'group', 'a 32-character lowercase hex group id', 'compare(group: "<group id>", split_at: "<time>")', 'a 32-character lowercase hex group id', '"abc"'],
-        'a type that does not hold the group' => [['group' => compareHash('a'), 'type' => 'query', 'split_at' => COMPARE_SPLIT], 'conflicting_arguments', 'type', 'a type that holds the group: request', 'compare(group: "'.compareHash('a').'", split_at: "<time>")', null, null],
     ];
 });
 

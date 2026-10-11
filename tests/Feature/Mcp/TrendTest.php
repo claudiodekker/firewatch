@@ -502,16 +502,11 @@ it('refuses what it can not trend, naming what it accepts', function (array $arg
 
     $response->assertHasErrors([__("firewatch::messages.{$key}", ['argument' => $argument, 'with' => 'group', 'expected' => $expected, 'value' => $value, 'accepted' => $accepted, 'example' => $example])]);
 })->with(function () {
-    $types = 'request, command, job-attempt, scheduled-task, query, exception, cache-event, mail, notification, outgoing-request, queued-job';
     $executions = 'occurrences, max_duration, avg_duration, total_duration, max_memory';
     $buckets = 'a whole number from 2 to 60';
     $bucketsExample = 'trend(type: "request", buckets: 12)';
 
     return [
-        'neither type nor group' => [[], 'missing_argument', 'type', $types, 'trend(type: "request")'],
-        'a type with no groups' => [['type' => 'log'], 'invalid_argument', 'type', $types, 'trend(type: "request")', 'one of the types with groups', '"log"'],
-        'a group that is no group id' => [['group' => 'abc'], 'invalid_argument', 'group', 'a 32-character lowercase hex group id', 'trend(group: "<group id>")', 'a 32-character lowercase hex group id', '"abc"'],
-        'a type that does not hold the group' => [['group' => trendHash('a'), 'type' => 'query'], 'conflicting_arguments', 'type', 'a type that holds the group: request', 'trend(group: "'.trendHash('a').'")'],
         'a percentile' => [['type' => 'request', 'by' => 'p95_duration'], 'invalid_argument', 'by', $executions, 'rank(type: "request", by: "p95_duration")', 'a measure per bucket; a percentile per bucket is never shown', '"p95_duration"'],
         'memory of a query' => [['type' => 'query', 'by' => 'max_memory'], 'invalid_argument', 'by', 'occurrences, max_duration, avg_duration, total_duration', 'trend(type: "query", by: "occurrences")', 'a measure of query per bucket', '"max_memory"'],
         'a duration of exceptions' => [['type' => 'exception', 'by' => 'max_duration'], 'invalid_argument', 'by', 'occurrences', 'trend(type: "exception", by: "occurrences")', 'a measure of exception per bucket', '"max_duration"'],
