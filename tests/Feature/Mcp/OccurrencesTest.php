@@ -524,7 +524,7 @@ it('keeps the records at or above the median or the 95th percentile of the selec
     $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => $percentile, 'until' => OCC_AT + 100, 'limit' => 100]);
 
     expect(array_column($envelope['result']['rows'], 'name'))->toEqualCanonicalizing(array_map(fn (int $milliseconds) => "/{$milliseconds}", $kept))
-        ->and($envelope['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => $threshold, 'samples' => $records, 'withheld' => null]);
+        ->and($envelope['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => $threshold, 'samples' => $records, 'values_ms' => null, 'withheld' => null]);
 })->with([
     'the median of 3' => ['median', 3, [2, 3], 2.0],
     'the median of 4' => ['median', 4, [2, 3, 4], 2.0],
@@ -548,12 +548,24 @@ it('withholds the baseline below its floor, and lists everything with a note', f
     $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => $percentile, 'limit' => 100]);
 
     expect($envelope['result']['rows'])->toHaveCount($records)
-        ->and($envelope['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => null, 'samples' => $records, 'withheld' => ['reason' => 'sample_too_small', 'have' => $records, 'needed' => $needed]])
+        ->and($envelope['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => null, 'samples' => $records, 'values_ms' => array_map(floatval(...), range(1, $records)), 'withheld' => ['reason' => 'sample_too_small', 'have' => $records, 'needed' => $needed]])
         ->and($envelope['notes'])->toBe([__('firewatch::messages.occurrences_baseline_withheld', ['percentile' => $percentile, 'have' => $records, 'needed' => $needed])]);
 })->with([
     'the median of 2' => ['median', 2, 3],
     'the 95th percentile of 19' => ['p95', 19, 20],
 ]);
+
+it('lists only the measured durations of a withheld baseline, ascending, and its samples match the withheld have', function () {
+    ingest([
+        ...array_map(fn (int $milliseconds) => occRecord(RecordType::REQUEST, ['duration' => $milliseconds * 1000, 'timestamp' => OCC_AT + $milliseconds]), [1900, 40, 41]),
+        occRecord(RecordType::REQUEST, ['duration' => null, 'timestamp' => OCC_AT + 9]),
+    ]);
+
+    $baseline = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'p95', 'limit' => 100])['result']['baseline'];
+
+    expect($baseline['values_ms'])->toEqual([40.0, 41.0, 1900.0])
+        ->and($baseline['samples'])->toBe($baseline['withheld']['have']);
+});
 
 it('restricts the records to a window and a deploy', function () {
     ingest([
@@ -826,7 +838,7 @@ it('lists and orders a record whose duration is not a number as one without a du
     expect(array_column($first['result']['rows'], 'duration_ms'))->toEqual([30.0, 20.0, 10.0])
         ->and($rest['result']['rows'])->toHaveCount(1)
         ->and($rest['result']['rows'][0])->toMatchArray(['name' => '/slow', 'duration_ms' => null])
-        ->and($baseline['result']['baseline'])->toEqual(['percentile' => 'median', 'threshold_ms' => 20.0, 'samples' => 3, 'withheld' => null])
+        ->and($baseline['result']['baseline'])->toEqual(['percentile' => 'median', 'threshold_ms' => 20.0, 'samples' => 3, 'values_ms' => null, 'withheld' => null])
         ->and(array_column($slower, 'name'))->toBe(['/30', '/20']);
 });
 

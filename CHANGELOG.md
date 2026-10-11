@@ -59,3 +59,4 @@
 - `overview` takes `by_deploy` to break the slowest groups down per deploy: one block for each of the five most recent deploys, with an `avg_ms` per group, and a `compare` of the two newest offered.
 - Every tool's input schema declares its closed values as an `enum`, its defaults, and the range of `limit` and `buckets`, so a client sees the valid choices before a call. Argument descriptions no longer list the values.
 - A store path under the public directory is refused on Windows whatever its case, so `c:\app\public\firewatch.sqlite` no longer slips past `C:\app\public`. POSIX paths stay case-sensitive.
+- `rank` lists a group's measured durations, ascending, as `values_ms` while its p95 is withheld (fewer than 20 measured runs), and a withheld `at_or_above` baseline in `occurrences` lists them too, so a cold first run reads straight off the answer.

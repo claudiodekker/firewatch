@@ -418,7 +418,7 @@ The percentile method that returns the observed value at rank `max(1, ceil(n·p/
 _Avoid_: Interpolated percentile, estimate
 
 **Sample floor**:
-The fewest occurrences a statistic needs before it is shown (3 for the median, 20 for p95), below which it is withheld.
+The fewest occurrences a statistic needs before it is shown (3 for the median, 20 for p95), below which it is withheld. A group below the p95 floor lists its measured durations in place of the percentile, as does a withheld `at_or_above` baseline.
 _Avoid_: Minimum sample, confidence threshold
 
 **Typical value**:

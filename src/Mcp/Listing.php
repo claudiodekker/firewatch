@@ -37,7 +37,7 @@ class Listing
     /**
      * Read the baseline of the selection.
      *
-     * @return array{samples: int, needed: int, threshold: int|float|null}
+     * @return array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null}
      */
     public function baseline(SQLite3 $connection, Percentile $percentile): array
     {
@@ -48,10 +48,13 @@ class Listing
         $samples = Stored::rows($connection, "SELECT count({$duration}) AS samples FROM records WHERE {$selection}", $bindings, $this->window)[0]['samples'];
 
         if ($samples < $needed) {
+            $durations = Stored::rows($connection, "SELECT {$duration} AS duration FROM records WHERE {$selection} AND {$duration} IS NOT NULL ORDER BY {$duration}", $bindings, $this->window);
+
             return [
                 'samples' => $samples,
                 'needed' => $needed,
                 'threshold' => null,
+                'durations' => array_column($durations, 'duration'),
             ];
         }
 
@@ -62,6 +65,7 @@ class Listing
             'samples' => $samples,
             'needed' => $needed,
             'threshold' => $row['duration'],
+            'durations' => null,
         ];
     }
 

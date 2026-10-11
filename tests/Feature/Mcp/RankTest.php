@@ -93,7 +93,7 @@ it('withholds a percentile below its sample floor, and shows it at the floor', f
     '20 records' => [20, true, true],
 ]);
 
-it('shows the raw values, ascending, of a group with fewer than 3 records', function (array $milliseconds, ?array $values) {
+it('lists the measured durations, ascending, of a group whose p95 is withheld, and none once it reaches the floor', function (array $milliseconds, ?array $values) {
     ingest(rankGroup(RecordType::REQUEST, 'a', $milliseconds));
 
     $rows = rankRows();
@@ -102,8 +102,38 @@ it('shows the raw values, ascending, of a group with fewer than 3 records', func
 })->with([
     'one record' => [[7], [7.0]],
     'two records' => [[9, 3], [3.0, 9.0]],
-    'three records' => [[9, 3, 5], null],
+    'three records' => [[9, 3, 5], [3.0, 5.0, 9.0]],
+    '19 records' => [[...range(19, 2), 1900], [...array_map(floatval(...), range(2, 19)), 1900.0]],
+    '20 records' => [range(1, 20), null],
 ]);
+
+it('lists only the measured durations of a group with an unmeasured run, and its count still matches the withheld have', function () {
+    ingest([
+        ...rankGroup(RecordType::REQUEST, 'a', [30, 10, 20]),
+        rankRecord(RecordType::REQUEST, 'a', null),
+    ]);
+
+    $row = rankRows()[0];
+
+    expect($row)->toMatchArray(['occurrences' => 4, 'values_ms' => [10.0, 20.0, 30.0]])
+        ->and($row['withheld']['p95_ms'])->toBe(['reason' => 'sample_too_small', 'have' => 3, 'needed' => 20])
+        ->and($row['values_ms'])->toHaveCount($row['withheld']['p95_ms']['have']);
+});
+
+it('lists the durations of a thin group in markdown without widening the rows of groups over the floor', function () {
+    ingest([
+        ...rankGroup(RecordType::REQUEST, 'a', [1900, 40, 41]),
+        ...rankGroup(RecordType::REQUEST, 'b', range(1, 20)),
+    ]);
+
+    $markdown = (fn () => $this->content())->call(FirewatchServer::tool(Rank::class, ['type' => 'request']))[0];
+    $table = array_values(preg_grep('/^\|/', explode("\n", $markdown)));
+
+    expect($table)->toHaveCount(4)
+        ->and($table[0])->toContain('values_ms')
+        ->and(collect($table)->first(fn (string $line) => str_contains($line, rankHash('a'))))->toContain('[40.0,41.0,1900.0]')
+        ->and(collect($table)->first(fn (string $line) => str_contains($line, rankHash('b'))))->not->toContain('[1.0');
+});
 
 it('shows one record as occurrences 1 with min, average, max and total equal', function () {
     ingest([rankRecord(RecordType::REQUEST, 'a', 12)]);

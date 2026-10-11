@@ -181,7 +181,7 @@ class Occurrences extends Tool
      *
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  Continuation<array{value: int|float, id: int}>  $continuation
-     * @return array{inWindow: int, groupHeld: bool, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
+     * @return array{inWindow: int, groupHeld: bool, baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
      */
     protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, OccurrenceFilters $filters, int $limit, string $selector, Continuation $continuation): array
     {
@@ -245,7 +245,7 @@ class Occurrences extends Tool
      * Put the rows, newest or worst first, in the envelope.
      *
      * @param  Continuation<array{value: int|float, id: int}>  $continuation
-     * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read
+     * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read
      */
     protected function listing(Continuation $continuation, Frame $frame, Window $window, Order $order, ?string $group, ?string $userId, int $limit, array $read): Answer
     {
@@ -284,7 +284,7 @@ class Occurrences extends Tool
     /**
      * Get the notes of the answer.
      *
-     * @param  array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null  $baseline
+     * @param  array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null  $baseline
      * @return list<string>
      */
     protected function notes(?array $baseline, ?string $userId): array
@@ -370,7 +370,7 @@ class Occurrences extends Tool
     /**
      * Get the baseline of the answer.
      *
-     * @param  array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}  $baseline
+     * @param  array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}  $baseline
      * @return array<string, mixed>
      */
     protected function baseline(array $baseline): array
@@ -392,6 +392,7 @@ class Occurrences extends Tool
             'percentile' => $baseline['percentile']->value,
             'threshold_ms' => $thresholdMilliseconds,
             'samples' => $baseline['samples'],
+            'values_ms' => $baseline['durations'] === null ? null : array_map(Stored::milliseconds(...), $baseline['durations']),
             'withheld' => $withheld,
         ];
     }
