@@ -34,6 +34,8 @@ class StoreFacts
     public static function read(SQLite3 $connection): self
     {
         $span = Stored::rows($connection, 'SELECT count(*) AS records, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
+        $drift = DriftLedger::summary($connection);
+        $typed = array_values(array_filter($drift, fn (array $row) => $row['type'] !== ''));
 
         return new self(
             meta: Markers::read($connection),
@@ -42,7 +44,7 @@ class StoreFacts
                 'type' => $row['type'],
                 'count' => $row['count'],
                 'last_seen' => $row['last_seen_at'],
-            ], DriftLedger::summary($connection, typed: true)),
+            ], $typed),
             records: is_int($span['records']) ? $span['records'] : 0,
             oldest: is_float($span['oldest']) ? $span['oldest'] : null,
             newest: is_float($span['newest']) ? $span['newest'] : null,

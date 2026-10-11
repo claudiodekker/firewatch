@@ -88,19 +88,18 @@ class DriftLedger
     /**
      * Summarise the ledger by type and kind, with the count and the last sighting of each.
      *
-     * @param  bool  $typed  whether to leave out the drift of the store itself, which names no type
      * @return list<array{kind: string, type: string, count: int, last_seen_at: float}>
      */
-    public static function summary(SQLite3 $connection, bool $typed = false): array
+    public static function summary(SQLite3 $connection): array
     {
-        $where = $typed ? "WHERE type != ''" : '';
+        $rows = Fetch::rows($connection, 'SELECT kind, type, sum(count) AS count, max(last_seen) AS last_seen FROM drift GROUP BY type, kind ORDER BY type, kind');
 
         return array_map(fn (array $row) => [
             'kind' => (string) $row['kind'],
             'type' => (string) $row['type'],
             'count' => Cell::integer($row['count']),
             'last_seen_at' => Cell::float($row['last_seen']),
-        ], Fetch::rows($connection, "SELECT kind, type, sum(count) AS count, max(last_seen) AS last_seen FROM drift {$where} GROUP BY type, kind ORDER BY type, kind"));
+        ], $rows);
     }
 
     /**
