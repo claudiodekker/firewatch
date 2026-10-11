@@ -288,7 +288,7 @@ class Listing
             return null;
         }
 
-        return $type->groupLabel($data[$type->labelColumn()] ?? null);
+        return $type->labelOf($data);
     }
 
     /**

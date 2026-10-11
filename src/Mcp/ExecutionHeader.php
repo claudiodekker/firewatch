@@ -25,7 +25,7 @@ class ExecutionHeader
             'trace_id' => $row['trace_id'],
             'source' => $row['source'],
             'group' => $row['group_hash'],
-            'label' => $type->groupLabel($row[$type->labelColumn()] ?? null),
+            'label' => $type->labelOf($row),
             'outcome' => self::outcome($type, $row),
             'started_at' => $row['started_at'],
             'duration_ms' => Stored::milliseconds($row['duration']),

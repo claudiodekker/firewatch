@@ -391,7 +391,7 @@ enum RecordType: string
     }
 
     /**
-     * Get a stored group label as an answer shows it: a blank one is an unrouted request, or unnamed.
+     * Get a stored group label as an answer shows it.
      */
     public function groupLabel(mixed $label): string
     {
@@ -400,6 +400,16 @@ enum RecordType: string
         }
 
         return $this === self::REQUEST ? __('firewatch::messages.rank_no_route') : __('firewatch::messages.group_unnamed');
+    }
+
+    /**
+     * Get the group label of a record of the type as an answer shows it.
+     *
+     * @param  array<string, mixed>  $record
+     */
+    public function labelOf(array $record): string
+    {
+        return $this->groupLabel($record[$this->labelColumn()] ?? null);
     }
 
     /**
