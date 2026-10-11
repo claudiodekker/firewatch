@@ -149,7 +149,7 @@ _Avoid_: Parent, triggered by
 ### Grouping and completeness
 
 **Group hash**:
-Nightwatch's own grouping hash for a record, stored verbatim so a group here is the group Nightwatch shows; one hash can be held by a job's dispatches and its attempts.
+Nightwatch's own grouping hash for a record, stored verbatim so a group here is the group Nightwatch shows; one hash can be held by a job's dispatches and its attempts. An exception's group hashes its class, code, file and line. The file is relative to the base path, with the capturing host's directory separator, which the `fingerprint` tool applies to a file given with either; and the file and line are the first application frame when the throw is inside `vendor/`, `artisan` or `public/index.php`. A throw in a Blade template is grouped by the class it wraps, the `.blade.php` file and no line, unless Spatie Ignition kept the template line. A template rendered inside another carries the outer render in its file. The code is `getCode()` as text, such as a `PDOException`'s SQLSTATE. Source can't give the code or the outer render, so the `fingerprint` tool reads them from the exceptions the store holds of the class at the file, and adds a candidate for code 0.
 _Avoid_: Fingerprint (the tool that computes one from source), group key
 
 **Group label**:
@@ -532,7 +532,7 @@ The per-counter comparison of an execution's counted total with the rows capture
 _Avoid_: Reconciliation, audit
 
 **Recipe check**:
-A fingerprint's statement whether recomputing a group's recipe from a stored record reproduces that record's stored group hash: agrees, disagrees or not evaluated. The `fingerprint` tool recomputes the recipe for this check and skips a record whose recipe fields were cut.
+A fingerprint's statement whether recomputing a group's recipe from a stored record reproduces that record's stored group hash: agrees, disagrees or not evaluated. The `fingerprint` tool recomputes the recipe for this check and skips a record whose recipe fields were cut. An exception's stored line is 0 when Nightwatch hashed none, as for a Blade template, so the check tries both no line and 0.
 _Avoid_: Validation, hash test
 
 **Job outcome**:

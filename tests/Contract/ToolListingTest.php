@@ -73,7 +73,7 @@ test('every closed argument declares exactly the values it accepts as its schema
         'occurrences.type' => $recordTypes,
         'execution.type' => ['request', 'command', 'job-attempt', 'scheduled-task'],
         'describe.type' => [...$recordTypes, 'user'],
-        'fingerprint.type' => ['request', 'command', 'job-attempt', 'queued-job', 'scheduled-task', 'query', 'cache-event', 'outgoing-request', 'mail', 'notification'],
+        'fingerprint.type' => ['request', 'command', 'job-attempt', 'queued-job', 'scheduled-task', 'query', 'cache-event', 'outgoing-request', 'mail', 'notification', 'exception'],
         'rank.by' => ['p95_duration', 'p50_duration', 'max_duration', 'total_duration', 'occurrences', 'p95_memory', 'max_memory', 'last_seen', 'queries'],
         'compare.by' => ['p95_duration', 'p50_duration', 'max_duration', 'total_duration', 'occurrences', 'p95_memory', 'p50_memory', 'max_memory', 'queries'],
         'trend.by' => ['occurrences', 'max_duration', 'avg_duration', 'total_duration', 'max_memory'],

@@ -25,6 +25,7 @@ class RecipeArguments
         'outgoing-request' => ['host'],
         'mail' => ['class'],
         'notification' => ['class'],
+        'exception' => ['class', 'file', 'line'],
     ];
 
     /**
@@ -68,7 +69,7 @@ class RecipeArguments
         }
 
         foreach ($taken as $argument) {
-            if ($arguments->get($argument) === null && ! in_array($argument, self::OPTIONAL, true)) {
+            if ($arguments->get($argument) === null && ! in_array($argument, self::OPTIONAL, true) && ! self::isTemplateLine($arguments, $argument)) {
                 throw Refusal::missing($argument, self::accepted($type), self::example($type));
             }
         }
@@ -97,6 +98,16 @@ class RecipeArguments
     }
 
     /**
+     * Determine if the argument is the line of an exception thrown in a Blade template, which Nightwatch groups without one.
+     */
+    protected static function isTemplateLine(Arguments $arguments, string $argument): bool
+    {
+        $file = $arguments->get('file');
+
+        return $argument === 'line' && is_string($file) && Recipe::isTemplate($file);
+    }
+
+    /**
      * Get a call of the tool for the type, as a refusal shows it: its required arguments with placeholders.
      */
     public static function example(RecordType $type): string
@@ -104,7 +115,11 @@ class RecipeArguments
         $arguments = ['type' => $type->value];
 
         foreach (array_diff(self::arguments($type), self::OPTIONAL) as $argument) {
-            $arguments[$argument] = $argument === 'methods' ? ['GET', 'HEAD'] : "<{$argument}>";
+            $arguments[$argument] = match ($argument) {
+                'methods' => ['GET', 'HEAD'],
+                'line' => 42,
+                default => "<{$argument}>",
+            };
         }
 
         return Call::written('fingerprint', $arguments);
@@ -174,6 +189,7 @@ class RecipeArguments
         return match ($argument) {
             'methods' => self::methods($arguments, $type, $value),
             'repeat_seconds' => self::repeatSeconds($arguments, $type, $value),
+            'line' => self::line($arguments, $type, $value),
             default => self::textField($arguments, $type, $argument, $value),
         };
     }
@@ -224,7 +240,19 @@ class RecipeArguments
     }
 
     /**
-     * Read a text argument as the field its recipe reads: a path trimmed to one leading slash, a domain without its scheme.
+     * Read the line of a throw: a line number in the file.
+     */
+    protected static function line(Arguments $arguments, RecordType $type, mixed $value): int
+    {
+        if (! is_int($value) || $value < 1) {
+            throw $arguments->invalid(argument: 'line', expected: 'a line number from 1', accepted: 'a line number, such as 42', example: self::example($type));
+        }
+
+        return $value;
+    }
+
+    /**
+     * Read a text argument as the field its recipe reads: a path trimmed to one leading slash, a domain without its scheme, a file in this host's separator.
      */
     protected static function textField(Arguments $arguments, RecordType $type, string $argument, mixed $value): string
     {
@@ -233,6 +261,7 @@ class RecipeArguments
         return match ($argument) {
             'path' => '/'.trim($text, '/'),
             'domain' => str_replace(['http://', 'https://'], '', $text),
+            'file' => Recipe::hostFile($text),
             default => $text,
         };
     }

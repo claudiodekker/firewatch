@@ -107,7 +107,7 @@ it('refuses a type that is none of those the tool reads, matching it exactly', f
         'occurrences' => [Occurrences::class, [], 'one of the record types', $events, 'occurrences(type: "request")'],
         'describe' => [Describe::class, [], 'one of the twelve record types or user', "{$events}, user", 'describe(type: "request")'],
         'execution' => [Execution::class, [], 'one of the four execution types', 'request, command, job-attempt, scheduled-task', 'execution(type: "request")'],
-        'fingerprint' => [Fingerprint::class, [], 'one of the ten types with a recipe', 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification', 'fingerprint(type: "request", methods: ["GET","HEAD"], path: "<path>")'],
+        'fingerprint' => [Fingerprint::class, [], 'one of the eleven types with a recipe', 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification, exception', 'fingerprint(type: "request", methods: ["GET","HEAD"], path: "<path>")'],
     ];
 })->with([
     'a view name' => ['requests', '"requests"'],

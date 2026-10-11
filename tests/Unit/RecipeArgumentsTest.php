@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\ErrorCode;
+use ClaudioDekker\Firewatch\Mcp\Recipe;
 use ClaudioDekker\Firewatch\Mcp\RecipeArguments;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\RecordType;
@@ -38,7 +39,24 @@ it('reads the source arguments of each type into the fields its recipe reads', f
     'outgoing request' => [RecordType::OUTGOING_REQUEST, ['host' => 'example.com'], ['host' => 'example.com'], null],
     'mail' => [RecordType::MAIL, ['class' => 'App\\Mail\\Welcome'], ['class' => 'App\\Mail\\Welcome'], null],
     'notification' => [RecordType::NOTIFICATION, ['class' => 'App\\Notifications\\Paid'], ['class' => 'App\\Notifications\\Paid'], null],
+    'exception: a file in either separator, as this host stores it' => [RecordType::EXCEPTION, ['class' => 'App\\Exceptions\\Late', 'file' => 'app\\Http/Controllers\\InvoiceController.php', 'line' => 42], ['class' => 'App\\Exceptions\\Late', 'file' => nativePath('app/Http/Controllers/InvoiceController.php'), 'line' => 42], null],
+    'exception: a template without a line' => [RecordType::EXCEPTION, ['class' => 'RuntimeException', 'file' => 'resources/views/invoice.blade.php'], ['class' => 'RuntimeException', 'file' => nativePath('resources/views/invoice.blade.php')], null],
 ]);
+
+it('hashes a file read in source with forward slashes as Nightwatch stores it on Windows', function () {
+    $file = Recipe::hostFile('tests/Scenario/InvoiceTest.php', '\\');
+    $template = Recipe::hostFile('resources/views/invoice.blade.php', '\\');
+    $nested = $template.') (View: C:\\app\\resources\\views\\invoice.blade.php';
+
+    $thrown = Recipe::candidates(RecordType::EXCEPTION, ['class' => 'RuntimeException', 'file' => $file, 'line' => 7, 'code' => '0']);
+    $rendered = Recipe::candidates(RecordType::EXCEPTION, ['class' => 'RuntimeException', 'file' => $template, 'code' => '0'], sites: [['file' => $nested, 'code' => '0']]);
+
+    expect(array_column($thrown, 'group'))->toBe([hash('xxh128', 'RuntimeException,0,tests\\Scenario\\InvoiceTest.php,7')])
+        ->and(array_column($rendered, 'input'))->toBe(['RuntimeException,0,resources\\views\\invoice.blade.php,', "RuntimeException,0,{$nested},"])
+        ->and(Recipe::isVendor('vendor\\laravel\\framework\\src\\Illuminate\\Collections\\Collection.php'))->toBeTrue()
+        ->and(Recipe::isVendor('public\\index.php'))->toBeTrue()
+        ->and(Recipe::isTemplate($template))->toBeTrue();
+});
 
 it('gives a task no timezone when the schedule timezone is set to null', function () {
     config(['app.timezone' => 'UTC', 'app.schedule_timezone' => null]);

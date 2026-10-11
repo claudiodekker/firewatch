@@ -32,6 +32,7 @@ class Recipe
         'outgoing-request' => ['host'],
         'mail' => ['class'],
         'notification' => ['class'],
+        'exception' => ['class', 'file', 'code'],
     ];
 
     /**
@@ -48,9 +49,10 @@ class Recipe
      * Get the group hashes Nightwatch gives a record of the type with these fields, one per reading the fields leave open.
      *
      * @param  array<string, mixed>  $fields
+     * @param  list<array<string, mixed>>  $sites
      * @return list<array{group: string, input: string, assumption: string|null}>
      */
-    public static function candidates(RecordType $type, array $fields, ?string $driver = null): array
+    public static function candidates(RecordType $type, array $fields, ?string $driver = null, array $sites = []): array
     {
         return match ($type) {
             RecordType::REQUEST => [static::candidate(static::request($fields))],
@@ -60,8 +62,43 @@ class Recipe
             RecordType::CACHE_EVENT => [static::candidate(static::text($fields, 'store').','.static::text($fields, 'key'))],
             RecordType::OUTGOING_REQUEST => [static::candidate(static::text($fields, 'host'))],
             RecordType::MAIL, RecordType::NOTIFICATION => [static::candidate(static::text($fields, 'class'))],
-            RecordType::EXCEPTION, RecordType::LOG, RecordType::USER => throw new LogicException("A {$type->value} has no group recipe."),
+            RecordType::EXCEPTION => static::exception($fields, $sites),
+            RecordType::LOG, RecordType::USER => throw new LogicException("A {$type->value} has no group recipe."),
         };
+    }
+
+    /**
+     * Determine if a file is a Blade template, which Nightwatch names an exception thrown while rendering it by.
+     */
+    public static function isTemplate(string $file): bool
+    {
+        return str_ends_with($file, '.blade.php');
+    }
+
+    /**
+     * Determine if a file is one Nightwatch looks past for the first application frame of an exception's trace.
+     */
+    public static function isVendor(string $file): bool
+    {
+        $path = str_replace('\\', '/', $file);
+
+        return str_starts_with($path, 'vendor/') || in_array($path, ['artisan', 'public/index.php'], true);
+    }
+
+    /**
+     * Get a file read in source, with either separator, as Nightwatch stores it on a host with the given separator.
+     */
+    public static function hostFile(string $file, string $separator = DIRECTORY_SEPARATOR): string
+    {
+        return str_replace(['/', '\\'], $separator, $file);
+    }
+
+    /**
+     * Get how a template's file begins when it was rendered inside another template.
+     */
+    public static function nestedPrefix(string $file): string
+    {
+        return "{$file}) (View: ";
     }
 
     /**
@@ -133,6 +170,99 @@ class Recipe
         return [
             static::candidate($normalised, __('firewatch::messages.fingerprint_assumption_normalised')),
             static::candidate($written, __('firewatch::messages.fingerprint_assumption_written')),
+        ];
+    }
+
+    /**
+     * Hash an exception by its class, code, file and line, once for every reading of each the fields leave open.
+     *
+     * @param  array<string, mixed>  $fields
+     * @param  list<array<string, mixed>>  $sites
+     * @return list<array{group: string, input: string, assumption: string|null}>
+     */
+    protected static function exception(array $fields, array $sites): array
+    {
+        $class = static::text($fields, 'class');
+        $candidates = [];
+
+        foreach (static::files($fields, $sites) as [$file, $fileAssumption]) {
+            foreach (static::lines($fields) as [$line, $lineAssumption]) {
+                foreach (static::codes($fields, $sites) as [$code, $codeAssumption]) {
+                    $assumptions = array_filter([$fileAssumption, $lineAssumption, $codeAssumption], is_string(...));
+
+                    $candidates[] = static::candidate("{$class},{$code},{$file},{$line}", $assumptions === [] ? null : implode('; ', $assumptions));
+                }
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * Get the files an exception may be grouped by: the file given, and for a template the nested renders of it the store holds.
+     *
+     * Laravel appends a "(View: <template>)" to the message for every template the throw unwinds through, and Nightwatch takes the file from the first one to the end (`laravel/nightwatch` `src/Location.php:116`).
+     *
+     * @param  array<string, mixed>  $fields
+     * @param  list<array<string, mixed>>  $sites
+     * @return list<array{string, mixed}>
+     */
+    protected static function files(array $fields, array $sites): array
+    {
+        $file = static::text($fields, 'file');
+        $readings = [[$file, null]];
+
+        if (! static::isTemplate($file)) {
+            return $readings;
+        }
+
+        foreach (array_unique(array_map(fn (array $row) => static::text($row, 'file'), $sites)) as $held) {
+            if (str_starts_with($held, static::nestedPrefix($file))) {
+                $readings[] = [$held, __('firewatch::messages.fingerprint_assumption_nested')];
+            }
+        }
+
+        return $readings;
+    }
+
+    /**
+     * Get the lines an exception may be grouped by: none for a template unless Ignition kept its line, and none or 0 for a stored 0.
+     *
+     * @param  array<string, mixed>  $fields
+     * @return list<array{string, mixed}>
+     */
+    protected static function lines(array $fields): array
+    {
+        $line = $fields['line'] ?? null;
+
+        return match (true) {
+            ! is_int($line) => [['', null]],
+            $line === 0 => [['', __('firewatch::messages.fingerprint_assumption_no_line')], ['0', __('firewatch::messages.fingerprint_assumption_line_zero')]],
+            static::isTemplate(static::text($fields, 'file')) => [['', __('firewatch::messages.fingerprint_assumption_view')], [(string) $line, __('firewatch::messages.fingerprint_assumption_ignition')]],
+            default => [[(string) $line, null]],
+        };
+    }
+
+    /**
+     * Get the codes an exception may be grouped by: the code given, else 0 and each code the store holds at the file.
+     *
+     * @param  array<string, mixed>  $fields
+     * @param  list<array<string, mixed>>  $sites
+     * @return list<array{string, mixed}>
+     */
+    protected static function codes(array $fields, array $sites): array
+    {
+        $code = $fields['code'] ?? null;
+
+        if (is_string($code)) {
+            return [[$code, null]];
+        }
+
+        $held = array_diff(array_unique(array_map(fn (array $row) => static::text($row, 'code'), $sites)), ['0']);
+
+        return [
+            ['0', __('firewatch::messages.fingerprint_assumption_code_zero')],
+            ...array_map(fn (string $code) => [$code, __('firewatch::messages.fingerprint_assumption_code_held', ['code' => $code])], array_values($held)),
         ];
     }
 

@@ -137,14 +137,14 @@ it('reads a query without a driver both ways when normalising changes it, and wi
         ->and($other['result']['held'])->toBe([]);
 });
 
-it('refuses exception, log and user with the reason', function (string $type) {
+it('refuses log and user with the reason', function (string $type) {
     fpRefused(['type' => $type], __('firewatch::messages.no_recipe', [
         'type' => $type,
         'reason' => __("firewatch::messages.no_recipe_reasons.{$type}"),
-        'accepted' => 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification',
+        'accepted' => 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification, exception',
         'example' => 'fingerprint(type: "request", methods: ["GET","HEAD"], path: "<path>")',
     ]));
-})->with(['exception', 'log', 'user']);
+})->with(['log', 'user']);
 
 it('refuses an argument that belongs to another type, naming the arguments of this one', function (array $arguments, string $argument, string $accepted, string $example) {
     fpRefused($arguments, __('firewatch::messages.conflicting_arguments', [
@@ -159,6 +159,7 @@ it('refuses an argument that belongs to another type, naming the arguments of th
     'a host on a query' => [['type' => 'query', 'connection' => 'a', 'sql' => 'b', 'host' => 'x'], 'host', 'connection, sql, driver (optional)', 'fingerprint(type: "query", connection: "<connection>", sql: "<sql>")'],
     'a key on a mail' => [['type' => 'mail', 'class' => 'x', 'key' => 'x'], 'key', 'class', 'fingerprint(type: "mail", class: "<class>")'],
     'a driver on a task' => [['type' => 'scheduled-task', 'name' => 'x', 'cron' => 'y', 'driver' => 'mysql'], 'driver', 'name, cron, timezone (optional), repeat_seconds (optional)', 'fingerprint(type: "scheduled-task", name: "<name>", cron: "<cron>")'],
+    'a key on an exception' => [['type' => 'exception', 'class' => 'x', 'file' => 'y', 'line' => 1, 'key' => 'z'], 'key', 'class, file, line', 'fingerprint(type: "exception", class: "<class>", file: "<file>", line: 42)'],
     'a repeat on a cache event' => [['type' => 'cache-event', 'store' => 'a', 'key' => 'b', 'repeat_seconds' => 5], 'repeat_seconds', 'store, key', 'fingerprint(type: "cache-event", store: "<store>", key: "<key>")'],
 ]);
 
@@ -169,12 +170,13 @@ it('refuses a missing argument by name', function (array $arguments, string $arg
         'example' => $example,
     ]));
 })->with([
-    'no type' => [[], 'type', 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification', 'fingerprint(type: "request", methods: ["GET","HEAD"], path: "<path>")'],
+    'no type' => [[], 'type', 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification, exception', 'fingerprint(type: "request", methods: ["GET","HEAD"], path: "<path>")'],
     'no methods' => [['type' => 'request', 'path' => '/'], 'methods', 'methods, path, domain (optional)', 'fingerprint(type: "request", methods: ["GET","HEAD"], path: "<path>")'],
     'no cron' => [['type' => 'scheduled-task', 'name' => 'x'], 'cron', 'name, cron, timezone (optional), repeat_seconds (optional)', 'fingerprint(type: "scheduled-task", name: "<name>", cron: "<cron>")'],
     'no connection' => [['type' => 'query', 'sql' => 'select 1'], 'connection', 'connection, sql, driver (optional)', 'fingerprint(type: "query", connection: "<connection>", sql: "<sql>")'],
     'no key' => [['type' => 'cache-event', 'store' => 'array'], 'key', 'store, key', 'fingerprint(type: "cache-event", store: "<store>", key: "<key>")'],
     'no name' => [['type' => 'queued-job'], 'name', 'name', 'fingerprint(type: "queued-job", name: "<name>")'],
+    'no line outside a template' => [['type' => 'exception', 'class' => 'RuntimeException', 'file' => 'app/Invoice.php'], 'line', 'class, file, line', 'fingerprint(type: "exception", class: "<class>", file: "<file>", line: 42)'],
 ]);
 
 it('refuses an argument of the wrong shape with the values it accepts', function (array $arguments, string $argument, string $expected, string $value, string $accepted, string $example) {
@@ -202,8 +204,10 @@ it('refuses an argument of the wrong shape with the values it accepts', function
         'sixty repeat seconds' => [[...$task, 'repeat_seconds' => 60], ...$repeat, '60', '0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20 or 30', $taskExample],
         'repeat seconds as text' => [[...$task, 'repeat_seconds' => '5'], ...$repeat, '"5"', '0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20 or 30', $taskExample],
         'a name that is no string' => [['type' => 'command', 'name' => 5], 'name', 'a string', '5', 'a string', 'fingerprint(type: "command", name: "<name>")'],
+        'line 0' => [['type' => 'exception', 'class' => 'RuntimeException', 'file' => 'app/Invoice.php', 'line' => 0], 'line', 'a line number from 1', '0', 'a line number, such as 42', 'fingerprint(type: "exception", class: "<class>", file: "<file>", line: 42)'],
+        'a line as text' => [['type' => 'exception', 'class' => 'RuntimeException', 'file' => 'app/Invoice.php', 'line' => '42'], 'line', 'a line number from 1', '"42"', 'a line number, such as 42', 'fingerprint(type: "exception", class: "<class>", file: "<file>", line: 42)'],
         'an empty driver' => [['type' => 'query', 'connection' => 'a', 'sql' => 'b', 'driver' => ''], 'driver', 'a non-empty string', '""', 'a driver name, such as "mysql"', 'fingerprint(type: "query", connection: "<connection>", sql: "<sql>")'],
-        'a type that is none' => [['type' => 'requests'], 'type', 'one of the ten types with a recipe', '"requests"', 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification', $request],
+        'a type that is none' => [['type' => 'requests'], 'type', 'one of the eleven types with a recipe', '"requests"', 'request, command, job-attempt, queued-job, scheduled-task, query, cache-event, outgoing-request, mail, notification, exception', $request],
     ];
 });
 

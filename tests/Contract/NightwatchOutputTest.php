@@ -92,13 +92,7 @@ test('each type with a recipe is grouped by a candidate the shipped recipe compu
     $record = sensorRecord($producer);
 
     expect(array_column(Recipe::candidates($producer->type(), $record), 'group'))->toContain($record['_group']);
-})->with(array_filter(Producer::cases(), fn (Producer $producer) => ! in_array($producer->type(), [RecordType::EXCEPTION, RecordType::LOG, RecordType::USER], true)));
-
-test('an exception is grouped by its class, code, file and line', function (Producer $producer) {
-    $record = sensorRecord($producer);
-
-    expect(hash('xxh128', "{$record['class']},{$record['code']},{$record['file']},{$record['line']}"))->toBe($record['_group']);
-})->with([Producer::EXCEPTION, Producer::FATAL_ERROR]);
+})->with(array_filter(Producer::cases(), fn (Producer $producer) => ! in_array($producer->type(), [RecordType::LOG, RecordType::USER], true)));
 
 test('a query on a driver Nightwatch normalises is grouped by its normalised SQL, and on another by its SQL as written', function () {
     $record = sensorRecord(Producer::QUERY_LIST);

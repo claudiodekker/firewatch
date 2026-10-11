@@ -100,6 +100,8 @@ class Fingerprint extends Tool
             'key' => $text('key'),
             'host' => $text('host'),
             'class' => $text('class'),
+            'file' => $text('file'),
+            'line' => $schema->integer()->min(1)->description(__('firewatch::messages.fingerprint_arguments.line')),
             ...$this->formatSchema($schema),
         ];
     }
@@ -122,19 +124,23 @@ class Fingerprint extends Tool
         $source = RecipeArguments::read($arguments, $type);
         $fields = $source->fields;
         $driver = $source->driver;
-        $candidates = Recipe::candidates($type, $fields, $driver);
         $types = $this->types($type);
 
         $frame = $this->frame($now);
 
         $frame->about($types, Window::none(reason: __('firewatch::messages.fingerprint_window_reason'), timezone: $frame->timezone));
 
-        $read = $frame->read(fn (SQLite3 $connection) => [
-            Holdings::read($connection),
-            $this->held($connection, $candidates, $types),
-            array_map(fn (RecordType $checked) => $this->check($connection, $checked), $types),
-            $this->ruledOut($connection, $type, $fields, $driver, $types),
-        ]);
+        $read = $frame->read(function (SQLite3 $connection) use ($type, $fields, $driver, $types) {
+            $candidates = Recipe::candidates($type, $fields, $driver, $this->sites($connection, $type, $fields));
+
+            return [
+                Holdings::read($connection),
+                $candidates,
+                $this->held($connection, $candidates, $types),
+                array_map(fn (RecordType $checked) => $this->check($connection, $checked), $types),
+                $this->ruledOut($connection, $type, $fields, $driver, $types),
+            ];
+        });
 
         if ($read === null) {
             $empty = $frame->unusable();
@@ -142,12 +148,12 @@ class Fingerprint extends Tool
             return $frame->answer(
                 summary: $empty->summary(),
                 empty: $empty,
-                result: $this->result($type, $candidates, [], $this->unchecked($types)),
+                result: $this->result($type, Recipe::candidates($type, $fields, $driver), [], $this->unchecked($types)),
                 notes: $this->notes($request, $type),
             );
         }
 
-        [$holdings, $held, $checks, $ruledOut] = $read;
+        [$holdings, $candidates, $held, $checks, $ruledOut] = $read;
 
         $population = array_sum(array_map($holdings->of(...), $types));
         $filter = 'group: '.implode(' or ', array_column($candidates, 'group'));
@@ -187,7 +193,7 @@ class Fingerprint extends Tool
     }
 
     /**
-     * Read the type to fingerprint: one of the ten types whose group source can give.
+     * Read the type to fingerprint: one of the eleven types whose group source can give.
      */
     protected function type(Arguments $arguments): RecordType
     {
@@ -200,7 +206,7 @@ class Fingerprint extends Tool
             throw Refusal::noRecipe($named->value, $accepted, $example);
         }
 
-        return $arguments->requiredType('one of the ten types with a recipe', $example);
+        return $arguments->requiredType('one of the eleven types with a recipe', $example);
     }
 
     /**
@@ -313,6 +319,25 @@ class Fingerprint extends Tool
     }
 
     /**
+     * Read the sites the store holds exceptions of the class at: the files and codes at the file, which give the readings source cannot.
+     *
+     * @param  array<string, mixed>  $fields
+     * @return list<array<string, mixed>>
+     */
+    protected function sites(SQLite3 $connection, RecordType $type, array $fields): array
+    {
+        if ($type !== RecordType::EXCEPTION) {
+            return [];
+        }
+
+        return Stored::rows($connection, 'SELECT DISTINCT file, code FROM exceptions WHERE class = :class AND (file = :file OR instr(file, :nested) = 1) ORDER BY file, code', [
+            'class' => $fields['class'],
+            'file' => $fields['file'],
+            'nested' => Recipe::nestedPrefix($fields['file']),
+        ]);
+    }
+
+    /**
      * Get the group the store holds a query under when only the reading its given driver rules out is held.
      *
      * @param  array<string, mixed>  $fields
@@ -410,6 +435,16 @@ class Fingerprint extends Tool
 
         if ($type === RecordType::SCHEDULED_TASK && $request->get('timezone') === null) {
             $notes[] = __('firewatch::messages.fingerprint_timezone_note', ['timezone' => RecipeArguments::scheduleTimezone()]);
+        }
+
+        $file = $request->get('file');
+
+        if ($type === RecordType::EXCEPTION && is_string($file) && Recipe::isTemplate($file)) {
+            $notes[] = __('firewatch::messages.fingerprint_view_note');
+        }
+
+        if ($type === RecordType::EXCEPTION && is_string($file) && Recipe::isVendor($file)) {
+            $notes[] = __('firewatch::messages.fingerprint_vendor_note');
         }
 
         return $notes;

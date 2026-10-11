@@ -23,7 +23,7 @@ it('lists the tools under a header, one line each', function () {
             '  trend        A measure over equal time buckets: did it rise, fall or hold, and where did it peak?',
             '  query        Last resort: your own read-only SQL.',
             '  describe     What Firewatch holds and how to query it.',
-            '  fingerprint  The group id of something read in source, and whether the store holds it, so a miss is no…',
+            '  fingerprint  The group id of something read in source and whether the store holds it.',
             '',
         ]));
 });
@@ -214,7 +214,7 @@ it('lists the tools as JSON with the server name and version', function () {
                     'name' => 'fingerprint',
                     'description' => __('firewatch::messages.tools.fingerprint'),
                     'inputSchema' => ['properties' => [
-                        'type' => ['enum' => ['request', 'command', 'job-attempt', 'queued-job', 'scheduled-task', 'query', 'cache-event', 'outgoing-request', 'mail', 'notification'], 'type' => 'string'],
+                        'type' => ['enum' => ['request', 'command', 'job-attempt', 'queued-job', 'scheduled-task', 'query', 'cache-event', 'outgoing-request', 'mail', 'notification', 'exception'], 'type' => 'string'],
                         'methods' => ['description' => __('firewatch::messages.fingerprint_arguments.methods'), 'items' => ['type' => 'string'], 'type' => 'array'],
                         'path' => ['description' => __('firewatch::messages.fingerprint_arguments.path'), 'type' => 'string'],
                         'domain' => ['description' => __('firewatch::messages.fingerprint_arguments.domain'), 'type' => 'string'],
@@ -229,6 +229,8 @@ it('lists the tools as JSON with the server name and version', function () {
                         'key' => ['description' => __('firewatch::messages.fingerprint_arguments.key'), 'type' => 'string'],
                         'host' => ['description' => __('firewatch::messages.fingerprint_arguments.host'), 'type' => 'string'],
                         'class' => ['description' => __('firewatch::messages.fingerprint_arguments.class'), 'type' => 'string'],
+                        'file' => ['description' => __('firewatch::messages.fingerprint_arguments.file'), 'type' => 'string'],
+                        'line' => ['description' => __('firewatch::messages.fingerprint_arguments.line'), 'minimum' => 1, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object', 'required' => ['type']],
                     'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
