@@ -24,6 +24,7 @@ use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Events\IngestingEvents;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
+use ReflectionClass;
 use RuntimeException;
 use SQLite3;
 use Throwable;
@@ -113,6 +114,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->registerNotices();
         $this->registerNightwatchInstall();
         $this->registerConfiguration();
+        $this->registerGitHead();
         $this->registerSqlRunner();
         $this->resolveMode();
         $this->redirectStrayServerOutput();
@@ -197,6 +199,14 @@ class FirewatchServiceProvider extends ServiceProvider
         $configuration = $normaliser->resolve(is_array($raw) ? $raw : []);
 
         $this->app->instance(Configuration::class, $configuration);
+    }
+
+    /**
+     * Look for the git repository from the application's base path, unless a reader is already bound.
+     */
+    protected function registerGitHead(): void
+    {
+        $this->app->bindIf(GitHead::class, fn () => new GitHead($this->app->basePath()));
     }
 
     /**
@@ -302,7 +312,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Get the deploy identity to write to Nightwatch, or nothing so Nightwatch resolves its own.
+     * Get the deploy identity to write to Nightwatch: Firewatch's setting, else Nightwatch's own if it has one, else the git commit.
      *
      * @return array<string, string>
      */
@@ -310,7 +320,30 @@ class FirewatchServiceProvider extends ServiceProvider
     {
         $deploy = $this->app->make(Configuration::class)->deploy;
 
+        if ($deploy === null && ! $this->nightwatchHasDeployment()) {
+            $deploy = $this->app->make(GitHead::class)->commit();
+        }
+
         return $deploy === null ? [] : ['nightwatch.deployment' => $deploy];
+    }
+
+    /**
+     * Tell whether Nightwatch's published file or its default chain of platform variables holds a deploy.
+     */
+    protected function nightwatchHasDeployment(): bool
+    {
+        $config = $this->app->make('config');
+
+        if ($config->has('nightwatch.deployment')) {
+            $deployment = $config->get('nightwatch.deployment');
+        } else {
+            // Nightwatch merges its defaults under the published file in its own register(), after this one.
+            $path = dirname((string) (new ReflectionClass(NightwatchServiceProvider::class))->getFileName()).'/../config/nightwatch.php';
+            $defaults = is_file($path) ? require $path : [];
+            $deployment = is_array($defaults) ? ($defaults['deployment'] ?? null) : null;
+        }
+
+        return is_string($deployment) && $deployment !== '';
     }
 
     /**
