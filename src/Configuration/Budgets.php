@@ -61,7 +61,10 @@ readonly class Budgets
         }
 
         if (! is_array($raw['budgets'])) {
-            return new self([], 0, [ConfigurationIssue::fallBack(key: 'budgets', reason: ConfigurationIssue::describe($raw['budgets']).' is not a list of budget entries', default: 'none')]);
+            $reason = ConfigurationIssue::describe($raw['budgets']).' is not a list of budget entries';
+            $issue = ConfigurationIssue::fallBack(key: 'budgets', reason: $reason, default: 'none');
+
+            return new self([], 0, [$issue]);
         }
 
         $entries = [];
