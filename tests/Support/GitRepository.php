@@ -14,6 +14,11 @@ class GitRepository
     protected const IDENTITY = ['-c', 'user.name=Firewatch', '-c', 'user.email=firewatch@example.com', '-c', 'commit.gpgsign=false', '-c', 'protocol.file.allow=always'];
 
     /**
+     * The variables that point git at a repository, removed from every call so a hook or rebase cannot redirect it.
+     */
+    protected const LOCATION = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_PREFIX'];
+
+    /**
      * Create a repository on the main branch with a first commit.
      */
     public static function create(string $format = 'sha1'): static
@@ -81,7 +86,7 @@ class GitRepository
      */
     public function run(string ...$arguments): string
     {
-        $process = new Process(['git', ...static::IDENTITY, ...$arguments], $this->path);
+        $process = new Process(['git', ...static::IDENTITY, ...$arguments], $this->path, array_fill_keys(static::LOCATION, false));
         $process->run();
 
         if (! $process->isSuccessful()) {
