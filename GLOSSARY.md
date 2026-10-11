@@ -121,7 +121,7 @@ A record's normalized start instant in Unix seconds with microsecond resolution 
 _Avoid_: Timestamp, created at, received at
 
 **Deploy**:
-The identity of the deployed code a record was captured under, an unordered string from Nightwatch's deployment setting or `FIREWATCH_DEPLOY`, matched exactly; a record with an empty or no deploy belongs to none.
+The identity of the deployed code a record was captured under, an unordered string, matched exactly, taken from the first source that has one: `FIREWATCH_DEPLOY`, Nightwatch's deployment setting and platform variables, then the full commit the git HEAD of the application's repository points to, read from the repository's files once per process; a record with an empty or no deploy belongs to none. A commit label keeps the HEAD commit through uncommitted edits, so records captured before a commit carry its parent, and a long-running worker keeps the commit it booted with.
 _Avoid_: Release, version, build
 
 ### Queued work

@@ -51,7 +51,7 @@ This is a Laravel package with no HTTP layer of its own. Its entry points are Ar
 
 ## 7. Errors and integrations
 
-- Two seams exist, each with a real and a fake adapter: the SQL runner (`Sql\SqlRunner`: `ChildRunner` spawns the child process, `Tests\Support\FakeSqlRunner` stands in) and the provider's notices (`Notices`, which the test case fakes for every application it creates). Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
+- Two seams exist, each with a real and a fake adapter: the SQL runner (`Sql\SqlRunner`: `ChildRunner` spawns the child process, `Tests\Support\FakeSqlRunner` stands in) and the provider's notices (`Notices`, which the test case fakes for every application it creates). The test case also starts `GitHead` at a directory outside any repository, so the package's own checkout never labels a record; a test that needs a repository builds one with the real `git` CLI and moves the start. Other collaborators are not put behind a contract for the sake of testing; they are exercised for real through the feature they belong to.
 - The boundaries that may catch `Throwable` and `report()` it are Firewatch's ingest, provider boot, process entry points and the tool layer.
 - Nothing is thrown into the host application. The tool layer turns an unexpected failure into the `internal` tool error, also when `app.debug` is on, because a rethrow ends the stdio process.
 - Calls that could act on nothing (an empty batch, an empty result set) check for empty input first.

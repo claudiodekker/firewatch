@@ -78,6 +78,9 @@ return [
     | When set, this value is written to Nightwatch as the deploy identity
     | so answers can compare deploys. Left unset, Nightwatch resolves it
     | the way it always does, from its own configuration and platform.
+    | When it has none either, the commit the git HEAD of the
+    | application's repository points to is used. Uncommitted edits
+    | keep the HEAD commit.
     |
     */
 
