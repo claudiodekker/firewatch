@@ -24,19 +24,9 @@ class ChildRunner implements SqlRunner
     public const SCRIPT = __DIR__.'/Child/run.php';
 
     /**
-     * The wall-clock deadline of one statement from spawn, in seconds.
-     */
-    public const DEADLINE_SECONDS = 10.0;
-
-    /**
      * The most seconds a probe waits for the child.
      */
     public const PROBE_DEADLINE_SECONDS = 2.0;
-
-    /**
-     * The PHP memory limit of the child, in mebibytes.
-     */
-    public const MEMORY_LIMIT_MEBIBYTES = 64;
 
     /**
      * The probe's request.
@@ -53,7 +43,7 @@ class ChildRunner implements SqlRunner
      * The ini the child runs under, forced over the host's so that no setting can change its output or its limits.
      */
     protected const INI = [
-        'memory_limit='.self::MEMORY_LIMIT_MEBIBYTES.'M',
+        'memory_limit='.Limits::MEMORY_LIMIT_MEBIBYTES.'M',
         'display_errors=0',
         'log_errors=1',
         'error_log=',
@@ -72,11 +62,6 @@ class ChildRunner implements SqlRunner
      * The most characters of the child's stderr a failure keeps.
      */
     protected const STDERR_CHARACTERS = 500;
-
-    /**
-     * The most bytes of stdout the parent reads before it kills the child.
-     */
-    public const OUTPUT_CAP_BYTES = 1048576;
 
     /**
      * The stops a child's end line reports; the parent alone decides the others.
@@ -106,7 +91,7 @@ class ChildRunner implements SqlRunner
      */
     public function __construct(
         protected Configuration $configuration,
-        protected float $deadline = self::DEADLINE_SECONDS,
+        protected float $deadline = Limits::DEADLINE_SECONDS,
         protected string $script = self::SCRIPT,
         protected Availability $availability = new Availability,
         protected ?string $temporaryDirectory = null,
@@ -142,10 +127,24 @@ class ChildRunner implements SqlRunner
     }
 
     /**
-     * Probe the child.
+     * Get why the child can't be spawned on this machine without spawning it, or null when nothing rules it out.
+     */
+    public function unavailable(): ?Unavailable
+    {
+        return $this->availability->reason();
+    }
+
+    /**
+     * Get why the child can't run a statement, spawning it once, or null when it can.
      */
     public function probe(): ?Unavailable
     {
+        $reason = $this->unavailable();
+
+        if ($reason !== null) {
+            return $reason;
+        }
+
         try {
             $rows = $this->call(static::PROBE, min($this->deadline, static::PROBE_DEADLINE_SECONDS));
         } catch (SqlFailure $failure) {
@@ -155,6 +154,22 @@ class ChildRunner implements SqlRunner
         }
 
         return $rows->stop === QueryStop::COMPLETE && $rows->rows === [[1]] ? null : Unavailable::SPAWN_FAILED;
+    }
+
+    /**
+     * Get the ceilings a statement is held to.
+     */
+    public function limits(): Limits
+    {
+        return new Limits(deadlineSeconds: $this->deadline);
+    }
+
+    /**
+     * Get the PHP binary the child is started with.
+     */
+    public function phpBinary(): string
+    {
+        return $this->availability->phpBinary;
     }
 
     /**
@@ -215,7 +230,7 @@ class ChildRunner implements SqlRunner
                 $this->end($process);
             }
 
-            $output = (string) stream_get_contents($handles['stdout'], static::OUTPUT_CAP_BYTES, 0);
+            $output = (string) stream_get_contents($handles['stdout'], Limits::OUTPUT_CAP_BYTES, 0);
             $errors = (string) stream_get_contents($handles['stderr'], static::STDERR_CHARACTERS * 4, 0);
         } finally {
             // Unlinked only after proc_close, when the child holds none of the files open, which Windows requires.
@@ -238,7 +253,7 @@ class ChildRunner implements SqlRunner
             $exitedBeforeMeasuring = ! proc_get_status($process)['running'];
             $written = fstat($output)['size'] ?? 0;
 
-            if ($written > static::OUTPUT_CAP_BYTES) {
+            if ($written > Limits::OUTPUT_CAP_BYTES) {
                 return Ending::OUTPUT_CAP;
             }
 

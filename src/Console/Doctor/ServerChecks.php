@@ -5,8 +5,7 @@ namespace ClaudioDekker\Firewatch\Console\Doctor;
 use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\ModeResolver;
-use ClaudioDekker\Firewatch\Sql\Availability;
-use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use Illuminate\Contracts\Foundation\Application;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 
@@ -20,8 +19,7 @@ class ServerChecks
      */
     public function __construct(
         protected Application $app,
-        protected Availability $availability,
-        protected ChildRunner $runner,
+        protected SqlRunner $runner,
     ) {
         //
     }
@@ -59,7 +57,7 @@ class ServerChecks
      */
     public function sqlAccess(): CheckResult
     {
-        $reason = $this->availability->reason(probe: $this->runner);
+        $reason = $this->runner->probe();
 
         if ($reason === null) {
             return CheckResult::ok(__('firewatch::messages.doctor.sql-access.ok'));
@@ -68,7 +66,7 @@ class ServerChecks
         return CheckResult::warn(
             __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __("firewatch::messages.sql_unavailable.{$reason->value}")]),
             __("firewatch::messages.doctor.sql-access.{$reason->value}_fix", [
-                'binary' => $this->availability->phpBinary,
+                'binary' => $this->runner->phpBinary(),
                 'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
             ]),
         );

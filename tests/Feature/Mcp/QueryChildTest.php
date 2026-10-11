@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\Limits;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\FailureLog;
@@ -20,7 +21,7 @@ beforeEach(function () {
     $writer->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('request', '{}')"));
 });
 
-function qcStandIn(string $script, float $deadline = ChildRunner::DEADLINE_SECONDS): void
+function qcStandIn(string $script, float $deadline = Limits::DEADLINE_SECONDS): void
 {
     app()->instance(SqlRunner::class, new ChildRunner(app(Configuration::class), deadline: $deadline, script: dirname(__DIR__, 2)."/Fixtures/Sql/{$script}.php"));
 }
@@ -31,7 +32,7 @@ function qcStandIn(string $script, float $deadline = ChildRunner::DEADLINE_SECON
  * @param  list<array<string, mixed>|string>  $lines
  * @param  string  $script  the stand-in that writes them, `echo` to end at once or `hang` to wait to be killed
  */
-function qcEcho(array $lines, string $script = 'echo', float $deadline = ChildRunner::DEADLINE_SECONDS): string
+function qcEcho(array $lines, string $script = 'echo', float $deadline = Limits::DEADLINE_SECONDS): string
 {
     qcStandIn($script, $deadline);
 

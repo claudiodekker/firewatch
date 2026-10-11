@@ -8,6 +8,8 @@ use Closure;
 use SQLite3;
 
 /**
+ * What the child runner checks about this machine before it spawns the SQL child.
+ *
  * @internal
  */
 class Availability
@@ -34,7 +36,7 @@ class Availability
     /**
      * Get why the SQL tool can't run, or null when it can.
      */
-    public function reason(?ChildRunner $probe = null): ?Unavailable
+    public function reason(): ?Unavailable
     {
         clearstatcache(true, $this->phpBinary);
         $version = ($this->sqliteVersion)();
@@ -45,7 +47,7 @@ class Availability
             $version === null => Unavailable::SQLITE3_MISSING,
             ! is_file($this->phpBinary) || ! is_executable($this->phpBinary) => Unavailable::PHP_BINARY,
             version_compare($version, ModeResolver::MINIMUM_SQLITE_VERSION, '<') => Unavailable::SQLITE_TOO_OLD,
-            default => $probe?->probe(),
+            default => null,
         };
     }
 }

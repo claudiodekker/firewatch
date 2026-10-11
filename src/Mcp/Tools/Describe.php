@@ -16,9 +16,8 @@ use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Unit;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Sql\Availability;
 use ClaudioDekker\Firewatch\Sql\Child\Policy;
-use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -77,7 +76,7 @@ class Describe extends Tool
         protected Configuration $configuration,
         protected Reader $reader,
         protected Conditions $conditions,
-        protected Availability $availability,
+        protected SqlRunner $runner,
         protected FailureLog $failures,
     ) {
         //
@@ -242,7 +241,8 @@ class Describe extends Tool
      */
     protected function sqlSection(Catalogue $catalogue): array
     {
-        $reason = $this->availability->reason();
+        $reason = $this->runner->unavailable();
+        $limits = $this->runner->limits();
 
         return [
             'sql' => [
@@ -250,12 +250,12 @@ class Describe extends Tool
                 'reason' => $reason === null ? null : __("firewatch::messages.sql_unavailable.{$reason->value}"),
                 'ceilings' => [
                     'statement_bytes' => Policy::SQL_BYTES,
-                    'deadline_ms' => (int) (ChildRunner::DEADLINE_SECONDS * 1000),
+                    'deadline_ms' => (int) ($limits->deadlineSeconds * 1000),
                     'row_limit' => Query::MAXIMUM_LIMIT,
                     'row_budget_bytes' => Policy::ROW_BUDGET_BYTES,
-                    'output_bytes' => ChildRunner::OUTPUT_CAP_BYTES,
+                    'output_bytes' => $limits->outputBytes,
                     'sqlite_heap_mb' => Policy::HEAP_LIMIT_MEBIBYTES,
-                    'php_memory_mb' => ChildRunner::MEMORY_LIMIT_MEBIBYTES,
+                    'php_memory_mb' => $limits->memoryMebibytes,
                     'cell_characters' => Policy::CELL_CHARACTERS,
                 ],
                 'readable' => Policy::READABLE,
@@ -375,7 +375,7 @@ class Describe extends Tool
             ];
         }
 
-        if ($this->availability->reason() === null) {
+        if ($this->runner->unavailable() === null) {
             $calls[] = [
                 'tool' => 'query',
                 'arguments' => ['sql' => $catalogue->examples($type)[0]['sql']],

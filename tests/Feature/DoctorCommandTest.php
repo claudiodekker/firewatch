@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Availability;
 use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Instant;
@@ -972,8 +973,7 @@ describe('sql-access', function () {
     })->group('process');
 
     it('names the reason the child reports', function () {
-        $this->app->instance(Availability::class, new Availability);
-        $this->app->instance(ChildRunner::class, new ChildRunner(app(Configuration::class), script: dirname(__DIR__).'/Fixtures/Sql/unavailable.php'));
+        $this->app->instance(SqlRunner::class, new ChildRunner(app(Configuration::class), script: dirname(__DIR__).'/Fixtures/Sql/unavailable.php'));
 
         expect(doctorCheck('sql-access'))->toMatchArray([
             'status' => 'warn',

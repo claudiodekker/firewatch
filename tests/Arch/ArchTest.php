@@ -85,6 +85,16 @@ arch('tools state the clock, coverage and unusable store of an answer only throu
     ->expect('ClaudioDekker\\Firewatch\\Mcp\\Tools')
     ->not->toUse([Instant::class, History::class, Coverage::class, CoverageState::class, StoreUnusable::class, StoreState::class]);
 
+test('only the SQL area and the provider binding name the SQL child runner, so the rest depends on the SqlRunner seam', function () {
+    $offences = PackageSource::offendingTokens('', fn (PhpToken $token) => $token->is([T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED])
+        && in_array(basename(str_replace('\\', '/', $token->text)), ['ChildRunner', 'Availability'], true));
+
+    $outside = array_filter($offences, fn (string $offence) => ! str_starts_with($offence, 'src/Sql/') && ! str_starts_with($offence, 'src/FirewatchServiceProvider.php:'));
+
+    expect($offences)->not->toBe([])
+        ->and($outside)->toBe([]);
+});
+
 foreach (['Store', 'Actions'] as $area) {
     arch("{$area} is never reached through Laravel's database layer")
         ->expect("ClaudioDekker\\Firewatch\\{$area}")
