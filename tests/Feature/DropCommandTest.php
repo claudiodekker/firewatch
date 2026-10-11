@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
 
@@ -252,10 +253,7 @@ describe('a store in another state', function () {
     it('says the store is busy after its fixed wait, and rebuilds nothing', function () {
         dropPopulatedStore();
         $this->endCapture();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
-        {
-            protected const BUSY_TIMEOUT_MILLISECONDS = 20;
-        });
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => new Writer(app(Configuration::class), app(FailureLog::class), busyTimeoutMilliseconds: 20)]));
         $connection = new SQLite3(dropPath());
         $connection->busyTimeout(20);
         $connection->exec('PRAGMA journal_mode = DELETE');

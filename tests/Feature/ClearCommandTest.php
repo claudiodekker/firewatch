@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
@@ -191,10 +192,7 @@ describe('a store in every state', function () {
     it('says the store is busy after its fixed wait, and deletes nothing', function () {
         clearPopulatedStore();
         $this->endCapture();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
-        {
-            protected const BUSY_TIMEOUT_MILLISECONDS = 20;
-        });
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => new Writer(app(Configuration::class), app(FailureLog::class), busyTimeoutMilliseconds: 20)]));
         $connection = new SQLite3(clearStorePath());
         $connection->busyTimeout(20);
         $connection->exec('PRAGMA journal_mode = DELETE');
@@ -266,20 +264,23 @@ describe('clearing everything', function () {
     it('keeps a batch that arrives while it clears', function () {
         clearPopulatedStore();
         $last = max(clearIds());
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
+        $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
         {
             protected bool $arrived = false;
 
-            protected function deleteChunk(?string $type, int $through): int
+            public function transaction(Closure $callback): mixed
             {
+                $result = parent::transaction($callback);
+
                 if (! $this->arrived) {
                     $this->arrived = true;
                     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776100.0])]);
                 }
 
-                return parent::deleteChunk($type, $through);
+                return $result;
             }
-        });
+        };
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => $writer]));
 
         $result = clearResult();
 
@@ -290,16 +291,40 @@ describe('clearing everything', function () {
 
     it('deletes in chunks until none are left up to the newest id it saw', function () {
         clearPopulatedStore();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
-        {
-            protected const CHUNK_ROWS = 2;
-        });
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['chunkRows' => 2]));
 
         $result = clearResult();
 
         expect($result['exit'])->toBe(0)
             ->and($result['output'])->toMatch(clearedPattern('cleared', ['records' => 6, 'users' => 1]))
             ->and(clearIds())->toBe([]);
+    });
+
+    it('writes the marker of the clear in the same transaction as each chunk it deletes', function () {
+        clearPopulatedStore();
+        $this->travelTo('2026-09-30 14:30:00');
+        $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
+        {
+            public array $commits = [];
+
+            public function transaction(Closure $callback): mixed
+            {
+                $result = parent::transaction($callback);
+
+                $this->commits[] = ['records' => count(clearIds()), 'clearedAt' => clearMarkers()->clearedAt];
+
+                return $result;
+            }
+        };
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => $writer, 'chunkRows' => 2]));
+
+        runClear()->run();
+
+        $deleted = array_map(fn (array $commit) => $commit['records'] < 6, $writer->commits);
+        $stamped = array_map(fn (array $commit) => $commit['clearedAt'] === 1790778600.0, $writer->commits);
+
+        expect($stamped)->toBe($deleted)
+            ->and(array_slice(array_column($writer->commits, 'records'), 0, 4))->toBe([6, 4, 2, 0]);
     });
 
     it('returns the freed pages to the file', function () {

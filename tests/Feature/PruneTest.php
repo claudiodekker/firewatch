@@ -61,23 +61,7 @@ function withRetention(int $records): void
 
 function withSmallPasses(int $chunk, int $transactions): void
 {
-    app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class), $chunk, $transactions) extends Pruner
-    {
-        public function __construct(Writer $writer, Reader $reader, Configuration $configuration, protected int $chunkRows, protected int $passTransactions)
-        {
-            parent::__construct($writer, $reader, $configuration);
-        }
-
-        protected function chunkRows(): int
-        {
-            return $this->chunkRows;
-        }
-
-        protected function passTransactions(): int
-        {
-            return $this->passTransactions;
-        }
-    });
+    app()->instance(Pruner::class, app()->make(Pruner::class, ['chunkRows' => $chunk, 'passTransactions' => $transactions]));
 
     registerFirewatch();
 }
@@ -292,6 +276,31 @@ describe('the pass', function () {
         expect($startedAts)->toBe([1789000005.0, 1789000004.0]);
     });
 
+    it('writes the instant history was removed through in the same transaction as each chunk it removes', function () {
+        $this->travelTo('2026-09-01 00:00:00');
+        requestsStartedAt([PRUNE_CUTOFF - 3, PRUNE_CUTOFF - 2, PRUNE_CUTOFF - 1, PRUNE_CUTOFF + 1]);
+        $this->travelTo(PRUNE_NOW);
+        $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
+        {
+            public array $commits = [];
+
+            public function transaction(Closure $callback): mixed
+            {
+                $result = parent::transaction($callback);
+                $removed = array_diff([PRUNE_CUTOFF - 3, PRUNE_CUTOFF - 2, PRUNE_CUTOFF - 1], startedAts());
+
+                $this->commits[] = ['newest' => $removed === [] ? null : max($removed), 'through' => pruneMarkers()->prunedThrough];
+
+                return $result;
+            }
+        };
+
+        app()->make(Pruner::class, ['writer' => $writer, 'chunkRows' => 1])->run();
+
+        expect(array_column($writer->commits, 'through'))->toBe(array_column($writer->commits, 'newest'))
+            ->and(array_values(array_unique(array_column($writer->commits, 'newest'), SORT_REGULAR)))->toBe([null, PRUNE_CUTOFF - 3, PRUNE_CUTOFF - 2, PRUNE_CUTOFF - 1]);
+    });
+
     it('starts no pass for a batch that failed', function () {
         app(Writer::class)->transaction(fn () => null);
         $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
@@ -403,33 +412,12 @@ function storePages(): array
 
 function withBackstop(int $pages, int $chunk = 5, int $transactions = 20, int $reclaim = 1024): void
 {
-    app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class), $pages, $chunk, $transactions, $reclaim) extends Pruner
-    {
-        public function __construct(Writer $writer, Reader $reader, Configuration $configuration, protected int $pages, protected int $chunkRows, protected int $passTransactions, protected int $reclaimPages)
-        {
-            parent::__construct($writer, $reader, $configuration);
-        }
-
-        protected function backstopBytes(): int
-        {
-            return $this->pages * 4096;
-        }
-
-        protected function chunkRows(): int
-        {
-            return $this->chunkRows;
-        }
-
-        protected function passTransactions(): int
-        {
-            return $this->passTransactions;
-        }
-
-        protected function reclaimPages(): int
-        {
-            return $this->reclaimPages;
-        }
-    });
+    app()->instance(Pruner::class, app()->make(Pruner::class, [
+        'chunkRows' => $chunk,
+        'passTransactions' => $transactions,
+        'backstopBytes' => $pages * 4096,
+        'reclaimPages' => $reclaim,
+    ]));
 
     registerFirewatch();
 }

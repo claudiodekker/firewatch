@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use Closure;
 use SQLite3;
 use SQLite3Exception;
-use SQLite3Result;
 use SQLite3Stmt;
 
 /**
@@ -20,11 +19,6 @@ class Pruner
     protected const CLAIM_SECONDS = 60;
 
     /**
-     * The most records one delete transaction removes.
-     */
-    protected const CHUNK_ROWS = 2000;
-
-    /**
      * The most delete transactions one pass makes.
      */
     protected const PASS_TRANSACTIONS = 20;
@@ -35,19 +29,25 @@ class Pruner
     protected const TRIM_TO = 0.9;
 
     /**
-     * The pages one incremental vacuum frees, and the freelist length above which an idle pass reclaims.
+     * The deletion the pass removes records and reclaims pages with.
      */
-    protected const RECLAIM_PAGES = 1024;
+    protected Deletion $deletion;
 
     /**
      * Create a new pruner instance.
+     *
+     * @param  int  $reclaimPages  the pages one incremental vacuum frees, and the freelist length above which an idle pass reclaims
      */
     public function __construct(
         protected Writer $writer,
         protected Reader $reader,
         protected Configuration $configuration,
+        protected int $chunkRows = Deletion::CHUNK_ROWS,
+        protected int $passTransactions = self::PASS_TRANSACTIONS,
+        protected int $backstopBytes = Writer::SIZE_BACKSTOP_BYTES,
+        protected int $reclaimPages = Deletion::RECLAIM_PAGES,
     ) {
-        //
+        $this->deletion = new Deletion($writer, $chunkRows, $reclaimPages);
     }
 
     /**
@@ -92,38 +92,6 @@ class Pruner
                 throw $exception;
             }
         }
-    }
-
-    /**
-     * Get the most records one delete transaction removes.
-     */
-    protected function chunkRows(): int
-    {
-        return static::CHUNK_ROWS;
-    }
-
-    /**
-     * Get the most delete transactions one pass makes.
-     */
-    protected function passTransactions(): int
-    {
-        return static::PASS_TRANSACTIONS;
-    }
-
-    /**
-     * Get the live bytes past which a pass trims the oldest records.
-     */
-    protected function backstopBytes(): int
-    {
-        return Writer::SIZE_BACKSTOP_BYTES;
-    }
-
-    /**
-     * Get the pages one incremental vacuum frees, and the freelist length above which an idle pass reclaims.
-     */
-    protected function reclaimPages(): int
-    {
-        return static::RECLAIM_PAGES;
     }
 
     /**
@@ -174,16 +142,16 @@ class Pruner
             }) || $deleted;
         }
 
-        $transactions = $this->passTransactions();
+        $transactions = $this->passTransactions;
 
         while ($transactions > 0) {
-            $removed = $this->chunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows(), PruneReason::AGE);
+            $removed = $this->deletion->pruneChunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows, PruneReason::AGE);
             $deleted = $deleted || $removed > 0;
 
             // A transaction that found nothing to delete does not count against the pass.
             $transactions -= $removed > 0 ? 1 : 0;
 
-            if ($removed < $this->chunkRows()) {
+            if ($removed < $this->chunkRows) {
                 break;
             }
         }
@@ -195,8 +163,8 @@ class Pruner
 
             while ($transactions > 0 && $excess > 0) {
                 $transactions--;
-                $limit = min($this->chunkRows(), $excess);
-                $removed = $this->chunk('1 = 1', [], $limit, PruneReason::CAP);
+                $limit = min($this->chunkRows, $excess);
+                $removed = $this->deletion->pruneChunk('1 = 1', [], $limit, PruneReason::CAP);
                 $excess -= $removed;
                 $deleted = $deleted || $removed > 0;
 
@@ -207,16 +175,16 @@ class Pruner
         }
 
         $pages = $this->pages();
-        $target = (int) floor(static::TRIM_TO * $this->backstopBytes());
+        $target = (int) floor(static::TRIM_TO * $this->backstopBytes);
 
         // Once over the backstop the trim goes on until the target, so the boundary does not creep.
-        $over = $this->backstopBytes() < $pages['live'] * $pages['size'];
+        $over = $this->backstopBytes < $pages['live'] * $pages['size'];
 
         while ($over && $transactions > 0) {
             $transactions--;
 
             // Freed pages land on the freelist at once, so the counts are read again after each committed chunk.
-            if ($this->chunk('1 = 1', [], $this->chunkRows(), PruneReason::SIZE) === 0) {
+            if ($this->deletion->pruneChunk('1 = 1', [], $this->chunkRows, PruneReason::SIZE) === 0) {
                 break;
             }
 
@@ -237,11 +205,11 @@ class Pruner
      */
     protected function reclaim(bool $deleted): void
     {
-        if (! $deleted && $this->pages()['free'] <= $this->reclaimPages()) {
+        if (! $deleted && $this->pages()['free'] <= $this->reclaimPages) {
             return;
         }
 
-        $this->writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.$this->reclaimPages().')'));
+        $this->deletion->reclaim();
 
         if (! $deleted) {
             return;
@@ -284,105 +252,5 @@ class Pruner
     protected function count(): int
     {
         return Cell::integer($this->reader->snapshot(fn (SQLite3 $connection) => $connection->querySingle('SELECT count(*) FROM records')));
-    }
-
-    /**
-     * Delete the oldest records that match in one transaction, and get how many matched.
-     *
-     * @param  array<string, float>  $bindings
-     */
-    protected function chunk(string $condition, array $bindings, int $limit, PruneReason $reason): int
-    {
-        return $this->writer->transaction(function (SQLite3 $connection) use ($condition, $bindings, $limit, $reason) {
-            $removed = $this->deleteOldest($connection, $condition, $bindings, $limit, $reason);
-
-            // A record of unknown start has no age, but it counts towards the cap and the size, after every record of known start.
-            if ($removed < $limit && $reason->countsUnstarted()) {
-                $removed += $this->deleteUnstarted($connection, $limit - $removed);
-            }
-
-            return $removed;
-        });
-    }
-
-    /**
-     * Delete the oldest records of known start that match, and get how many matched.
-     *
-     * @param  array<string, float>  $bindings
-     */
-    protected function deleteOldest(SQLite3 $connection, string $condition, array $bindings, int $limit, PruneReason $reason): int
-    {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT id, started_at FROM records WHERE started_at IS NOT NULL AND {$condition} ORDER BY started_at, id LIMIT :limit");
-        $statement->bindValue(':limit', $limit, SQLITE3_INTEGER);
-
-        foreach ($bindings as $name => $value) {
-            $statement->bindValue(":{$name}", $value, SQLITE3_FLOAT);
-        }
-
-        $result = $statement->execute();
-        $ids = [];
-        $newest = 0.0;
-
-        /** @var SQLite3Result $result */
-        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $ids[] = Cell::integer($row[0]);
-            $newest = Cell::float($row[1]);
-        }
-
-        if ($ids === []) {
-            return 0;
-        }
-
-        $this->deleteIds($connection, $ids);
-        $this->deleteUnstartedBelow($connection, max($ids));
-
-        Markers::advancePrunedThrough($connection, $newest, $reason);
-
-        return count($ids);
-    }
-
-    /**
-     * Delete the records with the given ids.
-     *
-     * @param  non-empty-list<int>  $ids
-     */
-    protected function deleteIds(SQLite3 $connection, array $ids): void
-    {
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
-
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("DELETE FROM records WHERE id IN ({$placeholders})");
-
-        foreach ($ids as $position => $id) {
-            $statement->bindValue($position + 1, $id, SQLITE3_INTEGER);
-        }
-
-        $statement->execute();
-    }
-
-    /**
-     * Delete a chunk of the records without a start that arrived before an id.
-     */
-    protected function deleteUnstartedBelow(SQLite3 $connection, int $id): void
-    {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare('DELETE FROM records WHERE id IN (SELECT id FROM records WHERE started_at IS NULL AND id < :id ORDER BY id LIMIT :limit)');
-        $statement->bindValue(':id', $id, SQLITE3_INTEGER);
-        $statement->bindValue(':limit', $this->chunkRows(), SQLITE3_INTEGER);
-        $statement->execute();
-    }
-
-    /**
-     * Delete the records of unknown start that arrived first, up to a limit, and get how many there were.
-     */
-    protected function deleteUnstarted(SQLite3 $connection, int $limit): int
-    {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare('DELETE FROM records WHERE id IN (SELECT id FROM records WHERE started_at IS NULL ORDER BY id LIMIT :limit)');
-        $statement->bindValue(':limit', $limit, SQLITE3_INTEGER);
-        $statement->execute();
-
-        return $connection->changes();
     }
 }
