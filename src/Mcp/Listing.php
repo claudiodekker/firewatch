@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
-use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
 
 /**
@@ -19,12 +18,11 @@ class Listing
 
     /**
      * Create a new listing instance.
-     *
-     * @param  array{int, int}|null  $status  the lowest and the highest status code that is kept
      */
     public function __construct(
         public readonly Window $window,
         public readonly Order $order,
+        public readonly OccurrenceFilters $filters,
         public readonly ?string $group = null,
         public readonly ?RecordType $type = null,
         public readonly ?string $executionId = null,
@@ -32,12 +30,6 @@ class Listing
         public readonly ?string $jobId = null,
         public readonly ?string $userId = null,
         public readonly ?string $deploy = null,
-        public readonly ?string $method = null,
-        public readonly ?array $status = null,
-        public readonly ?Outcome $outcome = null,
-        public readonly ?LogLevel $level = null,
-        public readonly int|float|null $slowerThanMilliseconds = null,
-        public readonly ?string $matching = null,
     ) {
         //
     }
@@ -52,28 +44,6 @@ class Listing
         $rows = Stored::rows($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group ORDER BY type', ['group' => $group]);
 
         return array_values(array_filter(array_map(fn (array $row) => RecordType::tryFrom($row['type']), $rows)));
-    }
-
-    /**
-     * Get the fields of a type a `matching` is looked for in, in the order the first one that matches is named.
-     *
-     * @return list<string>
-     */
-    protected static function matchedFields(RecordType $type): array
-    {
-        return match ($type) {
-            RecordType::REQUEST => ['route_path', 'route_name', 'route_action', 'url'],
-            RecordType::COMMAND => ['name', 'command'],
-            RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK, RecordType::QUEUED_JOB => ['name'],
-            RecordType::QUERY => ['sql'],
-            RecordType::EXCEPTION => ['class', 'message', 'file'],
-            RecordType::LOG => ['message'],
-            RecordType::CACHE_EVENT => ['key'],
-            RecordType::OUTGOING_REQUEST => ['host', 'url'],
-            RecordType::MAIL => ['class', 'subject'],
-            RecordType::NOTIFICATION => ['class'],
-            RecordType::USER => [],
-        };
     }
 
     /**
@@ -195,46 +165,17 @@ class Listing
         $conditions = [$selection];
         $duration = Stored::number('duration');
 
-        if ($this->method !== null) {
-            $conditions[] = "upper(json_extract(data, '\$.method')) = upper(:method)";
-            $bindings['method'] = $this->method;
+        [$filtered, $filterBindings] = $this->filters->condition($this->type);
+
+        if ($filtered !== '') {
+            $conditions[] = $filtered;
         }
 
-        if ($this->status !== null) {
-            $conditions[] = "json_extract(data, '\$.status_code') BETWEEN :status_from AND :status_to";
-            [$bindings['status_from'], $bindings['status_to']] = $this->status;
-        }
-
-        if ($this->outcome !== null) {
-            $conditions[] = "json_extract(data, '\$.status') = :outcome";
-            $bindings['outcome'] = $this->outcome->value;
-        }
-
-        if ($this->level !== null) {
-            $names = [];
-
-            foreach ($this->level->andWorse() as $at => $level) {
-                $names[] = ":level{$at}";
-                $bindings["level{$at}"] = $level;
-            }
-
-            $conditions[] = "lower(json_extract(data, '\$.level')) IN (".implode(', ', $names).')';
-        }
-
-        if ($this->slowerThanMilliseconds !== null) {
-            $conditions[] = "{$duration} > :slower";
-            $bindings['slower'] = $this->slowerThanMilliseconds * Microseconds::PER_MILLISECOND;
-        }
+        $bindings = [...$bindings, ...$filterBindings];
 
         if ($threshold !== null) {
             $conditions[] = "{$duration} >= :threshold";
             $bindings['threshold'] = $threshold;
-        }
-
-        if ($this->matching !== null && $this->type !== null) {
-            $fields = array_map(fn (string $field) => "instr(lower(COALESCE(json_extract(data, '\$.{$field}'), '')), lower(:matching)) > 0", self::matchedFields($this->type));
-            $conditions[] = '('.implode(' OR ', $fields).')';
-            $bindings['matching'] = $this->matching;
         }
 
         return [implode(' AND ', $conditions), $bindings];
@@ -268,8 +209,8 @@ class Listing
             'deploy' => Cell::blank($record['deploy']),
         ];
 
-        if ($this->matching !== null && $type !== null) {
-            $row['matched_on'] = $this->matchedOn($type, $data, $this->matching);
+        if ($this->filters->matching !== null && $type !== null) {
+            $row['matched_on'] = $this->filters->matchedOn($type, $data);
         }
 
         $row['detail'] = $this->detail($type, $record, $data);
@@ -289,22 +230,6 @@ class Listing
         }
 
         return $type->labelOf($data);
-    }
-
-    /**
-     * Get the first field of the type, in the order they are listed, that holds the matching.
-     *
-     * @param  array<string, mixed>  $data
-     */
-    protected function matchedOn(RecordType $type, array $data, string $matching): ?string
-    {
-        foreach (self::matchedFields($type) as $field) {
-            if (is_string($data[$field] ?? null) && str_contains(strtolower($data[$field]), strtolower($matching))) {
-                return $field;
-            }
-        }
-
-        return null;
     }
 
     /**
