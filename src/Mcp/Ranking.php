@@ -36,40 +36,83 @@ class Ranking
     }
 
     /**
-     * Read the groups of the type in the window, worst first by the measure.
+     * Read one page of the groups of the type in the window, worst first by the measure: at most the limit, after the key of the last row of the page before.
      *
-     * @return array{rows: list<array<string, mixed>>, keys: list<array{value: int|float|null, occurrences: int, hash: string}>, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
+     * @param  array{value: int|float|null, occurrences: int, hash: string}|null  $after
+     * @return array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
      */
-    public function read(SQLite3 $connection): array
+    public function read(SQLite3 $connection, ?array $after, int $limit): array
     {
         [$records, $withoutGroup] = array_values($this->population->query($connection, 'SELECT count(*) AS records, count(*) FILTER (WHERE group_hash IS NULL) AS without FROM base')[0]);
 
-        $groups = $this->groups($connection);
+        $measured = $this->population->measured($connection, $this->by);
+        $measured = $this->matched($connection, $measured);
 
-        if ($this->matching !== null) {
-            $groups = array_values(array_filter($groups, fn (array $group) => mb_stripos($this->label($group), $this->matching) !== false));
-        }
+        [$orderedBy, $measured] = $this->ordering($connection, $measured);
 
-        $orderedBy = $this->by;
+        $untimed = $this->population->hasDuration() ? array_sum(array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $measured)) : 0;
+        $keys = array_map(fn (array $group) => [
+            'value' => $group['value'],
+            'occurrences' => $group['occurrences'],
+            'hash' => $group['hash'],
+        ], array_values($measured));
 
-        if (($fallback = $this->by->fallback()) !== null && $groups !== [] && array_filter($groups, fn (array $group) => Population::value($group, $this->by) !== null) === []) {
-            $orderedBy = $fallback;
-        }
+        usort($keys, self::compare(...));
 
-        usort($groups, fn (array $a, array $b) => self::compare($this->key($a, $orderedBy), $this->key($b, $orderedBy)));
-
-        $timedGroups = $this->population->hasDuration() ? $groups : [];
-        $untimedPerGroup = array_map(fn (array $group) => $group['occurrences'] - $group['timed'], $timedGroups);
-        $untimed = array_sum($untimedPerGroup);
+        $following = array_filter($keys, fn (array $key) => $after === null || self::compare($key, $after) > 0);
+        $fetched = array_slice(array_values($following), 0, Rows::fetch($limit));
+        $page = Rows::bound($fetched, $limit);
+        $groups = $this->page($connection, array_column($page->rows, 'hash'));
 
         return [
-            'rows' => array_map($this->row(...), $groups),
-            'keys' => array_map(fn (array $group) => $this->key($group, $orderedBy), $groups),
+            'page' => $page,
+            'rows' => array_map(fn (array $key) => $this->row($groups[$key['hash']]), $page->rows),
+            'ranked' => count($keys),
             'records' => $records,
             'withoutGroup' => $withoutGroup,
             'untimed' => $untimed,
             'orderedBy' => $orderedBy,
         ];
+    }
+
+    /**
+     * Get the measure the groups are ordered by and their values of it, which is the fallback of the measure when no group has a value of the measure itself.
+     *
+     * @param  array<string, array{value: int|float|null, occurrences: int, hash: string, timed: int}>  $measured
+     * @return array{Measure, array<string, array{value: int|float|null, occurrences: int, hash: string, timed: int}>}
+     */
+    protected function ordering(SQLite3 $connection, array $measured): array
+    {
+        $fallback = $this->by->fallback();
+        $valued = array_filter(array_column($measured, 'value'), fn (int|float|null $value) => $value !== null);
+
+        if ($fallback === null || $measured === [] || $valued !== []) {
+            return [$this->by, $measured];
+        }
+
+        $values = $this->population->measured($connection, $fallback);
+
+        return [$fallback, array_intersect_key($values, $measured)];
+    }
+
+    /**
+     * Keep the groups whose label contains the text the ranking matches, or every group when it matches no text.
+     *
+     * @template TGroup
+     *
+     * @param  array<string, TGroup>  $groups
+     * @return array<string, TGroup>
+     */
+    protected function matched(SQLite3 $connection, array $groups): array
+    {
+        if ($this->matching === null) {
+            return $groups;
+        }
+
+        $latest = $this->population->latest($connection);
+        $labels = array_column($latest, 'label', 'group_hash');
+
+        return array_filter($groups, fn (string $hash) => mb_stripos($this->population->type->groupLabel($labels[$hash] ?? null), $this->matching) !== false, ARRAY_FILTER_USE_KEY);
     }
 
     /**
@@ -81,7 +124,7 @@ class Ranking
     {
         [$records] = array_values($this->population->query($connection, 'SELECT count(*) AS records FROM base')[0]);
 
-        $deploys = $this->groups($connection);
+        $deploys = array_values($this->statistics($connection, $this->population));
         $label = '';
 
         if ($deploys !== []) {
@@ -157,54 +200,53 @@ class Ranking
     }
 
     /**
-     * Read what the records of every group of the window add up to, with when each was first seen in the store and its slowest execution.
+     * Read what the records of the groups of a page add up to, with when each was first seen in the store and its slowest execution, keyed by group hash.
      *
-     * @return list<array<string, mixed>>
+     * @param  list<string>  $hashes
+     * @return array<string, array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection): array
+    protected function page(SQLite3 $connection, array $hashes): array
     {
-        $groups = $this->population->statistics($connection);
+        $population = $this->population->only($hashes);
+        $groups = $this->statistics($connection, $population);
 
-        $firsts = $this->population->group !== null ? [] : Stored::rows($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->population->type->view().' WHERE group_hash IS NOT NULL GROUP BY group_hash');
-
-        foreach ($firsts as $row) {
-            if (isset($groups[$row['group_hash']])) {
-                $groups[$row['group_hash']]['first'] = $row['first'];
-            }
+        foreach ($population->firstSeen($connection) as $hash => $first) {
+            $groups[$hash]['first'] = $first;
         }
 
-        if ($this->population->hasDuration() && $this->population->group === null) {
-            $slowest = $this->population->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1');
-
-            foreach ($slowest as $row) {
-                $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
-            }
+        if (! $population->hasDuration()) {
+            return $groups;
         }
 
-        if ($this->configuration !== null && $this->population->type->isExecution()) {
-            $type = ExecutionType::from($this->population->type->value);
+        $slowest = $population->query($connection, 'SELECT group_hash, execution_id FROM (SELECT group_hash, execution_id, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY d DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL AND d IS NOT NULL) WHERE rn = 1');
 
-            foreach ($this->population->budgets($connection) as $hash => $budget) {
-                $groups[$hash]['budget'] = BudgetVerdict::ofGroup($this->configuration, $type, $budget)->cell();
-            }
+        foreach ($slowest as $row) {
+            $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
         }
 
-        return array_values($groups);
+        return $groups;
     }
 
     /**
-     * Get the sort key of a group.
+     * Read the statistics of every group of a population, with the budget verdict of each when the type has budgets, keyed by group hash.
      *
-     * @param  array<string, mixed>  $group
-     * @return array{value: int|float|null, occurrences: int, hash: string}
+     * @return array<string, array<string, mixed>>
      */
-    protected function key(array $group, Measure $measure): array
+    protected function statistics(SQLite3 $connection, Population $population): array
     {
-        return [
-            'value' => Population::value($group, $measure),
-            'occurrences' => $group['occurrences'],
-            'hash' => $group['hash'],
-        ];
+        $groups = $population->statistics($connection);
+
+        if ($this->configuration === null || ! $population->type->isExecution()) {
+            return $groups;
+        }
+
+        $type = ExecutionType::from($population->type->value);
+
+        foreach ($population->budgets($connection) as $hash => $budget) {
+            $groups[$hash]['budget'] = BudgetVerdict::ofGroup($this->configuration, $type, $budget)->cell();
+        }
+
+        return $groups;
     }
 
     /**

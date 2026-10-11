@@ -16,14 +16,85 @@ class Population
      * Create a new population instance.
      *
      * @param  string|null  $group  the one group whose records are keyed by their deploy instead of their group
+     * @param  list<string>|null  $hashes  the groups the records are narrowed to, or null for every group
      */
     public function __construct(
         public readonly RecordType $type,
         public readonly Window $window,
         public readonly ?string $deploy = null,
         public readonly ?string $group = null,
+        public readonly ?array $hashes = null,
     ) {
         //
+    }
+
+    /**
+     * Get the population narrowed to the records of the groups with these hashes.
+     *
+     * @param  list<string>  $hashes
+     */
+    public function only(array $hashes): self
+    {
+        return new self($this->type, $this->window, $this->deploy, $this->group, $hashes);
+    }
+
+    /**
+     * Read the value of a measure for every group, with its records and the records that have a duration, keyed by group hash.
+     *
+     * @return array<string, array{value: int|float|null, occurrences: int, hash: string, timed: int}>
+     */
+    public function measured(SQLite3 $connection, Measure $measure): array
+    {
+        $sql = match ($measure) {
+            Measure::P95_DURATION => $this->percentile('d', Percentile::P95),
+            Measure::P50_DURATION => $this->percentile('d', Percentile::MEDIAN),
+            Measure::P95_MEMORY => $this->percentile('m', Percentile::P95),
+            Measure::P50_MEMORY => $this->percentile('m', Percentile::MEDIAN),
+            Measure::MAX_DURATION => $this->aggregated('max(d)'),
+            Measure::AVG_DURATION => $this->aggregated('avg(d)'),
+            Measure::TOTAL_DURATION => $this->aggregated('sum(d)'),
+            Measure::OCCURRENCES => $this->aggregated('count(*)'),
+            Measure::MAX_MEMORY => $this->aggregated('max(m)'),
+            Measure::LAST_SEEN => $this->aggregated('max(started_at)'),
+            Measure::QUERIES => $this->aggregated('sum(q)'),
+        };
+
+        $measured = [];
+
+        foreach ($this->query($connection, $sql) as $row) {
+            $measured[$row['group_hash']] = [
+                'value' => $row['value'],
+                'occurrences' => $row['occurrences'],
+                'hash' => $row['group_hash'],
+                'timed' => $row['timed'],
+            ];
+        }
+
+        return $measured;
+    }
+
+    /**
+     * Read the label of the latest record of every group, with its method for a type shown with one.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function latest(SQLite3 $connection): array
+    {
+        $method = $this->hasMethod() ? ', method' : '';
+
+        return $this->query($connection, "SELECT group_hash, label{$method} FROM (SELECT group_hash, label{$method}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
+    }
+
+    /**
+     * Read when every group was first seen in the store, outside the window and under any deploy, keyed by group hash.
+     *
+     * @return array<string, float>
+     */
+    public function firstSeen(SQLite3 $connection): array
+    {
+        $rows = Stored::rows($connection, 'SELECT group_hash, min(started_at) AS first FROM '.$this->source().' WHERE group_hash IS NOT NULL GROUP BY group_hash', $this->narrowing());
+
+        return array_column($rows, 'first', 'group_hash');
     }
 
     /**
@@ -175,11 +246,7 @@ class Population
             }
         }
 
-        $method = $this->hasMethod() ? ', method' : '';
-
-        $latest = $this->query($connection, "SELECT group_hash, label{$method} FROM (SELECT group_hash, label{$method}, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS rn FROM base WHERE group_hash IS NOT NULL) WHERE rn = 1");
-
-        foreach ($latest as $row) {
+        foreach ($this->latest($connection) as $row) {
             $groups[$row['group_hash']]['label'] = is_string($row['label']) ? $row['label'] : '';
             $groups[$row['group_hash']]['method'] = $row['method'] ?? null;
         }
@@ -263,7 +330,7 @@ class Population
     /**
      * Run a query over the records of the type that the window, the deploy and the group leave, as the table `base`.
      *
-     * @param  array<string, int|float>  $bindings  bound by name after the window, the deploy and the group
+     * @param  array<string, int|float>  $bindings  bound by name after the population's own filters
      * @return list<array<string, mixed>>
      */
     public function query(SQLite3 $connection, string $sql, array $bindings = []): array
@@ -292,13 +359,54 @@ class Population
             $columns[] = "{$failure} AS f";
         }
 
-        $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->type->view().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
-
         $filters = [
             'deploy' => $this->deploy,
             'group' => $this->group,
         ];
 
-        return Stored::rows($connection, $sql, [...$filters, ...$bindings], $this->window);
+        $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->source().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
+
+        return Stored::rows($connection, $sql, [...$filters, ...$this->narrowing(), ...$bindings], $this->window);
+    }
+
+    /**
+     * Get the SQL source of the records of the type, only those of the groups the population is narrowed to when it is.
+     */
+    protected function source(): ?string
+    {
+        if ($this->hashes === null) {
+            return $this->type->view();
+        }
+
+        // Without planner statistics SQLite prefers the type's index over the group's, so the ids come from the group index.
+        return "(SELECT id AS page_id FROM records INDEXED BY records_group WHERE group_hash IN (SELECT value FROM json_each(:hashes))) AS page CROSS JOIN {$this->type->view()} ON id = page_id";
+    }
+
+    /**
+     * Get the bindings of the groups the population is narrowed to, which the source names.
+     *
+     * @return array<string, string>
+     */
+    protected function narrowing(): array
+    {
+        return $this->hashes === null ? [] : ['hashes' => json_encode($this->hashes, JSON_THROW_ON_ERROR)];
+    }
+
+    /**
+     * Get the SQL that reads a nearest-rank percentile of one quantity of every group, null below its sample floor, with its records and the records that have a duration.
+     */
+    protected function percentile(string $column, Percentile $percentile): string
+    {
+        $rank = $percentile->nearestRank();
+
+        return "SELECT group_hash, count(*) AS occurrences, count(d) AS timed, max(CASE WHEN rn = {$rank} AND n >= {$percentile->floor()} THEN v END) AS value FROM (SELECT group_hash, d, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column} IS NULL, {$column}, id) AS rn, count({$column}) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL) GROUP BY group_hash";
+    }
+
+    /**
+     * Get the SQL that reads an aggregate of the records of every group, with its records and the records that have a duration.
+     */
+    protected function aggregated(string $aggregate): string
+    {
+        return "SELECT group_hash, count(*) AS occurrences, count(d) AS timed, {$aggregate} AS value FROM base WHERE group_hash IS NOT NULL GROUP BY group_hash";
     }
 }
