@@ -78,7 +78,7 @@ it('ignores the NIGHTWATCH_ variables for the keys it writes', function (bool $e
     'Off' => ['enabled' => false, 'expected' => ['nightwatch.enabled' => false, 'nightwatch.token' => 'application-token', 'nightwatch.ingest.uri' => 'ingest.example.com:2407', 'nightwatch.ingest.event_buffer' => '7']],
 ]);
 
-it('resolves a firewatch: process Off by its first argument that is not an option', function (array $argv, bool $expected) {
+it('resolves a firewatch: process Off by its command', function (array $argv, bool $expected) {
     setArgv($argv);
 
     registerFirewatch();
@@ -87,6 +87,9 @@ it('resolves a firewatch: process Off by its first argument that is not an optio
 })->with([
     'firewatch:server' => ['argv' => ['artisan', 'firewatch:server'], 'expected' => false],
     'an option before the command' => ['argv' => ['artisan', '--env=local', 'firewatch:server'], 'expected' => false],
+    'an --env value before the command' => ['argv' => ['artisan', '--env', 'local', 'firewatch:server'], 'expected' => false],
+    'an --env without a value before the command' => ['argv' => ['artisan', '--env', '--verbose', 'firewatch:server'], 'expected' => false],
+    'an --env value before another command' => ['argv' => ['artisan', '--env', 'firewatch:server', 'migrate'], 'expected' => true],
     'another command' => ['argv' => ['artisan', 'migrate'], 'expected' => true],
     'another command with a firewatch: argument' => ['argv' => ['artisan', 'queue:work', 'firewatch:server'], 'expected' => true],
     'no command' => ['argv' => ['artisan'], 'expected' => true],
