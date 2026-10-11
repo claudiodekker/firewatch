@@ -46,7 +46,7 @@ return [
         'trend' => 'A measure over equal time buckets: did it rise, fall or hold, and where did it peak? An empty bucket is 0 for occurrences, null otherwise; buckets before coverage are partial. Bucket edges pass back as since/until. Windowed.',
         'query' => 'Last resort: your own read-only SQL. One SELECT, WITH, VALUES or EXPLAIN over the record views, records, users, drift, meta, json_each and json_tree; other statements and functions off the allow-list are refused. Values are raw: epoch seconds, microseconds, bytes. Text cells are cut at :characters characters; read the rest with substr(). `describe` lists columns. Prefer `rank`, `occurrences`, `detect`. Not windowed.',
         'describe' => 'What Firewatch holds and how to query it. Without `type`: store state, counts, drift, retention, coverage, whether `query` runs and why not, deploys newest first, units, objects, the SQL allow-list and ceilings, examples. With `type`: its columns with units and recent values, group recipe, examples and blind spots. Not windowed.',
-        'fingerprint' => 'The group id of something read in source, and whether the store holds it, so a miss is not read as "never ran". Pass `type` and its source facts, as each argument says; others are refused. Exceptions: `rank` with `matching`. recipe_check: a miss with agrees has not run; with disagrees, do not conclude. Not windowed.',
+        'fingerprint' => 'The group id of something read in source and whether the store holds it. Pass `type` and its arguments. recipe_check: a miss with agrees has not run; with disagrees, do not conclude. Not windowed.',
     ],
 
     /*
@@ -646,8 +646,8 @@ return [
     'describe_next_query' => 'Run the first example statement.',
 
     'fingerprint_arguments' => [
-        'methods' => 'request: all its methods, such as GET and HEAD.',
-        'path' => 'request: the full route path.',
+        'methods' => 'request: every method, such as GET, HEAD.',
+        'path' => 'request: the route path.',
         'domain' => 'request, optional.',
         'name' => 'command, job-attempt, queued-job, scheduled-task.',
         'cron' => 'scheduled-task.',
@@ -659,13 +659,14 @@ return [
         'store' => 'cache-event.',
         'key' => 'cache-event.',
         'host' => 'outgoing-request.',
-        'class' => 'mail, notification.',
+        'class' => 'mail, notification, exception.',
+        'file' => 'exception: from the base path.',
+        'line' => 'exception: none for .blade.php.',
     ],
 
     'no_recipe' => "error: invalid_argument\n`type` cannot be :type: :reason\nargument: type\naccepted: :accepted\nexample: :example",
 
     'no_recipe_reasons' => [
-        'exception' => 'an exception is grouped by where it was thrown, which source does not give. Use `rank(type: "exception", matching: "<class>")`.',
         'log' => 'logs have no group.',
         'user' => 'users have no group.',
     ],
@@ -698,6 +699,24 @@ return [
     'fingerprint_assumption_normalised' => 'the driver is one Nightwatch normalises: mariadb, mysql, pgsql, sqlite, sqlsrv or singlestore',
 
     'fingerprint_assumption_written' => 'the driver is any other, so the SQL is hashed as written',
+
+    'fingerprint_assumption_code_zero' => 'the exception was thrown without a code',
+
+    'fingerprint_assumption_code_held' => 'the code is :code, as an exception of this class at this file carries in the store',
+
+    'fingerprint_assumption_view' => 'Laravel wrapped the throw in its ViewException, which has no line',
+
+    'fingerprint_assumption_ignition' => 'Spatie Ignition wrapped the throw in its ViewException, which keeps the template line',
+
+    'fingerprint_assumption_nested' => 'the template was rendered inside another, whose render Nightwatch appends to the file',
+
+    'fingerprint_assumption_no_line' => 'the throw had no line',
+
+    'fingerprint_assumption_line_zero' => 'the throw was on line 0',
+
+    'fingerprint_vendor_note' => 'An exception thrown inside vendor/, artisan or public/index.php is grouped by the first application frame of its trace, such as the line that called findOrFail, and by its own file and line only when the trace has none.',
+
+    'fingerprint_view_note' => 'An exception thrown while a Blade template renders is grouped by the exception it wraps, the template and no line. Laravel does not wrap an HTTP exception or a record-not-found exception, so those are grouped by the compiled view.',
 
     'objects' => [
         'requests' => 'One row per HTTP request the application served.',

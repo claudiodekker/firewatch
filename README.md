@@ -125,7 +125,7 @@ Locally, the value that redaction would hide is usually the answer the assistant
 | `trend` | A measure over equal time buckets |
 | `query` | Read-only SQL over the store: one statement, 10 s limit, run in an isolated child process |
 | `describe` | Schema, store facts, deploys, units, examples |
-| `fingerprint` | The group id of something read in source |
+| `fingerprint` | The group id of something read in source, including a `throw` by its `class`, `file` and `line` |
 
 Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `queue-latency`, `failing-tasks`, `exception-clusters`, `error-logs`, `failing-http`, `cache`, `memory`.
 
