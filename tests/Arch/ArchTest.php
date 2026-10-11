@@ -69,13 +69,23 @@ arch('nothing in the package source can leave the machine')
     ->not->toUse([...OFF_MACHINE, ...NIGHTWATCH_INGEST])
     ->ignoring([Ingest::class, IngestReplacer::class, NullIngest::class]);
 
-arch('only Firewatch\'s ingests and their replacer reach Nightwatch\'s ingest contract')
-    ->expect([Ingest::class, IngestReplacer::class, NullIngest::class])
-    ->not->toUse([...OFF_MACHINE, ...array_diff(NIGHTWATCH_INGEST, ['Laravel\\Nightwatch\\Contracts\\Ingest'])]);
+foreach (['Ingest' => Ingest::class, 'IngestReplacer' => IngestReplacer::class, 'NullIngest' => NullIngest::class] as $name => $ingest) {
+    arch("{$name} reaches Nightwatch's ingest contract and nothing else off the machine")
+        ->expect($ingest)
+        ->not->toUse([...OFF_MACHINE, ...array_diff(NIGHTWATCH_INGEST, ['Laravel\\Nightwatch\\Contracts\\Ingest'])]);
+}
 
-arch('the store is never reached through Laravel\'s database layer')
-    ->expect(['ClaudioDekker\\Firewatch\\Store', 'ClaudioDekker\\Firewatch\\Actions'])
-    ->not->toUse(['Illuminate\\Database', 'Illuminate\\Support\\Facades\\DB', 'PDO']);
+foreach (['Store', 'Actions'] as $area) {
+    arch("{$area} is never reached through Laravel's database layer")
+        ->expect("ClaudioDekker\\Firewatch\\{$area}")
+        ->not->toUse(['Illuminate\\Database', 'Illuminate\\Support\\Facades\\DB']);
+}
+
+test('the store and its actions never name PDO, which arch cannot see', function () {
+    $isPdo = fn (PhpToken $token) => $token->is([T_STRING, T_NAME_FULLY_QUALIFIED]) && ltrim($token->text, '\\') === 'PDO';
+
+    expect([...PackageSource::offendingTokens('Store', $isPdo), ...PackageSource::offendingTokens('Actions', $isPdo)])->toBe([]);
+});
 
 test('nothing in the package source calls a network or mail function', function () {
     $offences = PackageSource::offendingTokens('', fn (PhpToken $token, array $tokens, int $index) => preg_match(
@@ -94,7 +104,13 @@ test('nothing on the server path writes to standard output', function () {
 
 arch('nothing in the package source needs the intl extension, which composer.json does not require')
     ->expect('ClaudioDekker\\Firewatch')
-    ->not->toUse(['Illuminate\\Support\\Number', 'NumberFormatter']);
+    ->not->toUse('Illuminate\\Support\\Number');
+
+test('nothing in the package source names NumberFormatter, which arch cannot see', function () {
+    $offences = PackageSource::offendingTokens('', fn (PhpToken $token) => $token->is([T_STRING, T_NAME_FULLY_QUALIFIED]) && ltrim($token->text, '\\') === 'NumberFormatter');
+
+    expect($offences)->toBe([]);
+});
 
 arch('the SQL child references nothing outside itself')
     ->expect(PackageSource::SQL_CHILD_NAMESPACE)
