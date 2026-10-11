@@ -38,6 +38,7 @@ class BlindSpots
             'application-opt-outs' => CallFact::STORE_LEVEL,
             'values-truncated' => CallFact::STORE_LEVEL,
             'octane-bootstrap' => [RecordType::REQUEST],
+            'compiled-view-templates' => CallFact::COMPILED_VIEW,
         ];
     }
 

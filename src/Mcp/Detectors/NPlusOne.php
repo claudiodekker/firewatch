@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\ExecutionType;
+use ClaudioDekker\Firewatch\Mcp\CompiledView;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -182,6 +183,7 @@ class NPlusOne implements Detector
             $sites[$this->key($row)][] = [
                 'file' => $row['file'],
                 'line' => $row['line'],
+                ...CompiledView::of($row['file']),
                 'runs' => $row['runs'],
             ];
         }

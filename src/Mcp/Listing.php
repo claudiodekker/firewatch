@@ -112,6 +112,7 @@ class Listing
 
         return array_map(fn (array $site) => [
             'location' => Stored::location($site['file'], $site['line']),
+            ...CompiledView::of($site['file']),
             'count' => $site['count'],
         ], $sites);
     }
@@ -197,6 +198,7 @@ class Listing
             'group' => $record['group_hash'],
             'name' => $this->name($type, $data),
             'location' => $located ? Stored::location($data['file'] ?? null, $data['line'] ?? null) : null,
+            ...($located ? CompiledView::of($data['file'] ?? null) : []),
             'user_id' => Cell::blank($record['user_id']),
             'deploy' => Cell::blank($record['deploy']),
         ];

@@ -52,7 +52,9 @@ Produce telemetry by exercising the workbench the way a user's application would
 | `GET /` | answers `ok` | one request |
 | `GET /products` | runs `select ? as product` 25 times | a request with 25 queries, an `n-plus-one` finding |
 | `GET /purchases` | dispatches `ShipOrder`, `ChargeCard` and `SyncInventory` to the `database` queue | a request, three `queued-job` records and the three `insert into "jobs"` queries, in one trace |
+| `GET /posts` | renders `posts.blade.php`, whose loop runs `select ? as author` 5 times | a request with 5 queries, an `n-plus-one` finding; the workbench's query locations are a vendor frame, so a compiled view shows on frames, not call sites |
 | `GET /invoices/42` | throws a `RuntimeException`, status 500 | a request, an exception and a log, a `failing-routes` finding |
+| `GET /receipts/7` | renders `receipt.blade.php`, which throws a `RuntimeException`, status 500 | an exception whose first frame is the compiled view, with its `template` beside it |
 | `GET /exports` | builds an 80 MB string | a request peaking above 64 MB, a `memory` finding |
 | `GET /quotes` | calls a faked dependency that answers 503 | a request and an outgoing request, a `failing-http` finding |
 | `GET /catalog` | reads the key `catalog` through `Cache::remember()` | a request, a miss and a write, and from the third request a `cache` finding |

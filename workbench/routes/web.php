@@ -20,6 +20,8 @@ Route::get('/products', function () {
     return 'ok';
 });
 
+Route::get('/posts', fn () => view('posts'));
+
 Route::get('/purchases', function () {
     ShipOrder::dispatch();
     ChargeCard::dispatch();
@@ -29,6 +31,8 @@ Route::get('/purchases', function () {
 });
 
 Route::get('/invoices/{invoice}', fn (string $invoice) => throw new RuntimeException("Invoice [{$invoice}] could not be rendered."));
+
+Route::get('/receipts/{receipt}', fn (string $receipt) => view('receipt', ['receipt' => $receipt]));
 
 Route::get('/exports', fn () => strlen(str_repeat('a', 80 * 1024 * 1024)));
 
