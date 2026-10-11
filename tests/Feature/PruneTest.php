@@ -332,7 +332,7 @@ describe('the pass', function () {
 
     it('stops silently when a read of the pass finds the store busy', function () {
         // WAL never blocks a reader, and leaving it needs every writer closed, which only this release's writers are.
-        app()->bind(Writer::class, fn () => new Writer(app(Configuration::class), sqliteVersion: '3.45.0'));
+        app()->bind(Writer::class, fn () => new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.0'));
         registerFirewatch();
         requestsStartedAt([PRUNE_CUTOFF + 1]);
         $this->endCapture();
