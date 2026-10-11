@@ -114,7 +114,7 @@ Locally, the value that redaction would hide is usually the answer the assistant
 
 | Tool | Answers |
 |---|---|
-| `overview` | What is wrong right now, across everything |
+| `overview` | What is wrong right now, across everything; `by_deploy` breaks the slowest groups down per deploy |
 | `rank` | Which groups are worst by a measure |
 | `detect` | Named problem shapes with evidence |
 | `occurrences` | Individual records, filtered and ordered |

@@ -19,6 +19,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -82,6 +83,7 @@ class Overview extends Tool
     {
         return [
             ...$this->windowSchema($schema),
+            'by_deploy' => $schema->boolean()->description(__('firewatch::messages.overview_by_deploy_argument')),
             ...$this->formatSchema($schema),
         ];
     }
@@ -102,6 +104,7 @@ class Overview extends Tool
         $epoch = Instant::of($now);
         $timezone = config()->string('app.timezone');
         $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
+        $byDeploy = $this->byDeploy($request);
 
         $types = RecordType::events();
         $structural = BlindSpots::for($types, actor: true, storeLevel: true);
@@ -110,7 +113,7 @@ class Overview extends Tool
         try {
             [[$total, $oldest, $newest], $sections, $budgets, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
                 $this->countRecords($connection),
-                FixedSections::read($connection, $window),
+                $byDeploy ? FixedSections::readByDeploy($connection, $window) : FixedSections::read($connection, $window),
                 BudgetSection::read($connection, $window, $this->configuration),
                 StoreFacts::read($connection),
                 $this->detectors->judgeAll($connection, $window, new Deadline($epoch)),
@@ -157,10 +160,26 @@ class Overview extends Tool
             coverage: $coverage,
             blindSpots: $blindSpots,
             notes: $this->notes($sections, $budgets, $window),
-            truncated: array_filter([$budgets->truncation()]),
+            truncated: array_values(array_filter([$budgets->truncation(), $sections->truncation()])),
             next: $this->next($window, $sections, $judgements),
             cuttable: ['slowest_by_total_time'],
         );
+    }
+
+    /**
+     * Read whether the slowest groups are broken down per deploy.
+     */
+    protected function byDeploy(Request $request): bool
+    {
+        $value = $request->get('by_deploy');
+
+        if ($value === null || is_bool($value)) {
+            return $value ?? false;
+        }
+
+        $shown = json_encode($value, JSON_THROW_ON_ERROR);
+
+        throw Refusal::invalid(argument: 'by_deploy', expected: 'true or false', value: $shown, accepted: 'true or false', example: 'overview(by_deploy: true)');
     }
 
     /**
@@ -262,7 +281,7 @@ class Overview extends Tool
     }
 
     /**
-     * Get the calls that follow, the first five: the findings of each shape that has some, the ranking of the slowest group's type, and the execution of the window that finished last.
+     * Get the calls that follow, the first five: the comparison of the newest deploys shown (only with by_deploy, ahead of the rest), the findings of each shape that has some, the ranking of the slowest group's type, and the execution of the window that finished last.
      *
      * @param  list<Judgement>  $judgements
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
@@ -271,6 +290,20 @@ class Overview extends Tool
     {
         $bounds = $window->arguments();
         $calls = [];
+        $newest = $sections->newestDeploys();
+
+        if ($newest !== null) {
+            $calls[] = [
+                'tool' => 'compare',
+                'arguments' => [
+                    'type' => $newest['type']->value,
+                    'deploy_before' => $newest['before'],
+                    'deploy_after' => $newest['after'],
+                    ...$bounds,
+                ],
+                'why' => __('firewatch::messages.overview_next_compare', ['type' => $newest['type']->value]),
+            ];
+        }
 
         foreach ($judgements as $judgement) {
             if ($judgement->verdict === Verdict::FINDINGS) {

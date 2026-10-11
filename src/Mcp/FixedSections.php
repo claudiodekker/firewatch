@@ -22,6 +22,11 @@ class FixedSections
     protected const SLOWEST_PER_TYPE = 3;
 
     /**
+     * The most deploys the slowest list shows as blocks.
+     */
+    protected const SLOWEST_DEPLOYS = 5;
+
+    /**
      * The decimals of a share in an answer.
      */
     protected const PERCENT_DECIMALS = 1;
@@ -36,6 +41,7 @@ class FixedSections
      * @param  int  $userDirectory  the rows of the user directory, whatever the window
      * @param  array{executions: int, signed_in_actors: int, without_actor: int}  $actors  people and executions, never to be summed
      * @param  string|null  $latestExecution  the id of the execution of the window that finished last, or null when none finished
+     * @param  array{blocks: list<array{deploy: string|null, groups: list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>}>, matched: int}|null  $deploys  the slowest list per deploy, oldest first, or null when it was not asked for
      */
     protected function __construct(
         public readonly array $errorRate,
@@ -45,6 +51,7 @@ class FixedSections
         public readonly int $userDirectory,
         public readonly array $actors,
         public readonly ?string $latestExecution,
+        public readonly ?array $deploys = null,
     ) {
         //
     }
@@ -79,6 +86,25 @@ class FixedSections
     }
 
     /**
+     * Read the sections of the window, with the slowest list broken down per deploy.
+     */
+    public static function readByDeploy(SQLite3 $connection, Window $window): self
+    {
+        $sections = self::read($connection, $window);
+
+        return new self(
+            errorRate: $sections->errorRate,
+            slowest: $sections->slowest,
+            records: $sections->records,
+            byType: $sections->byType,
+            userDirectory: $sections->userDirectory,
+            actors: $sections->actors,
+            latestExecution: $sections->latestExecution,
+            deploys: self::deployBlocks($connection, $window),
+        );
+    }
+
+    /**
      * Get the sections as the keys of a result, in the fixed order.
      *
      * @return array<string, mixed>
@@ -87,7 +113,7 @@ class FixedSections
     {
         return [
             'error_rate' => $this->errorRate,
-            'slowest_by_total_time' => $this->slowest,
+            'slowest_by_total_time' => $this->deploys === null ? $this->slowest : array_map($this->block(...), $this->deploys['blocks']),
             'records' => $this->records,
             'records_by_type' => $this->byType,
             'user_directory' => $this->userDirectory,
@@ -109,6 +135,62 @@ class FixedSections
     public function unknownTypes(): int
     {
         return $this->records - array_sum(array_column($this->byType, 'records'));
+    }
+
+    /**
+     * Get the truncated entry for the deploys the slowest list left out, or null when it shows them all.
+     *
+     * @return array{section: string, shown: int, matched: int, reason: string, how: string}|null
+     */
+    public function truncation(): ?array
+    {
+        if ($this->deploys === null || $this->deploys['matched'] <= count($this->deploys['blocks'])) {
+            return null;
+        }
+
+        return [
+            'section' => 'slowest_by_total_time',
+            'shown' => count($this->deploys['blocks']),
+            'matched' => $this->deploys['matched'],
+            'reason' => TruncationReason::LIMIT->value,
+            'how' => __('firewatch::messages.overview_deploys_truncated_how'),
+        ];
+    }
+
+    /**
+     * Get the type of the slowest group of the newest deploy shown, with the two newest deploys shown by name, or null when fewer than two are.
+     *
+     * @return array{type: RecordType, before: string, after: string}|null
+     */
+    public function newestDeploys(): ?array
+    {
+        $named = array_values(array_filter($this->deploys['blocks'] ?? [], fn (array $block) => $block['deploy'] !== null));
+
+        if (count($named) < 2) {
+            return null;
+        }
+
+        [$before, $after] = array_slice($named, -2);
+
+        return [
+            'type' => RecordType::from($after['groups'][0]['type']),
+            'before' => $before['deploy'],
+            'after' => $after['deploy'],
+        ];
+    }
+
+    /**
+     * Get a block of the slowest list as it is answered: the deploy, named as a ranking names the records of none, and its groups.
+     *
+     * @param  array{deploy: string|null, groups: list<array<string, mixed>>}  $block
+     * @return array{deploy: string, groups: list<array<string, mixed>>}
+     */
+    protected function block(array $block): array
+    {
+        return [
+            'deploy' => $block['deploy'] ?? __('firewatch::messages.rank_no_deploy'),
+            'groups' => $block['groups'],
+        ];
     }
 
     /**
@@ -145,28 +227,144 @@ class FixedSections
      */
     protected static function leaders(SQLite3 $connection, Window $window): array
     {
-        $types = array_values(array_filter(Measure::types(), Measure::TOTAL_DURATION->fits(...)));
-        $bindings = ['per_type' => self::SLOWEST_PER_TYPE];
+        $types = self::timedTypes();
+        [$timed, $bindings] = self::timed($types, $window);
+
+        $rows = Stored::rows($connection, "WITH timed AS ({$timed}),
+            totals AS (SELECT position, group_hash, count(*) AS occurrences, count(d) AS timed_records, sum(d) AS total FROM timed GROUP BY position, group_hash),
+            placed AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY position ORDER BY total DESC, occurrences DESC, group_hash) AS place FROM totals WHERE timed_records > 0)
+            SELECT position, group_hash, occurrences, total FROM placed WHERE place <= :per_type", [
+            ...$bindings,
+            'per_type' => self::SLOWEST_PER_TYPE,
+        ], $window);
+
+        return self::top(array_map(fn (array $row) => self::leader($types, $row), $rows));
+    }
+
+    /**
+     * Read the groups of each of the most recent deploys of the window with the largest total duration, as the blocks of the slowest list, oldest deploy first.
+     *
+     * @return array{blocks: list<array{deploy: string|null, groups: list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>}>, matched: int}
+     */
+    protected static function deployBlocks(SQLite3 $connection, Window $window): array
+    {
+        $types = self::timedTypes();
+        [$timed, $bindings] = self::timed($types, $window, "NULLIF(deploy, '') AS deploy, started_at, ");
+
+        $rows = Stored::rows($connection, "WITH timed AS ({$timed}),
+            totals AS (SELECT deploy, position, group_hash, count(*) AS occurrences, count(d) AS timed_records, sum(d) AS total FROM timed GROUP BY deploy, position, group_hash),
+            placed AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY deploy, position ORDER BY total DESC, occurrences DESC, group_hash) AS place FROM totals WHERE timed_records > 0),
+            seen AS (SELECT deploy, min(started_at) AS first_at, max(started_at) AS last_at FROM timed WHERE d IS NOT NULL GROUP BY deploy),
+            recent AS (SELECT *, ROW_NUMBER() OVER (ORDER BY last_at DESC, deploy) AS recency, count(*) OVER () AS matched FROM seen)
+            SELECT placed.deploy, first_at, matched, position, group_hash, occurrences, timed_records, total
+            FROM placed JOIN recent ON recent.deploy IS placed.deploy
+            WHERE place <= :per_type AND recency <= :deploys", [
+            ...$bindings,
+            'per_type' => self::SLOWEST_PER_TYPE,
+            'deploys' => self::SLOWEST_DEPLOYS,
+        ], $window);
+
+        $seen = [];
+
+        foreach ($rows as $row) {
+            $key = $row['deploy'] ?? '';
+            $seen[$key] ??= [
+                'deploy' => $row['deploy'],
+                'first' => $row['first_at'],
+                'leaders' => [],
+            ];
+
+            $seen[$key]['leaders'][] = [
+                ...self::leader($types, $row),
+                'timed' => $row['timed_records'],
+            ];
+        }
+
+        usort($seen, fn (array $a, array $b) => ($a['first'] <=> $b['first']) ?: strcmp($a['deploy'] ?? '', $b['deploy'] ?? ''));
+
+        $blocks = array_map(fn (array $block) => [
+            'deploy' => $block['deploy'],
+            'groups' => self::deployGroups($connection, $window, self::top($block['leaders'])),
+        ], $seen);
+
+        return [
+            'blocks' => $blocks,
+            'matched' => $rows[0]['matched'] ?? 0,
+        ];
+    }
+
+    /**
+     * Get the rows of one deploy's block: the labelled leaders, each with the mean of its timed records.
+     *
+     * @param  list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float, timed: int}>  $leaders
+     * @return list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>
+     */
+    protected static function deployGroups(SQLite3 $connection, Window $window, array $leaders): array
+    {
+        return array_map(fn (array $row, array $leader) => [
+            ...$row,
+            'avg_ms' => Stored::milliseconds($leader['value'] / $leader['timed']),
+        ], self::labelled($connection, $window, $leaders), $leaders);
+    }
+
+    /**
+     * Get the types whose records have a duration to total.
+     *
+     * @return list<RecordType>
+     */
+    protected static function timedTypes(): array
+    {
+        return array_values(array_filter(Measure::types(), Measure::TOTAL_DURATION->fits(...)));
+    }
+
+    /**
+     * Get the union of the duration of every record of the types in the window, as the SQL of the table `timed`, with the bindings of its positions.
+     *
+     * @param  list<RecordType>  $types
+     * @param  string  $columns  the columns to select beside the position, the group and the duration, each followed by a comma
+     * @return array{string, array<string, int>}
+     */
+    protected static function timed(array $types, Window $window, string $columns = ''): array
+    {
+        $bindings = [];
         $branches = [];
 
         foreach ($types as $position => $type) {
             $bindings["position{$position}"] = $position;
-            $branches[] = "SELECT :position{$position} AS position, group_hash, ".Stored::duration($type)." AS d FROM {$type->view()} WHERE group_hash IS NOT NULL AND {$window->condition()}";
+            $branches[] = "SELECT :position{$position} AS position, {$columns}group_hash, ".Stored::duration($type)." AS d FROM {$type->view()} WHERE group_hash IS NOT NULL AND {$window->condition()}";
         }
 
-        $rows = Stored::rows($connection, 'WITH timed AS ('.implode(' UNION ALL ', $branches).'),
-            totals AS (SELECT position, group_hash, count(*) AS occurrences, count(d) AS timed_records, sum(d) AS total FROM timed GROUP BY position, group_hash),
-            placed AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY position ORDER BY total DESC, occurrences DESC, group_hash) AS place FROM totals WHERE timed_records > 0)
-            SELECT position, group_hash, occurrences, total FROM placed WHERE place <= :per_type', $bindings, $window);
+        return [implode(' UNION ALL ', $branches), $bindings];
+    }
 
-        $leaders = array_map(fn (array $row) => [
+    /**
+     * Get a row of totals as a leader.
+     *
+     * @param  list<RecordType>  $types
+     * @param  array<string, mixed>  $row
+     * @return array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float}
+     */
+    protected static function leader(array $types, array $row): array
+    {
+        return [
             'type' => $types[$row['position']],
             'position' => $row['position'],
             'hash' => $row['group_hash'],
             'occurrences' => $row['occurrences'],
             'value' => $row['total'],
-        ], $rows);
+        ];
+    }
 
+    /**
+     * Order leaders worst first and keep the ten worst.
+     *
+     * @template TLeader of array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float}
+     *
+     * @param  list<TLeader>  $leaders
+     * @return list<TLeader>
+     */
+    protected static function top(array $leaders): array
+    {
         // A job attempt and its dispatch share one group hash, so the type decides last.
         usort($leaders, fn (array $a, array $b) => Ranking::compare($a, $b) ?: ($a['position'] <=> $b['position']));
 

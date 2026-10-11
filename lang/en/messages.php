@@ -89,7 +89,13 @@ return [
 
     'overview_next_rank' => 'Rank every :type group by total time: this answer lists at most three groups of a type.',
 
+    'overview_next_compare' => 'Compare the two newest deploys shown, group by group, over :type.',
+
     'overview_next_execution' => 'Open the execution of the window that finished last, in full.',
+
+    'overview_by_deploy_argument' => 'true breaks the slowest list into a block per deploy, in the order first seen, with avg_ms; compare totals only within a block.',
+
+    'overview_deploys_truncated_how' => 'The most recent deploys are shown: narrow the window with `since` or `until` to see the others.',
 
     'overview_detectors_findings' => 'Findings: :shapes.',
 
