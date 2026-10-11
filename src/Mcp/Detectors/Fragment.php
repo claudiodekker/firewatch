@@ -26,6 +26,6 @@ readonly class Fragment
      */
     public static function selecting(Window $window, ?string $group): self
     {
-        return new self($window->condition().' AND (:group = \'\' OR group_hash = :group)', ['group' => $group ?? '']);
+        return new self($window->condition().' AND (:group IS NULL OR group_hash = :group)', ['group' => $group]);
     }
 }

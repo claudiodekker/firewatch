@@ -65,7 +65,7 @@ class Detectors
      *
      * @return list<Judgement>
      */
-    public function count(SQLite3 $connection, Window $window, Deadline $deadline): array
+    public function judgeAll(SQLite3 $connection, Window $window, Deadline $deadline): array
     {
         return array_map(fn (Detector $detector) => $deadline->passed()
             ? Judgement::notEvaluated($detector->name(), $detector instanceof Thresholded ? $detector->threshold()->describe() : null, Reason::DEADLINE)

@@ -113,7 +113,7 @@ class Overview extends Tool
                 FixedSections::read($connection, $window),
                 BudgetSection::read($connection, $window, $this->configuration),
                 StoreFacts::read($connection),
-                $this->detectors->count($connection, $window, new Deadline($epoch)),
+                $this->detectors->judgeAll($connection, $window, new Deadline($epoch)),
             ]);
         } catch (StoreUnusable $unusable) {
             $blindSpots = [...$structural, ...$this->conditions->for(null, $types, $window)];

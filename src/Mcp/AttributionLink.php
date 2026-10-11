@@ -22,12 +22,4 @@ enum AttributionLink: string
     {
         return [self::DIRECT, self::DISPATCH, self::INSIDE];
     }
-
-    /**
-     * Determine whether the case ties work to the person.
-     */
-    public function isLink(): bool
-    {
-        return in_array($this, self::links(), true);
-    }
 }

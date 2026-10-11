@@ -14,6 +14,7 @@ use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use ClaudioDekker\Firewatch\Mcp\StrayOutput;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
+use Closure;
 use Composer\InstalledVersions;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Database\Events\QueryExecuted;
@@ -25,6 +26,7 @@ use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 use RuntimeException;
 use SQLite3;
+use Throwable;
 
 /**
  * @api
@@ -119,9 +121,9 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->captureQueryBindings();
         $this->registerNightwatch();
         $this->releaseQueryBindings();
-        $this->captureLogs();
-        $this->replaceNightwatchIngest();
-        $this->redactHeaders();
+        $this->guarded($this->captureLogs(...));
+        $this->guarded($this->replaceNightwatchIngest(...));
+        $this->guarded($this->redactHeaders(...));
     }
 
     /**
@@ -206,6 +208,20 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
+     * Report a failure of the Nightwatch wiring instead of throwing it into the host application.
+     *
+     * @param  Closure(): void  $wiring
+     */
+    protected function guarded(Closure $wiring): void
+    {
+        try {
+            $wiring();
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+    }
+
+    /**
      * Resolve the mode once for this process.
      */
     protected function resolveMode(): void
@@ -237,6 +253,10 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function argv(): array
     {
+        if (! $this->app->runningInConsole()) {
+            return [];
+        }
+
         $argv = $_SERVER['argv'] ?? [];
 
         return is_array($argv) ? array_values(array_filter($argv, is_string(...))) : [];
