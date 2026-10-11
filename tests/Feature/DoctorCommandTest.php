@@ -848,6 +848,7 @@ describe('store-losses', function () {
                 throw new RuntimeException('the pass broke');
             }
         });
+
         registerFirewatch();
 
         ingest([syntheticRecord(RecordType::REQUEST)]);
@@ -857,6 +858,7 @@ describe('store-losses', function () {
         expect($check['status'])->toBe('warn')
             ->and($check['message'])->toStartWith('1 prune failed; the newest at ')
             ->and($check['message'])->toEndWith('(other): the pass broke');
+
         Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Firewatch could not prune the store: the pass broke');
     });
 

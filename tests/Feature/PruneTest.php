@@ -352,6 +352,7 @@ describe('the pass', function () {
                 }
             }
         };
+
         app()->instance(Pruner::class, new Pruner(app(Writer::class), $heldReader, app(Configuration::class)));
         registerFirewatch();
 

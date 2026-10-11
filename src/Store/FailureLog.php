@@ -50,7 +50,7 @@ class FailureLog
     }
 
     /**
-     * Record a pruning pass that failed beside the store and report the first failure of the process.
+     * Record a failed pruning pass beside the store and report the first failure of the process.
      */
     public function pruneFailed(Throwable $exception): void
     {

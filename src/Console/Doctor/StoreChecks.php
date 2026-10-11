@@ -222,26 +222,11 @@ class StoreChecks
         $findings = [];
 
         if ($dropped !== []) {
-            $batch = $dropped[count($dropped) - 1];
-
-            $findings[] = __('firewatch::messages.doctor.store-losses.dropped', [
-                'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', count($dropped), ['count' => count($dropped)]),
-                'records' => $this->records(array_sum(array_column($dropped, 'dropped'))),
-                'at' => $this->moment($batch['at']),
-                'kind' => $batch['kind'],
-                'message' => $batch['message'],
-            ]);
+            $findings[] = $this->droppedMessage($dropped);
         }
 
         if ($prunes !== []) {
-            $prune = $prunes[count($prunes) - 1];
-
-            $findings[] = __('firewatch::messages.doctor.store-losses.pruned', [
-                'prunes' => trans_choice('firewatch::messages.doctor.store-losses.prunes', count($prunes), ['count' => count($prunes)]),
-                'at' => $this->moment($prune['at']),
-                'kind' => $prune['kind'],
-                'message' => $prune['message'],
-            ]);
+            $findings[] = $this->prunedMessage($prunes);
         }
 
         $failures = [...$dropped, ...$prunes];
@@ -412,5 +397,40 @@ class StoreChecks
         }
 
         return Carbon::createFromTimestamp($epoch, date_default_timezone_get())->format('Y-m-d H:i:s T');
+    }
+
+    /**
+     * Get the message that counts the dropped batches and quotes the newest.
+     *
+     * @param  non-empty-list<array{at: float, kind: string, dropped: int, message: string}>  $dropped
+     */
+    protected function droppedMessage(array $dropped): string
+    {
+        $newest = $dropped[count($dropped) - 1];
+
+        return __('firewatch::messages.doctor.store-losses.dropped', [
+            'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', count($dropped), ['count' => count($dropped)]),
+            'records' => $this->records(array_sum(array_column($dropped, 'dropped'))),
+            'at' => $this->moment($newest['at']),
+            'kind' => $newest['kind'],
+            'message' => $newest['message'],
+        ]);
+    }
+
+    /**
+     * Get the message that counts the failed prunes and quotes the newest.
+     *
+     * @param  non-empty-list<array{at: float, kind: string, message: string}>  $prunes
+     */
+    protected function prunedMessage(array $prunes): string
+    {
+        $newest = $prunes[count($prunes) - 1];
+
+        return __('firewatch::messages.doctor.store-losses.pruned', [
+            'prunes' => trans_choice('firewatch::messages.doctor.store-losses.prunes', count($prunes), ['count' => count($prunes)]),
+            'at' => $this->moment($newest['at']),
+            'kind' => $newest['kind'],
+            'message' => $newest['message'],
+        ]);
     }
 }
