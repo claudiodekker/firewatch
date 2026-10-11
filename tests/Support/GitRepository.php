@@ -97,10 +97,16 @@ class GitRepository
     }
 
     /**
-     * Delete the repository's directory.
+     * Delete the repository's directory, making git's read-only object files writable first so Windows can remove them.
      */
     public function delete(): void
     {
-        (new Filesystem)->deleteDirectory($this->path);
+        $files = new Filesystem;
+
+        foreach ($files->allFiles($this->path, hidden: true) as $file) {
+            @chmod($file->getPathname(), 0666);
+        }
+
+        $files->deleteDirectory($this->path);
     }
 }
