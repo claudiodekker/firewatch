@@ -13,6 +13,7 @@
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
+        "laravel/octane": "^2.21",
         "laravel/pint": "^1.24",
         "orchestra/testbench": "^10.6|^11.0",
         "pestphp/pest": "^4.0",

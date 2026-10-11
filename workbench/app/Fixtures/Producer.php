@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
-use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
+use Laravel\Octane\Events\RequestReceived;
 use RuntimeException;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
@@ -45,6 +45,7 @@ enum Producer: string
     case USER = 'user';
     case LOG_OUTSIDE_EXECUTION = 'log.outside-execution';
     case OCTANE_REQUEST = 'request.octane';
+    case LOG_BETWEEN_OCTANE_REQUESTS = 'log.between-octane-requests';
     case UNROUTED_REQUEST = 'request.unrouted';
 
     /**
@@ -55,7 +56,7 @@ enum Producer: string
         return match ($this) {
             self::FATAL_ERROR => RecordType::EXCEPTION,
             self::QUERY_LIST => RecordType::QUERY,
-            self::LOG_OUTSIDE_EXECUTION => RecordType::LOG,
+            self::LOG_OUTSIDE_EXECUTION, self::LOG_BETWEEN_OCTANE_REQUESTS => RecordType::LOG,
             self::OCTANE_REQUEST, self::UNROUTED_REQUEST => RecordType::REQUEST,
             default => RecordType::from($this->value),
         };
@@ -67,7 +68,7 @@ enum Producer: string
     public function recordsRequests(): bool
     {
         return match ($this) {
-            self::REQUEST, self::USER, self::LOG_OUTSIDE_EXECUTION, self::OCTANE_REQUEST, self::UNROUTED_REQUEST => true,
+            self::REQUEST, self::USER, self::LOG_OUTSIDE_EXECUTION, self::OCTANE_REQUEST, self::LOG_BETWEEN_OCTANE_REQUESTS, self::UNROUTED_REQUEST => true,
             default => false,
         };
     }
@@ -103,6 +104,7 @@ enum Producer: string
             self::USER => $this->signedInRequest(),
             self::LOG_OUTSIDE_EXECUTION => $this->logsAfterARequest(),
             self::OCTANE_REQUEST => $this->octaneRequest(),
+            self::LOG_BETWEEN_OCTANE_REQUESTS => $this->logBetweenOctaneRequests(),
             self::UNROUTED_REQUEST => $this->unroutedRequests(),
         };
     }
@@ -133,15 +135,27 @@ enum Producer: string
     }
 
     /**
-     * Serve a request the way Octane's request listener prepares one, so the bootstrap stage never starts.
+     * Serve a request after the event Octane dispatches when its worker receives one, so the bootstrap stage never starts.
      */
     protected function octaneRequest(): void
     {
         $request = Request::create('/');
 
-        app(Core::class)->prepareForRequest($request);
+        event(new RequestReceived(app(), app(), $request));
 
         $this->request(request: $request);
+    }
+
+    /**
+     * Serve two requests in one Octane worker, with a log written between them.
+     */
+    protected function logBetweenOctaneRequests(): void
+    {
+        $this->octaneRequest();
+
+        Log::channel('nightwatch')->warning('The payment is slow.', ['order' => 7]);
+
+        $this->octaneRequest();
     }
 
     /**

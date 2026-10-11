@@ -149,7 +149,18 @@ test('Nightwatch keeps a log written while the application boots and one written
         ->and($request['logs'])->toBe(1);
 });
 
-test('Nightwatch writes a request prepared the way Octane prepares one with a bootstrap of 0, and any other request with a bootstrap above 0', function () {
+test('Nightwatch writes a log between two Octane requests under the earlier request\'s trace but the later request\'s execution, and counts it in neither', function () {
+    [$first, $between, $second] = sensorRecords(Producer::LOG_BETWEEN_OCTANE_REQUESTS);
+
+    expect([$first['t'], $between['t'], $second['t']])->toBe(['request', 'log', 'request'])
+        ->and($second['trace_id'])->not->toBe($first['trace_id'])
+        ->and($between['trace_id'])->toBe($first['trace_id'])
+        ->and($between['execution_id'])->toBe($second['trace_id'])
+        ->and($between['execution_stage'])->toBe('end')
+        ->and([$first['logs'], $second['logs']])->toBe([0, 0]);
+});
+
+test('Nightwatch writes a request Octane received with a bootstrap of 0, and any other request with a bootstrap above 0', function () {
     $octane = sensorRecord(Producer::OCTANE_REQUEST);
     $served = sensorRecord(Producer::REQUEST);
 
