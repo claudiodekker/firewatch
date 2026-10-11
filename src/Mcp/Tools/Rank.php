@@ -112,7 +112,7 @@ class Rank extends Tool
     {
         $arguments = new Arguments($request, $this);
         $group = $arguments->group('rank(group: "<group id>")');
-        $matching = $arguments->text('matching', 'rank(type: "request", matching: "orders")');
+        $matching = $arguments->matching('rank(type: "request", matching: "orders")');
         $explicit = $arguments->typeWithGroups($group, 'rank(type: "request", by: "p95_duration")');
         $limit = $arguments->limit($explicit === null ? ['group' => '<group id>'] : ['type' => $explicit->value]);
         $deploy = $arguments->deploy($this->call([

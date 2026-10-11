@@ -226,24 +226,33 @@ class Arguments
     }
 
     /**
-     * Read text of the declared length, or null when none is given.
+     * Read text, or null when none is given.
      */
     public function text(string $argument, string $example): ?string
     {
         $value = $this->get($argument);
 
-        if ($value !== null && ! is_string($value)) {
-            $text = __('firewatch::messages.argument_values.text');
-
-            throw $this->invalid(argument: $argument, expected: $text, accepted: $text, example: $example);
-        }
-
-        $declared = $this->declared($argument);
-
-        if ($value === null || ! isset($declared['minLength'], $declared['maxLength'])) {
+        if ($value === null || is_string($value)) {
             return $value;
         }
 
+        $text = __('firewatch::messages.argument_values.text');
+
+        throw $this->invalid(argument: $argument, expected: $text, accepted: $text, example: $example);
+    }
+
+    /**
+     * Read the substring of the declared length a match must contain, or null when none is given.
+     */
+    public function matching(string $example): ?string
+    {
+        $value = $this->text('matching', $example);
+
+        if ($value === null) {
+            return null;
+        }
+
+        $declared = $this->declared('matching');
         $length = [
             'minimum' => $declared['minLength'],
             'maximum' => $declared['maxLength'],
@@ -253,7 +262,7 @@ class Arguments
             return $value;
         }
 
-        throw $this->invalid(argument: $argument, expected: __('firewatch::messages.argument_values.length', $length), accepted: __('firewatch::messages.argument_values.text_of_length', $length), example: $example);
+        throw $this->invalid(argument: 'matching', expected: __('firewatch::messages.argument_values.length', $length), accepted: __('firewatch::messages.argument_values.substring', $length), example: $example);
     }
 
     /**

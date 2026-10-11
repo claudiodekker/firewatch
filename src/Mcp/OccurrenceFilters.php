@@ -50,7 +50,7 @@ class OccurrenceFilters
             level: self::choice($arguments, 'level', LogLevel::class, 'a log level', 'occurrences(type: "log", level: "error")'),
             slowerThanMilliseconds: self::slowerThan($arguments),
             atOrAbove: self::choice($arguments, 'at_or_above', Percentile::class, 'median or p95', 'occurrences(type: "request", at_or_above: "p95")'),
-            matching: $arguments->text('matching', self::EXAMPLE),
+            matching: $arguments->matching('occurrences(type: "log", matching: "timeout")'),
         );
     }
 

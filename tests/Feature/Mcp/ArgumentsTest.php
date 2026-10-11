@@ -162,10 +162,10 @@ it('declares the matching length it enforces', function (string $tool) {
 it('refuses a matching outside the declared length, naming the length', function (string $tool, array $arguments, string $example, string $matching) {
     $text = argumentText($tool, [...$arguments, 'matching' => $matching]);
 
-    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'matching', 'expected' => '1 to 200 characters', 'value' => json_encode($matching), 'accepted' => 'a text of 1 to 200 characters', 'example' => $example]));
+    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'matching', 'expected' => '1 to 200 characters', 'value' => json_encode($matching), 'accepted' => 'a substring of 1 to 200 characters', 'example' => $example]));
 })->with([
     'rank' => [Rank::class, ['type' => 'request'], 'rank(type: "request", matching: "orders")'],
-    'occurrences' => [Occurrences::class, ['type' => 'log'], 'occurrences(type: "request")'],
+    'occurrences' => [Occurrences::class, ['type' => 'log'], 'occurrences(type: "log", matching: "timeout")'],
 ])->with([
     'empty' => [''],
     'too long' => [str_repeat('a', 201)],
@@ -181,15 +181,15 @@ it('refuses a deploy that is no text', function (string $tool, array $arguments,
     'occurrences' => [Occurrences::class, ['type' => 'queued-job'], 'occurrences(type: "request", deploy: "v1")'],
 ]);
 
-it('refuses a filter of text that is no text', function (string $argument, mixed $value, string $shown) {
+it('refuses a filter of text that is no text', function (string $argument, mixed $value, string $shown, string $example) {
     $text = argumentText(Occurrences::class, ['type' => 'request', $argument => $value]);
 
-    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => $argument, 'expected' => __('firewatch::messages.argument_values.text'), 'value' => $shown, 'accepted' => __('firewatch::messages.argument_values.text'), 'example' => 'occurrences(type: "request")']));
+    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => $argument, 'expected' => __('firewatch::messages.argument_values.text'), 'value' => $shown, 'accepted' => __('firewatch::messages.argument_values.text'), 'example' => $example]));
 })->with([
-    'a method' => ['method', 5, '5'],
-    'a status' => ['status', 500, '500'],
-    'an outcome' => ['outcome', true, 'true'],
-    'a level' => ['level', ['error'], '["error"]'],
-    'a percentile' => ['at_or_above', 95, '95'],
-    'a matching' => ['matching', 1.5, '1.5'],
+    'a method' => ['method', 5, '5', 'occurrences(type: "request")'],
+    'a status' => ['status', 500, '500', 'occurrences(type: "request")'],
+    'an outcome' => ['outcome', true, 'true', 'occurrences(type: "request")'],
+    'a level' => ['level', ['error'], '["error"]', 'occurrences(type: "request")'],
+    'a percentile' => ['at_or_above', 95, '95', 'occurrences(type: "request")'],
+    'a matching' => ['matching', 1.5, '1.5', 'occurrences(type: "log", matching: "timeout")'],
 ]);

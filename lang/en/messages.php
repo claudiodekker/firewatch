@@ -415,7 +415,7 @@ return [
         'deploy' => 'an exact deploy string',
         'text' => 'text',
         'length' => ':minimum to :maximum characters',
-        'text_of_length' => 'a text of :minimum to :maximum characters',
+        'substring' => 'a substring of :minimum to :maximum characters',
         'grouped_type' => 'one of the types with groups',
         'holding' => 'a type that holds the group: :types',
     ],
