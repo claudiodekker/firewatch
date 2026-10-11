@@ -102,7 +102,7 @@ class Writer
     protected Closure $pid;
 
     /**
-     * How long writes wait for a busy store while a caller has asked for longer or shorter than configured, in milliseconds.
+     * The wait a caller set for the writes inside its callback, in milliseconds, or null for the configured one.
      */
     protected ?int $busyTimeoutMilliseconds = null;
 
