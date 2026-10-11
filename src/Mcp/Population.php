@@ -277,7 +277,7 @@ class Population
     }
 
     /**
-     * Read the nearest-rank median and 95th percentile of one quantity of every group, and the values of a group too small to have a median.
+     * Read the nearest-rank median and 95th percentile of one quantity of every group, and the values of a group too small to have a 95th percentile.
      *
      * @return array<string, array{n: int, p50: int|float|null, p95: int|float|null, max: int|float|null, raw: list<int|float>|null}>
      */
@@ -287,9 +287,9 @@ class Population
 
         $p50Rank = Percentile::MEDIAN->nearestRank();
         $p95Rank = Percentile::P95->nearestRank();
-        $p50Floor = Percentile::MEDIAN->floor();
+        $listFloor = Percentile::P95->floor();
 
-        $rows = $this->query($connection, "SELECT group_hash, n, max(CASE WHEN rn = {$p50Rank} THEN v END) AS p50, max(CASE WHEN rn = {$p95Rank} THEN v END) AS p95, max(CASE WHEN rn = n THEN v END) AS max, group_concat(CASE WHEN n < {$p50Floor} THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL AND {$where}) GROUP BY group_hash");
+        $rows = $this->query($connection, "SELECT group_hash, n, max(CASE WHEN rn = {$p50Rank} THEN v END) AS p50, max(CASE WHEN rn = {$p95Rank} THEN v END) AS p95, max(CASE WHEN rn = n THEN v END) AS max, group_concat(CASE WHEN n < {$listFloor} THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL AND {$where}) GROUP BY group_hash");
 
         foreach ($rows as $row) {
             /** @var list<int|float>|null $raw */
