@@ -9,7 +9,7 @@ use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Buckets;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\GroupSelection;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
@@ -42,7 +42,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Trend extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -118,7 +118,7 @@ class Trend extends Tool
     }
 
     /**
-     * Read the arguments, then the store, and put the trend, or why there is none, in the envelope.
+     * Read the arguments, then the store, and put the trend, or why there is none, in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {

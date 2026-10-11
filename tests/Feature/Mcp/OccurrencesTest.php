@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -35,7 +35,7 @@ function occRecord(RecordType $type, array $fields = []): RecordBuilder
  */
 function occRows(array $arguments): array
 {
-    return Envelope::assert(Occurrences::class, $arguments)['result']['rows'] ?? [];
+    return Answers::assert(Occurrences::class, $arguments)['result']['rows'] ?? [];
 }
 
 /**
@@ -47,11 +47,11 @@ function occRefused(array $arguments, string $code): void
 }
 
 /**
- * @param  array<string, mixed>  $envelope
+ * @param  array<string, mixed>  $answer
  */
-function occCursor(array $envelope): string
+function occCursor(array $answer): string
 {
-    preg_match('/cursor: "([^"]+)"/', $envelope['truncated'][0]['how'], $matches);
+    preg_match('/cursor: "([^"]+)"/', $answer['truncated'][0]['how'], $matches);
 
     return $matches[1];
 }
@@ -480,10 +480,10 @@ it('lists the dispatches and the attempts of a job group together', function () 
 it('answers that nothing matched a group the store does not hold', function () {
     ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a')])]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['group' => occHash('f')]);
+    $answer = Answers::assert(Occurrences::class, ['group' => occHash('f')]);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
-        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'group: '.occHash('f')]));
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
+        ->and($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'group: '.occHash('f')]));
 });
 
 it('judges a filter by the type the group is held by', function (array $arguments, ?string $refused) {
@@ -508,10 +508,10 @@ it('keeps the records at or above the median or the 95th percentile of the selec
     ingest(array_map(fn (int $milliseconds) => occRecord(RecordType::REQUEST, ['route_path' => "/{$milliseconds}", 'duration' => $milliseconds * 1000, 'timestamp' => OCC_AT + $milliseconds]), range(1, $records)));
     ingest([occRecord(RecordType::REQUEST, ['route_path' => '/outside', 'duration' => 999000, 'timestamp' => OCC_AT + 500])]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => $percentile, 'until' => OCC_AT + 100, 'limit' => 100]);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => $percentile, 'until' => OCC_AT + 100, 'limit' => 100]);
 
-    expect(array_column($envelope['result']['rows'], 'name'))->toEqualCanonicalizing(array_map(fn (int $milliseconds) => "/{$milliseconds}", $kept))
-        ->and($envelope['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => $threshold, 'samples' => $records, 'values_ms' => null, 'withheld' => null]);
+    expect(array_column($answer['result']['rows'], 'name'))->toEqualCanonicalizing(array_map(fn (int $milliseconds) => "/{$milliseconds}", $kept))
+        ->and($answer['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => $threshold, 'samples' => $records, 'values_ms' => null, 'withheld' => null]);
 })->with([
     'the median of 3' => ['median', 3, [2, 3], 2.0],
     'the median of 4' => ['median', 4, [2, 3, 4], 2.0],
@@ -521,22 +521,22 @@ it('keeps the records at or above the median or the 95th percentile of the selec
 it('states the baseline to the hundredth of a millisecond, as the durations it keeps', function () {
     ingest(array_map(fn (int $microseconds) => occRecord(RecordType::REQUEST, ['duration' => $microseconds, 'timestamp' => OCC_AT + $microseconds / 1000]), [47_000, 47_951, 48_000]));
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'median', 'limit' => 100]);
-    $durations = array_column($envelope['result']['rows'], 'duration_ms');
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'median', 'limit' => 100]);
+    $durations = array_column($answer['result']['rows'], 'duration_ms');
 
-    expect($envelope['result']['baseline']['threshold_ms'])->toBe(47.95)
+    expect($answer['result']['baseline']['threshold_ms'])->toBe(47.95)
         ->and($durations)->toEqualCanonicalizing([47.95, 48.0])
-        ->and(min($durations))->toBe($envelope['result']['baseline']['threshold_ms']);
+        ->and(min($durations))->toBe($answer['result']['baseline']['threshold_ms']);
 });
 
 it('withholds the baseline below its floor, and lists everything with a note', function (string $percentile, int $records, int $needed) {
     ingest(array_map(fn (int $milliseconds) => occRecord(RecordType::REQUEST, ['duration' => $milliseconds * 1000, 'timestamp' => OCC_AT + $milliseconds]), range(1, $records)));
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => $percentile, 'limit' => 100]);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => $percentile, 'limit' => 100]);
 
-    expect($envelope['result']['rows'])->toHaveCount($records)
-        ->and($envelope['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => null, 'samples' => $records, 'values_ms' => array_map(floatval(...), range(1, $records)), 'withheld' => ['reason' => 'sample_too_small', 'have' => $records, 'needed' => $needed]])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.occurrences_baseline_withheld', ['percentile' => $percentile, 'have' => $records, 'needed' => $needed])]);
+    expect($answer['result']['rows'])->toHaveCount($records)
+        ->and($answer['result']['baseline'])->toEqual(['percentile' => $percentile, 'threshold_ms' => null, 'samples' => $records, 'values_ms' => array_map(floatval(...), range(1, $records)), 'withheld' => ['reason' => 'sample_too_small', 'have' => $records, 'needed' => $needed]])
+        ->and($answer['notes'])->toBe([__('firewatch::messages.occurrences_baseline_withheld', ['percentile' => $percentile, 'have' => $records, 'needed' => $needed])]);
 })->with([
     'the median of 2' => ['median', 2, 3],
     'the 95th percentile of 19' => ['p95', 19, 20],
@@ -548,7 +548,7 @@ it('lists only the measured durations of a withheld baseline, ascending, and its
         occRecord(RecordType::REQUEST, ['duration' => null, 'timestamp' => OCC_AT + 9]),
     ]);
 
-    $baseline = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'p95', 'limit' => 100])['result']['baseline'];
+    $baseline = Answers::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'p95', 'limit' => 100])['result']['baseline'];
 
     expect($baseline['values_ms'])->toEqual([40.0, 41.0, 1900.0])
         ->and($baseline['samples'])->toBe($baseline['withheld']['have']);
@@ -572,11 +572,11 @@ it('restricts the records to a window and a deploy', function () {
 it('cuts the list at the limit', function () {
     ingest(array_map(fn (int $second) => occRecord(RecordType::REQUEST, ['timestamp' => OCC_AT + $second]), range(1, 3)));
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'limit' => 2]);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'limit' => 2]);
 
-    expect($envelope['result']['rows'])->toHaveCount(2)
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.occurrences_summary', 2, ['count' => 2, 'order' => 'recent']))
-        ->and($envelope['truncated'][0])->toMatchArray(['section' => 'rows', 'shown' => 2, 'matched' => null, 'reason' => 'limit']);
+    expect($answer['result']['rows'])->toHaveCount(2)
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.occurrences_summary', 2, ['count' => 2, 'order' => 'recent']))
+        ->and($answer['truncated'][0])->toMatchArray(['section' => 'rows', 'shown' => 2, 'matched' => null, 'reason' => 'limit']);
 });
 
 it('cuts the list at the limit the schema declares as the default when none is given', function () {
@@ -584,20 +584,20 @@ it('cuts the list at the limit the schema declares as the default when none is g
 
     ingest(array_map(fn (int $second) => occRecord(RecordType::REQUEST, ['timestamp' => OCC_AT + $second]), range(1, 21)));
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request']);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request']);
 
     expect($default)->toBe(20)
-        ->and($envelope['result']['rows'])->toHaveCount(20)
-        ->and($envelope['truncated'][0])->toMatchArray(['section' => 'rows', 'shown' => 20, 'reason' => 'limit']);
+        ->and($answer['result']['rows'])->toHaveCount(20)
+        ->and($answer['truncated'][0])->toMatchArray(['section' => 'rows', 'shown' => 20, 'reason' => 'limit']);
 });
 
 it('lists a list of exactly the limit as complete', function () {
     ingest(array_map(fn (int $second) => occRecord(RecordType::REQUEST, ['timestamp' => OCC_AT + $second]), range(1, 2)));
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'limit' => 2]);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'limit' => 2]);
 
-    expect($envelope['result']['rows'])->toHaveCount(2)
-        ->and($envelope['truncated'])->toBe([]);
+    expect($answer['result']['rows'])->toHaveCount(2)
+        ->and($answer['truncated'])->toBe([]);
 });
 
 it('lists the distinct call sites of one query group, most frequent first, over the whole selection', function () {
@@ -607,8 +607,8 @@ it('lists the distinct call sites of one query group, most frequent first, over 
         occRecord(RecordType::QUERY, ['_group' => occHash('e'), 'file' => 'app/C.php', 'line' => 3]),
     ]);
 
-    $group = Envelope::assert(Occurrences::class, ['group' => occHash('d'), 'limit' => 1]);
-    $type = Envelope::assert(Occurrences::class, ['type' => 'query']);
+    $group = Answers::assert(Occurrences::class, ['group' => occHash('d'), 'limit' => 1]);
+    $type = Answers::assert(Occurrences::class, ['type' => 'query']);
 
     expect($group['result']['call_sites'])->toEqual([['location' => 'app/A.php:1', 'count' => 3], ['location' => 'app/B.php:9', 'count' => 1]])
         ->and($type['result'])->not->toHaveKey('call_sites');
@@ -617,27 +617,27 @@ it('lists the distinct call sites of one query group, most frequent first, over 
 it('says a user filter reads the recorded user only', function () {
     ingest([occRecord(RecordType::REQUEST, ['user' => 'u1'])]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['user_id' => 'u1']);
+    $answer = Answers::assert(Occurrences::class, ['user_id' => 'u1']);
 
-    expect($envelope['notes'])->toBe([__('firewatch::messages.occurrences_user_only')])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial');
+    expect($answer['notes'])->toBe([__('firewatch::messages.occurrences_user_only')])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('actor-partial');
 });
 
 it('answers that nothing matched, naming the filters', function () {
     ingest([occRecord(RecordType::REQUEST, ['status_code' => 200])]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'status' => '5xx', 'deploy' => 'v9']);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'status' => '5xx', 'deploy' => 'v9']);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
-        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'type: request, status: 5xx, deploy: v9']));
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
+        ->and($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'type: request, status: 5xx, deploy: v9']));
 });
 
 it('names every filter that was given when nothing matched', function (array $arguments, string $filters) {
     ingest([occRecord(RecordType::REQUEST), occRecord(RecordType::JOB_ATTEMPT), occRecord(RecordType::LOG)]);
 
-    $envelope = Envelope::assert(Occurrences::class, $arguments);
+    $answer = Answers::assert(Occurrences::class, $arguments);
 
-    expect($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 3, 'filters' => $filters]));
+    expect($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 3, 'filters' => $filters]));
 })->with([
     'the filters of a request' => [['type' => 'request', 'trace_id' => 't9', 'method' => 'GET', 'slower_than_ms' => 5, 'at_or_above' => 'median', 'matching' => 'x'], 'type: request, trace_id: t9, method: GET, slower_than_ms: 5, at_or_above: median, matching: x'],
     'the outcome of a job attempt' => [['type' => 'job-attempt', 'outcome' => 'failed'], 'type: job-attempt, outcome: failed'],
@@ -648,15 +648,15 @@ it('names every filter that was given when nothing matched', function (array $ar
 it('answers that the window holds no records', function () {
     ingest([occRecord(RecordType::REQUEST)]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'since' => OCC_AT + 1]);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'since' => OCC_AT + 1]);
 
-    expect($envelope['empty']['kind'])->toBe('window_empty');
+    expect($answer['empty']['kind'])->toBe('window_empty');
 });
 
 it('answers that the store is empty', function () {
     app(Writer::class)->transaction(fn () => null);
 
-    $empty = Envelope::assert(Occurrences::class, ['type' => 'request']);
+    $empty = Answers::assert(Occurrences::class, ['type' => 'request']);
 
     expect($empty['empty']['kind'])->toBe('store_empty');
 });
@@ -664,10 +664,10 @@ it('answers that the store is empty', function () {
 it('points from a list to the group of its first row, in a call that runs', function () {
     ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a')])]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request']);
-    $ranked = Envelope::assert(Rank::class, $envelope['next'][0]['arguments']);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request']);
+    $ranked = Answers::assert(Rank::class, $answer['next'][0]['arguments']);
 
-    expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => occHash('a')], 'why' => __('firewatch::messages.occurrences_next_group')]])
+    expect($answer['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => occHash('a')], 'why' => __('firewatch::messages.occurrences_next_group')]])
         ->and($ranked['empty'])->toBeNull();
 });
 
@@ -675,20 +675,20 @@ it('points to the group over the instants its window resolved to, so the call re
     $this->travelTo(Date::createFromTimestamp(OCC_AT + 60));
     ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a')])]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'request', 'since' => '-2h']);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'request', 'since' => '-2h']);
     $this->travel(3)->hours();
-    $ranked = Envelope::assert(Rank::class, $envelope['next'][0]['arguments']);
+    $ranked = Answers::assert(Rank::class, $answer['next'][0]['arguments']);
 
-    expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => occHash('a'), 'since' => OCC_AT - 7140], 'why' => __('firewatch::messages.occurrences_next_group')]])
+    expect($answer['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => occHash('a'), 'since' => OCC_AT - 7140], 'why' => __('firewatch::messages.occurrences_next_group')]])
         ->and($ranked['empty'])->toBeNull();
 });
 
 it('points nowhere from the list of one group, or from a first row that has no group', function (array $arguments) {
     ingest([occRecord(RecordType::REQUEST, ['_group' => occHash('a')]), occRecord(RecordType::LOG, ['timestamp' => OCC_AT + 1])]);
 
-    $envelope = Envelope::assert(Occurrences::class, $arguments);
+    $answer = Answers::assert(Occurrences::class, $arguments);
 
-    expect($envelope['next'])->toBe([]);
+    expect($answer['next'])->toBe([]);
 })->with([
     'a group' => [['type' => 'request', 'group' => str_repeat('a', 32)]],
     'a log' => [['type' => 'log']],
@@ -725,11 +725,11 @@ it('continues a cut list with the cursor until it is complete, in every order, t
     occFiveRequests();
     $arguments = ['type' => 'request', 'order' => $order, 'limit' => 2];
 
-    $first = Envelope::assert(Occurrences::class, $arguments);
-    $second = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
-    $third = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($second)]);
-    $all = Envelope::assert(Occurrences::class, [...$arguments, 'limit' => 100]);
-    $names = fn (array $envelope) => array_column($envelope['result']['rows'], 'name');
+    $first = Answers::assert(Occurrences::class, $arguments);
+    $second = Answers::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+    $third = Answers::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($second)]);
+    $all = Answers::assert(Occurrences::class, [...$arguments, 'limit' => 100]);
+    $names = fn (array $answer) => array_column($answer['result']['rows'], 'name');
 
     expect([...$names($first), ...$names($second), ...$names($third)])->toBe($names($all))
         ->and($names($third))->toHaveCount(1)
@@ -745,9 +745,9 @@ it('keeps the window of the first page, and the call the cursor continues', func
     occFiveRequests();
     $arguments = ['type' => 'request', 'limit' => 2];
 
-    $first = Envelope::assert(Occurrences::class, $arguments);
+    $first = Answers::assert(Occurrences::class, $arguments);
     ingest([occRecord(RecordType::REQUEST, ['route_path' => '/later', 'timestamp' => $first['now'] + 100])]);
-    $second = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+    $second = Answers::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
 
     expect(array_column($second['result']['rows'], 'name'))->toBe(['/c', '/b'])
         ->and($first['truncated'][0]['how'])->toStartWith(__('firewatch::messages.occurrences_cursor_how', ['call' => 'occurrences(type: "request", limit: 2, cursor: "']));
@@ -756,7 +756,7 @@ it('keeps the window of the first page, and the call the cursor continues', func
 it('refuses a cursor that is no cursor, or of another tool or call, or from before a rebuild', function (Closure $arrange) {
     occFiveRequests();
     $arguments = ['type' => 'request', 'limit' => 2];
-    $cursor = occCursor(Envelope::assert(Occurrences::class, $arguments));
+    $cursor = occCursor(Answers::assert(Occurrences::class, $arguments));
 
     $changed = $arrange($cursor, $arguments);
     $response = FirewatchServer::tool(Occurrences::class, $changed);
@@ -789,13 +789,13 @@ it('refuses a cursor that is no cursor, or of another tool or call, or from befo
 it('keeps a cursor valid across a clear', function () {
     occFiveRequests();
     $arguments = ['type' => 'request', 'limit' => 2];
-    $cursor = occCursor(Envelope::assert(Occurrences::class, $arguments));
+    $cursor = occCursor(Answers::assert(Occurrences::class, $arguments));
 
     $this->artisan('firewatch:clear', ['--force' => true])->assertExitCode(0);
 
-    $envelope = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => $cursor]);
+    $answer = Answers::assert(Occurrences::class, [...$arguments, 'cursor' => $cursor]);
 
-    expect($envelope['empty']['kind'])->toBe('store_empty');
+    expect($answer['empty']['kind'])->toBe('store_empty');
 });
 
 it('lists a record of an unknown type beside the records it shares a trace with, as stored and without detail', function () {
@@ -817,9 +817,9 @@ it('lists and orders a record whose duration is not a number as one without a du
     ]);
     $arguments = ['type' => 'request', 'order' => 'slowest', 'limit' => 3];
 
-    $first = Envelope::assert(Occurrences::class, $arguments);
-    $rest = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
-    $baseline = Envelope::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'median']);
+    $first = Answers::assert(Occurrences::class, $arguments);
+    $rest = Answers::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+    $baseline = Answers::assert(Occurrences::class, ['type' => 'request', 'at_or_above' => 'median']);
     $slower = occRows(['type' => 'request', 'slower_than_ms' => 15]);
 
     expect(array_column($first['result']['rows'], 'duration_ms'))->toEqual([30.0, 20.0, 10.0])
@@ -836,8 +836,8 @@ it('lists and orders a request whose measure is not a number as one without it',
     ]);
     $arguments = ['type' => 'request', 'order' => $order, 'limit' => 1];
 
-    $first = Envelope::assert(Occurrences::class, $arguments);
-    $rest = Envelope::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
+    $first = Answers::assert(Occurrences::class, $arguments);
+    $rest = Answers::assert(Occurrences::class, [...$arguments, 'cursor' => occCursor($first)]);
 
     expect(array_column($first['result']['rows'], 'name'))->toBe(['/counted'])
         ->and(array_column($rest['result']['rows'], 'name'))->toBe(['/drifted'])
@@ -853,10 +853,10 @@ it('lists a query whose file is not a string without a location or a call site',
         occRecord(RecordType::QUERY, ['_group' => occHash('b'), 'file' => 'app/B.php', 'line' => 9]),
     ]);
 
-    $envelope = Envelope::assert(Occurrences::class, ['type' => 'query', 'group' => occHash('b')]);
+    $answer = Answers::assert(Occurrences::class, ['type' => 'query', 'group' => occHash('b')]);
 
-    expect(array_column($envelope['result']['rows'], 'location'))->toBe(['app/B.php:9', null])
-        ->and($envelope['result']['call_sites'])->toBe([['location' => 'app/B.php:9', 'count' => 1]]);
+    expect(array_column($answer['result']['rows'], 'location'))->toBe(['app/B.php:9', null])
+        ->and($answer['result']['call_sites'])->toBe([['location' => 'app/B.php:9', 'count' => 1]]);
 });
 
 it('lists a record the real sensor recorded without a user or a deploy with neither', function () {

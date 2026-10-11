@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
@@ -47,7 +47,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Detect extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -107,7 +107,7 @@ class Detect extends Tool
     }
 
     /**
-     * Read the arguments, then the store, and put the judgements in the envelope.
+     * Read the arguments, then the store, and put the judgements in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
@@ -144,7 +144,7 @@ class Detect extends Tool
     }
 
     /**
-     * Put the judgements of one shape, or of all of them, in the envelope.
+     * Put the judgements of one shape, or of all of them, in the answer.
      *
      * @param  list<Judgement>  $judgements
      */

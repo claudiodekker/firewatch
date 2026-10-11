@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -50,11 +50,11 @@ it('flags the error lines by their shape, the one written most often first, and 
     errorLogsRequests(['/payments/7', '/refunds', '/payments/12', '/stock', '/payments/431', '/orders']);
     [$request] = storeRows('SELECT DISTINCT execution_id FROM requests');
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'error-logs']);
-    $findings = $envelope['result']['findings'];
+    $answer = Answers::assert(Detect::class, ['shape' => 'error-logs']);
+    $findings = $answer['result']['findings'];
     $evidence = array_column($findings, 'evidence');
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 5, 'total' => 2, 'saw' => []])
+    expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 5, 'total' => 2, 'saw' => []])
         ->and(array_column($findings, 'group'))->toBe([null, null])
         ->and(array_column($findings, 'name'))->toBe(['Payment <n> was declined by gateway <id>.', 'The refund could not be booked.'])
         ->and(array_column($findings, 'count'))->toBe([3, 1])
@@ -70,8 +70,8 @@ it('flags the error lines by their shape, the one written most often first, and 
 it('flags the line the handler writes for an exception, and keeps the exception', function () {
     errorLogsRequests(['/invoices/7', '/invoices/8']);
 
-    $findings = Envelope::assert(Detect::class, ['shape' => 'error-logs'])['result']['findings'];
-    $exceptions = Envelope::assert(Detect::class, ['shape' => 'exception-clusters'])['result'];
+    $findings = Answers::assert(Detect::class, ['shape' => 'error-logs'])['result']['findings'];
+    $exceptions = Answers::assert(Detect::class, ['shape' => 'exception-clusters'])['result'];
 
     expect(array_column($findings, 'name'))->toBe(['Invoice [<n>] could not be rendered.'])
         ->and($findings[0]['count'])->toBe(2)
@@ -83,18 +83,18 @@ it('flags the line the handler writes for an exception, and keeps the exception'
 it('finds nothing in requests that logged no error, and says how many lines it examined', function () {
     errorLogsRequests(['/stock', '/orders', '/stock']);
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'error-logs']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'error-logs']);
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []]);
+    expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []]);
 });
 
 it('does not see an error written to a named channel, and says that it cannot', function () {
     errorLogsRequests(['/audit']);
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'error-logs']);
-    $blindSpots = array_column($envelope['blind_spots'], 'message', 'id');
+    $answer = Answers::assert(Detect::class, ['shape' => 'error-logs']);
+    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+    expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
         ->and($blindSpots)->toHaveKey('named-log-channels')
         ->and($blindSpots['named-log-channels'])->toBe(__('firewatch::messages.blind_spots.named-log-channels'));
 });
@@ -102,10 +102,10 @@ it('does not see an error written to a named channel, and says that it cannot', 
 it('says that logs exist only while log capture is on, whatever the verdict', function (array $uris, string $verdict) {
     errorLogsRequests($uris);
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'error-logs']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'error-logs']);
 
-    expect($envelope['result']['verdict'])->toBe($verdict)
-        ->and($envelope['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_log_capture')]);
+    expect($answer['result']['verdict'])->toBe($verdict)
+        ->and($answer['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_log_capture')]);
 })->with([
     'with findings' => [['/payments/7'], 'findings'],
     'when clean' => [['/stock'], 'clean'],
@@ -115,14 +115,14 @@ it('says that logs exist only while log capture is on, whatever the verdict', fu
 it('opens what a finding points at, and lists the lines it counted', function () {
     errorLogsRequests(['/payments/7', '/refunds', '/payments/12', '/stock', '/payments/431']);
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'error-logs']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'error-logs']);
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'execution'])
-        ->and($envelope['next'][1]['arguments'])->toBe(['type' => 'log', 'level' => 'error', 'matching' => 'was declined by gateway']);
+    expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'execution'])
+        ->and($answer['next'][1]['arguments'])->toBe(['type' => 'log', 'level' => 'error', 'matching' => 'was declined by gateway']);
 
-    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
+    expect(array_map(fn (array $call) => Answers::follow($call)['empty'], $answer['next']))->each->toBeNull();
 
-    $lines = Envelope::follow($envelope['next'][1])['result']['rows'];
+    $lines = Answers::follow($answer['next'][1])['result']['rows'];
 
     expect($lines)->toHaveCount(3);
 });
@@ -130,7 +130,7 @@ it('opens what a finding points at, and lists the lines it counted', function ()
 it('puts the verdict in the overview next to the other shapes', function () {
     errorLogsRequests(['/payments/7', '/refunds', '/payments/12']);
 
-    $row = collect(Envelope::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'error-logs');
+    $row = collect(Answers::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'error-logs');
 
     expect($row)->toBe([
         'detector' => 'error-logs',

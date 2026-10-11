@@ -97,7 +97,7 @@ class Answer
     }
 
     /**
-     * Get the envelope.
+     * Get the answer.
      *
      * @return array<string, mixed>
      */
@@ -105,7 +105,7 @@ class Answer
     {
         [$result, $truncated] = $this->bounded();
 
-        return $this->envelope($result, $truncated);
+        return $this->shape($result, $truncated);
     }
 
     /**
@@ -148,26 +148,26 @@ class Answer
     }
 
     /**
-     * Get the length in characters of the envelope for a result, recounted, and truncated entries.
+     * Get the length in characters of the answer for a result, recounted, and truncated entries.
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      */
     protected function size(array $result, array $truncated): int
     {
-        $envelope = $this->envelope($this->recounted($result), $truncated);
+        $answer = $this->shape($this->recounted($result), $truncated);
 
-        return mb_strlen(json_encode($envelope, RecordMapper::JSON_FLAGS));
+        return mb_strlen(json_encode($answer, RecordMapper::JSON_FLAGS));
     }
 
     /**
-     * Get the envelope for a result and truncated entries.
+     * Get the answer for a result and truncated entries.
      *
      * @param  array<string, mixed>  $result
      * @param  list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>  $truncated
      * @return array<string, mixed>
      */
-    protected function envelope(array $result, array $truncated): array
+    protected function shape(array $result, array $truncated): array
     {
         return [
             'tool' => $this->tool,
@@ -189,7 +189,7 @@ class Answer
     }
 
     /**
-     * Get the envelope as markdown.
+     * Get the answer as markdown.
      */
     public function toMarkdown(): string
     {

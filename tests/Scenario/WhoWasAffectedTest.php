@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Schema;
@@ -94,18 +94,18 @@ function whoWasAffectedTraffic(string $queue): void
 it('says who was affected: the person meant, the work tied to them by each link, and what no link reaches', function () {
     whoWasAffectedTraffic($this->queue);
 
-    $ambiguous = Envelope::assert(Actor::class, ['who' => 'taylor']);
-    $envelope = Envelope::assert(Actor::class, ['who' => $ambiguous['result']['candidates'][0]['id']]);
-    $result = $envelope['result'];
+    $ambiguous = Answers::assert(Actor::class, ['who' => 'taylor']);
+    $answer = Answers::assert(Actor::class, ['who' => $ambiguous['result']['candidates'][0]['id']]);
+    $result = $answer['result'];
     $executions = $result['executions'];
     $activity = array_column($result['activity'], null, 'type');
-    // PHP 8.6.0RC3 compiles array_map(Envelope::follow(...), ...) without the file's imports and looks for a global Envelope.
-    $followed = array_map(fn (array $call) => Envelope::follow($call), $envelope['next']);
+    // PHP 8.6.0RC3 compiles array_map(Answers::follow(...), ...) without the file's imports and looks for a global Answers.
+    $followed = array_map(fn (array $call) => Answers::follow($call), $answer['next']);
 
     expect($ambiguous['result']['matched_by'])->toBe('contains')
         ->and(array_column($ambiguous['result']['candidates'], 'id'))->toBe(['7', '8'])
         ->and($ambiguous['notes'])->toBe([__('firewatch::messages.actor_ambiguous_note')])
-        ->and($envelope['empty'])->toBeNull()
+        ->and($answer['empty'])->toBeNull()
         ->and(array_keys($result))->toBe(['identity', 'attribution', 'activity', 'executions'])
         ->and($result['identity'])->toMatchArray(['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@example.com', 'matched_by' => 'id'])
         ->and($result['attribution']['requests'])->toBe(['total' => 4, 'this_actor' => 2, 'other_actors' => 1, 'guest' => 1])
@@ -113,7 +113,7 @@ it('says who was affected: the person meant, the work tied to them by each link,
         ->and($result['attribution']['commands'])->toBe(['total' => 2, 'this_actor' => 1, 'unattributable' => 1])
         ->and($result['attribution']['scheduled_tasks'])->toBe(['total' => 0, 'this_actor' => 0, 'unattributable' => 0])
         ->and($result['attribution']['records']['this_actor'])->toBe(array_sum(array_column($result['activity'], 'direct')) + array_sum(array_column($result['activity'], 'dispatch')))
-        ->and($result['attribution']['records']['in_window'])->toBe($envelope['coverage']['records'])
+        ->and($result['attribution']['records']['in_window'])->toBe($answer['coverage']['records'])
         ->and($activity['request'])->toBe(['type' => 'request', 'direct' => 2, 'dispatch' => 0, 'can_carry_actor' => true])
         ->and($activity['job-attempt'])->toBe(['type' => 'job-attempt', 'direct' => 0, 'dispatch' => 1, 'can_carry_actor' => true])
         ->and($activity['queued-job'])->toBe(['type' => 'queued-job', 'direct' => 1, 'dispatch' => 0, 'can_carry_actor' => true])
@@ -127,14 +127,14 @@ it('says who was affected: the person meant, the work tied to them by each link,
             'inside command members:audit',
         ])
         ->and(array_column($executions, 'started_at'))->toBe(array_values(Arr::sortDesc(array_column($executions, 'started_at'))))
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor Otwell', 'attributed' => 4, 'total' => 7, 'direct' => 2, 'dispatch' => 1, 'inside' => 1, 'unattributable' => 2]))
-        ->and($envelope['notes'])->toBe([
+        ->and($answer['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor Otwell', 'attributed' => 4, 'total' => 7, 'direct' => 2, 'dispatch' => 1, 'inside' => 1, 'unattributable' => 2]))
+        ->and($answer['notes'])->toBe([
             actorCommandsNote(2, 0, 1),
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
             __('firewatch::messages.actor_identity_note'),
         ])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial')
-        ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'occurrences'])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('actor-partial')
+        ->and(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'occurrences'])
         ->and($followed[0]['result']['header'])->toMatchArray(['type' => $executions[0]['type'], 'execution_id' => $executions[0]['execution_id'], 'label' => $executions[0]['label']])
         ->and(array_unique(array_column($followed[1]['result']['rows'], 'group')))->toBe([$executions[0]['group_hash']])
         ->and(array_unique(array_column($followed[2]['result']['rows'], 'user_id')))->toBe(['7'])
@@ -145,20 +145,20 @@ it('says who was affected: the person meant, the work tied to them by each link,
 it('attributes nothing to a person who did nothing in the window, and finds no one who never acted', function () {
     whoWasAffectedTraffic($this->queue);
 
-    $taylor = Envelope::assert(Actor::class, ['who' => '7']);
+    $taylor = Answers::assert(Actor::class, ['who' => '7']);
     $attempt = array_values(array_filter($taylor['result']['executions'], fn (array $execution) => $execution['link'] === 'dispatch'))[0];
-    $envelope = Envelope::assert(Actor::class, ['who' => 'swift@example.com', 'since' => $attempt['started_at']]);
-    $nobody = Envelope::assert(Actor::class, ['who' => 'nuno']);
-    $attribution = $envelope['result']['attribution'];
+    $answer = Answers::assert(Actor::class, ['who' => 'swift@example.com', 'since' => $attempt['started_at']]);
+    $nobody = Answers::assert(Actor::class, ['who' => 'nuno']);
+    $attribution = $answer['result']['attribution'];
     $total = $attribution['requests']['total'] + $attribution['job_attempts']['total'] + $attribution['commands']['total'] + $attribution['scheduled_tasks']['total'];
 
-    expect($envelope['empty'])->toBe(['kind' => 'no_match', 'population' => $total, 'message' => __('firewatch::messages.actor_nothing_attributed', ['person' => 'Taylor Swift', 'population' => $total])])
-        ->and($envelope['result']['identity'])->toMatchArray(['id' => '8', 'matched_by' => 'username'])
+    expect($answer['empty'])->toBe(['kind' => 'no_match', 'population' => $total, 'message' => __('firewatch::messages.actor_nothing_attributed', ['person' => 'Taylor Swift', 'population' => $total])])
+        ->and($answer['result']['identity'])->toMatchArray(['id' => '8', 'matched_by' => 'username'])
         ->and(array_column($attribution, 'this_actor'))->toBe([0, 0, 0, 0, 0])
         ->and($attribution['job_attempts'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 1, 'no_actor' => 0])
-        ->and(array_sum(array_column($envelope['result']['activity'], 'direct')) + array_sum(array_column($envelope['result']['activity'], 'dispatch')))->toBe(0)
-        ->and($envelope['result']['executions'])->toBe([])
-        ->and($envelope['next'])->toBe([])
+        ->and(array_sum(array_column($answer['result']['activity'], 'direct')) + array_sum(array_column($answer['result']['activity'], 'dispatch')))->toBe(0)
+        ->and($answer['result']['executions'])->toBe([])
+        ->and($answer['next'])->toBe([])
         ->and($nobody['empty']['kind'])->toBe('no_match')
         ->and($nobody['result']['known_actor_count'])->toBe(2)
         ->and(array_column($nobody['result']['known_actors'], 'id'))->toBe(['7', '8']);
@@ -168,16 +168,16 @@ it('states what it cannot attribute once the dispatch that tied a job to the per
     whoWasAffectedTraffic($this->queue);
     $this->artisan('firewatch:clear', ['--type' => 'queued-job', '--force' => true])->assertSuccessful();
 
-    $envelope = Envelope::assert(Actor::class, ['who' => '7']);
+    $answer = Answers::assert(Actor::class, ['who' => '7']);
 
-    expect($envelope['result']['attribution']['job_attempts'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1])
-        ->and(array_values(Arr::sort(array_column($envelope['result']['executions'], 'link'))))->toBe(['direct', 'direct', 'inside'])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor Otwell', 'attributed' => 3, 'total' => 7, 'direct' => 2, 'dispatch' => 0, 'inside' => 1, 'unattributable' => 3]))
-        ->and($envelope['notes'])->toBe([
+    expect($answer['result']['attribution']['job_attempts'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 0, 'no_actor' => 1])
+        ->and(array_values(Arr::sort(array_column($answer['result']['executions'], 'link'))))->toBe(['direct', 'direct', 'inside'])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.actor_summary', ['person' => 'Taylor Otwell', 'attributed' => 3, 'total' => 7, 'direct' => 2, 'dispatch' => 0, 'inside' => 1, 'unattributable' => 3]))
+        ->and($answer['notes'])->toBe([
             actorCommandsNote(2, 0, 1),
             trans_choice('firewatch::messages.actor_no_actor_note', 1, ['count' => 1]),
             trans_choice('firewatch::messages.actor_guest_note', 1, ['count' => 1]),
             __('firewatch::messages.actor_identity_note'),
         ])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial', 'history-cleared');
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('actor-partial', 'history-cleared');
 });

@@ -11,7 +11,7 @@ use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\BudgetVerdict;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Children;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
@@ -51,7 +51,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Execution extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -108,7 +108,7 @@ class Execution extends Tool
     }
 
     /**
-     * Read the arguments, then the store, and put the execution, or why there is none, in the envelope.
+     * Read the arguments, then the store, and put the execution, or why there is none, in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
@@ -151,7 +151,7 @@ class Execution extends Tool
     }
 
     /**
-     * Put one execution in the envelope.
+     * Put one execution in the answer.
      *
      * @param  array{row: array<string, mixed>, children: list<array<string, mixed>>}  $found
      */

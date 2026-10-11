@@ -5,7 +5,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Date;
 
 const HRM_AT = 1790776000.0;
@@ -59,7 +59,7 @@ function hrmPrune(): float
  */
 function hrmJudgements(array $window = []): array
 {
-    $detectors = Envelope::assert(Detect::class, $window)['result']['detectors'];
+    $detectors = Answers::assert(Detect::class, $window)['result']['detectors'];
 
     return array_column($detectors, null, 'detector');
 }
@@ -143,7 +143,7 @@ describe('after history was removed', function () {
         ingest([syntheticRecord(RecordType::LOG)->with(['timestamp' => HRM_AT]), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => HRM_AT])]);
         hrmClear(['--type' => 'log']);
 
-        $rows = array_column(Envelope::assert(Overview::class)['result']['detectors'], null, 'detector');
+        $rows = array_column(Answers::assert(Overview::class)['result']['detectors'], null, 'detector');
 
         expect($rows['error-logs'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0])
             ->and(array_map(fn (array $row) => $row['reason'], $rows))->toEqualCanonicalizing(hrmReasons(hrmJudgements()));
@@ -153,10 +153,10 @@ describe('after history was removed', function () {
         ingest([syntheticRecord(RecordType::LOG)->with(['timestamp' => HRM_AT]), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => HRM_AT, '_group' => md5('/orders')])]);
         hrmClear(['--type' => 'request']);
 
-        $envelope = Envelope::assert(Detect::class, ['shape' => 'failing-routes', 'group' => md5('/orders')]);
+        $answer = Answers::assert(Detect::class, ['shape' => 'failing-routes', 'group' => md5('/orders')]);
 
-        expect($envelope['result']['reason'])->toBe('outside_coverage')
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result']['reason'])->toBe('outside_coverage')
+            ->and($answer['empty'])->toBeNull();
     });
 
     it('blames the removal, not the dispatcher, when the dispatches were removed and the attempts left', function () {
@@ -167,12 +167,12 @@ describe('after history was removed', function () {
         hrmClear(['--type' => 'queued-job']);
         ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->inExecution('b-1')->with(['job_id' => 'b', 'attempt' => 1, 'timestamp' => HRM_REMOVED_AT + 60])]);
 
-        $before = Envelope::assert(Detect::class, ['shape' => 'queue-latency', 'since' => (string) (HRM_AT - 1)]);
-        $after = Envelope::assert(Detect::class, ['shape' => 'queue-latency', 'since' => (string) (HRM_REMOVED_AT + 1)]);
+        $before = Answers::assert(Detect::class, ['shape' => 'queue-latency', 'since' => (string) (HRM_AT - 1)]);
+        $after = Answers::assert(Detect::class, ['shape' => 'queue-latency', 'since' => (string) (HRM_REMOVED_AT + 1)]);
 
         expect($before['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0])
             ->and($before['result']['saw']['attempts_without_dispatch'])->toBe(2)
-            ->and(Envelope::assert(Detect::class, ['shape' => 'queue-latency'])['result']['reason'])->toBe('outside_coverage')
+            ->and(Answers::assert(Detect::class, ['shape' => 'queue-latency'])['result']['reason'])->toBe('outside_coverage')
             ->and($after['result']['reason'])->toBe('prerequisite_missing');
     });
 
@@ -181,7 +181,7 @@ describe('after history was removed', function () {
         hrmClear(['--type' => 'queued-job']);
         ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->inExecution('b-1')->with(['job_id' => 'b', 'attempt' => 1, 'timestamp' => HRM_REMOVED_AT + 60])]);
 
-        expect(Envelope::assert(Detect::class, ['shape' => 'queue-latency', 'since' => (string) $since])['result']['reason'])->toBe($reason);
+        expect(Answers::assert(Detect::class, ['shape' => 'queue-latency', 'since' => (string) $since])['result']['reason'])->toBe($reason);
     })->with([
         'a moment before the removal' => [HRM_REMOVED_AT - 0.001, 'outside_coverage'],
         'as the removal ends' => [HRM_REMOVED_AT, 'prerequisite_missing'],
@@ -192,7 +192,7 @@ describe('after history was removed', function () {
         hrmClear(['--type' => 'job-attempt']);
         ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->inExecution('b-1')->with(['job_id' => 'b', 'attempt' => 1, 'timestamp' => HRM_REMOVED_AT + 60])]);
 
-        expect(Envelope::assert(Detect::class, ['shape' => 'queue-latency'])['result']['reason'])->toBe('prerequisite_missing');
+        expect(Answers::assert(Detect::class, ['shape' => 'queue-latency'])['result']['reason'])->toBe('prerequisite_missing');
     });
 
     it('changes every shape that reads a type several shapes share', function () {

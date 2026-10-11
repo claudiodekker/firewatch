@@ -3,7 +3,7 @@
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 
 const OVERVIEW_BUDGET_AT = 1790776000.0;
@@ -72,7 +72,7 @@ function overviewBudgetGroup(RecordType $type, string $letter, array $millisecon
  */
 function overviewBudgetAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Overview::class, $arguments);
+    return Answers::assert(Overview::class, $arguments);
 }
 
 describe('the counts', function () {

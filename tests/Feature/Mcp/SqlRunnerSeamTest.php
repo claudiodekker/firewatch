@@ -9,7 +9,7 @@ use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\FakeSqlRunner;
 
 beforeEach(function () {
@@ -55,7 +55,7 @@ it('reports the SQL tool available in the doctor from a fake that finds nothing 
 it('reports the SQL tool unavailable in describe, and offers no query, without spawning a child', function () {
     srUnavailable(Unavailable::HEAP_LIMIT);
 
-    $answer = Envelope::assert(Describe::class);
+    $answer = Answers::assert(Describe::class);
 
     expect($answer['result']['sql']['available'])->toBeFalse()
         ->and($answer['result']['sql']['reason'])->toBe(__('firewatch::messages.sql_unavailable.heap_limit'))

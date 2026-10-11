@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Arr;
 
@@ -40,7 +40,7 @@ function fpRecord(RecordType $type, string $input, array $fields = [], int $afte
  */
 function fpFollow(array $call): array
 {
-    return Envelope::assert(['occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']], $call['arguments']);
+    return Answers::assert(['occurrences' => Occurrences::class, 'rank' => Rank::class][$call['tool']], $call['arguments']);
 }
 
 /**
@@ -54,9 +54,9 @@ function fpRefused(array $arguments, string $text): void
 }
 
 it('computes the group id of each type from the facts read in source, in full', function (array $arguments, string $input) {
-    $envelope = Envelope::assert(Fingerprint::class, $arguments);
+    $answer = Answers::assert(Fingerprint::class, $arguments);
 
-    expect($envelope['result'])->toBe([
+    expect($answer['result'])->toBe([
         'type' => $arguments['type'],
         'candidates' => [['group' => fpGroup($input), 'input' => $input, 'assumption' => null]],
         'held' => [],
@@ -79,10 +79,10 @@ it('computes the group id of each type from the facts read in source, in full', 
 ]);
 
 it('adds HEAD beside GET and says so, and says nothing when HEAD was given', function (array $methods, bool $noted) {
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'request', 'methods' => $methods, 'path' => '/a']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'request', 'methods' => $methods, 'path' => '/a']);
 
-    expect($envelope['notes'])->toBe($noted ? [__('firewatch::messages.fingerprint_head_note')] : [])
-        ->and($envelope['result']['candidates'][0]['input'])->toBe($methods === ['POST'] ? 'POST,,/a' : 'GET|HEAD,,/a');
+    expect($answer['notes'])->toBe($noted ? [__('firewatch::messages.fingerprint_head_note')] : [])
+        ->and($answer['result']['candidates'][0]['input'])->toBe($methods === ['POST'] ? 'POST,,/a' : 'GET|HEAD,,/a');
 })->with([
     'GET alone' => [['GET'], true],
     'GET and HEAD' => [['HEAD', 'GET'], false],
@@ -94,10 +94,10 @@ it('gives a task that names no timezone the one Laravel schedules it in, and say
     config()->set('app', Arr::except(config()->array('app'), 'schedule_timezone'));
     config()->set($schedule);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'scheduled-task', 'name' => 'prune', 'cron' => '* * * * *']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'scheduled-task', 'name' => 'prune', 'cron' => '* * * * *']);
 
-    expect($envelope['result']['candidates'][0]['input'])->toBe("prune,* * * * *,{$expected}")
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.fingerprint_timezone_note', ['timezone' => $expected])]);
+    expect($answer['result']['candidates'][0]['input'])->toBe("prune,* * * * *,{$expected}")
+        ->and($answer['notes'])->toBe([__('firewatch::messages.fingerprint_timezone_note', ['timezone' => $expected])]);
 })->with([
     'the schedule one' => [['app.schedule_timezone' => 'Europe/Amsterdam'], 'Europe/Amsterdam'],
     'the application one when no schedule timezone is set' => [[], 'Asia/Tokyo'],
@@ -107,8 +107,8 @@ it('gives a task that names no timezone the one Laravel schedules it in, and say
 it('reads a driver and a domain as Laravel gives them: the driver in lower case, the domain without its scheme', function () {
     $sql = 'select * from "orders" where "id" in (?, ?)';
 
-    $driver = Envelope::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'MySQL']);
-    $domain = Envelope::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['GET', 'HEAD'], 'path' => '/orders', 'domain' => 'https://api.example.com']);
+    $driver = Answers::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'MySQL']);
+    $domain = Answers::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['GET', 'HEAD'], 'path' => '/orders', 'domain' => 'https://api.example.com']);
 
     expect($driver['result']['candidates'][0]['input'])->toBe('testing,select * from "orders" where "id" in (...?)')
         ->and($domain['result']['candidates'][0]['input'])->toBe('GET|HEAD,api.example.com,/orders');
@@ -121,9 +121,9 @@ it('reads a query without a driver both ways when normalising changes it, and wi
 
     ingest([fpRecord(RecordType::QUERY, $normalised, ['connection' => 'testing', 'sql' => $sql])]);
 
-    $open = Envelope::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql]);
-    $sqlite = Envelope::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'sqlite']);
-    $other = Envelope::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'array']);
+    $open = Answers::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql]);
+    $sqlite = Answers::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'sqlite']);
+    $other = Answers::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'array']);
 
     expect($open['result']['candidates'])->toBe([
         ['group' => fpGroup($normalised), 'input' => $normalised, 'assumption' => __('firewatch::messages.fingerprint_assumption_normalised')],
@@ -214,15 +214,15 @@ it('refuses an argument of the wrong shape with the values it accepts', function
 it('computes the id before any store exists, saying the check could not be made', function () {
     $path = app(Configuration::class)->database;
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'queued-job', 'name' => 'App\\Jobs\\ShipOrder']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'queued-job', 'name' => 'App\\Jobs\\ShipOrder']);
 
-    expect($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.no_store'))
-        ->and($envelope['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.fingerprint_window_reason')])
-        ->and($envelope['coverage']['types_read'])->toBe(['job-attempt', 'queued-job'])
-        ->and($envelope['result']['candidates'][0]['group'])->toBe(fpGroup('App\\Jobs\\ShipOrder'))
-        ->and($envelope['result']['held'])->toBe([])
-        ->and(array_column($envelope['result']['recipe_check'], 'check'))->toBe(['not_evaluated', 'not_evaluated'])
-        ->and($envelope['next'])->toBe([])
+    expect($answer['summary'])->toBe(__('firewatch::messages.empty_summary.no_store'))
+        ->and($answer['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.fingerprint_window_reason')])
+        ->and($answer['coverage']['types_read'])->toBe(['job-attempt', 'queued-job'])
+        ->and($answer['result']['candidates'][0]['group'])->toBe(fpGroup('App\\Jobs\\ShipOrder'))
+        ->and($answer['result']['held'])->toBe([])
+        ->and(array_column($answer['result']['recipe_check'], 'check'))->toBe(['not_evaluated', 'not_evaluated'])
+        ->and($answer['next'])->toBe([])
         ->and(dirname($path))->not->toBeDirectory();
 });
 
@@ -231,24 +231,24 @@ it('computes the id from a store it cannot read, saying why', function () {
     mkdir(dirname($path), recursive: true);
     file_put_contents($path, str_repeat('not a database ', 100));
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
 
-    expect($envelope['result']['candidates'][0]['group'])->toBe(fpGroup('env'))
-        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'not_evaluated', 'detail' => null]])
-        ->and($envelope['next'])->toBe([]);
+    expect($answer['result']['candidates'][0]['group'])->toBe(fpGroup('env'))
+        ->and($answer['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'not_evaluated', 'detail' => null]])
+        ->and($answer['next'])->toBe([]);
 });
 
 it('says an empty store holds nothing, with the check not evaluated', function () {
     $path = app(Configuration::class)->database;
     app(Writer::class)->transaction(fn () => null);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
 
-    expect($envelope['empty'])->toBe(['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => $path])])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
-        ->and($envelope['result']['held'])->toBe([])
-        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'not_evaluated', 'detail' => 'no_records']])
-        ->and($envelope['next'])->toBe([]);
+    expect($answer['empty'])->toBe(['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => $path])])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
+        ->and($answer['result']['held'])->toBe([])
+        ->and($answer['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'not_evaluated', 'detail' => 'no_records']])
+        ->and($answer['next'])->toBe([]);
 });
 
 it('finds the types that hold the id, with their span and label, and offers their records', function () {
@@ -258,25 +258,25 @@ it('finds the types that hold the id, with their span and label, and offers thei
         fpRecord(RecordType::REQUEST, 'GET|HEAD,,/carts', ['route_methods' => ['GET', 'HEAD'], 'route_domain' => '', 'route_path' => '/carts'], 90),
     ]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['GET', 'HEAD'], 'path' => 'orders']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'request', 'methods' => ['GET', 'HEAD'], 'path' => 'orders']);
     $span = storeRows("SELECT min(started_at) AS first, max(started_at) AS last FROM records WHERE group_hash = '".fpGroup('GET|HEAD,,/orders')."'")[0];
     $group = fpGroup('GET|HEAD,,/orders');
 
-    expect($envelope['result']['held'])->toBe([['group' => $group, 'type' => 'request', 'records' => 2, 'first_started_at' => $span['first'], 'last_started_at' => $span['last'], 'label' => '/orders']])
-        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'request', 'check' => 'agrees', 'detail' => null]])
-        ->and($envelope['empty'])->toBeNull()
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.fingerprint_summary_held', 2, [
+    expect($answer['result']['held'])->toBe([['group' => $group, 'type' => 'request', 'records' => 2, 'first_started_at' => $span['first'], 'last_started_at' => $span['last'], 'label' => '/orders']])
+        ->and($answer['result']['recipe_check'])->toBe([['type' => 'request', 'check' => 'agrees', 'detail' => null]])
+        ->and($answer['empty'])->toBeNull()
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.fingerprint_summary_held', 2, [
             'group' => $group,
             'records' => 2,
             'types' => 'request',
             'check' => __('firewatch::messages.fingerprint_check.agrees'),
         ]))
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'types_read' => ['request'], 'records' => 3])
-        ->and($envelope['blind_spots'])->toContain(...BlindSpots::for([RecordType::REQUEST]))
-        ->and(array_column($envelope['next'], 'tool'))->toBe(['occurrences', 'rank'])
-        ->and(array_column($envelope['next'], 'arguments'))->toBe([['group' => $group], ['group' => $group]]);
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'types_read' => ['request'], 'records' => 3])
+        ->and($answer['blind_spots'])->toContain(...BlindSpots::for([RecordType::REQUEST]))
+        ->and(array_column($answer['next'], 'tool'))->toBe(['occurrences', 'rank'])
+        ->and(array_column($answer['next'], 'arguments'))->toBe([['group' => $group], ['group' => $group]]);
 
-    foreach ($envelope['next'] as $call) {
+    foreach ($answer['next'] as $call) {
         expect(fpFollow($call)['tool'])->toBe($call['tool']);
     }
 });
@@ -287,8 +287,8 @@ it('says when the store holds the query under the reading the given driver rules
 
     ingest([fpRecord(RecordType::QUERY, $normalised, ['connection' => 'testing', 'sql' => $sql])]);
 
-    $missed = Envelope::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'array']);
-    $held = Envelope::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'sqlite']);
+    $missed = Answers::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'array']);
+    $held = Answers::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => $sql, 'driver' => 'sqlite']);
 
     expect($missed['result']['held'])->toBe([])
         ->and($missed['notes'])->toBe([__('firewatch::messages.fingerprint_driver_note', ['group' => fpGroup($normalised)])])
@@ -298,26 +298,26 @@ it('says when the store holds the query under the reading the given driver rules
 it('answers an id the store does not hold with a miss the agreeing check lets the assistant trust', function () {
     ingest([fpRecord(RecordType::COMMAND, 'env', ['name' => 'env'])]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'command', 'name' => 'orders:refund']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'command', 'name' => 'orders:refund']);
     $group = fpGroup('orders:refund');
 
-    expect($envelope['empty']['kind'])->toBe('no_match')
-        ->and($envelope['empty']['population'])->toBe(1)
-        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => "group: {$group}"]))
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.agrees', ['group' => $group, 'types' => 'command']))
-        ->and($envelope['result']['held'])->toBe([])
-        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'agrees', 'detail' => null]])
-        ->and($envelope['next'])->toBe([]);
+    expect($answer['empty']['kind'])->toBe('no_match')
+        ->and($answer['empty']['population'])->toBe(1)
+        ->and($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => "group: {$group}"]))
+        ->and($answer['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.agrees', ['group' => $group, 'types' => 'command']))
+        ->and($answer['result']['held'])->toBe([])
+        ->and($answer['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'agrees', 'detail' => null]])
+        ->and($answer['next'])->toBe([]);
 });
 
 it('says a miss cannot be trusted when the latest stored record does not hash the way the recipe says', function () {
     ingest([fpRecord(RecordType::COMMAND, 'env', ['name' => 'env', '_group' => str_repeat('a', 32)])]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
 
-    expect($envelope['result']['held'])->toBe([])
-        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'disagrees', 'detail' => null]])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.disagrees', ['group' => fpGroup('env'), 'types' => 'command']));
+    expect($answer['result']['held'])->toBe([])
+        ->and($answer['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'disagrees', 'detail' => null]])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.disagrees', ['group' => fpGroup('env'), 'types' => 'command']));
 });
 
 it('lets the newest record decide the check, so a recipe that agrees again is trusted again', function () {
@@ -326,20 +326,20 @@ it('lets the newest record decide the check, so a recipe that agrees again is tr
         fpRecord(RecordType::COMMAND, 'env', ['name' => 'env'], 10),
     ]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'command', 'name' => 'env']);
 
-    expect($envelope['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'agrees', 'detail' => null]])
-        ->and($envelope['result']['held'][0]['records'])->toBe(1);
+    expect($answer['result']['recipe_check'])->toBe([['type' => 'command', 'check' => 'agrees', 'detail' => null]])
+        ->and($answer['result']['held'][0]['records'])->toBe(1);
 });
 
 it('does not evaluate the check without a record of the type, and says a miss then proves nothing', function () {
     ingest([fpRecord(RecordType::COMMAND, 'env', ['name' => 'env'])]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'mail', 'class' => 'App\\Mail\\OrderShipped']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'mail', 'class' => 'App\\Mail\\OrderShipped']);
 
-    expect($envelope['result']['recipe_check'])->toBe([['type' => 'mail', 'check' => 'not_evaluated', 'detail' => 'no_records']])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.not_evaluated', ['group' => fpGroup('App\\Mail\\OrderShipped'), 'types' => 'mail']))
-        ->and($envelope['empty']['kind'])->toBe('no_match');
+    expect($answer['result']['recipe_check'])->toBe([['type' => 'mail', 'check' => 'not_evaluated', 'detail' => 'no_records']])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.not_evaluated', ['group' => fpGroup('App\\Mail\\OrderShipped'), 'types' => 'mail']))
+        ->and($answer['empty']['kind'])->toBe('no_match');
 });
 
 it('does not trust a key Nightwatch stored cut at 255 bytes, and checks the newest record whose fields are whole', function () {
@@ -348,11 +348,11 @@ it('does not trust a key Nightwatch stored cut at 255 bytes, and checks the newe
 
     ingest([$cut]);
 
-    $onlyCut = Envelope::assert(Fingerprint::class, ['type' => 'cache-event', 'store' => 'array', 'key' => 'orders']);
+    $onlyCut = Answers::assert(Fingerprint::class, ['type' => 'cache-event', 'store' => 'array', 'key' => 'orders']);
 
     ingest([fpRecord(RecordType::CACHE_EVENT, 'array,orders', ['store' => 'array', 'key' => 'orders'], 0)]);
 
-    $withWhole = Envelope::assert(Fingerprint::class, ['type' => 'cache-event', 'store' => 'array', 'key' => 'orders']);
+    $withWhole = Answers::assert(Fingerprint::class, ['type' => 'cache-event', 'store' => 'array', 'key' => 'orders']);
 
     expect($onlyCut['result']['recipe_check'])->toBe([['type' => 'cache-event', 'check' => 'not_evaluated', 'detail' => 'cut']])
         ->and($onlyCut['summary'])->toBe(__('firewatch::messages.fingerprint_summary_missed.not_evaluated', ['group' => fpGroup('array,orders'), 'types' => 'cache-event']))
@@ -367,10 +367,10 @@ it('skips a record whose recipe field Firewatch cut, and checks the next', funct
         fpRecord(RecordType::QUERY, "testing,{$sql}", ['connection' => 'testing', 'sql' => $sql], 10),
     ]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => 'select 1']);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'query', 'connection' => 'testing', 'sql' => 'select 1']);
 
     expect(storeRows("SELECT sql FROM queries WHERE sql LIKE '%truncated%'"))->toHaveCount(1)
-        ->and($envelope['result']['recipe_check'])->toBe([['type' => 'query', 'check' => 'agrees', 'detail' => null]]);
+        ->and($answer['result']['recipe_check'])->toBe([['type' => 'query', 'check' => 'agrees', 'detail' => null]]);
 });
 
 it('reports a job name under its attempts and its dispatch, each with its own check, and leaves out a command of that name', function () {
@@ -383,15 +383,15 @@ it('reports a job name under its attempts and its dispatch, each with its own ch
         fpRecord(RecordType::COMMAND, $name, ['name' => $name], 30),
     ]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'job-attempt', 'name' => $name]);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'job-attempt', 'name' => $name]);
 
-    expect(array_map(fn (array $row) => [$row['type'], $row['records']], $envelope['result']['held']))->toBe([['job-attempt', 1], ['queued-job', 2]])
-        ->and($envelope['result']['recipe_check'])->toBe([
+    expect(array_map(fn (array $row) => [$row['type'], $row['records']], $answer['result']['held']))->toBe([['job-attempt', 1], ['queued-job', 2]])
+        ->and($answer['result']['recipe_check'])->toBe([
             ['type' => 'job-attempt', 'check' => 'agrees', 'detail' => null],
             ['type' => 'queued-job', 'check' => 'agrees', 'detail' => null],
         ])
-        ->and($envelope['coverage']['types_read'])->toBe(['job-attempt', 'queued-job'])
-        ->and(array_column($envelope['next'], 'tool'))->toBe(['occurrences', 'rank']);
+        ->and($answer['coverage']['types_read'])->toBe(['job-attempt', 'queued-job'])
+        ->and(array_column($answer['next'], 'tool'))->toBe(['occurrences', 'rank']);
 });
 
 it('lets one type that disagrees outweigh one that agrees', function () {
@@ -402,10 +402,10 @@ it('lets one type that disagrees outweigh one that agrees', function () {
         fpRecord(RecordType::QUEUED_JOB, $name, ['name' => $name, '_group' => str_repeat('a', 32)]),
     ]);
 
-    $envelope = Envelope::assert(Fingerprint::class, ['type' => 'queued-job', 'name' => $name]);
+    $answer = Answers::assert(Fingerprint::class, ['type' => 'queued-job', 'name' => $name]);
 
-    expect(array_column($envelope['result']['recipe_check'], 'check'))->toBe(['agrees', 'disagrees'])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.fingerprint_summary_held', 1, [
+    expect(array_column($answer['result']['recipe_check'], 'check'))->toBe(['agrees', 'disagrees'])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.fingerprint_summary_held', 1, [
             'group' => fpGroup($name),
             'records' => 1,
             'types' => 'job-attempt, queued-job',

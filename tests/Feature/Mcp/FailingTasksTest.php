@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -56,7 +56,7 @@ function ftkTasks(string $name, array $statuses): array
  */
 function ftkAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'failing-tasks', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'failing-tasks', ...$arguments]);
 }
 
 /**
@@ -73,11 +73,11 @@ describe('the verdict', function () {
     it('has findings when a scheduled task of a group failed or was skipped, over every one examined, and states no threshold', function () {
         ingest([...ftkTasks('prune-orders', ['processed', 'failed']), ...ftkTasks('send-digest', ['processed'])]);
 
-        $envelope = ftkAnswer();
+        $answer = ftkAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'failing-tasks', 'threshold' => null, 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-tasks', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-tasks')]))
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('prune-orders'));
+        expect($answer['result'])->toMatchArray(['detector' => 'failing-tasks', 'threshold' => null, 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-tasks', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-tasks')]))
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('prune-orders'));
     });
 
     it('takes one failed or one skipped scheduled task for a finding, and one with another status or none for none', function (?string $status, string $verdict) {
@@ -111,19 +111,19 @@ describe('the verdict', function () {
     it('is clean over the scheduled tasks examined when none failed or was skipped, and says how many', function () {
         ingest([...ftkTasks('prune-orders', ['processed']), ...ftkTasks('send-digest', ['processed'])]);
 
-        $envelope = ftkAnswer();
+        $answer = ftkAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-tasks', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.failing-tasks')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-tasks', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.failing-tasks')]));
     });
 
     it('is not evaluated when the window holds no scheduled task, never clean', function () {
         ingest([syntheticRecord(RecordType::REQUEST), syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = ftkAnswer();
+        $answer = ftkAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-tasks', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-tasks', 'reason' => 'no_records']));
     });
 
     it('judges the scheduled tasks that started in the window, the start included and the end not', function () {
@@ -133,9 +133,9 @@ describe('the verdict', function () {
             ftkTask('at-until', 'failed', fields: ['timestamp' => FTK_AT + 10]),
         ]);
 
-        $envelope = ftkAnswer(['since' => (string) FTK_AT, 'until' => (string) (FTK_AT + 10)]);
+        $answer = ftkAnswer(['since' => (string) FTK_AT, 'until' => (string) (FTK_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 
     it('finds a scheduled task that failed at the start of the window, and not one that failed at its end', function () {
@@ -144,10 +144,10 @@ describe('the verdict', function () {
             ftkTask('at-until', 'skipped', 'send-digest', ['timestamp' => FTK_AT + 10]),
         ]);
 
-        $envelope = ftkAnswer(['since' => (string) FTK_AT, 'until' => (string) (FTK_AT + 10)]);
+        $answer = ftkAnswer(['since' => (string) FTK_AT, 'until' => (string) (FTK_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['latest_execution_id'])->toBe('at-since');
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($answer['result']['findings'][0]['latest_execution_id'])->toBe('at-since');
     });
 });
 
@@ -162,9 +162,9 @@ describe('the finding', function () {
             ftkTask('late', 'processed', fields: ['timestamp' => FTK_AT + 300]),
         ]);
 
-        $envelope = ftkAnswer();
+        $answer = ftkAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => md5('prune-orders'),
             'name' => 'prune-orders',
             'count' => 4,
@@ -178,7 +178,7 @@ describe('the finding', function () {
                 'skipped' => 2,
                 'runs' => 6,
             ],
-        ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
+        ]])->and($answer['result']['findings'][0])->not->toHaveKey('worst_execution_id');
     });
 
     it('points at the latest skipped scheduled task of a group in which none failed, and at the one stored last of two that started together', function () {
@@ -287,19 +287,19 @@ describe('the order', function () {
     it('shows the findings up to the limit, with the exact total and a note of the cut', function () {
         ingest(array_merge(...array_map(fn (int $task) => ftkTasks("task-{$task}", array_fill(0, $task, 'failed')), range(1, 4))));
 
-        $envelope = ftkAnswer(['limit' => 3]);
+        $answer = ftkAnswer(['limit' => 3]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['task-4', 'task-3', 'task-2'])
-            ->and($envelope['result'])->toMatchArray(['examined' => 10, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['task-4', 'task-3', 'task-2'])
+            ->and($answer['result'])->toMatchArray(['examined' => 10, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest(array_merge(...array_map(fn (int $task) => ftkTasks("task-{$task}", ['skipped']), range(1, 3))));
 
-        $envelope = ftkAnswer(['limit' => 3]);
+        $answer = ftkAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 });
 
@@ -307,11 +307,11 @@ describe('one group', function () {
     it('restricts the judgement to the group, and examines only its scheduled tasks', function () {
         ingest([...ftkTasks('prune-orders', ['skipped', 'processed']), ...ftkTasks('send-digest', ['failed', 'failed'])]);
 
-        $envelope = ftkAnswer(['group' => md5('prune-orders')]);
+        $answer = ftkAnswer(['group' => md5('prune-orders')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['prune-orders'])
-            ->and($envelope['result']['findings'][0]['evidence'])->toBe(['kind' => 'skipped_only', 'failed' => 0, 'skipped' => 1, 'runs' => 2]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['prune-orders'])
+            ->and($answer['result']['findings'][0]['evidence'])->toBe(['kind' => 'skipped_only', 'failed' => 0, 'skipped' => 1, 'runs' => 2]);
     });
 
     it('is clean when the group has scheduled tasks and none failed or was skipped', function () {
@@ -323,10 +323,10 @@ describe('one group', function () {
     it('answers that no scheduled task matches a group that holds none', function () {
         ingest([...ftkTasks('prune-orders', ['failed']), ...ftkTasks('send-digest', ['processed'])]);
 
-        $envelope = ftkAnswer(['group' => md5('missing')]);
+        $answer = ftkAnswer(['group' => md5('missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
     });
 });
 
@@ -373,14 +373,14 @@ describe('what to look at next', function () {
             ftkTask('d', 'processed', 'send-digest', ['timestamp' => FTK_AT + 50]),
         ]);
 
-        $envelope = ftkAnswer();
+        $answer = ftkAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
-            ->and(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => md5('prune-orders')], ['group' => md5('prune-orders')], ['execution_id' => 'c']]);
+        expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
+            ->and(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => md5('prune-orders')], ['group' => md5('prune-orders')], ['execution_id' => 'c']]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -393,7 +393,7 @@ describe('with the other shapes', function () {
             ...ftkTasks('works', ['processed']),
         ]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'failing-tasks');
 
         expect($row)->toBe([
@@ -409,7 +409,7 @@ describe('with the other shapes', function () {
     it('is run between queue-latency and memory when no shape is named', function () {
         ingest([ftkTask('a', 'failed')]);
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[5])->toMatchArray(['threshold' => null, 'verdict' => 'findings', 'total' => 1]);

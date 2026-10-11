@@ -10,7 +10,7 @@ use ClaudioDekker\Firewatch\Stage;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -53,7 +53,7 @@ function rankGroup(RecordType $type, string $letter, array $milliseconds, array 
  */
 function rankRows(array $arguments = ['type' => 'request']): array
 {
-    return Envelope::assert(Rank::class, $arguments)['result']['groups'];
+    return Answers::assert(Rank::class, $arguments)['result']['groups'];
 }
 
 it('orders the groups of a type worst first by their 95th percentile, nearest rank', function () {
@@ -63,16 +63,16 @@ it('orders the groups of a type worst first by their 95th percentile, nearest ra
         ...rankGroup(RecordType::REQUEST, 'c', [...array_fill(0, 19, 5), 900]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request']);
-    $rows = $envelope['result']['groups'];
+    $answer = Answers::assert(Rank::class, ['type' => 'request']);
+    $rows = $answer['result']['groups'];
 
     expect(array_column($rows, 'group'))->toBe([rankHash('b'), rankHash('a'), rankHash('c')])
         ->and($rows[1])->toMatchArray(['occurrences' => 20, 'min_ms' => 1.0, 'p50_ms' => 10.0, 'avg_ms' => 10.5, 'p95_ms' => 19.0, 'max_ms' => 20.0, 'total_ms' => 210.0, 'withheld' => null])
         ->and($rows[2])->toMatchArray(['p95_ms' => 5.0, 'max_ms' => 900.0])
-        ->and($envelope['result'])->toMatchArray(['type' => 'request', 'by' => 'p95_duration', 'records' => 60, 'groups_ranked' => 3, 'records_without_group' => 0])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_summary', 3, ['count' => 3, 'type' => 'request', 'by' => 'p95_duration']))
-        ->and($envelope['notes'])->toBe([])
-        ->and($envelope['coverage']['types_read'])->toBe(['request']);
+        ->and($answer['result'])->toMatchArray(['type' => 'request', 'by' => 'p95_duration', 'records' => 60, 'groups_ranked' => 3, 'records_without_group' => 0])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.rank_summary', 3, ['count' => 3, 'type' => 'request', 'by' => 'p95_duration']))
+        ->and($answer['notes'])->toBe([])
+        ->and($answer['coverage']['types_read'])->toBe(['request']);
 });
 
 it('withholds a percentile below its sample floor, and shows it at the floor', function (int $records, bool $p50, bool $p95) {
@@ -149,25 +149,25 @@ it('orders by the maximum and says so when no group reaches the floor of the per
         ...rankGroup(RecordType::REQUEST, 'b', [5, 90]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'by' => $by]);
+    $answer = Answers::assert(Rank::class, ['type' => 'request', 'by' => $by]);
 
-    expect(array_column($envelope['result']['groups'], 'group'))->toBe([rankHash('b'), rankHash('a')])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.rank_fallback', ['statistic' => $statistic, 'needed' => $needed])]);
+    expect(array_column($answer['result']['groups'], 'group'))->toBe([rankHash('b'), rankHash('a')])
+        ->and($answer['notes'])->toBe([__('firewatch::messages.rank_substituted', ['statistic' => $statistic, 'needed' => $needed])]);
 })->with([
     'p95' => ['p95_duration', 'p95', 20],
     'p50' => ['p50_duration', 'p50', 3],
 ]);
 
-it('sorts the groups below the floor after those above it, with no fallback', function () {
+it('sorts the groups below the floor after those above it, with no substitute', function () {
     ingest([
         ...rankGroup(RecordType::REQUEST, 'a', [900, 800]),
         ...rankGroup(RecordType::REQUEST, 'b', array_fill(0, 20, 1)),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request']);
+    $answer = Answers::assert(Rank::class, ['type' => 'request']);
 
-    expect(array_column($envelope['result']['groups'], 'group'))->toBe([rankHash('b'), rankHash('a')])
-        ->and($envelope['notes'])->toBe([]);
+    expect(array_column($answer['result']['groups'], 'group'))->toBe([rankHash('b'), rankHash('a')])
+        ->and($answer['notes'])->toBe([]);
 });
 
 it('breaks ties by occurrences, then by group hash', function () {
@@ -216,12 +216,12 @@ it('ranks exceptions by occurrences, and by when they were last seen', function 
         rankRecord(RecordType::EXCEPTION, 'b', null, ['timestamp' => RANK_AT + 1]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'exception']);
+    $answer = Answers::assert(Rank::class, ['type' => 'exception']);
 
-    expect(array_column($envelope['result']['groups'], 'group'))->toBe([rankHash('b'), rankHash('a')])
-        ->and($envelope['result']['by'])->toBe('occurrences')
-        ->and($envelope['result']['groups'][0])->toMatchArray(['occurrences' => 2, 'failure_pct' => null])
-        ->and($envelope['result']['groups'][0])->not->toHaveKeys(['p95_ms', 'withheld'])
+    expect(array_column($answer['result']['groups'], 'group'))->toBe([rankHash('b'), rankHash('a')])
+        ->and($answer['result']['by'])->toBe('occurrences')
+        ->and($answer['result']['groups'][0])->toMatchArray(['occurrences' => 2, 'failure_pct' => null])
+        ->and($answer['result']['groups'][0])->not->toHaveKeys(['p95_ms', 'withheld'])
         ->and(array_column(rankRows(['type' => 'exception', 'by' => 'last_seen']), 'group'))->toBe([rankHash('a'), rankHash('b')]);
 });
 
@@ -232,12 +232,12 @@ it('counts a record without a duration as an occurrence, and leaves it out of th
         rankRecord(RecordType::SCHEDULED_TASK, 'b', null),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'scheduled-task']);
-    $rows = array_column($envelope['result']['groups'], null, 'group');
+    $answer = Answers::assert(Rank::class, ['type' => 'scheduled-task']);
+    $rows = array_column($answer['result']['groups'], null, 'group');
 
     expect($rows[rankHash('a')])->toMatchArray(['occurrences' => 2, 'min_ms' => 30.0, 'max_ms' => 30.0, 'total_ms' => 30.0])
         ->and($rows[rankHash('b')])->toMatchArray(['occurrences' => 1, 'min_ms' => null, 'avg_ms' => null, 'max_ms' => null, 'total_ms' => null, 'p50_ms' => null, 'p95_ms' => null])
-        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_untimed', 2, ['count' => 2]));
+        ->and($answer['notes'])->toContain(trans_choice('firewatch::messages.rank_untimed', 2, ['count' => 2]));
 });
 
 it('computes failure_pct by the rule of each type', function (RecordType $type, array $failed, array $kept, ?float $percent, ?string $definition) {
@@ -245,10 +245,10 @@ it('computes failure_pct by the rule of each type', function (RecordType $type, 
         ...array_map(fn (array $fields) => rankRecord($type, 'a', 10, $fields), [...$failed, ...$kept]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => $type->value]);
+    $answer = Answers::assert(Rank::class, ['type' => $type->value]);
 
-    expect($envelope['result']['groups'][0]['failure_pct'])->toEqual($percent)
-        ->and($envelope['result']['failure_definition'])->toBe($definition);
+    expect($answer['result']['groups'][0]['failure_pct'])->toEqual($percent)
+        ->and($answer['result']['failure_definition'])->toBe($definition);
 })->with([
     'a request, from status 400 up' => [RecordType::REQUEST, [['status_code' => 404], ['status_code' => 500]], [['status_code' => 200], ['status_code' => 399]], 50.0, 'status >= 400'],
     'an outgoing request, from status 400 up' => [RecordType::OUTGOING_REQUEST, [['status_code' => 400]], [['status_code' => 200], ['status_code' => 302], ['status_code' => 204]], 25.0, 'status >= 400'],
@@ -344,9 +344,9 @@ it('counts the records of the window, the groups ranked and the records without 
         rankRecord(RecordType::QUERY, 'a', 10),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'until' => RANK_AT + 100]);
+    $answer = Answers::assert(Rank::class, ['type' => 'request', 'until' => RANK_AT + 100]);
 
-    expect($envelope['result'])->toMatchArray(['records' => 3, 'groups_ranked' => 2, 'records_without_group' => 1]);
+    expect($answer['result'])->toMatchArray(['records' => 3, 'groups_ranked' => 2, 'records_without_group' => 1]);
 });
 
 it('cuts the list at the limit, and says how to see more', function () {
@@ -356,33 +356,33 @@ it('cuts the list at the limit, and says how to see more', function () {
         rankRecord(RecordType::REQUEST, 'c', 30),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 2]);
+    $answer = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 2]);
 
-    expect(array_column($envelope['result']['groups'], 'group'))->toBe([rankHash('c'), rankHash('b')])
-        ->and($envelope['result']['groups_ranked'])->toBe(3)
-        ->and($envelope['truncated'])->toHaveCount(1)
-        ->and($envelope['truncated'][0])->toMatchArray(['section' => 'groups', 'shown' => 2, 'matched' => null, 'reason' => 'limit'])
-        ->and($envelope['truncated'][0]['how'])->toStartWith(__('firewatch::messages.rank_cursor_how', ['call' => 'rank(type: "request", by: "max_duration", limit: 2, cursor: "']));
+    expect(array_column($answer['result']['groups'], 'group'))->toBe([rankHash('c'), rankHash('b')])
+        ->and($answer['result']['groups_ranked'])->toBe(3)
+        ->and($answer['truncated'])->toHaveCount(1)
+        ->and($answer['truncated'][0])->toMatchArray(['section' => 'groups', 'shown' => 2, 'matched' => null, 'reason' => 'limit'])
+        ->and($answer['truncated'][0]['how'])->toStartWith(__('firewatch::messages.rank_cursor_how', ['call' => 'rank(type: "request", by: "max_duration", limit: 2, cursor: "']));
 });
 
 it('answers that the store holds nothing of the type in the window, naming the filters', function () {
     ingest([rankRecord(RecordType::REQUEST, 'a', 10, ['deploy' => 'v1'])]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'deploy' => 'v2']);
+    $answer = Answers::assert(Rank::class, ['type' => 'request', 'deploy' => 'v2']);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
-        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'type: request, deploy: v2']))
-        ->and($envelope['result'])->toBe([])
-        ->and(Envelope::assert(Rank::class, ['type' => 'request', 'since' => RANK_AT + 1])['empty']['kind'])->toBe('window_empty')
-        ->and(Envelope::assert(Rank::class, ['type' => 'query'])['empty']['kind'])->toBe('no_match');
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
+        ->and($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'type: request, deploy: v2']))
+        ->and($answer['result'])->toBe([])
+        ->and(Answers::assert(Rank::class, ['type' => 'request', 'since' => RANK_AT + 1])['empty']['kind'])->toBe('window_empty')
+        ->and(Answers::assert(Rank::class, ['type' => 'query'])['empty']['kind'])->toBe('no_match');
 });
 
 it('answers that the store is empty', function () {
     app(Writer::class)->transaction(fn () => null);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request']);
+    $answer = Answers::assert(Rank::class, ['type' => 'request']);
 
-    expect($envelope['empty']['kind'])->toBe('store_empty');
+    expect($answer['empty']['kind'])->toBe('store_empty');
 });
 
 it('refuses what it can not rank, naming what it accepts', function (array $arguments, string $key, string $argument, string $accepted, string $example, ?string $expected = null, ?string $value = null) {
@@ -443,7 +443,7 @@ it('leaves the duration of a skipped scheduled task out of the durations', funct
     expect($rows[0])->toMatchArray(['occurrences' => 2, 'max_ms' => 30.0, 'total_ms' => 30.0]);
 });
 
-it('shows the 95th percentile of memory at 20 records and falls back to the maximum below it', function () {
+it('shows the 95th percentile of memory at 20 records and substitutes the maximum below it', function () {
     ingest([
         ...array_map(fn (int $mb) => rankRecord(RecordType::REQUEST, 'a', 10, ['peak_memory_usage' => $mb * 1048576]), range(1, 20)),
         ...array_map(fn (int $mb) => rankRecord(RecordType::REQUEST, 'b', 10, ['peak_memory_usage' => $mb * 1048576]), [50, 2]),
@@ -462,11 +462,11 @@ function rankCreatedAt(): ?float
 }
 
 /**
- * @param  array<string, mixed>  $envelope
+ * @param  array<string, mixed>  $answer
  */
-function rankCursor(array $envelope): string
+function rankCursor(array $answer): string
 {
-    preg_match('/cursor: "([^"]+)"/', $envelope['truncated'][0]['how'], $matches);
+    preg_match('/cursor: "([^"]+)"/', $answer['truncated'][0]['how'], $matches);
 
     return $matches[1];
 }
@@ -482,12 +482,12 @@ function rankTwentyFiveGroups(): void
 /**
  * Get the labels of the groups an answer lists.
  *
- * @param  array<string, mixed>  $envelope
+ * @param  array<string, mixed>  $answer
  * @return list<string>
  */
-function rankLabels(array $envelope): array
+function rankLabels(array $answer): array
 {
-    return array_column($envelope['result']['groups'], 'label');
+    return array_column($answer['result']['groups'], 'label');
 }
 
 /**
@@ -535,10 +535,10 @@ it('matches the label requests that matched no route have', function () {
 it('answers that nothing matched, naming the filters', function () {
     ingest([rankRecord(RecordType::REQUEST, 'a', 10, ['route_path' => '/orders', 'deploy' => 'v1'])]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'matching' => 'users', 'deploy' => 'v1']);
+    $answer = Answers::assert(Rank::class, ['type' => 'request', 'matching' => 'users', 'deploy' => 'v1']);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
-        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'type: request, matching: users, deploy: v1']));
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
+        ->and($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => 'type: request, matching: users, deploy: v1']));
 });
 
 it('refuses a matching of no characters or of more than 200', function (string $matching) {
@@ -559,9 +559,9 @@ it('continues a cut list with the cursor, until the list is complete', function 
     rankTwentyFiveGroups();
     $arguments = ['type' => 'request', 'by' => 'max_duration', 'limit' => 10];
 
-    $first = Envelope::assert(Rank::class, $arguments);
-    $second = Envelope::assert(Rank::class, [...$arguments, 'cursor' => rankCursor($first)]);
-    $third = Envelope::assert(Rank::class, [...$arguments, 'cursor' => rankCursor($second)]);
+    $first = Answers::assert(Rank::class, $arguments);
+    $second = Answers::assert(Rank::class, [...$arguments, 'cursor' => rankCursor($first)]);
+    $third = Answers::assert(Rank::class, [...$arguments, 'cursor' => rankCursor($second)]);
 
     expect(rankLabels($first))->toBe(rankRoutes(0, 9))
         ->and(rankLabels($second))->toBe(rankRoutes(10, 19))
@@ -576,7 +576,7 @@ it('pages through ties and groups without the measure in the order of one unpage
     $expected = array_column(rankRows($arguments), 'group');
     $seen = [];
 
-    $page = Envelope::assert(Rank::class, [...$arguments, 'limit' => 1]);
+    $page = Answers::assert(Rank::class, [...$arguments, 'limit' => 1]);
 
     while (true) {
         array_push($seen, ...array_column($page['result']['groups'], 'group'));
@@ -585,21 +585,21 @@ it('pages through ties and groups without the measure in the order of one unpage
             break;
         }
 
-        $page = Envelope::assert(Rank::class, [...$arguments, 'limit' => 1, 'cursor' => rankCursor($page)]);
+        $page = Answers::assert(Rank::class, [...$arguments, 'limit' => 1, 'cursor' => rankCursor($page)]);
     }
 
     expect($seen)->toBe($expected)->and($expected)->toHaveCount(count($groups));
 })->with([
     'ties, then groups below the floor' => [['a' => array_fill(0, 20, 5), 'b' => array_fill(0, 20, 5), 'c' => [9, 9], 'd' => [9, 9], 'e' => [7]], 'p95_duration'],
-    'the fallback to the maximum' => [['a' => [5, 5], 'b' => [5, 5], 'c' => [8], 'd' => [1, 9], 'e' => [9, 1]], 'p95_duration'],
+    'the substitute of the maximum' => [['a' => [5, 5], 'b' => [5, 5], 'c' => [8], 'd' => [1, 9], 'e' => [9, 1]], 'p95_duration'],
     'the median with a null before ties' => [['a' => [4, 4, 4], 'b' => [4, 4, 4], 'c' => [4, 4], 'd' => [4]], 'p50_duration'],
 ]);
 
 it('lets the limit change between pages', function () {
     rankTwentyFiveGroups();
-    $first = Envelope::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 10]);
+    $first = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 10]);
 
-    $second = Envelope::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 3, 'cursor' => rankCursor($first)]);
+    $second = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 3, 'cursor' => rankCursor($first)]);
 
     expect(rankLabels($second))->toBe(rankRoutes(10, 12));
 });
@@ -607,12 +607,12 @@ it('lets the limit change between pages', function () {
 it('keeps the window of the first page, so records that came after it do not show up', function () {
     rankTwentyFiveGroups();
     $this->travelTo(Date::createFromTimestamp(RANK_AT + 1000));
-    $first = Envelope::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 10]);
+    $first = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 10]);
 
     $this->travelTo(Date::createFromTimestamp(RANK_AT + 2000));
     ingest([rankRecord(RecordType::REQUEST, 'f', 1000, ['route_path' => '/late', 'timestamp' => RANK_AT + 1500])]);
 
-    $second = Envelope::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 10, 'cursor' => rankCursor($first)]);
+    $second = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 10, 'cursor' => rankCursor($first)]);
 
     expect(rankLabels($second))->toBe(rankRoutes(10, 19))
         ->and($second['window']['until'])->toEqual(RANK_AT + 1000);
@@ -621,7 +621,7 @@ it('keeps the window of the first page, so records that came after it do not sho
 it('refuses a cursor that is no cursor, or of another tool or call, or from before a rebuild', function (Closure $arrange) {
     rankTwentyFiveGroups();
     $arguments = ['type' => 'request', 'by' => 'max_duration', 'limit' => 10];
-    $cursor = rankCursor(Envelope::assert(Rank::class, $arguments));
+    $cursor = rankCursor(Answers::assert(Rank::class, $arguments));
     $changed = $arrange($cursor, $arguments);
 
     $response = FirewatchServer::tool(Rank::class, $changed);
@@ -647,13 +647,13 @@ it('refuses a cursor that is no cursor, or of another tool or call, or from befo
 it('keeps a cursor valid across a clear', function () {
     rankTwentyFiveGroups();
     $arguments = ['type' => 'request', 'by' => 'max_duration', 'limit' => 10];
-    $cursor = rankCursor(Envelope::assert(Rank::class, $arguments));
+    $cursor = rankCursor(Answers::assert(Rank::class, $arguments));
     $exitCode = $this->artisan('firewatch:clear', ['--force' => true])->run();
 
-    $envelope = Envelope::assert(Rank::class, [...$arguments, 'cursor' => $cursor]);
+    $answer = Answers::assert(Rank::class, [...$arguments, 'cursor' => $cursor]);
 
     expect($exitCode)->toBe(0)
-        ->and($envelope['empty']['kind'])->toBe('store_empty');
+        ->and($answer['empty']['kind'])->toBe('store_empty');
 });
 
 it('breaks one group down by deploy, in the order the deploys were first seen', function () {
@@ -664,16 +664,16 @@ it('breaks one group down by deploy, in the order the deploys were first seen', 
         rankRecord(RecordType::REQUEST, 'b', 99, ['deploy' => 'other']),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
-    $rows = $envelope['result']['deploys'];
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a')]);
+    $rows = $answer['result']['deploys'];
 
     expect(array_column($rows, 'deploy'))->toBe(['v1', __('firewatch::messages.rank_no_deploy'), 'v2'])
         ->and($rows[0])->toMatchArray(['occurrences' => 20, 'p50_ms' => 10.0, 'p95_ms' => 19.0, 'max_ms' => 20.0, 'first_at' => RANK_AT, 'last_at' => RANK_AT, 'withheld' => null])
         ->and($rows[1])->toMatchArray(['occurrences' => 1, 'p50_ms' => null, 'p95_ms' => null, 'max_ms' => 5.0, 'values_ms' => [5.0]])
         ->and($rows[2])->toMatchArray(['occurrences' => 3, 'p50_ms' => 20.0, 'p95_ms' => null, 'max_ms' => 30.0, 'first_at' => RANK_AT + 100])
         ->and($rows[2]['withheld'])->toBe(['p95_ms' => ['reason' => 'sample_too_small', 'have' => 3, 'needed' => 20]])
-        ->and($envelope['result'])->toMatchArray(['type' => 'request', 'group' => rankHash('a'), 'label' => '/', 'records' => 24])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 3, ['group' => rankHash('a'), 'count' => 3]).__('firewatch::messages.rank_breakdown_dominant', ['stage' => 'bootstrap', 'share' => 14.3, 'avg' => 7.0]));
+        ->and($answer['result'])->toMatchArray(['type' => 'request', 'group' => rankHash('a'), 'label' => '/', 'records' => 24])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 3, ['group' => rankHash('a'), 'count' => 3]).__('firewatch::messages.rank_breakdown_dominant', ['stage' => 'bootstrap', 'share' => 14.3, 'avg' => 7.0]));
 });
 
 it('shows the most recent deploys the limit allows, still in the order they were first seen', function () {
@@ -684,10 +684,10 @@ it('shows the most recent deploys the limit allows, still in the order they were
         rankRecord(RecordType::REQUEST, 'a', 10, ['deploy' => 'v1', 'timestamp' => RANK_AT + 30]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a'), 'limit' => 2]);
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a'), 'limit' => 2]);
 
-    expect(array_column($envelope['result']['deploys'], 'deploy'))->toBe(['v1', 'v3'])
-        ->and($envelope['truncated'])->toBe([['section' => 'deploys', 'shown' => 2, 'matched' => 3, 'reason' => 'limit', 'how' => __('firewatch::messages.rank_truncated_how')]]);
+    expect(array_column($answer['result']['deploys'], 'deploy'))->toBe(['v1', 'v3'])
+        ->and($answer['truncated'])->toBe([['section' => 'deploys', 'shown' => 2, 'matched' => 3, 'reason' => 'limit', 'how' => __('firewatch::messages.rank_truncated_how')]]);
 });
 
 it('breaks a group down within the window', function () {
@@ -696,18 +696,18 @@ it('breaks a group down within the window', function () {
         rankRecord(RecordType::REQUEST, 'a', 10, ['deploy' => 'v2', 'timestamp' => RANK_AT + 100]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a'), 'since' => RANK_AT + 50]);
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a'), 'since' => RANK_AT + 50]);
 
-    expect(array_column($envelope['result']['deploys'], 'deploy'))->toBe(['v2']);
+    expect(array_column($answer['result']['deploys'], 'deploy'))->toBe(['v2']);
 });
 
 it('answers that the store holds no such group, with the filters', function (array $arguments, string $filters) {
     ingest([rankRecord(RecordType::REQUEST, 'a', 10)]);
 
-    $envelope = Envelope::assert(Rank::class, $arguments);
+    $answer = Answers::assert(Rank::class, $arguments);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
-        ->and($envelope['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => $filters]));
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 1])
+        ->and($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', ['population' => 1, 'filters' => $filters]));
 })->with([
     'a group of no type' => [['group' => str_repeat('f', 32)], 'group: ffffffffffffffffffffffffffffffff'],
     'a group of a type' => [['group' => str_repeat('f', 32), 'type' => 'query'], 'group: ffffffffffffffffffffffffffffffff, type: query'],
@@ -719,12 +719,12 @@ it('uses the job attempts of a job group when no type is given, and says so', fu
         rankRecord(RecordType::QUEUED_JOB, 'a', 5, ['deploy' => 'v1']),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
-    $explicit = Envelope::assert(Rank::class, ['group' => rankHash('a'), 'type' => 'queued-job']);
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a')]);
+    $explicit = Answers::assert(Rank::class, ['group' => rankHash('a'), 'type' => 'queued-job']);
 
-    expect($envelope['result']['type'])->toBe('job-attempt')
-        ->and($envelope['result']['deploys'][0]['max_ms'])->toEqual(10.0)
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.rank_job_group', ['group' => rankHash('a')])])
+    expect($answer['result']['type'])->toBe('job-attempt')
+        ->and($answer['result']['deploys'][0]['max_ms'])->toEqual(10.0)
+        ->and($answer['notes'])->toBe([__('firewatch::messages.rank_job_group', ['group' => rankHash('a')])])
         ->and($explicit['result']['type'])->toBe('queued-job')
         ->and($explicit['result']['deploys'][0]['max_ms'])->toEqual(5.0)
         ->and($explicit['notes'])->toBe([]);
@@ -750,10 +750,10 @@ it('points from a ranking to the breakdown of its worst group, in a call that ru
         rankRecord(RecordType::REQUEST, 'b', 90, ['deploy' => 'v1']),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'since' => RANK_AT - 1]);
-    $breakdown = Envelope::assert(Rank::class, $envelope['next'][0]['arguments']);
+    $answer = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'since' => RANK_AT - 1]);
+    $breakdown = Answers::assert(Rank::class, $answer['next'][0]['arguments']);
 
-    expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => rankHash('b'), 'since' => RANK_AT - 1], 'why' => __('firewatch::messages.rank_next_group')]])
+    expect($answer['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => rankHash('b'), 'since' => RANK_AT - 1], 'why' => __('firewatch::messages.rank_next_group')]])
         ->and($breakdown['result']['deploys'])->toHaveCount(1);
 });
 
@@ -761,11 +761,11 @@ it('points to the breakdown over the instants its window resolved to, so it read
     $this->travelTo(Date::createFromTimestamp(RANK_AT + 60));
     ingest([rankRecord(RecordType::REQUEST, 'a', 10, ['deploy' => 'v1'])]);
 
-    $envelope = Envelope::assert(Rank::class, ['type' => 'request', 'since' => '-2h', 'until' => 'now']);
+    $answer = Answers::assert(Rank::class, ['type' => 'request', 'since' => '-2h', 'until' => 'now']);
     $this->travel(3)->hours();
-    $breakdown = Envelope::assert(Rank::class, $envelope['next'][0]['arguments']);
+    $breakdown = Answers::assert(Rank::class, $answer['next'][0]['arguments']);
 
-    expect($envelope['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => rankHash('a'), 'since' => RANK_AT - 7140, 'until' => RANK_AT + 60], 'why' => __('firewatch::messages.rank_next_group')]])
+    expect($answer['next'])->toEqual([['tool' => 'rank', 'arguments' => ['group' => rankHash('a'), 'since' => RANK_AT - 7140, 'until' => RANK_AT + 60], 'why' => __('firewatch::messages.rank_next_group')]])
         ->and($breakdown['empty'])->toBeNull()
         ->and(array_column($breakdown['result']['deploys'], 'deploy'))->toBe(['v1']);
 });
@@ -801,7 +801,7 @@ it('counts no deploy for the requests the real sensor recorded without one, and 
     $this->get('/');
 
     $group = rankRows()[0];
-    $breakdown = Envelope::assert(Rank::class, ['type' => 'request', 'group' => $group['group']]);
+    $breakdown = Answers::assert(Rank::class, ['type' => 'request', 'group' => $group['group']]);
 
     expect($group['deploys'])->toBe(0)
         ->and(array_column($breakdown['result']['deploys'], 'deploy'))->toBe([__('firewatch::messages.rank_no_deploy')]);
@@ -833,9 +833,9 @@ it('breaks a request group into the mean of each stage in the order they run, it
         rankStaged(RecordType::REQUEST, 'b', ['render' => 900]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a'), 'since' => RANK_AT - 1]);
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a'), 'since' => RANK_AT - 1]);
 
-    expect($envelope['result'])->toMatchArray([
+    expect($answer['result'])->toMatchArray([
         'records' => 3,
         'dominant_stage' => 'action',
         'stage_executions' => 3,
@@ -843,7 +843,7 @@ it('breaks a request group into the mean of each stage in the order they run, it
         'slowest_execution_id' => 'e3',
         'slowest_duration_ms' => 44.0,
     ])
-        ->and($envelope['result']['stages'])->toEqual([
+        ->and($answer['result']['stages'])->toEqual([
             ['stage' => 'bootstrap', 'mean_ms' => 6.33, 'share_pct' => 15.1, 'slowest_ms' => 7.0],
             ['stage' => 'before_middleware', 'mean_ms' => 1.33, 'share_pct' => 3.2, 'slowest_ms' => 1.0],
             ['stage' => 'action', 'mean_ms' => 31.33, 'share_pct' => 74.6, 'slowest_ms' => 33.0],
@@ -852,15 +852,15 @@ it('breaks a request group into the mean of each stage in the order they run, it
             ['stage' => 'sending', 'mean_ms' => 0.33, 'share_pct' => 0.8, 'slowest_ms' => 1.0],
             ['stage' => 'terminating', 'mean_ms' => 2.0, 'share_pct' => 4.8, 'slowest_ms' => 2.0],
         ])
-        ->and(array_keys($envelope['result']))->toBe(['type', 'group', 'label', 'records', 'dominant_stage', 'stage_executions', 'stage_avg_ms', 'slowest_execution_id', 'slowest_duration_ms', 'stages', 'deploys'])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 1, ['group' => rankHash('a'), 'count' => 1]).__('firewatch::messages.rank_breakdown_dominant', ['stage' => 'action', 'share' => 74.6, 'avg' => 42.0]))
-        ->and($envelope['notes'])->toBe([]);
+        ->and(array_keys($answer['result']))->toBe(['type', 'group', 'label', 'records', 'dominant_stage', 'stage_executions', 'stage_avg_ms', 'slowest_execution_id', 'slowest_duration_ms', 'stages', 'deploys'])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 1, ['group' => rankHash('a'), 'count' => 1]).__('firewatch::messages.rank_breakdown_dominant', ['stage' => 'action', 'share' => 74.6, 'avg' => 42.0]))
+        ->and($answer['notes'])->toBe([]);
 });
 
 it('gives a tie for the highest mean to the stage that runs first', function (array $stages, string $dominant) {
     ingest([rankStaged(RecordType::REQUEST, 'a', $stages)]);
 
-    expect(Envelope::assert(Rank::class, ['group' => rankHash('a')])['result']['dominant_stage'])->toBe($dominant);
+    expect(Answers::assert(Rank::class, ['group' => rankHash('a')])['result']['dominant_stage'])->toBe($dominant);
 })->with([
     'bootstrap and action' => [['bootstrap' => 5, 'action' => 5, 'terminating' => 1], 'bootstrap'],
     'action and terminating' => [['bootstrap' => 1, 'action' => 5, 'terminating' => 5], 'action'],
@@ -873,20 +873,20 @@ it('leaves an execution with a missing stage out of the stages and counts it in 
         rankStaged(RecordType::REQUEST, 'a', ['action' => 100])->without('render'),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
-    $action = collect($envelope['result']['stages'])->firstWhere('stage', 'action');
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a')]);
+    $action = collect($answer['result']['stages'])->firstWhere('stage', 'action');
 
-    expect($envelope['result'])->toMatchArray(['records' => 3, 'stage_executions' => 2, 'stage_avg_ms' => 15.0])
+    expect($answer['result'])->toMatchArray(['records' => 3, 'stage_executions' => 2, 'stage_avg_ms' => 15.0])
         ->and($action)->toMatchArray(['mean_ms' => 15.0, 'share_pct' => 100.0])
-        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1, 'complete' => 2]));
+        ->and($answer['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1, 'complete' => 2]));
 });
 
 it('answers every stage field but the count null when no execution has all its stages', function () {
     ingest([rankStaged(RecordType::REQUEST, 'a', ['action' => 10])->without('render')]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a')]);
 
-    expect($envelope['result'])->toMatchArray([
+    expect($answer['result'])->toMatchArray([
         'dominant_stage' => null,
         'stage_executions' => 0,
         'stage_avg_ms' => null,
@@ -894,15 +894,15 @@ it('answers every stage field but the count null when no execution has all its s
         'slowest_duration_ms' => null,
         'stages' => null,
     ])
-        ->and($envelope['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1, 'complete' => 0]));
+        ->and($answer['notes'])->toContain(trans_choice('firewatch::messages.rank_stages_excluded', 1, ['count' => 1, 'complete' => 0]));
 });
 
 it('answers no stages for a type that records none', function (RecordType $type) {
     ingest([rankRecord($type, 'a', 10)]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a')]);
 
-    expect($envelope['result'])->toMatchArray([
+    expect($answer['result'])->toMatchArray([
         'type' => $type->value,
         'dominant_stage' => null,
         'stage_executions' => null,
@@ -911,7 +911,7 @@ it('answers no stages for a type that records none', function (RecordType $type)
         'slowest_duration_ms' => null,
         'stages' => null,
     ])
-        ->and($envelope['notes'])->toBe([]);
+        ->and($answer['notes'])->toBe([]);
 })->with([
     'a job attempt' => [RecordType::JOB_ATTEMPT],
     'a scheduled task' => [RecordType::SCHEDULED_TASK],
@@ -921,7 +921,7 @@ it('answers no stages for a type that records none', function (RecordType $type)
 it('says shares compare only between executions served the same way when the mean bootstrap is 0', function (int $bootstrap, bool $noted) {
     ingest([rankStaged(RecordType::REQUEST, 'a', ['bootstrap' => $bootstrap, 'action' => 5])]);
 
-    $notes = Envelope::assert(Rank::class, ['group' => rankHash('a')])['notes'];
+    $notes = Answers::assert(Rank::class, ['group' => rankHash('a')])['notes'];
 
     expect(in_array(__('firewatch::messages.rank_stages_bootstrap_zero'), $notes, true))->toBe($noted);
 })->with([
@@ -932,7 +932,7 @@ it('says shares compare only between executions served the same way when the mea
 it('says nothing of Octane for a command whose mean bootstrap is 0, since Octane serves only requests', function () {
     ingest([rankStaged(RecordType::COMMAND, 'a', ['action' => 5], ['name' => 'inspire'])]);
 
-    $notes = Envelope::assert(Rank::class, ['group' => rankHash('a')])['notes'];
+    $notes = Answers::assert(Rank::class, ['group' => rankHash('a')])['notes'];
 
     expect($notes)->not->toContain(__('firewatch::messages.rank_stages_bootstrap_zero'));
 });
@@ -944,18 +944,18 @@ it('reads the stages of every deploy in the window, also those past the limit of
         rankStaged(RecordType::REQUEST, 'a', ['action' => 30], ['deploy' => 'v3', 'timestamp' => RANK_AT + 20]),
     ]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a'), 'limit' => 1]);
-    $action = collect($envelope['result']['stages'])->firstWhere('stage', 'action');
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a'), 'limit' => 1]);
+    $action = collect($answer['result']['stages'])->firstWhere('stage', 'action');
 
-    expect($envelope['result']['deploys'])->toHaveCount(1)
-        ->and($envelope['result']['stage_executions'])->toBe(3)
+    expect($answer['result']['deploys'])->toHaveCount(1)
+        ->and($answer['result']['stage_executions'])->toBe(3)
         ->and($action['mean_ms'])->toEqual(20.0);
 });
 
 it('counts an execution with every stage but no duration in the means, and never takes it as the slowest', function () {
     ingest([rankStaged(RecordType::REQUEST, 'a', ['action' => 50], ['duration' => null])->inExecution('untimed')]);
 
-    $result = Envelope::assert(Rank::class, ['group' => rankHash('a')])['result'];
+    $result = Answers::assert(Rank::class, ['group' => rankHash('a')])['result'];
     $action = collect($result['stages'])->firstWhere('stage', 'action');
 
     expect($result)->toMatchArray(['stage_executions' => 1, 'stage_avg_ms' => 50.0, 'slowest_execution_id' => null, 'slowest_duration_ms' => null])
@@ -965,11 +965,11 @@ it('counts an execution with every stage but no duration in the means, and never
 it('names no dominant stage and no shares when the stages took no time', function () {
     ingest([rankStaged(RecordType::COMMAND, 'a', [], ['name' => 'inspire'])]);
 
-    $envelope = Envelope::assert(Rank::class, ['group' => rankHash('a')]);
+    $answer = Answers::assert(Rank::class, ['group' => rankHash('a')]);
 
-    expect($envelope['result'])->toMatchArray(['dominant_stage' => null, 'stage_executions' => 1, 'stage_avg_ms' => 0.0])
-        ->and(array_column($envelope['result']['stages'], 'share_pct'))->toBe([null, null, null])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 1, ['group' => rankHash('a'), 'count' => 1]));
+    expect($answer['result'])->toMatchArray(['dominant_stage' => null, 'stage_executions' => 1, 'stage_avg_ms' => 0.0])
+        ->and(array_column($answer['result']['stages'], 'share_pct'))->toBe([null, null, null])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.rank_breakdown_summary', 1, ['group' => rankHash('a'), 'count' => 1]));
 });
 
 it('takes the slowest execution among those with every stage, the later record on a tie', function () {
@@ -979,7 +979,7 @@ it('takes the slowest execution among those with every stage, the later record o
         rankStaged(RecordType::REQUEST, 'a', ['action' => 30])->inExecution('later'),
     ]);
 
-    expect(Envelope::assert(Rank::class, ['group' => rankHash('a')])['result'])->toMatchArray(['slowest_execution_id' => 'later', 'slowest_duration_ms' => 30.0]);
+    expect(Answers::assert(Rank::class, ['group' => rankHash('a')])['result'])->toMatchArray(['slowest_execution_id' => 'later', 'slowest_duration_ms' => 30.0]);
 });
 
 it('breaks a command the real sensor recorded into its three stages', function () {
@@ -987,7 +987,7 @@ it('breaks a command the real sensor recorded into its three stages', function (
     Nightwatch::digest();
 
     $group = rankRows(['type' => 'command'])[0];
-    $result = Envelope::assert(Rank::class, ['group' => $group['group']])['result'];
+    $result = Answers::assert(Rank::class, ['group' => $group['group']])['result'];
 
     expect(array_column($result['stages'], 'stage'))->toBe(['bootstrap', 'action', 'terminating'])
         ->and($result['stage_executions'])->toBe(1)

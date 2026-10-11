@@ -486,7 +486,7 @@ return [
 
     'rank_summary' => 'Ranked :count :type group by :by, worst first.|Ranked :count :type groups by :by, worst first.',
 
-    'rank_fallback' => 'No group has enough records for :statistic (needed :needed); ordered by max.',
+    'rank_substituted' => 'No group has enough records for :statistic (needed :needed); ordered by max.',
 
     'rank_untimed' => ':count record without duration is counted in occurrences and left out of the duration statistics.|:count records without duration are counted in occurrences and left out of the duration statistics.',
 

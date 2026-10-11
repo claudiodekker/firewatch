@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Catalogue;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
 use ClaudioDekker\Firewatch\Mcp\HoldingsSection;
@@ -47,7 +47,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Describe extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 

@@ -14,7 +14,7 @@ use ClaudioDekker\Firewatch\Sql\Availability;
 use ClaudioDekker\Firewatch\Sql\Child\Policy;
 use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Arr;
 use Laravel\Nightwatch\Core;
 
@@ -62,18 +62,18 @@ function dscFollow(array $call): array
 {
     $tool = ['describe' => Describe::class, 'query' => Query::class, 'rank' => Rank::class][$call['tool']];
 
-    return Envelope::assert($tool, $call['arguments']);
+    return Answers::assert($tool, $call['arguments']);
 }
 
 /**
  * Get the row of a column in the answer for a type.
  *
- * @param  array<string, mixed>  $envelope
+ * @param  array<string, mixed>  $answer
  * @return array<string, mixed>
  */
-function dscColumn(array $envelope, string $column): array
+function dscColumn(array $answer, string $column): array
 {
-    return Arr::first($envelope['result']['columns'], fn (array $row) => $row['column'] === $column);
+    return Arr::first($answer['result']['columns'], fn (array $row) => $row['column'] === $column);
 }
 
 it('answers what the store holds, then the schema and the SQL tool, in full', function () {
@@ -81,16 +81,16 @@ it('answers what the store holds, then the schema and the SQL tool, in full', fu
     dscSeed();
     $path = app(Configuration::class)->database;
 
-    $envelope = Envelope::assert(Describe::class);
-    $result = $envelope['result'];
+    $answer = Answers::assert(Describe::class);
+    $result = $answer['result'];
     $created = ['complete_from_at' => $clock, 'complete_reason' => 'created'];
 
     expect(array_keys($result))->toBe(['sqlite_version', 'file_bytes', 'live_bytes', 'wal_mitigation', 'source_capture', 'last_prune_at', 'dropped_records', 'types', 'deploys', 'drift', 'dropped_batches', 'units', 'json_access', 'join_keys', 'objects', 'tables', 'sql', 'examples'])
-        ->and($envelope['tool'])->toBe('describe')
-        ->and($envelope['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.describe_window_reason')])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.describe_summary', 4, ['records' => 4, 'types' => 3, 'sql' => __('firewatch::messages.describe_sql_available')]))
-        ->and($envelope['empty'])->toBeNull()
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'oldest_at' => 1790776000.5, 'newest_at' => 1790776100.5, 'records' => 4])
+        ->and($answer['tool'])->toBe('describe')
+        ->and($answer['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.describe_window_reason')])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.describe_summary', 4, ['records' => 4, 'types' => 3, 'sql' => __('firewatch::messages.describe_sql_available')]))
+        ->and($answer['empty'])->toBeNull()
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'oldest_at' => 1790776000.5, 'newest_at' => 1790776100.5, 'records' => 4])
         ->and($result['sqlite_version'])->toBe(SQLite3::version()['versionString'])
         ->and($result['file_bytes'])->toBe(filesize($path))
         ->and($result['live_bytes'])->toBeGreaterThan(0)
@@ -145,22 +145,22 @@ it('answers what the store holds, then the schema and the SQL tool, in full', fu
             __('firewatch::messages.describe_examples.header_names'),
         ])
         ->and(array_keys($result['tables'][0]))->toBe(['column', 'sql_type', 'wire', 'unit', 'values', 'nullable', 'indexed', 'examples', 'meaning'])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.describe_bytes_note')])
-        ->and($envelope['truncated'])->toBe([])
-        ->and(array_column($envelope['blind_spots'], 'kind'))->toContain('structural');
+        ->and($answer['notes'])->toBe([__('firewatch::messages.describe_bytes_note')])
+        ->and($answer['truncated'])->toBe([])
+        ->and(array_column($answer['blind_spots'], 'kind'))->toContain('structural');
 });
 
 it('describes the users table with the people the directory holds, in full', function () {
     dscClock();
     dscSeed();
 
-    $envelope = Envelope::assert(Describe::class, ['type' => 'user']);
+    $answer = Answers::assert(Describe::class, ['type' => 'user']);
 
-    expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.describe_type_summary', 1, ['object' => 'users', 'columns' => 5, 'records' => 1]))
-        ->and($envelope['empty'])->toBeNull()
-        ->and($envelope['coverage']['types_read'])->toBe(['user'])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('actor-partial')
-        ->and($envelope['result'])->toBe([
+    expect($answer['summary'])->toBe(trans_choice('firewatch::messages.describe_type_summary', 1, ['object' => 'users', 'columns' => 5, 'records' => 1]))
+        ->and($answer['empty'])->toBeNull()
+        ->and($answer['coverage']['types_read'])->toBe(['user'])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('actor-partial')
+        ->and($answer['result'])->toBe([
             'type' => 'user',
             'object' => 'users',
             'records' => 1,
@@ -174,7 +174,7 @@ it('describes the users table with the people the directory holds, in full', fun
             ],
             'examples' => (new Catalogue)->examples(RecordType::USER),
         ])
-        ->and($envelope['next'])->toBe([
+        ->and($answer['next'])->toBe([
             ['tool' => 'query', 'arguments' => ['sql' => Catalogue::TYPE_EXAMPLES['user']['user_directory']], 'why' => __('firewatch::messages.describe_next_query')],
         ]);
 });
@@ -183,10 +183,10 @@ it('describes every type by its object, its recipe and three statements', functi
     dscClock();
     dscSeed();
 
-    $envelope = Envelope::assert(Describe::class, ['type' => $type]);
-    $result = $envelope['result'];
+    $answer = Answers::assert(Describe::class, ['type' => $type]);
+    $result = $answer['result'];
 
-    expect($envelope['coverage']['types_read'])->toBe([$type])
+    expect($answer['coverage']['types_read'])->toBe([$type])
         ->and($result['type'])->toBe($type)
         ->and($result['object'])->toBe($object)
         ->and(array_column($result['columns'], 'column'))->toBe(array_column((new Catalogue)->columns($object), 'column'))
@@ -212,16 +212,16 @@ it('shows the recent values of a column, five at most, newest first, and never o
     dscClock();
     ingest(array_map(fn (int $index) => syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.5 + $index, 'route_path' => "/page-{$index}", 'status_code' => $index % 2 === 0 ? 200 : 500]), range(1, 8)));
 
-    $envelope = Envelope::assert(Describe::class, ['type' => 'request']);
+    $answer = Answers::assert(Describe::class, ['type' => 'request']);
 
-    expect(dscColumn($envelope, 'route_path')['examples'])->toBe(['/page-8', '/page-7', '/page-6', '/page-5', '/page-4'])
-        ->and(dscColumn($envelope, 'status_code')['examples'])->toBe([200, 500])
-        ->and(dscColumn($envelope, 'started_at')['examples'])->toBe([1790776008.5, 1790776007.5, 1790776006.5, 1790776005.5, 1790776004.5])
-        ->and(dscColumn($envelope, 'id')['examples'])->toBe([])
-        ->and(dscColumn($envelope, 'data')['examples'])->toBe([])
-        ->and(dscColumn($envelope, 'headers')['examples'])->toBe([])
-        ->and(dscColumn($envelope, 'context')['examples'])->toBe([])
-        ->and(dscColumn($envelope, 'route_methods')['examples'])->toBe([]);
+    expect(dscColumn($answer, 'route_path')['examples'])->toBe(['/page-8', '/page-7', '/page-6', '/page-5', '/page-4'])
+        ->and(dscColumn($answer, 'status_code')['examples'])->toBe([200, 500])
+        ->and(dscColumn($answer, 'started_at')['examples'])->toBe([1790776008.5, 1790776007.5, 1790776006.5, 1790776005.5, 1790776004.5])
+        ->and(dscColumn($answer, 'id')['examples'])->toBe([])
+        ->and(dscColumn($answer, 'data')['examples'])->toBe([])
+        ->and(dscColumn($answer, 'headers')['examples'])->toBe([])
+        ->and(dscColumn($answer, 'context')['examples'])->toBe([])
+        ->and(dscColumn($answer, 'route_methods')['examples'])->toBe([]);
 });
 
 it('draws example values from the latest 200 records only', function (int $records, bool $shown) {
@@ -230,10 +230,10 @@ it('draws example values from the latest 200 records only', function (int $recor
     $later = array_map(fn (int $index) => syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790770000.0 + $index, 'server' => 'recent']), range(1, $records - 1));
     ingest([$oldest, ...$later]);
 
-    $envelope = Envelope::assert(Describe::class, ['type' => 'request']);
+    $answer = Answers::assert(Describe::class, ['type' => 'request']);
 
-    expect(in_array('oldest', dscColumn($envelope, 'server')['examples'], true))->toBe($shown)
-        ->and(dscColumn($envelope, 'server')['examples'][0])->toBe('recent');
+    expect(in_array('oldest', dscColumn($answer, 'server')['examples'], true))->toBe($shown)
+        ->and(dscColumn($answer, 'server')['examples'][0])->toBe('recent');
 })->with([
     'the 200th newest' => [200, true],
     'the 201st newest' => [201, false],
@@ -243,9 +243,9 @@ it('cuts a long value to 40 characters', function () {
     dscClock();
     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0, 'url' => 'http://localhost/'.str_repeat('a', 300)])]);
 
-    $envelope = Envelope::assert(Describe::class, ['type' => 'request']);
+    $answer = Answers::assert(Describe::class, ['type' => 'request']);
 
-    expect(dscColumn($envelope, 'url')['examples'])->toBe([substr('http://localhost/'.str_repeat('a', 300), 0, 40)]);
+    expect(dscColumn($answer, 'url')['examples'])->toBe([substr('http://localhost/'.str_repeat('a', 300), 0, 40)]);
 });
 
 it('keeps 0 and "0" apart among the values of a column', function () {
@@ -255,9 +255,9 @@ it('keeps 0 and "0" apart among the values of a column', function () {
         syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.5, 'status_code' => 0]),
     ]);
 
-    $envelope = Envelope::assert(Describe::class, ['type' => 'request']);
+    $answer = Answers::assert(Describe::class, ['type' => 'request']);
 
-    expect(dscColumn($envelope, 'status_code')['examples'])->toBe(['0', 0]);
+    expect(dscColumn($answer, 'status_code')['examples'])->toBe(['0', 0]);
 });
 
 it('lists the deploys newest first, twenty at most, and says when it cut them', function (int $deploys, bool $cut) {
@@ -267,10 +267,10 @@ it('lists the deploys newest first, twenty at most, and says when it cut them', 
         syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776500.0, 'deploy' => '']),
     ]);
 
-    $envelope = Envelope::assert(Describe::class);
+    $answer = Answers::assert(Describe::class);
 
-    expect(array_column($envelope['result']['deploys'], 'deploy'))->toBe(array_map(fn (int $index) => "deploy-{$index}", range($deploys, $deploys - 19)))
-        ->and($envelope['truncated'])->toBe($cut ? [['section' => 'deploys', 'shown' => 20, 'matched' => null, 'reason' => 'limit', 'how' => __('firewatch::messages.describe_deploys_how')]] : []);
+    expect(array_column($answer['result']['deploys'], 'deploy'))->toBe(array_map(fn (int $index) => "deploy-{$index}", range($deploys, $deploys - 19)))
+        ->and($answer['truncated'])->toBe($cut ? [['section' => 'deploys', 'shown' => 20, 'matched' => null, 'reason' => 'limit', 'how' => __('firewatch::messages.describe_deploys_how')]] : []);
 })->with([
     'twenty deploys' => [20, false],
     'twenty-one deploys' => [21, true],
@@ -282,7 +282,7 @@ it('lists what Nightwatch\'s output drifted from and the batches the store dropp
     $lines = array_map(fn (int $index) => json_encode(['at' => 1790776000.5 + $index, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => $index]), range(1, 6));
     file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', implode("\n", $lines)."\n");
 
-    $result = Envelope::assert(Describe::class)['result'];
+    $result = Answers::assert(Describe::class)['result'];
 
     expect($result['drift'])->toBe([['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen_at' => $clock]])
         ->and($result['dropped_records'])->toBe(21)
@@ -301,10 +301,10 @@ it('lists the drift the store notes for itself, which no record type carries', f
     app(Core::class)->ingest = app(Ingest::class);
     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
 
-    $envelope = Envelope::assert(Describe::class);
+    $answer = Answers::assert(Describe::class);
 
-    expect($envelope['result']['drift'])->toBe([['kind' => 'structure', 'type' => '', 'count' => 1, 'last_seen_at' => $clock]])
-        ->and($envelope['summary'])->toBe(trans_choice('firewatch::messages.describe_summary', 1, ['records' => '1', 'types' => 1, 'sql' => __('firewatch::messages.describe_sql_available')]));
+    expect($answer['result']['drift'])->toBe([['kind' => 'structure', 'type' => '', 'count' => 1, 'last_seen_at' => $clock]])
+        ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.describe_summary', 1, ['records' => '1', 'types' => 1, 'sql' => __('firewatch::messages.describe_sql_available')]));
 });
 
 it('names the pass that last claimed the prune and the types stored outside the contract', function () {
@@ -312,18 +312,18 @@ it('names the pass that last claimed the prune and the types stored outside the 
     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0]), ['t' => 'sandwich', 'v' => 1, 'timestamp' => 1790776001.0]]);
     $this->travel(30)->seconds();
 
-    $envelope = Envelope::assert(Describe::class);
+    $answer = Answers::assert(Describe::class);
 
-    expect($envelope['result']['last_prune_at'])->toBe($claimed)
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.describe_bytes_note'), __('firewatch::messages.describe_unknown_types', ['types' => 'sandwich'])]);
+    expect($answer['result']['last_prune_at'])->toBe($claimed)
+        ->and($answer['notes'])->toBe([__('firewatch::messages.describe_bytes_note'), __('firewatch::messages.describe_unknown_types', ['types' => 'sandwich'])]);
 });
 
 it('answers before anything was recorded with the shipped catalogue, saying the store is absent', function () {
     dscClock();
     $path = app(Configuration::class)->database;
 
-    $store = Envelope::assert(Describe::class);
-    $type = Envelope::assert(Describe::class, ['type' => 'request']);
+    $store = Answers::assert(Describe::class);
+    $type = Answers::assert(Describe::class, ['type' => 'request']);
 
     expect($store['summary'])->toBe(__('firewatch::messages.describe_summary_absent'))
         ->and(array_keys($store['result']))->toBe(['units', 'json_access', 'join_keys', 'objects', 'tables', 'sql', 'examples'])
@@ -341,8 +341,8 @@ it('answers an empty store with the catalogue and the store facts, saying it hol
     $path = app(Configuration::class)->database;
     app(Writer::class)->transaction(fn () => null);
 
-    $store = Envelope::assert(Describe::class);
-    $type = Envelope::assert(Describe::class, ['type' => 'request']);
+    $store = Answers::assert(Describe::class);
+    $type = Answers::assert(Describe::class, ['type' => 'request']);
 
     expect($store['empty'])->toBe(['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => $path])])
         ->and($store['summary'])->toBe(__('firewatch::messages.describe_summary_empty'))
@@ -363,8 +363,8 @@ it('answers a store it cannot read with the catalogue and the reason', function 
     mkdir(dirname($path), recursive: true);
     file_put_contents($path, str_repeat('not a database ', 100));
 
-    $store = Envelope::assert(Describe::class);
-    $type = Envelope::assert(Describe::class, ['type' => 'exception']);
+    $store = Answers::assert(Describe::class);
+    $type = Answers::assert(Describe::class, ['type' => 'exception']);
 
     expect($store['summary'])->toBe(__('firewatch::messages.describe_summary_unusable'))
         ->and($store['result']['objects'])->toHaveCount(16)
@@ -379,8 +379,8 @@ it('does not write anything where the store is', function () {
     $path = app(Configuration::class)->database;
     $before = [md5_file($path), scandir(dirname($path))];
 
-    Envelope::assert(Describe::class);
-    Envelope::assert(Describe::class, ['type' => 'request']);
+    Answers::assert(Describe::class);
+    Answers::assert(Describe::class, ['type' => 'request']);
 
     expect([md5_file($path), scandir(dirname($path))])->toBe($before);
 });
@@ -390,20 +390,20 @@ it('says why the SQL tool cannot run, in the words the SQL tool refuses with', f
     dscSeed();
     app()->instance(Availability::class, new Availability(sqliteVersion: fn () => null));
 
-    $store = Envelope::assert(Describe::class);
+    $store = Answers::assert(Describe::class);
 
     expect($store['result']['sql']['available'])->toBeFalse()
         ->and($store['result']['sql']['reason'])->toBe(__('firewatch::messages.sql_unavailable.sqlite3_missing'))
         ->and(array_column($store['next'], 'tool'))->not->toContain('query')
         ->and(dscText(Query::class, ['sql' => 'SELECT 1']))->toBe(__('firewatch::messages.unavailable', ['reason' => $store['result']['sql']['reason']]))
-        ->and(array_column(Envelope::assert(Describe::class, ['type' => 'request'])['next'], 'tool'))->toBe(['rank']);
+        ->and(array_column(Answers::assert(Describe::class, ['type' => 'request'])['next'], 'tool'))->toBe(['rank']);
 });
 
 it('offers the busiest types and the first example, and every call it offers answers', function () {
     dscClock();
     dscSeed();
 
-    $store = Envelope::assert(Describe::class);
+    $store = Answers::assert(Describe::class);
 
     expect($store['next'])->toBe([
         ['tool' => 'describe', 'arguments' => ['type' => 'request'], 'why' => __('firewatch::messages.describe_next_type', ['type' => 'request'])],
@@ -413,12 +413,12 @@ it('offers the busiest types and the first example, and every call it offers ans
     ]);
 
     foreach ($store['next'] as $call) {
-        $answer = dscFollow($call);
+        $followed = dscFollow($call);
 
-        expect($answer['tool'])->toBe($call['tool']);
+        expect($followed['tool'])->toBe($call['tool']);
     }
 
-    $request = Envelope::assert(Describe::class, ['type' => 'request']);
+    $request = Answers::assert(Describe::class, ['type' => 'request']);
 
     expect($request['next'])->toBe([
         ['tool' => 'rank', 'arguments' => ['type' => 'request'], 'why' => __('firewatch::messages.describe_next_rank')],
@@ -448,8 +448,8 @@ it('fits the answer budget with the longest values a request can have and twenty
         'deploy' => $index.str_repeat('d', 199),
     ]), range(1, 20)));
 
-    $request = Envelope::assert(Describe::class, ['type' => 'request']);
-    $store = Envelope::assert(Describe::class);
+    $request = Answers::assert(Describe::class, ['type' => 'request']);
+    $store = Answers::assert(Describe::class);
 
     expect($request['truncated'])->toBe([])
         ->and($store['truncated'])->toBe([])
@@ -471,5 +471,5 @@ it('is read-only and idempotent: asking twice gives the same answer', function (
     dscClock();
     dscSeed();
 
-    expect(Envelope::assert(Describe::class))->toBe(Envelope::assert(Describe::class));
+    expect(Answers::assert(Describe::class))->toBe(Answers::assert(Describe::class));
 });

@@ -4,7 +4,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Artisan;
 
 /**
@@ -38,7 +38,7 @@ function nothingCapturedAnswers(): array
 
     foreach (FirewatchServer::TOOLS as $tool) {
         $name = app($tool)->name();
-        $answers[$name] = Envelope::assert($tool, nothingCapturedArguments()[$name] ?? []);
+        $answers[$name] = Answers::assert($tool, nothingCapturedArguments()[$name] ?? []);
     }
 
     return $answers;
@@ -83,7 +83,7 @@ it('gives every detector shape the verdict not evaluated, never clean', function
     foreach (DetectorName::cases() as $name) {
         $shape = $name->value;
 
-        $answer = Envelope::assert(Detect::class, ['shape' => $shape]);
+        $answer = Answers::assert(Detect::class, ['shape' => $shape]);
 
         expect($answer['result']['verdict'])->toBe('not_evaluated', $shape)
             ->and($answer['result']['examined'])->toBe(0, $shape);

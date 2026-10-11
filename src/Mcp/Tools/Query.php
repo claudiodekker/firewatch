@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Bounds;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Frame;
@@ -45,7 +45,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Query extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -112,7 +112,7 @@ class Query extends Tool
     }
 
     /**
-     * Run the statement in the SQL child and put its rows in the envelope.
+     * Run the statement in the SQL child and put its rows in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
@@ -163,7 +163,7 @@ class Query extends Tool
     }
 
     /**
-     * Put the rows in the envelope, with the coverage and blind spots of the types the statement read.
+     * Put the rows in the answer, with the coverage and blind spots of the types the statement read.
      */
     protected function rows(Frame $frame, SqlRows $rows, string $sql, int $limit): Answer
     {

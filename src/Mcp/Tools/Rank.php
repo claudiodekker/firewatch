@@ -6,7 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Continuation;
 use ClaudioDekker\Firewatch\Mcp\Failure;
@@ -45,7 +45,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Rank extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -107,7 +107,7 @@ class Rank extends Tool
     }
 
     /**
-     * Read the arguments, then the store, and put the ranking, or the breakdown of one group, in the envelope.
+     * Read the arguments, then the store, and put the ranking, or the breakdown of one group, in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
@@ -180,7 +180,7 @@ class Rank extends Tool
     }
 
     /**
-     * Put the groups, worst first, in the envelope.
+     * Put the groups, worst first, in the answer.
      *
      * @param  Continuation<array{value: int|float|null, occurrences: int, hash: string}>  $continuation
      * @param  Closure(Frame): Answer  $unranked
@@ -223,7 +223,7 @@ class Rank extends Tool
     }
 
     /**
-     * Put the deploys one group was recorded under in the envelope.
+     * Put the deploys one group was recorded under in the answer.
      *
      * @param  Closure(Frame): Answer  $unranked
      * @param  array{page: Rows<array<string, mixed>>, rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}  $breakdown
@@ -316,7 +316,7 @@ class Rank extends Tool
         $notes = [];
 
         if ($ranked['orderedBy'] !== $by && ($floor = $by->floor()) !== null) {
-            $notes[] = __('firewatch::messages.rank_fallback', [
+            $notes[] = __('firewatch::messages.rank_substituted', [
                 'statistic' => $floor[0],
                 'needed' => $floor[1],
             ]);

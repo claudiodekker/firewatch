@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Continuation;
 use ClaudioDekker\Firewatch\Mcp\Frame;
@@ -48,7 +48,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Occurrences extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -125,7 +125,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the arguments, then the store, and put the list in the envelope.
+     * Read the arguments, then the store, and put the list in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
@@ -237,7 +237,7 @@ class Occurrences extends Tool
     }
 
     /**
-     * Put the rows, newest or worst first, in the envelope.
+     * Put the rows, newest or worst first, in the answer.
      *
      * @param  Continuation<array{value: int|float, id: int}>  $continuation
      * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read

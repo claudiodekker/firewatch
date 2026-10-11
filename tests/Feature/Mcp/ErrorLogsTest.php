@@ -6,7 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -66,7 +66,7 @@ function elogException(string $execution, array $fields = []): RecordBuilder
  */
 function elogAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'error-logs', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'error-logs', ...$arguments]);
 }
 
 /**
@@ -88,9 +88,9 @@ describe('the verdict', function () {
             syntheticRecord(RecordType::QUERY),
         ]);
 
-        $envelope = elogAnswer();
+        $answer = elogAnswer();
 
-        expect($envelope['result'])->toMatchArray([
+        expect($answer['result'])->toMatchArray([
             'detector' => 'error-logs',
             'threshold' => ['name' => 'occurrences', 'value' => 1, 'default' => 1, 'unit' => 'occurrences', 'range' => ['min' => 1, 'max' => null], 'is_default' => true],
             'verdict' => 'findings',
@@ -98,10 +98,10 @@ describe('the verdict', function () {
             'examined' => 3,
             'total' => 1,
             'saw' => [],
-        ])->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'error-logs', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.error-logs')]))
-            ->and($envelope['summary'])->not->toContain('firewatch::')
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['The payment failed.'])
-            ->and($envelope['result']['findings'][0]['evidence']['level'])->toBe($level);
+        ])->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'error-logs', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.error-logs')]))
+            ->and($answer['summary'])->not->toContain('firewatch::')
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['The payment failed.'])
+            ->and($answer['result']['findings'][0]['evidence']['level'])->toBe($level);
     })->with(['error', 'critical', 'alert', 'emergency']);
 
     it('reads a level whatever its case', function () {
@@ -117,20 +117,20 @@ describe('the verdict', function () {
     it('is clean over the logs of every level when none is at error or worse, and says how many', function () {
         ingest(array_map(fn (string $level) => elogLine('The payment is slow.', $level), ['debug', 'info', 'notice', 'warning']));
 
-        $envelope = elogAnswer();
+        $answer = elogAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 4, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'error-logs', 'examined' => 4, 'input' => __('firewatch::messages.detect_input.error-logs')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 4, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'error-logs', 'examined' => 4, 'input' => __('firewatch::messages.detect_input.error-logs')]));
     });
 
     it('is not evaluated when the window holds no log, never clean', function (Closure $records, array $arguments) {
         ingest($records());
 
-        $envelope = elogAnswer($arguments);
+        $answer = elogAnswer($arguments);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'error-logs', 'reason' => 'no_records']))
-            ->and($envelope['next'])->toBe([]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'error-logs', 'reason' => 'no_records']))
+            ->and($answer['next'])->toBe([]);
     })->with([
         'records of other types' => [fn () => [elogRequest('a'), elogException('a'), syntheticRecord(RecordType::QUERY)], []],
         'an error before the window' => [fn () => [elogLine('The payment failed.', fields: ['timestamp' => ELOG_AT - 1])], ['since' => (string) ELOG_AT]],
@@ -206,9 +206,9 @@ describe('the finding', function () {
             elogLine('Payment 0b5d8f1c-0a51-4c5e-9d39-6f0f4a8f6e21 declined for order 12', fields: ['execution_id' => 'last', 'timestamp' => ELOG_AT + 9]),
         ]);
 
-        $envelope = elogAnswer();
+        $answer = elogAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => null,
             'name' => 'Payment <id> declined for order <n>',
             'count' => 2,
@@ -224,7 +224,7 @@ describe('the finding', function () {
                 'occurrences' => 2,
                 'in_executions_with_exception' => 1,
             ],
-        ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
+        ]])->and($answer['result']['findings'][0])->not->toHaveKey('worst_execution_id');
     });
 
     it('points at the line stored last of two that were written together', function () {
@@ -246,10 +246,10 @@ describe('the finding', function () {
             elogLine('Order 2 failed', fields: ['execution_id' => '', 'timestamp' => ELOG_AT + 2]),
         ]);
 
-        $envelope = elogAnswer();
+        $answer = elogAnswer();
 
-        expect($envelope['result']['findings'][0])->toMatchArray(['count' => 2, 'latest_execution_id' => null])
-            ->and(array_column($envelope['next'], 'tool'))->toBe(['occurrences']);
+        expect($answer['result']['findings'][0])->toMatchArray(['count' => 2, 'latest_execution_id' => null])
+            ->and(array_column($answer['next'], 'tool'))->toBe(['occurrences']);
     });
 
     it('counts the distinct actors its lines reached, and the lines without one', function () {
@@ -269,11 +269,11 @@ describe('the finding', function () {
 
         ingest([elogLine($message)]);
 
-        $envelope = elogAnswer();
-        $listing = collect($envelope['next'])->firstWhere('tool', 'occurrences');
+        $answer = elogAnswer();
+        $listing = collect($answer['next'])->firstWhere('tool', 'occurrences');
 
-        expect($envelope['result']['findings'][0]['evidence'])->toMatchArray(['message' => $message, 'shape' => str_repeat('é', 250).' in order <n>', 'fragment' => str_repeat('é', 200)])
-            ->and(Envelope::assert(Occurrences::class, $listing['arguments'])['result']['rows'])->toHaveCount(1);
+        expect($answer['result']['findings'][0]['evidence'])->toMatchArray(['message' => $message, 'shape' => str_repeat('é', 250).' in order <n>', 'fragment' => str_repeat('é', 200)])
+            ->and(Answers::assert(Occurrences::class, $listing['arguments'])['result']['rows'])->toHaveCount(1);
     });
 });
 
@@ -416,11 +416,11 @@ describe('the order', function () {
             ...elogLines(4, 'Four times'),
         ]);
 
-        $envelope = elogAnswer(['limit' => $limit]);
+        $answer = elogAnswer(['limit' => $limit]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe($names)
-            ->and($envelope['result'])->toMatchArray(['examined' => 11, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => $limit, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how_ungrouped')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe($names)
+            ->and($answer['result'])->toMatchArray(['examined' => 11, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => $limit, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how_ungrouped')]]);
     })->with([
         'one' => [1, ['Four times']],
         'three' => [3, ['Four times', 'Thrice', 'Twice']],
@@ -429,11 +429,11 @@ describe('the order', function () {
     it('is complete when exactly the limit is shown', function () {
         ingest([elogLine('One'), elogLine('Two'), elogLine('Three')]);
 
-        $envelope = elogAnswer(['limit' => 3]);
+        $answer = elogAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)
-            ->and($envelope['result']['total'])->toBe(3)
-            ->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)
+            ->and($answer['result']['total'])->toBe(3)
+            ->and($answer['truncated'])->toBe([]);
     });
 });
 
@@ -503,21 +503,21 @@ describe('what to look at next', function () {
             elogLine('Payment 9 declined for order 13', 'warning', ['execution_id' => 'c']),
         ]);
 
-        $envelope = elogAnswer();
+        $answer = elogAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class];
 
-        expect(array_column(array_column($envelope['result']['findings'], 'evidence'), 'level'))->toBe(['critical', 'error', 'emergency'])
-            ->and($envelope['next'])->toBe([
+        expect(array_column(array_column($answer['result']['findings'], 'evidence'), 'level'))->toBe(['critical', 'error', 'emergency'])
+            ->and($answer['next'])->toBe([
                 ['tool' => 'execution', 'arguments' => ['execution_id' => 'b'], 'why' => __('firewatch::messages.detect_next_execution')],
                 ['tool' => 'occurrences', 'arguments' => ['type' => 'log', 'level' => 'critical', 'matching' => 'declined for order'], 'why' => __('firewatch::messages.detect_next_log_lines')],
                 ['tool' => 'execution', 'arguments' => ['execution_id' => 'c'], 'why' => __('firewatch::messages.detect_next_execution')],
             ]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
 
-        $lines = Envelope::assert(Occurrences::class, $envelope['next'][1]['arguments'])['result']['rows'];
+        $lines = Answers::assert(Occurrences::class, $answer['next'][1]['arguments'])['result']['rows'];
 
         expect(array_column(array_column($lines, 'detail'), 'message'))->toEqualCanonicalizing(['Payment 7 declined for order 4471', 'Payment 8 declined for order 12']);
     });
@@ -528,13 +528,13 @@ describe('what to look at next', function () {
             elogLine('The payment is slow.', 'warning'),
         ]);
 
-        $envelope = elogAnswer();
+        $answer = elogAnswer();
 
-        expect($envelope['next'])->toBe([
+        expect($answer['next'])->toBe([
             ['tool' => 'occurrences', 'arguments' => ['type' => 'log', 'level' => 'alert'], 'why' => __('firewatch::messages.detect_next_log_level')],
         ]);
 
-        $lines = Envelope::assert(Occurrences::class, $envelope['next'][0]['arguments'])['result']['rows'];
+        $lines = Answers::assert(Occurrences::class, $answer['next'][0]['arguments'])['result']['rows'];
 
         expect(array_column(array_column($lines, 'detail'), 'message'))->toBe(['3fa85f64-5717-4562-b3fc-2c963f66afa6']);
     });
@@ -548,7 +548,7 @@ describe('with the other shapes', function () {
             elogLine('The card was declined.', 'critical'),
         ]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'error-logs');
 
         expect($row)->toBe([
@@ -564,7 +564,7 @@ describe('with the other shapes', function () {
     it('is run between exception-clusters and failing-http when no shape is named', function () {
         ingest([elogLine('The payment failed.')]);
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[7])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1]);

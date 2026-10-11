@@ -167,7 +167,7 @@ class Window
     }
 
     /**
-     * Get the window as the envelope's `window` key.
+     * Get the window as the answer's `window` key.
      *
      * @return array<string, mixed>
      */

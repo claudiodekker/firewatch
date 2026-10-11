@@ -9,10 +9,10 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use PHPUnit\Framework\Assert;
 
-class Envelope
+class Answers
 {
     /**
-     * The keys of every envelope, in order.
+     * The keys of every answer, in order.
      */
     public const KEYS = ['tool', 'now', 'window', 'summary', 'empty', 'result', 'coverage', 'blind_spots', 'notes', 'truncated', 'next'];
 
@@ -66,7 +66,7 @@ class Envelope
     }
 
     /**
-     * Call the tool in JSON and in markdown, assert that both carry the same answer in the fixed shape, and get the envelope.
+     * Call the tool in JSON and in markdown, assert that both carry the same answer in the fixed shape, and get the answer.
      *
      * While following is on, every call the answer offers is run and asserted the same way.
      *
@@ -81,15 +81,15 @@ class Envelope
         Date::setTestNow($mocked ? Date::getTestNow() : Date::now());
 
         try {
-            $envelope = self::calls($tool, $arguments);
+            $answer = self::calls($tool, $arguments);
 
             if (self::$following) {
-                foreach ($envelope['next'] as $call) {
+                foreach ($answer['next'] as $call) {
                     self::follow($call);
                 }
             }
 
-            return $envelope;
+            return $answer;
         } finally {
             Date::setTestNow($mocked ? Date::getTestNow() : null);
         }
@@ -105,28 +105,28 @@ class Envelope
     protected static function calls(string $tool, array $arguments): array
     {
         $json = FirewatchServer::tool($tool, [...$arguments, 'format' => 'json']);
-        $envelope = (fn () => $this->structuredContent())->call($json);
+        $answer = (fn () => $this->structuredContent())->call($json);
         $blocks = (fn () => $this->content())->call($json);
 
-        Assert::assertSame(self::KEYS, array_keys($envelope));
+        Assert::assertSame(self::KEYS, array_keys($answer));
         Assert::assertCount(1, $blocks);
-        Assert::assertEquals($envelope, json_decode($blocks[0], associative: true, flags: JSON_THROW_ON_ERROR));
+        Assert::assertEquals($answer, json_decode($blocks[0], associative: true, flags: JSON_THROW_ON_ERROR));
 
         $markdown = (fn () => $this->content())->call(FirewatchServer::tool($tool, $arguments));
 
         Assert::assertCount(1, $markdown);
-        self::assertLayout($envelope, explode("\n", $markdown[0]));
+        self::assertLayout($answer, explode("\n", $markdown[0]));
 
-        return $envelope;
+        return $answer;
     }
 
     /**
-     * Assert that the markdown has the lines of the envelope, in the fixed order.
+     * Assert that the markdown has the lines of the answer, in the fixed order.
      *
-     * @param  array<string, mixed>  $envelope
+     * @param  array<string, mixed>  $answer
      * @param  list<string>  $lines
      */
-    protected static function assertLayout(array $envelope, array $lines): void
+    protected static function assertLayout(array $answer, array $lines): void
     {
         $position = 0;
         $expect = function (string $line) use (&$position, $lines) {
@@ -134,26 +134,26 @@ class Envelope
             $position++;
         };
 
-        $expect("## {$envelope['tool']}");
-        $expect($envelope['summary']);
-        $expect($envelope['window']['windowed'] ? self::windowLine($envelope['window']) : "Not windowed: {$envelope['window']['reason']}");
+        $expect("## {$answer['tool']}");
+        $expect($answer['summary']);
+        $expect($answer['window']['windowed'] ? self::windowLine($answer['window']) : "Not windowed: {$answer['window']['reason']}");
         Assert::assertStringStartsWith('Store clock: ', $lines[$position]);
-        Assert::assertStringContainsString('(epoch '.Instant::epoch($envelope['now']).')', $lines[$position]);
+        Assert::assertStringContainsString('(epoch '.Instant::epoch($answer['now']).')', $lines[$position]);
         $position++;
 
-        if ($envelope['empty'] !== null) {
-            $expect($envelope['empty']['message']);
+        if ($answer['empty'] !== null) {
+            $expect($answer['empty']['message']);
         }
 
-        foreach (array_keys($envelope['result']) as $label) {
+        foreach (array_keys($answer['result']) as $label) {
             Assert::assertNotEmpty(preg_grep('/^(### '.preg_quote($label, '/').'$|- \*\*'.preg_quote($label, '/').'\*\*: )/', $lines));
         }
 
-        Assert::assertNotEmpty(preg_grep('/^Store: '.preg_quote($envelope['coverage']['state'], '/').'/', $lines));
+        Assert::assertNotEmpty(preg_grep('/^Store: '.preg_quote($answer['coverage']['state'], '/').'/', $lines));
     }
 
     /**
-     * Get the window line the markdown prints for a window of the envelope.
+     * Get the window line the markdown prints for a window of the answer.
      *
      * @param  array<string, mixed>  $window
      */

@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Route;
@@ -83,11 +83,11 @@ it('flags the exception groups, those that escaped before the one that was only 
     [$attempt] = storeRows('SELECT execution_id FROM job_attempts');
     [$request] = storeRows('SELECT DISTINCT execution_id FROM requests');
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
-    $findings = $envelope['result']['findings'];
+    $answer = Answers::assert(Detect::class, ['shape' => 'exception-clusters']);
+    $findings = $answer['result']['findings'];
     $evidence = array_column($findings, 'evidence');
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 8, 'total' => 4, 'saw' => [], 'caveats' => []])
+    expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 8, 'total' => 4, 'saw' => [], 'caveats' => []])
         ->and(array_column($evidence, 'message'))->toBe(['Invoice [8] could not be rendered.', 'Allowed memory size of 134217728 bytes exhausted', 'The card was declined.', 'The report is stale.'])
         ->and(array_column($findings, 'name'))->toBe([RuntimeException::class, FatalError::class, RuntimeException::class, DomainException::class])
         ->and(array_column($findings, 'count'))->toBe([2, 1, 1, 3])
@@ -109,9 +109,9 @@ it('flags the exception groups, those that escaped before the one that was only 
 it('finds nothing in requests that threw nothing, and says it examined them', function () {
     exceptionClustersRequests(['/orders', '/orders']);
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'exception-clusters']);
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []]);
+    expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []]);
 });
 
 it('finds the exception a scheduled task throws, and has no record of one a task reports without throwing', function () {
@@ -125,48 +125,48 @@ it('finds the exception a scheduled task throws, and has no record of one a task
 
     runArtisan(['command' => 'schedule:run']);
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'exception-clusters']);
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
-        ->and(array_column(array_column($envelope['result']['findings'], 'evidence'), 'units', 'message'))->toBe([
+    expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+        ->and(array_column(array_column($answer['result']['findings'], 'evidence'), 'units', 'message'))->toBe([
             'The carts table is locked.' => [['source' => 'schedule', 'label' => 'prune-carts', 'occurrences' => 1]],
         ])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('exceptions-unreported');
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('exceptions-unreported');
 });
 
 it('is clean over a request that failed without an exception record, and says that it cannot see one', function () {
     exceptionClustersRequests(['/boom']);
     [$failed] = storeRows('SELECT status_code FROM requests');
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
-    $blindSpots = array_column($envelope['blind_spots'], 'message', 'id');
+    $answer = Answers::assert(Detect::class, ['shape' => 'exception-clusters']);
+    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
 
     expect($failed['status_code'])->toBe(500)
-        ->and($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0])
+        ->and($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0])
         ->and($blindSpots)->toHaveKey('exceptions-unreported')
         ->and($blindSpots['exceptions-unreported'])->toBe(__('firewatch::messages.blind_spots.exceptions-unreported'));
 });
 
 it('does not call a store without an execution clean', function () {
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'exception-clusters']);
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'examined' => 0, 'total' => 0, 'findings' => []]);
+    expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'examined' => 0, 'total' => 0, 'findings' => []]);
 });
 
 it('opens what a finding points at', function () {
     exceptionClustersTraffic();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'exception-clusters']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'exception-clusters']);
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution', 'execution']);
+    expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution', 'execution']);
 
-    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
+    expect(array_map(fn (array $call) => Answers::follow($call)['empty'], $answer['next']))->each->toBeNull();
 });
 
 it('puts the verdict in the overview next to the other shapes', function () {
     exceptionClustersTraffic();
 
-    $row = collect(Envelope::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'exception-clusters');
+    $row = collect(Answers::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'exception-clusters');
 
     expect($row)->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 8, 'total' => 4])
         ->and($row['worst']['name'])->toBe(RuntimeException::class);

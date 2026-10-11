@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Queue;
@@ -94,7 +94,7 @@ function fjbEvidence(array $arguments = []): array
  */
 function fjbAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'failing-jobs', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'failing-jobs', ...$arguments]);
 }
 
 /**
@@ -111,12 +111,12 @@ describe('the verdict', function () {
     it('has findings when an attempt of a group failed or was released, over every attempt examined', function () {
         ingest([...fjbJob('a', ['released', 'processed']), ...fjbJob('b', ['processed'], 'SendInvoice')]);
 
-        $envelope = fjbAnswer();
+        $answer = fjbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'failing-jobs', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => [], 'caveats' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-jobs', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-jobs')]))
-            ->and($envelope['result']['threshold'])->toBe(['name' => 'attempts', 'value' => 1, 'default' => 1, 'unit' => 'attempts', 'range' => ['min' => 1, 'max' => null], 'is_default' => true])
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('ShipOrder'));
+        expect($answer['result'])->toMatchArray(['detector' => 'failing-jobs', 'verdict' => 'findings', 'reason' => null, 'examined' => 3, 'total' => 1, 'saw' => [], 'caveats' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'failing-jobs', 'total' => 1, 'examined' => 3, 'input' => __('firewatch::messages.detect_input.failing-jobs')]))
+            ->and($answer['result']['threshold'])->toBe(['name' => 'attempts', 'value' => 1, 'default' => 1, 'unit' => 'attempts', 'range' => ['min' => 1, 'max' => null], 'is_default' => true])
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('ShipOrder'));
     });
 
     it('tells one attempt under the threshold from the threshold, counting the failed and the released attempts together', function (?int $threshold, array $statuses, string $verdict) {
@@ -168,19 +168,19 @@ describe('the verdict', function () {
     it('is clean over the attempts examined when none failed or was released, and says how many', function () {
         ingest([...fjbJob('a', ['processed']), ...fjbJob('b', ['processed'])]);
 
-        $envelope = fjbAnswer();
+        $answer = fjbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-jobs', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.failing-jobs')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'failing-jobs', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.failing-jobs')]));
     });
 
     it('is not evaluated when the window holds no attempt, never clean', function () {
         ingest([syntheticRecord(RecordType::REQUEST), syntheticRecord(RecordType::QUEUED_JOB)]);
 
-        $envelope = fjbAnswer();
+        $answer = fjbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-jobs', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'failing-jobs', 'reason' => 'no_records']));
     });
 
     it('examines an attempt that has no status, and counts it as neither failed nor released', function () {
@@ -199,9 +199,9 @@ describe('the verdict', function () {
             fjbAttempt('at-until', 1, 'failed', fields: ['timestamp' => FJB_AT + 10]),
         ]);
 
-        $envelope = fjbAnswer(['since' => (string) FJB_AT, 'until' => (string) (FJB_AT + 10)]);
+        $answer = fjbAnswer(['since' => (string) FJB_AT, 'until' => (string) (FJB_AT + 10)]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 });
 
@@ -296,10 +296,10 @@ describe('the jobs', function () {
             fjbAttempt('b', 1, 'released', fields: ['timestamp' => FJB_AT + 3]),
         ]);
 
-        $envelope = fjbAnswer(['since' => (string) FJB_AT]);
+        $answer = fjbAnswer(['since' => (string) FJB_AT]);
 
-        expect($envelope['result'])->toMatchArray(['examined' => 2, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['retried_attempts' => 1, 'jobs' => 2, 'jobs_recovered' => 0, 'jobs_retrying' => 1, 'max_attempt' => 2]);
+        expect($answer['result'])->toMatchArray(['examined' => 2, 'total' => 1])
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['retried_attempts' => 1, 'jobs' => 2, 'jobs_recovered' => 0, 'jobs_retrying' => 1, 'max_attempt' => 2]);
     });
 
     it('does not take a failure after the window for how a job ended', function () {
@@ -322,11 +322,11 @@ describe('the jobs', function () {
             fjbAttempt('gone', 1, 'released')->without('job_id'),
         ]);
 
-        $envelope = fjbAnswer();
+        $answer = fjbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['examined' => 5, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['count'])->toBe(4)
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['failed_attempts' => 2, 'retried_attempts' => 2, 'jobs' => 0, 'jobs_failed' => 0, 'jobs_recovered' => 0, 'jobs_retrying' => 0]);
+        expect($answer['result'])->toMatchArray(['examined' => 5, 'total' => 1])
+            ->and($answer['result']['findings'][0]['count'])->toBe(4)
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['failed_attempts' => 2, 'retried_attempts' => 2, 'jobs' => 0, 'jobs_failed' => 0, 'jobs_recovered' => 0, 'jobs_retrying' => 0]);
     });
 
     it('judges a job id whose attempts sit in two groups within each group', function () {
@@ -365,11 +365,11 @@ describe('the finding', function () {
         Nightwatch::digest();
         runArtisan(['command' => 'queue:work', '--once' => true]);
 
-        $envelope = fjbAnswer();
+        $answer = fjbAnswer();
 
         expect(storeRows('SELECT name FROM job_attempts'))->toBe([['name' => '']])
-            ->and(json_encode($envelope))->not->toContain(__('firewatch::messages.rank_no_route'))
-            ->and($envelope['result']['findings'][0]['name'])->toBe(__('firewatch::messages.group_unnamed'));
+            ->and(json_encode($answer))->not->toContain(__('firewatch::messages.rank_no_route'))
+            ->and($answer['result']['findings'][0]['name'])->toBe(__('firewatch::messages.group_unnamed'));
     });
 
     it('states the group, its failed and released attempts, how its jobs ended, its latest failure and whom it reached', function () {
@@ -385,9 +385,9 @@ describe('the finding', function () {
             fjbException('broken-3', 'The carrier refused.', ['timestamp' => FJB_AT + 141]),
         ]);
 
-        $envelope = fjbAnswer();
+        $answer = fjbAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => md5('ShipOrder'),
             'name' => 'ShipOrder',
             'count' => 5,
@@ -409,7 +409,7 @@ describe('the finding', function () {
                     'location' => 'app/Jobs/ShipOrder.php:12',
                 ],
             ],
-        ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
+        ]])->and($answer['result']['findings'][0])->not->toHaveKey('worst_execution_id');
     });
 
     it('points at the latest attempt that failed or was released, and at the one stored last of two that started together', function () {
@@ -548,11 +548,11 @@ describe('the last exception', function () {
     it('comes back with a long message cut to the cell cap, and the answer says so', function () {
         ingest([...fjbJob('a', ['failed']), fjbException('a-1', str_repeat('x', Bounds::CELL_CHARACTERS + 50))]);
 
-        $envelope = fjbAnswer();
-        $message = $envelope['result']['findings'][0]['evidence']['last_exception']['message'];
+        $answer = fjbAnswer();
+        $message = $answer['result']['findings'][0]['evidence']['last_exception']['message'];
 
         expect($message)->toBe(str_repeat('x', 2000).__('firewatch::messages.cell_truncated', ['count' => 50]))
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how', ['characters' => '2,000'])]]);
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 1, 'matched' => null, 'reason' => 'cap', 'how' => __('firewatch::messages.cap_how', ['characters' => '2,000'])]]);
     });
 });
 
@@ -601,19 +601,19 @@ describe('the order', function () {
     it('shows the findings up to the limit, with the exact total and a note of the cut', function () {
         ingest(array_merge(...array_map(fn (int $job) => fjbJob("job-{$job}", array_fill(0, $job, 'released'), "Job{$job}"), range(1, 4))));
 
-        $envelope = fjbAnswer(['limit' => 3]);
+        $answer = fjbAnswer(['limit' => 3]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['Job4', 'Job3', 'Job2'])
-            ->and($envelope['result'])->toMatchArray(['examined' => 10, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['Job4', 'Job3', 'Job2'])
+            ->and($answer['result'])->toMatchArray(['examined' => 10, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest(array_merge(...array_map(fn (int $job) => fjbJob("job-{$job}", ['failed'], "Job{$job}"), range(1, 3))));
 
-        $envelope = fjbAnswer(['limit' => 3]);
+        $answer = fjbAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 
     it('gives the last exception of each finding shown, also of the one a limit of one shows', function () {
@@ -624,11 +624,11 @@ describe('the order', function () {
             fjbException('b-1', 'Of the other.'),
         ]);
 
-        $envelope = fjbAnswer(['limit' => 1]);
+        $answer = fjbAnswer(['limit' => 1]);
 
-        expect($envelope['result'])->toMatchArray(['total' => 2])
-            ->and($envelope['result']['findings'])->toHaveCount(1)
-            ->and($envelope['result']['findings'][0]['evidence']['last_exception']['message'])->toBe('Of the worst.');
+        expect($answer['result'])->toMatchArray(['total' => 2])
+            ->and($answer['result']['findings'])->toHaveCount(1)
+            ->and($answer['result']['findings'][0]['evidence']['last_exception']['message'])->toBe('Of the worst.');
     });
 });
 
@@ -641,12 +641,12 @@ describe('one group', function () {
             fjbException('b-2', 'Of the invoice.'),
         ]);
 
-        $envelope = fjbAnswer(['group' => md5('ShipOrder')]);
+        $answer = fjbAnswer(['group' => md5('ShipOrder')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['ShipOrder'])
-            ->and($envelope['result']['findings'][0]['evidence'])->toMatchArray(['retried_attempts' => 1, 'jobs' => 1, 'jobs_recovered' => 1])
-            ->and($envelope['result']['findings'][0]['evidence']['last_exception']['message'])->toBe('Of the shipment.');
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['ShipOrder'])
+            ->and($answer['result']['findings'][0]['evidence'])->toMatchArray(['retried_attempts' => 1, 'jobs' => 1, 'jobs_recovered' => 1])
+            ->and($answer['result']['findings'][0]['evidence']['last_exception']['message'])->toBe('Of the shipment.');
     });
 
     it('is clean when the group has attempts and none failed or was released', function () {
@@ -658,10 +658,10 @@ describe('one group', function () {
     it('answers that no attempt matches a group that holds none', function () {
         ingest([...fjbJob('a', ['failed']), ...fjbJob('b', ['processed'], 'SendInvoice')]);
 
-        $envelope = fjbAnswer(['group' => md5('Missing')]);
+        $answer = fjbAnswer(['group' => md5('Missing')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 2]);
     });
 });
 
@@ -669,13 +669,13 @@ describe('the blind spots', function () {
     it('states that sync jobs have no attempt and that an uninstrumented dispatcher leaves no dispatch, also when nothing was examined', function (array $statuses) {
         ingest([...fjbJob('a', $statuses), syntheticRecord(RecordType::QUERY)]);
 
-        $envelope = fjbAnswer();
-        $blindSpots = array_column($envelope['blind_spots'], 'message', 'id');
+        $answer = fjbAnswer();
+        $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
 
         expect($blindSpots)->toHaveKeys(['sync-jobs-unrecorded', 'uninstrumented-dispatcher'])
             ->and($blindSpots['sync-jobs-unrecorded'])->toBe(__('firewatch::messages.blind_spots.sync-jobs-unrecorded'))
             ->and($blindSpots['uninstrumented-dispatcher'])->toBe(__('firewatch::messages.blind_spots.uninstrumented-dispatcher'))
-            ->and($envelope['result']['caveats'])->toBe([]);
+            ->and($answer['result']['caveats'])->toBe([]);
     })->with([
         'with findings' => [['failed']],
         'when clean' => [['processed']],
@@ -691,14 +691,14 @@ describe('what to look at next', function () {
             fjbAttempt('c', 1, 'processed', fields: ['timestamp' => FJB_AT + 50]),
         ]);
 
-        $envelope = fjbAnswer();
+        $answer = fjbAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
-            ->and(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'a-2'], ['group' => md5('ShipOrder')], ['group' => md5('ShipOrder')], ['execution_id' => 'b-1']]);
+        expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
+            ->and(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'a-2'], ['group' => md5('ShipOrder')], ['group' => md5('ShipOrder')], ['execution_id' => 'b-1']]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -711,7 +711,7 @@ describe('with the other shapes', function () {
             ...fjbJob('c', ['processed'], 'Works'),
         ]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'failing-jobs');
 
         expect($row)->toBe([
@@ -727,7 +727,7 @@ describe('with the other shapes', function () {
     it('is run between failing-routes and memory when no shape is named', function () {
         ingest(fjbJob('a', ['failed']));
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[3])->toMatchArray(['verdict' => 'findings', 'total' => 1]);

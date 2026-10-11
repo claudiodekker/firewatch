@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -86,7 +86,7 @@ function excTrace(array $files): string
  */
 function excAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'exception-clusters', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'exception-clusters', ...$arguments]);
 }
 
 /**
@@ -110,9 +110,9 @@ describe('the verdict', function () {
             syntheticRecord(RecordType::QUERY),
         ]);
 
-        $envelope = excAnswer();
+        $answer = excAnswer();
 
-        expect($envelope['result'])->toMatchArray([
+        expect($answer['result'])->toMatchArray([
             'detector' => 'exception-clusters',
             'threshold' => ['name' => 'occurrences', 'value' => 1, 'default' => 1, 'unit' => 'occurrences', 'range' => ['min' => 1, 'max' => null], 'is_default' => true],
             'verdict' => 'findings',
@@ -121,27 +121,27 @@ describe('the verdict', function () {
             'total' => 1,
             'saw' => [],
             'caveats' => [],
-        ])->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'exception-clusters', 'total' => 1, 'examined' => 4, 'input' => __('firewatch::messages.detect_input.exception-clusters')]))
-            ->and($envelope['summary'])->not->toContain('firewatch::')
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('RuntimeException'));
+        ])->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'exception-clusters', 'total' => 1, 'examined' => 4, 'input' => __('firewatch::messages.detect_input.exception-clusters')]))
+            ->and($answer['summary'])->not->toContain('firewatch::')
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('RuntimeException'));
     });
 
     it('is clean over the executions examined when no exception occurred, and says how many', function () {
         ingest([excExecution('a'), excExecution('b', 'inventory:sync', RecordType::COMMAND)]);
 
-        $envelope = excAnswer();
+        $answer = excAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'exception-clusters', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.exception-clusters')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'exception-clusters', 'examined' => 2, 'input' => __('firewatch::messages.detect_input.exception-clusters')]));
     });
 
     it('is not evaluated when the window holds no execution and no exception, never clean', function () {
         ingest([syntheticRecord(RecordType::QUERY), syntheticRecord(RecordType::LOG)]);
 
-        $envelope = excAnswer();
+        $answer = excAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'exception-clusters', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'exception-clusters', 'reason' => 'no_records']));
     });
 
     it('has findings over no execution when an exception occurred and its execution is not stored', function () {
@@ -239,11 +239,11 @@ describe('the history', function () {
         ingest([excExecution('one', fields: ['timestamp' => EXC_AT])]);
         excClear(EXC_AT + 600);
 
-        $envelope = excAnswer();
+        $answer = excAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'exception-clusters', 'reason' => 'outside_coverage']))
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('history-cleared');
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'exception-clusters', 'reason' => 'outside_coverage']))
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('history-cleared');
     });
 
     it('still finds an exception stored after the clear, over none of the executions it left out', function () {
@@ -284,9 +284,9 @@ describe('the finding', function () {
             ]),
         ]);
 
-        $envelope = excAnswer();
+        $answer = excAnswer();
 
-        expect($envelope['result']['findings'])->toEqual([[
+        expect($answer['result']['findings'])->toEqual([[
             'group' => md5('RuntimeException'),
             'name' => 'RuntimeException',
             'count' => 2,
@@ -307,7 +307,7 @@ describe('the finding', function () {
                     ['source' => 'request', 'label' => '/invoices/{invoice}', 'occurrences' => 2],
                 ],
             ],
-        ]])->and($envelope['result']['findings'][0])->not->toHaveKey('worst_execution_id');
+        ]])->and($answer['result']['findings'][0])->not->toHaveKey('worst_execution_id');
     });
 
     it('points at the occurrence stored last of two that occurred together', function () {
@@ -595,19 +595,19 @@ describe('the order', function () {
             ...array_merge(...array_map(fn (int $times) => excExceptions("Group{$times}", array_fill(0, $times, 'a')), range(1, 4))),
         ]);
 
-        $envelope = excAnswer(['limit' => 3]);
+        $answer = excAnswer(['limit' => 3]);
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['Group4', 'Group3', 'Group2'])
-            ->and($envelope['result'])->toMatchArray(['examined' => 1, 'total' => 4])
-            ->and($envelope['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['Group4', 'Group3', 'Group2'])
+            ->and($answer['result'])->toMatchArray(['examined' => 1, 'total' => 4])
+            ->and($answer['truncated'])->toBe([['section' => 'findings', 'shown' => 3, 'matched' => 4, 'reason' => 'limit', 'how' => __('firewatch::messages.detect_findings_how')]]);
     });
 
     it('is complete when exactly the limit is shown', function () {
         ingest([excException('a', 'One'), excException('a', 'Two'), excException('a', 'Three')]);
 
-        $envelope = excAnswer(['limit' => 3]);
+        $answer = excAnswer(['limit' => 3]);
 
-        expect($envelope['result']['findings'])->toHaveCount(3)->and($envelope['truncated'])->toBe([]);
+        expect($answer['result']['findings'])->toHaveCount(3)->and($answer['truncated'])->toBe([]);
     });
 });
 
@@ -620,31 +620,31 @@ describe('one group', function () {
             ...excExceptions('Other', ['b', 'b']),
         ]);
 
-        $envelope = excAnswer(['group' => md5('Wanted')]);
+        $answer = excAnswer(['group' => md5('Wanted')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
-            ->and(array_column($envelope['result']['findings'], 'name'))->toBe(['Wanted'])
-            ->and($envelope['result']['findings'][0]['evidence']['units'])->toBe([['source' => 'request', 'label' => '/orders', 'occurrences' => 1]])
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2, 'total' => 1])
+            ->and(array_column($answer['result']['findings'], 'name'))->toBe(['Wanted'])
+            ->and($answer['result']['findings'][0]['evidence']['units'])->toBe([['source' => 'request', 'label' => '/orders', 'occurrences' => 1]])
+            ->and($answer['empty'])->toBeNull();
     });
 
     it('is clean when the group has fewer occurrences than the threshold', function () {
         ingest([excExecution('a'), ...excExceptions('Wanted', ['a', 'a'])]);
 
-        $envelope = excAnswer(['group' => md5('Wanted'), 'threshold' => 3]);
+        $answer = excAnswer(['group' => md5('Wanted'), 'threshold' => 3]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0, 'findings' => []])
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0, 'findings' => []])
+            ->and($answer['empty'])->toBeNull();
     });
 
     it('answers that no record matches a group that holds no exception, whatever else it holds', function (string $group) {
         ingest([excExecution('a'), excExecution('b', '/carts'), excException('a')]);
 
-        $envelope = excAnswer(['group' => $group]);
+        $answer = excAnswer(['group' => $group]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
-            ->and($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 3])
-            ->and($envelope['next'])->toBe([]);
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'findings' => []])
+            ->and($answer['empty'])->toMatchArray(['kind' => 'no_match', 'population' => 3])
+            ->and($answer['next'])->toBe([]);
     })->with([
         'a group of nothing' => [md5('missing')],
         'the group of a route' => [md5('execution /orders')],
@@ -653,11 +653,11 @@ describe('one group', function () {
     it('has findings, and matched something, for a group whose only occurrence is a fatal error of a job in a window without an execution', function () {
         ingest([excFatal('the-trace', fields: ['execution_source' => 'job'])]);
 
-        $envelope = excAnswer(['group' => md5('FatalError')]);
+        $answer = excAnswer(['group' => md5('FatalError')]);
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 0, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['latest_execution_id'])->toBeNull()
-            ->and($envelope['empty'])->toBeNull();
+        expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 0, 'total' => 1])
+            ->and($answer['result']['findings'][0]['latest_execution_id'])->toBeNull()
+            ->and($answer['empty'])->toBeNull();
     });
 });
 
@@ -689,15 +689,15 @@ describe('what to look at next', function () {
             excException('c', 'Reported', ['execution_source' => 'command', 'handled' => true]),
         ]);
 
-        $envelope = excAnswer();
+        $answer = excAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect(array_column($envelope['result']['findings'], 'name'))->toBe(['RuntimeException', 'FatalError', 'Reported'])
-            ->and(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
-            ->and(array_column($envelope['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => md5('RuntimeException')], ['group' => md5('RuntimeException')], ['execution_id' => 'c']]);
+        expect(array_column($answer['result']['findings'], 'name'))->toBe(['RuntimeException', 'FatalError', 'Reported'])
+            ->and(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank', 'execution'])
+            ->and(array_column($answer['next'], 'arguments'))->toBe([['execution_id' => 'b'], ['group' => md5('RuntimeException')], ['group' => md5('RuntimeException')], ['execution_id' => 'c']]);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -711,7 +711,7 @@ describe('with the other shapes', function () {
             ...excExceptions('Escaped', ['b'], ['execution_source' => 'command']),
         ]);
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
         $row = collect($rows)->firstWhere('detector', 'exception-clusters');
 
         expect($row)->toBe([
@@ -727,7 +727,7 @@ describe('with the other shapes', function () {
     it('is run between failing-tasks and error-logs when no shape is named', function () {
         ingest([excExecution('a'), excException('a')]);
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[6])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1]);

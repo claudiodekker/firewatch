@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Date;
@@ -44,13 +44,13 @@ function actorGuest(): RecordBuilder
 }
 
 /**
- * Call the tool in both formats and get the envelope.
+ * Call the tool in both formats and get the answer.
  *
  * @return array<string, mixed>
  */
 function actorAnswer(mixed $who): array
 {
-    return Envelope::assert(Actor::class, ['who' => $who]);
+    return Answers::assert(Actor::class, ['who' => $who]);
 }
 
 /**
@@ -152,9 +152,9 @@ it('refuses a who that holds a control character or a line separator', function 
 it('accepts a who of 255 characters, counted as characters and after the trim', function (string $who) {
     ingest([actorUser('7', 'Taylor')]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['empty']['kind'])->toBe('no_match');
+    expect($answer['empty']['kind'])->toBe('no_match');
 })->with([
     '255 characters' => [str_repeat('a', 255)],
     '255 multibyte characters' => [str_repeat('é', 255)],
@@ -165,10 +165,10 @@ it('accepts a who of 255 characters, counted as characters and after the trim', 
 it('trims the whitespace of any script around who before it identifies', function (string $who) {
     ingest([actorUser('7', 'Taylor Otwell'), actorUser('8', 'Nuno Maduro'), actorGuest()]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['result']['identity'])->toMatchArray(['id' => '7', 'matched_by' => 'name'])
-        ->and($envelope['summary'])->toBe(actorNothing('Taylor Otwell'));
+    expect($answer['result']['identity'])->toMatchArray(['id' => '7', 'matched_by' => 'name'])
+        ->and($answer['summary'])->toBe(actorNothing('Taylor Otwell'));
 })->with([
     'ASCII spaces and a newline' => ["  taylor otwell \n"],
     'non-breaking spaces' => ["\u{00A0}taylor otwell\u{00A0}"],
@@ -219,9 +219,9 @@ it('identifies a person, with when they were first and last seen and the stage t
     ingest([actorUser('7', 'Taylor Otwell', 'taylor@example.com', offset: 10), actorUser('8', 'Nuno', 'nuno@example.com', offset: 20)]);
     ingest([actorUser('7', 'Taylor Otwell', 'taylor@example.com', offset: 40), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '7'])]);
 
-    $envelope = actorAnswer('taylor@example.com');
+    $answer = actorAnswer('taylor@example.com');
 
-    expect($envelope)->toBe([
+    expect($answer)->toBe([
         'tool' => 'actor',
         'now' => ACTOR_AT + 3600,
         'window' => actorWindow(),
@@ -251,8 +251,8 @@ it('identifies a person, with when they were first and last seen and the stage t
                 ['started_at' => ACTOR_AT, 'type' => 'request', 'execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f', 'group_hash' => str_repeat('a', 32), 'label' => '/', 'link' => 'direct'],
             ],
         ],
-        'coverage' => $envelope['coverage'],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => $answer['coverage'],
+        'blind_spots' => $answer['blind_spots'],
         'notes' => [__('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_identity_note')],
         'truncated' => [],
         'next' => [
@@ -261,17 +261,17 @@ it('identifies a person, with when they were first and last seen and the stage t
             ['tool' => 'occurrences', 'arguments' => ['user_id' => '7'], 'why' => __('firewatch::messages.actor_next_user')],
         ],
     ])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
+        ->and(array_column($answer['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('identifies by each stage', function (string $who, string $stage) {
     ingest([actorUser('7', 'Taylor Otwell', 'taylor@example.com'), actorUser('8', 'Nuno Maduro', 'nuno@example.com'), actorGuest()]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['result']['identity'])->toMatchArray(['id' => '7', 'matched_by' => $stage])
-        ->and($envelope['summary'])->toBe(actorNothing('Taylor Otwell'));
+    expect($answer['result']['identity'])->toMatchArray(['id' => '7', 'matched_by' => $stage])
+        ->and($answer['summary'])->toBe(actorNothing('Taylor Otwell'));
 })->with([
     'the id' => ['7', 'id'],
     'the id inside padding' => ["  7\n", 'id'],
@@ -288,10 +288,10 @@ it('identifies by each stage', function (string $who, string $stage) {
 it('lets the first stage that finds anyone decide, and tries no later one', function (array $first, array $later, string $who, string $stage) {
     ingest([actorUser('first', ...$first, offset: 10), actorUser('later', ...$later, offset: 20), actorGuest()]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['result'])->toHaveKeys(['identity'])
-        ->and($envelope['result']['identity'])->toMatchArray(['id' => 'first', 'matched_by' => $stage]);
+    expect($answer['result'])->toHaveKeys(['identity'])
+        ->and($answer['result']['identity'])->toMatchArray(['id' => 'first', 'matched_by' => $stage]);
 })->with([
     'the id over a username' => [['name' => 'One'], ['name' => 'Two', 'username' => 'first'], 'first', 'id'],
     'the username over a name' => [['name' => 'One', 'username' => 'sam'], ['name' => 'Sam'], 'sam', 'username'],
@@ -302,9 +302,9 @@ it('lets the first stage that finds anyone decide, and tries no later one', func
 it('matches an id exactly, and a number that is no id as a username', function (string $who, string $id, string $stage) {
     ingest([actorUser('ABC', 'One', 'one'), actorUser('9', 'Two', 'abc'), actorUser('10', 'Three', '42'), actorGuest()]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['result']['identity'])->toMatchArray(['id' => $id, 'matched_by' => $stage]);
+    expect($answer['result']['identity'])->toMatchArray(['id' => $id, 'matched_by' => $stage]);
 })->with([
     'the id as stored' => ['ABC', 'ABC', 'id'],
     'the id in another case' => ['abc', '9', 'username'],
@@ -314,10 +314,10 @@ it('matches an id exactly, and a number that is no id as a username', function (
 it('folds the case of ASCII letters only', function (string $who, ?string $stage) {
     ingest([actorUser('7', 'Émile Zola', 'Émile@example.com'), actorGuest()]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['empty']['message'])->toBe($stage === null ? __('firewatch::messages.actor_unknown', ['who' => $who, 'population' => 1]) : __('firewatch::messages.actor_nothing_attributed', ['person' => 'Émile Zola', 'population' => 1]))
-        ->and($envelope['result']['identity']['matched_by'] ?? null)->toBe($stage);
+    expect($answer['empty']['message'])->toBe($stage === null ? __('firewatch::messages.actor_unknown', ['who' => $who, 'population' => 1]) : __('firewatch::messages.actor_nothing_attributed', ['person' => 'Émile Zola', 'population' => 1]))
+        ->and($answer['result']['identity']['matched_by'] ?? null)->toBe($stage);
 })->with([
     'the name as stored' => ['Émile Zola', 'name'],
     'the name with its ASCII letters in another case' => ['ÉMILE zOLA', 'name'],
@@ -331,9 +331,9 @@ it('folds the case of ASCII letters only', function (string $who, ?string $stage
 it('reads the wildcards and the escape character of who as plain characters', function (string $who, string $literal, string $wild) {
     ingest([actorUser('literal', $literal, offset: 10), actorUser('wild', $wild, offset: 20), actorUser('by-username', 'Three', $literal, offset: 5)]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['result'])->toBe([
+    expect($answer['result'])->toBe([
         'matched_by' => 'contains',
         'candidate_count' => 2,
         'candidates' => [actorRow('literal', $literal, null, 10), actorRow('by-username', 'Three', $literal, 5)],
@@ -351,10 +351,10 @@ it('reads the wildcards and the escape character of who as plain characters', fu
 it('identifies a person stored without a name or a username by the id only', function (RecordBuilder $user) {
     ingest([$user, actorUser('8', 'null', 'null'), actorGuest()]);
 
-    $envelope = actorAnswer('42');
+    $answer = actorAnswer('42');
 
-    expect($envelope['result']['identity'])->toBe(['id' => '42', 'name' => null, 'username' => null, 'first_seen_at' => ACTOR_AT, 'last_seen_at' => ACTOR_AT, 'matched_by' => 'id'])
-        ->and($envelope['summary'])->toBe(actorNothing('42'));
+    expect($answer['result']['identity'])->toBe(['id' => '42', 'name' => null, 'username' => null, 'first_seen_at' => ACTOR_AT, 'last_seen_at' => ACTOR_AT, 'matched_by' => 'id'])
+        ->and($answer['summary'])->toBe(actorNothing('42'));
 })->with([
     'blank on the wire' => [fn () => actorUser('42')],
     'absent from the wire' => [fn () => actorUser('42')->without('name', 'username')],
@@ -363,14 +363,14 @@ it('identifies a person stored without a name or a username by the id only', fun
 it('answers that the window holds no execution for a person whose records are all gone', function () {
     ingest([actorUser('7', 'Taylor', 'taylor@example.com')]);
 
-    $envelope = actorAnswer('taylor');
+    $answer = actorAnswer('taylor');
 
-    expect($envelope['empty'])->toBe(['kind' => 'window_empty', 'population' => 0, 'message' => __('firewatch::messages.actor_no_executions', ['population' => 0])])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.window_empty'))
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['notes'])->toBe([])
-        ->and($envelope['next'])->toBe([])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0]);
+    expect($answer['empty'])->toBe(['kind' => 'window_empty', 'population' => 0, 'message' => __('firewatch::messages.actor_no_executions', ['population' => 0])])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.empty_summary.window_empty'))
+        ->and($answer['result'])->toBe([])
+        ->and($answer['notes'])->toBe([])
+        ->and($answer['next'])->toBe([])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0]);
 });
 
 it('lists everyone the deciding stage found when it found several, and guesses no one', function () {
@@ -381,9 +381,9 @@ it('lists everyone the deciding stage found when it found several, and guesses n
         syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '7']),
     ]);
 
-    $envelope = actorAnswer('SAM');
+    $answer = actorAnswer('SAM');
 
-    expect($envelope)->toBe([
+    expect($answer)->toBe([
         'tool' => 'actor',
         'now' => ACTOR_AT + 3600,
         'window' => actorWindow(),
@@ -394,22 +394,22 @@ it('lists everyone the deciding stage found when it found several, and guesses n
             'candidate_count' => 2,
             'candidates' => [actorRow('8', 'sam', 'sam@example.org', 30), actorRow('7', 'Sam', 'sam@example.com', 10)],
         ],
-        'coverage' => $envelope['coverage'],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => $answer['coverage'],
+        'blind_spots' => $answer['blind_spots'],
         'notes' => [__('firewatch::messages.actor_ambiguous_note')],
         'truncated' => [],
         'next' => [],
     ])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1])
+        ->and(array_column($answer['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('finds several people at the username stage when their usernames differ only in case', function () {
     ingest([actorUser('7', 'One', 'Sam'), actorUser('8', 'Two', 'sam'), actorUser('9', 'sam')]);
 
-    $envelope = actorAnswer('sAM');
+    $answer = actorAnswer('sAM');
 
-    expect($envelope['result'])->toBe([
+    expect($answer['result'])->toBe([
         'matched_by' => 'username',
         'candidate_count' => 2,
         'candidates' => [actorRow('7', 'One', 'Sam', 0), actorRow('8', 'Two', 'sam', 0)],
@@ -419,13 +419,13 @@ it('finds several people at the username stage when their usernames differ only 
 it('lists ten candidates, newest sighting first, and says how many there are when there are more', function (int $people, array $listed, bool $cut) {
     ingest(array_map(fn (int $number) => actorUser("user-{$number}", "Sam {$number}", offset: $number), range(1, $people)));
 
-    $envelope = actorAnswer('sam');
+    $answer = actorAnswer('sam');
 
-    expect(array_column($envelope['result']['candidates'], 'id'))->toBe($listed)
-        ->and($envelope['result']['matched_by'])->toBe('contains')
-        ->and($envelope['result']['candidate_count'])->toBe($people)
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.actor_ambiguous_summary', ['who' => 'sam', 'count' => $people, 'stage' => 'contains']))
-        ->and($envelope['truncated'])->toBe($cut ? [['section' => 'candidates', 'shown' => 10, 'matched' => $people, 'reason' => 'limit', 'how' => __('firewatch::messages.actor_candidates_how', ['listed' => 10])]] : []);
+    expect(array_column($answer['result']['candidates'], 'id'))->toBe($listed)
+        ->and($answer['result']['matched_by'])->toBe('contains')
+        ->and($answer['result']['candidate_count'])->toBe($people)
+        ->and($answer['summary'])->toBe(__('firewatch::messages.actor_ambiguous_summary', ['who' => 'sam', 'count' => $people, 'stage' => 'contains']))
+        ->and($answer['truncated'])->toBe($cut ? [['section' => 'candidates', 'shown' => 10, 'matched' => $people, 'reason' => 'limit', 'how' => __('firewatch::messages.actor_candidates_how', ['listed' => 10])]] : []);
 })->with([
     'ten' => [10, ['user-10', 'user-9', 'user-8', 'user-7', 'user-6', 'user-5', 'user-4', 'user-3', 'user-2', 'user-1'], false],
     'eleven' => [11, ['user-11', 'user-10', 'user-9', 'user-8', 'user-7', 'user-6', 'user-5', 'user-4', 'user-3', 'user-2'], true],
@@ -446,13 +446,13 @@ it('leaves who out of the summary of several people when the sentence with it wo
     $who = str_repeat('a', $room + $over);
     ingest([actorUser('7', $who), actorUser('8', $who)]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['summary'])->toBe($named
+    expect($answer['summary'])->toBe($named
         ? __('firewatch::messages.actor_ambiguous_summary', ['who' => $who, 'count' => 2, 'stage' => 'name'])
         : __('firewatch::messages.actor_ambiguous_summary_without_who', ['count' => 2, 'stage' => 'name']))
-        ->and(mb_strlen($envelope['summary']))->toBe($named ? Answer::SUMMARY_CHARACTERS : mb_strlen(__('firewatch::messages.actor_ambiguous_summary_without_who', ['count' => 2, 'stage' => 'name'])))
-        ->and($envelope['result']['candidate_count'])->toBe(2);
+        ->and(mb_strlen($answer['summary']))->toBe($named ? Answer::SUMMARY_CHARACTERS : mb_strlen(__('firewatch::messages.actor_ambiguous_summary_without_who', ['count' => 2, 'stage' => 'name'])))
+        ->and($answer['result']['candidate_count'])->toBe(2);
 })->with([
     'a sentence of exactly the most characters' => [0, true],
     'one character more' => [1, false],
@@ -461,9 +461,9 @@ it('leaves who out of the summary of several people when the sentence with it wo
 it('identifies an id that no directory row holds from a record that carries it', function () {
     ingest([actorUser('7', 'Taylor'), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '99'])]);
 
-    $envelope = actorAnswer('99');
+    $answer = actorAnswer('99');
 
-    expect($envelope)->toBe([
+    expect($answer)->toBe([
         'tool' => 'actor',
         'now' => ACTOR_AT + 3600,
         'window' => actorWindow(),
@@ -480,8 +480,8 @@ it('identifies an id that no directory row holds from a record that carries it',
                 ['started_at' => ACTOR_AT, 'type' => 'request', 'execution_id' => '9f0c3a1e-5b7d-4c2a-8e6f-1a2b3c4d5e6f', 'group_hash' => str_repeat('a', 32), 'label' => '/', 'link' => 'direct'],
             ],
         ],
-        'coverage' => $envelope['coverage'],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => $answer['coverage'],
+        'blind_spots' => $answer['blind_spots'],
         'notes' => [__('firewatch::messages.actor_from_records_note'), __('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_identity_note')],
         'truncated' => [],
         'next' => [
@@ -490,16 +490,16 @@ it('identifies an id that no directory row holds from a record that carries it',
             ['tool' => 'occurrences', 'arguments' => ['user_id' => '99'], 'why' => __('firewatch::messages.actor_next_user')],
         ],
     ])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1])
+        ->and(array_column($answer['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('identifies from a record of any type that carries the id', function (RecordType $type) {
     ingest([syntheticRecord($type)->with(['timestamp' => ACTOR_AT, 'user' => '99']), actorGuest()]);
 
-    $envelope = actorAnswer('99');
+    $answer = actorAnswer('99');
 
-    expect($envelope['result']['identity'])->toMatchArray(['id' => '99', 'matched_by' => 'records']);
+    expect($answer['result']['identity'])->toMatchArray(['id' => '99', 'matched_by' => 'records']);
 })->with([
     'a request' => [RecordType::REQUEST],
     'a job attempt' => [RecordType::JOB_ATTEMPT],
@@ -509,10 +509,10 @@ it('identifies from a record of any type that carries the id', function (RecordT
 it('identifies from records only by the whole id as recorded', function (string $who) {
     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => 'ABC-99'])]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['empty'])->toBe(['kind' => 'no_match', 'population' => 0, 'message' => __('firewatch::messages.actor_unknown', ['who' => $who, 'population' => 0])])
-        ->and($envelope['result'])->toBe(['known_actors' => [], 'known_actor_count' => 0]);
+    expect($answer['empty'])->toBe(['kind' => 'no_match', 'population' => 0, 'message' => __('firewatch::messages.actor_unknown', ['who' => $who, 'population' => 0])])
+        ->and($answer['result'])->toBe(['known_actors' => [], 'known_actor_count' => 0]);
 })->with([
     'another case' => ['abc-99'],
     'a part of it' => ['ABC'],
@@ -522,10 +522,10 @@ it('identifies from records only by the whole id as recorded', function (string 
 it('lets a directory stage decide before the records are read', function () {
     ingest([actorUser('5', 'Sam', '99'), syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '99'])]);
 
-    $envelope = actorAnswer('99');
+    $answer = actorAnswer('99');
 
-    expect($envelope['result']['identity'])->toMatchArray(['id' => '5', 'matched_by' => 'username'])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_identity_note')]);
+    expect($answer['result']['identity'])->toMatchArray(['id' => '5', 'matched_by' => 'username'])
+        ->and($answer['notes'])->toBe([__('firewatch::messages.actor_no_commands_note'), __('firewatch::messages.actor_identity_note')]);
 });
 
 it('identifies the signed-in user of a real request by name', function () {
@@ -535,13 +535,13 @@ it('identifies the signed-in user of a real request by name', function () {
 
     $this->get('/');
 
-    $envelope = actorAnswer('taylor otwell');
+    $answer = actorAnswer('taylor otwell');
 
-    expect($envelope['empty'])->toBeNull()
-        ->and($envelope['result']['identity'])->toMatchArray(['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@example.com', 'matched_by' => 'name'])
-        ->and($envelope['result']['identity']['first_seen_at'])->toBeFloat()
-        ->and($envelope['result']['identity']['last_seen_at'])->toBe($envelope['result']['identity']['first_seen_at'])
-        ->and($envelope['coverage']['records'])->toBeGreaterThanOrEqual(1);
+    expect($answer['empty'])->toBeNull()
+        ->and($answer['result']['identity'])->toMatchArray(['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@example.com', 'matched_by' => 'name'])
+        ->and($answer['result']['identity']['first_seen_at'])->toBeFloat()
+        ->and($answer['result']['identity']['last_seen_at'])->toBe($answer['result']['identity']['first_seen_at'])
+        ->and($answer['coverage']['records'])->toBeGreaterThanOrEqual(1);
 });
 
 it('answers that nobody was identified, with the people the directory holds, newest sighting first', function () {
@@ -552,9 +552,9 @@ it('answers that nobody was identified, with the people the directory holds, new
         syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT, 'user' => '7']),
     ]);
 
-    $envelope = actorAnswer('mohamed');
+    $answer = actorAnswer('mohamed');
 
-    expect($envelope)->toBe([
+    expect($answer)->toBe([
         'tool' => 'actor',
         'now' => ACTOR_AT + 3600,
         'window' => actorWindow(),
@@ -568,34 +568,34 @@ it('answers that nobody was identified, with the people the directory holds, new
             ],
             'known_actor_count' => 3,
         ],
-        'coverage' => $envelope['coverage'],
-        'blind_spots' => $envelope['blind_spots'],
+        'coverage' => $answer['coverage'],
+        'blind_spots' => $answer['blind_spots'],
         'notes' => [__('firewatch::messages.actor_unknown_note')],
         'truncated' => [],
         'next' => [],
     ])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'records' => 1, 'types_read' => array_column(RecordType::events(), 'value')])
+        ->and(array_column($answer['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('names the longest who there is in the summary when nobody was identified', function () {
     $who = str_repeat('a', 255);
     ingest([actorUser('7', 'Taylor')]);
 
-    $envelope = actorAnswer($who);
+    $answer = actorAnswer($who);
 
-    expect($envelope['summary'])->toBe(__('firewatch::messages.actor_unknown_summary', ['who' => $who]));
+    expect($answer['summary'])->toBe(__('firewatch::messages.actor_unknown_summary', ['who' => $who]));
 });
 
 it('lists the ten people seen most recently and counts them all, without a truncated entry', function (int $people, array $listed) {
     ingest(array_map(fn (int $number) => actorUser("user-{$number}", "User {$number}", offset: $number), range(1, $people)));
 
-    $envelope = actorAnswer('mohamed');
+    $answer = actorAnswer('mohamed');
 
-    expect(array_column($envelope['result']['known_actors'], 'id'))->toBe($listed)
-        ->and($envelope['result']['known_actor_count'])->toBe($people)
-        ->and($envelope['empty']['population'])->toBe($people)
-        ->and($envelope['truncated'])->toBe([]);
+    expect(array_column($answer['result']['known_actors'], 'id'))->toBe($listed)
+        ->and($answer['result']['known_actor_count'])->toBe($people)
+        ->and($answer['empty']['population'])->toBe($people)
+        ->and($answer['truncated'])->toBe([]);
 })->with([
     'ten' => [10, ['user-10', 'user-9', 'user-8', 'user-7', 'user-6', 'user-5', 'user-4', 'user-3', 'user-2', 'user-1']],
     'eleven' => [11, ['user-11', 'user-10', 'user-9', 'user-8', 'user-7', 'user-6', 'user-5', 'user-4', 'user-3', 'user-2']],
@@ -605,19 +605,19 @@ it('lists the ten people seen most recently and counts them all, without a trunc
 it('orders people seen at the same instant by id', function () {
     ingest([actorUser('b', 'Second'), actorUser('c', 'Third'), actorUser('a', 'First')]);
 
-    $envelope = actorAnswer('mohamed');
+    $answer = actorAnswer('mohamed');
 
-    expect(array_column($envelope['result']['known_actors'], 'id'))->toBe(['a', 'b', 'c']);
+    expect(array_column($answer['result']['known_actors'], 'id'))->toBe(['a', 'b', 'c']);
 });
 
 it('answers that nobody was identified among no one when the store holds records and an empty directory', function () {
     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => ACTOR_AT])]);
 
-    $envelope = actorAnswer('mohamed');
+    $answer = actorAnswer('mohamed');
 
-    expect($envelope['empty'])->toBe(['kind' => 'no_match', 'population' => 0, 'message' => __('firewatch::messages.actor_unknown', ['who' => 'mohamed', 'population' => 0])])
-        ->and($envelope['result'])->toBe(['known_actors' => [], 'known_actor_count' => 0])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.actor_unknown_note')]);
+    expect($answer['empty'])->toBe(['kind' => 'no_match', 'population' => 0, 'message' => __('firewatch::messages.actor_unknown', ['who' => 'mohamed', 'population' => 0])])
+        ->and($answer['result'])->toBe(['known_actors' => [], 'known_actor_count' => 0])
+        ->and($answer['notes'])->toBe([__('firewatch::messages.actor_unknown_note')]);
 });
 
 it('states the blind spots of reading by actor when there is no store or it cannot be read', function () {
@@ -636,24 +636,24 @@ it('states the blind spots of reading by actor when there is no store or it cann
 it('answers that the store is empty when it holds no record and no one', function () {
     app(Writer::class)->transaction(fn () => null);
 
-    $envelope = actorAnswer('taylor');
+    $answer = actorAnswer('taylor');
 
-    expect($envelope['empty']['kind'])->toBe('store_empty')
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.store_empty'))
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
-        ->and($envelope['next'])->toBe([])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
+    expect($answer['empty']['kind'])->toBe('store_empty')
+        ->and($answer['summary'])->toBe(__('firewatch::messages.empty_summary.store_empty'))
+        ->and($answer['result'])->toBe([])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
+        ->and($answer['next'])->toBe([])
+        ->and(array_column($answer['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('lists the people of a directory whose records are all gone, and states that no record is left', function () {
     ingest([actorUser('7', 'Taylor', 'taylor@example.com')]);
 
-    $envelope = actorAnswer('mohamed');
+    $answer = actorAnswer('mohamed');
 
-    expect($envelope['empty']['kind'])->toBe('no_match')
-        ->and($envelope['result'])->toBe(['known_actors' => [actorRow('7', 'Taylor', 'taylor@example.com', 0)], 'known_actor_count' => 1])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0, 'oldest_at' => null, 'newest_at' => null]);
+    expect($answer['empty']['kind'])->toBe('no_match')
+        ->and($answer['result'])->toBe(['known_actors' => [actorRow('7', 'Taylor', 'taylor@example.com', 0)], 'known_actor_count' => 1])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0, 'oldest_at' => null, 'newest_at' => null]);
 });
 
 test('the tool is listed, with its description, arguments and annotations', function () {

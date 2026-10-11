@@ -13,7 +13,7 @@ use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Exceptions;
 use Symfony\Component\Process\Process;
 
@@ -63,8 +63,8 @@ describe('isolation', function () {
         setEnvironmentVariable('FIREWATCH_QUERY_SENTINEL', 'leaked');
         qcStandIn('environment');
 
-        $envelope = Envelope::assert(Query::class, ['sql' => 'SELECT 1']);
-        $names = array_merge(...$envelope['result']['rows']);
+        $answer = Answers::assert(Query::class, ['sql' => 'SELECT 1']);
+        $names = array_merge(...$answer['result']['rows']);
 
         // macOS gives every process its text encoding, whatever environment it is started with.
         expect(array_diff($names, ['PHPRC', 'PHP_INI_SCAN_DIR', 'SystemRoot', '__CF_USER_TEXT_ENCODING']))->toBe([])
@@ -80,9 +80,9 @@ describe('isolation', function () {
         file_put_contents("{$directory}/php.ini", "{$host}\nprecision=3\nserialize_precision=5\nauto_prepend_file={$directory}/prepend.php\n");
         setEnvironmentVariable('PHPRC', $directory);
 
-        $envelope = Envelope::assert(Query::class, ['sql' => 'SELECT 0.1 + 0.2 AS sum']);
+        $answer = Answers::assert(Query::class, ['sql' => 'SELECT 0.1 + 0.2 AS sum']);
 
-        expect($envelope['result']['rows'])->toBe([[0.30000000000000004]]);
+        expect($answer['result']['rows'])->toBe([[0.30000000000000004]]);
 
         array_map(unlink(...), glob("{$directory}/*"));
         rmdir($directory);
@@ -91,16 +91,16 @@ describe('isolation', function () {
 
 describe('raw values', function () {
     it('returns values as stored, and what JSON can not hold in words', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => "SELECT 9223372036854775807 AS big, 1e999 AS high, -1e999 AS low, x'00ff10' AS bytes, CAST(x'ff61' AS TEXT) AS broken, NULL AS missing, 1.5 AS fraction"]);
+        $answer = Answers::assert(Query::class, ['sql' => "SELECT 9223372036854775807 AS big, 1e999 AS high, -1e999 AS low, x'00ff10' AS bytes, CAST(x'ff61' AS TEXT) AS broken, NULL AS missing, 1.5 AS fraction"]);
 
-        expect($envelope['result']['rows'])->toBe([[PHP_INT_MAX, 'Infinity', '-Infinity', '<blob 3 bytes>', "\u{FFFD}a", null, 1.5]]);
+        expect($answer['result']['rows'])->toBe([[PHP_INT_MAX, 'Infinity', '-Infinity', '<blob 3 bytes>', "\u{FFFD}a", null, 1.5]]);
     })->group('process');
 
     it('returns text that holds a NUL byte as the SQLite driver reads it', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => "SELECT CAST(x'610062' AS TEXT) AS text"]);
+        $answer = Answers::assert(Query::class, ['sql' => "SELECT CAST(x'610062' AS TEXT) AS text"]);
 
         // PHP 8.6 reads the text whole; earlier releases cut it at the NUL byte.
-        expect($envelope['result']['rows'])->toBe([[PHP_VERSION_ID >= 80600 ? "a\0b" : 'a']]);
+        expect($answer['result']['rows'])->toBe([[PHP_VERSION_ID >= 80600 ? "a\0b" : 'a']]);
     })->group('process');
 });
 
@@ -147,19 +147,19 @@ describe('the protocol', function () {
 
     it('returns the rows a child streamed before it ended without a complete result, as partial with stop aborted', function (array $lines) {
         $text = qcEcho($lines);
-        $envelope = json_decode($text, associative: true);
+        $answer = json_decode($text, associative: true);
 
-        expect($envelope['result']['rows'])->toBe([[1]])
-            ->and($envelope['result']['stop'])->toBe('aborted')
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.query_summary_partial', ['rows' => '1 row', 'columns' => '1 column']))
-            ->and($envelope['truncated'])->toBe([[
+        expect($answer['result']['rows'])->toBe([[1]])
+            ->and($answer['result']['stop'])->toBe('aborted')
+            ->and($answer['summary'])->toBe(__('firewatch::messages.query_summary_partial', ['rows' => '1 row', 'columns' => '1 column']))
+            ->and($answer['truncated'])->toBe([[
                 'section' => 'rows',
                 'shown' => 1,
                 'matched' => null,
                 'reason' => 'partial',
                 'how' => __('firewatch::messages.query_partial_how'),
             ]])
-            ->and($envelope['notes'])->toBe([
+            ->and($answer['notes'])->toBe([
                 __('firewatch::messages.query_raw_values'),
                 __('firewatch::messages.query_partial_note'),
                 __('firewatch::messages.aborted_stderr', ['stderr' => 'stand-in stderr']),
@@ -191,7 +191,7 @@ describe('the protocol', function () {
         qcStandIn('sleep', deadline: 1.0);
 
         $refusal = (fn () => $this->content())->call(FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']))[0];
-        $ceilings = Envelope::assert(Describe::class)['result']['sql']['ceilings'];
+        $ceilings = Answers::assert(Describe::class)['result']['sql']['ceilings'];
 
         expect($ceilings['deadline_ms'])->toBe(1000)
             ->and($refusal)->toBe(__('firewatch::messages.deadline', ['seconds' => $ceilings['deadline_ms'] / 1000]));
@@ -204,12 +204,12 @@ describe('the protocol', function () {
             ['k' => 'row', 'r' => [2]],
             '',
         ], 'hang', deadline: 0.5);
-        $envelope = json_decode($text, associative: true);
+        $answer = json_decode($text, associative: true);
 
-        expect($envelope['result']['rows'])->toBe([[1], [2]])
-            ->and($envelope['result']['stop'])->toBe('deadline')
-            ->and($envelope['truncated'][0]['reason'])->toBe('partial')
-            ->and($envelope['notes'])->toBe([__('firewatch::messages.query_raw_values'), __('firewatch::messages.query_partial_note')]);
+        expect($answer['result']['rows'])->toBe([[1], [2]])
+            ->and($answer['result']['stop'])->toBe('deadline')
+            ->and($answer['truncated'][0]['reason'])->toBe('partial')
+            ->and($answer['notes'])->toBe([__('firewatch::messages.query_raw_values'), __('firewatch::messages.query_partial_note')]);
     })->group('process');
 
     it('drops the line a kill cut short instead of failing on it', function () {
@@ -218,10 +218,10 @@ describe('the protocol', function () {
             ['k' => 'row', 'r' => [1]],
             '{"k":"row","r":[2',
         ], 'hang', deadline: 0.5);
-        $envelope = json_decode($text, associative: true);
+        $answer = json_decode($text, associative: true);
 
-        expect($envelope['result']['rows'])->toBe([[1]])
-            ->and($envelope['result']['stop'])->toBe('deadline');
+        expect($answer['result']['rows'])->toBe([[1]])
+            ->and($answer['result']['stop'])->toBe('deadline');
 
         Exceptions::assertNothingReported();
     })->group('process');
@@ -250,18 +250,18 @@ describe('the protocol', function () {
             ['k' => 'row', 'r' => [['text' => 'abc', 'omitted' => 40]]],
             ['k' => 'end', 'rows' => 1, 'stop' => 'complete'],
         ]);
-        $envelope = json_decode($text, associative: true);
+        $answer = json_decode($text, associative: true);
 
-        expect($envelope['result']['rows'])->toBe([['abc'.__('firewatch::messages.cell_truncated', ['count' => 40])]])
-            ->and($envelope['truncated'][0]['reason'])->toBe('cap');
+        expect($answer['result']['rows'])->toBe([['abc'.__('firewatch::messages.cell_truncated', ['count' => 40])]])
+            ->and($answer['truncated'][0]['reason'])->toBe('cap');
     })->group('process');
 
     it('answers a store state the child reports alone the way every tool does', function () {
         $text = qcEcho([['k' => 'state', 'state' => 'schema_mismatch', 'found' => 2]]);
-        $envelope = json_decode($text, associative: true);
+        $answer = json_decode($text, associative: true);
 
-        expect($envelope['empty']['kind'])->toBe('store_unusable')
-            ->and($envelope['coverage']['reason'])->toBe('newer_schema');
+        expect($answer['empty']['kind'])->toBe('store_unusable')
+            ->and($answer['coverage']['reason'])->toBe('newer_schema');
     })->group('process');
 
     it('answers an isolation the child could not establish as unavailable', function () {
@@ -277,12 +277,12 @@ describe('the protocol', function () {
     })->group('process');
 
     it('returns the rows before a runtime error as partial with stop error, and SQLite\'s message as a note', function () {
-        $envelope = Envelope::assert(Query::class, ['sql' => "SELECT json_extract(column1, '$') FROM (VALUES ('{}'), ('{'))"]);
+        $answer = Answers::assert(Query::class, ['sql' => "SELECT json_extract(column1, '$') FROM (VALUES ('{}'), ('{'))"]);
 
-        expect($envelope['result']['rows'])->toBe([['{}']])
-            ->and($envelope['result']['stop'])->toBe('error')
-            ->and($envelope['truncated'][0]['reason'])->toBe('partial')
-            ->and($envelope['notes'])->toBe([
+        expect($answer['result']['rows'])->toBe([['{}']])
+            ->and($answer['result']['stop'])->toBe('error')
+            ->and($answer['truncated'][0]['reason'])->toBe('partial')
+            ->and($answer['notes'])->toBe([
                 __('firewatch::messages.query_raw_values'),
                 __('firewatch::messages.query_partial_note'),
                 'malformed JSON',

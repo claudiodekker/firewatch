@@ -6,7 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -60,7 +60,7 @@ function pairIngest(array $records): void
  */
 function pairAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Compare::class, ['type' => 'request', 'deploy_before' => 'v1', 'deploy_after' => 'v2', ...$arguments]);
+    return Answers::assert(Compare::class, ['type' => 'request', 'deploy_before' => 'v1', 'deploy_after' => 'v2', ...$arguments]);
 }
 
 /**
@@ -140,9 +140,9 @@ it('compares every record of each deploy in the window, interleaved in time, and
         ...pairRecords('a', 'v2', PAIR_NOW - PAIR_START, [900, 900]),
     ]);
 
-    $envelope = pairAnswer();
+    $answer = pairAnswer();
 
-    expect($envelope)->toEqual([
+    expect($answer)->toEqual([
         'tool' => 'compare',
         'now' => PAIR_NOW,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => PAIR_CREATED, 'until' => PAIR_NOW, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
@@ -293,9 +293,9 @@ it('evaluates nothing when a deploy has no records in the window, says which, an
         ...pairRecords('b', null, 40, [100]),
     ]);
 
-    $envelope = pairAnswer(['deploy_before' => $before, 'deploy_after' => $after]);
+    $answer = pairAnswer(['deploy_before' => $before, 'deploy_after' => $after]);
 
-    expect($envelope)->toEqual([
+    expect($answer)->toEqual([
         'tool' => 'compare',
         'now' => PAIR_NOW,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => PAIR_CREATED, 'until' => PAIR_NOW, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
@@ -335,9 +335,9 @@ it('evaluates nothing when neither deploy has records in a window that holds the
         ...pairRecords('b', null, 40, [100]),
     ]);
 
-    $envelope = pairAnswer(['deploy_before' => 'v8', 'deploy_after' => 'v9']);
+    $answer = pairAnswer(['deploy_before' => 'v8', 'deploy_after' => 'v9']);
 
-    expect($envelope)->toEqual([
+    expect($answer)->toEqual([
         'tool' => 'compare',
         'now' => PAIR_NOW,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => PAIR_CREATED, 'until' => PAIR_NOW, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
@@ -369,20 +369,20 @@ it('evaluates nothing when neither deploy has records in a window that holds the
 it('answers no match when the window holds no records of the type under any deploy', function () {
     pairIngest(pairRecords('a', 'v1', 0, [100, 100, 100]));
 
-    $envelope = pairAnswer(['type' => 'command', 'deploy_before' => 'v8', 'deploy_after' => 'v9']);
+    $answer = pairAnswer(['type' => 'command', 'deploy_before' => 'v8', 'deploy_after' => 'v9']);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 3, 'filters' => 'type: command, deploy_before: v8, deploy_after: v9'])])
-        ->and($envelope['result'])->toBe([]);
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 3, 'filters' => 'type: command, deploy_before: v8, deploy_after: v9'])])
+        ->and($answer['result'])->toBe([]);
 });
 
 it('lists at most ten deploys beside an empty deploy, and says so when the window holds more', function (int $deploys, array $truncated) {
     pairIngest(array_merge(...array_map(fn (int $index) => pairRecords('a', sprintf('v%02d', $index), $index, [100]), range(1, $deploys))));
 
-    $envelope = pairAnswer(['deploy_before' => 'v01', 'deploy_after' => 'v99']);
+    $answer = pairAnswer(['deploy_before' => 'v01', 'deploy_after' => 'v99']);
 
-    expect($envelope['result'])->toMatchArray(['reason' => 'empty_side', 'side' => 'after'])
-        ->and(array_column($envelope['result']['deploys'], 'deploy'))->toBe(['v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09', 'v10'])
-        ->and($envelope['truncated'])->toBe($truncated);
+    expect($answer['result'])->toMatchArray(['reason' => 'empty_side', 'side' => 'after'])
+        ->and(array_column($answer['result']['deploys'], 'deploy'))->toBe(['v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09', 'v10'])
+        ->and($answer['truncated'])->toBe($truncated);
 })->with([
     'ten deploys' => [10, []],
     'eleven deploys' => fn () => [11, [['section' => 'deploys', 'shown' => 10, 'matched' => null, 'reason' => 'limit', 'how' => __('firewatch::messages.compare_deploys_truncated_how')]]],
@@ -405,9 +405,9 @@ it('says a deploy pair cannot separate an uncommitted edit on every pair answer,
     $windowEmpty = pairAnswer(['since' => PAIR_START + 100, 'until' => PAIR_START + 200]);
     $bothEmpty = pairAnswer(['deploy_before' => 'v8', 'deploy_after' => 'v9']);
     $noMatch = pairAnswer(['type' => 'query']);
-    $noGroup = Envelope::assert(Compare::class, ['group' => pairHash('f'), 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
-    $split = Envelope::assert(Compare::class, ['type' => 'request', 'split_at' => PAIR_START + 300]);
-    $splitEmpty = Envelope::assert(Compare::class, ['type' => 'query', 'split_at' => PAIR_START + 300]);
+    $noGroup = Answers::assert(Compare::class, ['group' => pairHash('f'), 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
+    $split = Answers::assert(Compare::class, ['type' => 'request', 'split_at' => PAIR_START + 300]);
+    $splitEmpty = Answers::assert(Compare::class, ['type' => 'query', 'split_at' => PAIR_START + 300]);
 
     $sentence = __('firewatch::messages.compare_deploy_pair_note');
 
@@ -421,15 +421,15 @@ it('says a deploy pair cannot separate an uncommitted edit on every pair answer,
         ->and($split['empty'])->toBeNull()
         ->and($splitEmpty['empty']['kind'])->toBe('no_match');
 
-    foreach ([$noStore, $storeEmpty, $evaluated, $emptySide, $bothEmpty, $windowEmpty, $noMatch, $noGroup] as $envelope) {
-        expect($envelope['notes'])->toContain($sentence)
-            ->and($envelope['coverage']['straddling'])->toBeNull()
-            ->and(array_column($envelope['blind_spots'], 'id'))->not->toContain('visible-at-completion');
+    foreach ([$noStore, $storeEmpty, $evaluated, $emptySide, $bothEmpty, $windowEmpty, $noMatch, $noGroup] as $answer) {
+        expect($answer['notes'])->toContain($sentence)
+            ->and($answer['coverage']['straddling'])->toBeNull()
+            ->and(array_column($answer['blind_spots'], 'id'))->not->toContain('visible-at-completion');
     }
 
-    foreach ([$split, $splitEmpty] as $envelope) {
-        expect($envelope['notes'])->not->toContain($sentence)
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('visible-at-completion');
+    foreach ([$split, $splitEmpty] as $answer) {
+        expect($answer['notes'])->not->toContain($sentence)
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('visible-at-completion');
     }
 });
 
@@ -442,22 +442,22 @@ it('offers the records of each deploy and the deploy breakdown of the first grou
         ...pairRecords('b', 'v0', 300, [100]),
     ]);
 
-    $envelope = pairAnswer(['by' => 'p50_duration']);
+    $answer = pairAnswer(['by' => 'p50_duration']);
     $this->travelTo(Date::createFromTimestamp(PAIR_NOW + 7200));
     ingest(pairRecords('b', 'v2', PAIR_NOW - PAIR_START + 600, [900, 900, 900]));
 
     $window = ['since' => PAIR_CREATED, 'until' => PAIR_NOW];
-    $before = Envelope::assert(Occurrences::class, $envelope['next'][0]['arguments']);
-    $after = Envelope::assert(Occurrences::class, $envelope['next'][1]['arguments']);
-    $breakdown = Envelope::assert(Rank::class, $envelope['next'][2]['arguments']);
+    $before = Answers::assert(Occurrences::class, $answer['next'][0]['arguments']);
+    $after = Answers::assert(Occurrences::class, $answer['next'][1]['arguments']);
+    $breakdown = Answers::assert(Rank::class, $answer['next'][2]['arguments']);
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['occurrences', 'occurrences', 'rank'])
-        ->and(array_column($envelope['next'], 'arguments'))->toEqual([
+    expect(array_column($answer['next'], 'tool'))->toBe(['occurrences', 'occurrences', 'rank'])
+        ->and(array_column($answer['next'], 'arguments'))->toEqual([
             ['group' => pairHash('b'), 'deploy' => 'v1', ...$window],
             ['group' => pairHash('b'), 'deploy' => 'v2', ...$window],
             ['group' => pairHash('b'), ...$window],
         ])
-        ->and($envelope['result']['groups'][0])->toMatchArray(['group' => pairHash('b'), 'before_records' => 3, 'after_records' => 4])
+        ->and($answer['result']['groups'][0])->toMatchArray(['group' => pairHash('b'), 'before_records' => 3, 'after_records' => 4])
         ->and($before['empty'])->toBeNull()
         ->and($before['window'])->toMatchArray($window)
         ->and($before['result']['rows'])->toHaveCount(3)
@@ -492,10 +492,10 @@ it('says on each deploy how many of its records started before what the store co
         ...pairRecords('a', 'v3', PAIR_CREATED - PAIR_START - 10, [100]),
     ]);
 
-    $envelope = pairAnswer();
+    $answer = pairAnswer();
 
-    expect($envelope['summary'])->toBe(__('firewatch::messages.compare_empty_deploy_summary', ['deploy' => 'v1', 'side' => 'before', 'type' => 'request']))
-        ->and($envelope['result'])->toMatchArray([
+    expect($answer['summary'])->toBe(__('firewatch::messages.compare_empty_deploy_summary', ['deploy' => 'v1', 'side' => 'before', 'type' => 'request']))
+        ->and($answer['result'])->toMatchArray([
             'change' => 'not_evaluated',
             'reason' => 'empty_side',
             'side' => 'before',
@@ -505,7 +505,7 @@ it('says on each deploy how many of its records started before what the store co
                 ['deploy' => 'v2', 'records' => 3, 'first_at' => PAIR_START],
             ],
         ])
-        ->and($envelope['notes'])->toBe([
+        ->and($answer['notes'])->toBe([
             __('firewatch::messages.compare_pair_not_evaluated_note'),
             trans_choice('firewatch::messages.compare_earlier_deploy_note', 1, ['count' => 1, 'type' => 'request', 'deploy' => 'v1']),
             trans_choice('firewatch::messages.compare_earlier_deploy_note', 2, ['count' => 2, 'type' => 'request', 'deploy' => 'v2']),
@@ -520,11 +520,11 @@ it('counts at most 100 records of a deploy before what the store covers, says wh
         ...pairRecords('a', 'v2', 600, [100, 100, 100]),
     ]);
 
-    $envelope = pairAnswer(['by' => 'p50_duration', ...$arguments]);
+    $answer = pairAnswer(['by' => 'p50_duration', ...$arguments]);
 
-    expect($envelope['result']['before'])->toMatchArray(['records' => 3, ...$before])
-        ->and($envelope['result']['after'])->toMatchArray(['records' => 3, 'earlier_records' => 0, 'earlier_more' => false])
-        ->and($envelope['notes'])->toBe([...array_map(fn (array $note) => trans_choice("firewatch::messages.{$note[0]}", $note[1], ['count' => $note[1], 'type' => 'request', 'deploy' => 'v1']), $notes), __('firewatch::messages.compare_deploy_pair_note')]);
+    expect($answer['result']['before'])->toMatchArray(['records' => 3, ...$before])
+        ->and($answer['result']['after'])->toMatchArray(['records' => 3, 'earlier_records' => 0, 'earlier_more' => false])
+        ->and($answer['notes'])->toBe([...array_map(fn (array $note) => trans_choice("firewatch::messages.{$note[0]}", $note[1], ['count' => $note[1], 'type' => 'request', 'deploy' => 'v1']), $notes), __('firewatch::messages.compare_deploy_pair_note')]);
 })->with([
     '100 records' => [100, [], ['earlier_records' => 100, 'earlier_more' => false], [['compare_earlier_deploy_note', 100]]],
     '101 records' => [101, [], ['earlier_records' => 100, 'earlier_more' => true], [['compare_earlier_deploy_more_note', 100]]],
@@ -539,11 +539,11 @@ it('offers the records of a group that is new or gone only under the deploy that
         ...pairRecords('c', 'v1', 0, [100, 100, 100]),
     ]);
 
-    $envelope = Envelope::assert(Compare::class, ['group' => pairHash($letter), 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
-    $records = Envelope::assert(Occurrences::class, $envelope['next'][0]['arguments']);
+    $answer = Answers::assert(Compare::class, ['group' => pairHash($letter), 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
+    $records = Answers::assert(Occurrences::class, $answer['next'][0]['arguments']);
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['occurrences', 'rank'])
-        ->and($envelope['next'][0]['arguments'])->toEqual(['group' => pairHash($letter), 'deploy' => $deploy, 'since' => PAIR_CREATED, 'until' => PAIR_NOW])
+    expect(array_column($answer['next'], 'tool'))->toBe(['occurrences', 'rank'])
+        ->and($answer['next'][0]['arguments'])->toEqual(['group' => pairHash($letter), 'deploy' => $deploy, 'since' => PAIR_CREATED, 'until' => PAIR_NOW])
         ->and($records['result']['rows'])->toHaveCount(3);
 })->with([
     'a new group' => ['a', 'v2'],

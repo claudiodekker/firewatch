@@ -192,7 +192,7 @@ class Arguments
         $value = $this->get($argument);
 
         if ($value === null) {
-            return $this->fallback($argument, $fitting);
+            return $this->declaredCase($argument, $fitting);
         }
 
         foreach ($fitting as $case) {
@@ -212,7 +212,7 @@ class Arguments
      * @param  list<TCase>  $cases
      * @return TCase|null
      */
-    protected function fallback(string $argument, array $cases): ?BackedEnum
+    protected function declaredCase(string $argument, array $cases): ?BackedEnum
     {
         $default = $this->declared($argument)['default'] ?? null;
 

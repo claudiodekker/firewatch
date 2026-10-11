@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
-use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
+use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\ExecutionHeader;
 use ClaudioDekker\Firewatch\Mcp\Failure;
@@ -45,7 +45,7 @@ use SQLite3;
 #[IsOpenWorld(false)]
 class Trace extends Tool
 {
-    use AnswersInEnvelope {
+    use BuildsAnswers {
         schema as formatSchema;
     }
 
@@ -102,7 +102,7 @@ class Trace extends Tool
     }
 
     /**
-     * Read the arguments, then the store, and put the trace, or why there is none, in the envelope.
+     * Read the arguments, then the store, and put the trace, or why there is none, in the answer.
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
@@ -132,7 +132,7 @@ class Trace extends Tool
     }
 
     /**
-     * Put the trace in the envelope.
+     * Put the trace in the answer.
      *
      * @param  string|null  $jobId  the job asked for, or null when the trace was
      */

@@ -12,7 +12,7 @@ use ClaudioDekker\Firewatch\Sql\SqlRows;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\FakeSqlRunner;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
@@ -43,7 +43,7 @@ function qryRequest(string $path, int $duration, float $at = QUERY_AT, array $fi
  */
 function qryAnswer(array $arguments): array
 {
-    return Envelope::assert(Query::class, $arguments);
+    return Answers::assert(Query::class, $arguments);
 }
 
 /**
@@ -88,13 +88,13 @@ describe('the rows of a statement', function () {
             qryRequest('/home', 250_000, QUERY_AT + 20),
         ]);
 
-        $envelope = qryAnswer(['sql' => 'SELECT route_path, count(*) AS n, max(duration) AS longest, min(started_at) AS first FROM requests GROUP BY route_path ORDER BY n DESC']);
+        $answer = qryAnswer(['sql' => 'SELECT route_path, count(*) AS n, max(duration) AS longest, min(started_at) AS first FROM requests GROUP BY route_path ORDER BY n DESC']);
 
-        expect($envelope['result']['elapsed_ms'])->toBeInt();
+        expect($answer['result']['elapsed_ms'])->toBeInt();
 
-        $envelope['result']['elapsed_ms'] = 0;
+        $answer['result']['elapsed_ms'] = 0;
 
-        expect($envelope)->toBe([
+        expect($answer)->toBe([
             'tool' => 'query',
             'now' => (int) QUERY_AT + 3600,
             'window' => [
@@ -147,28 +147,28 @@ describe('the rows of a statement', function () {
     it('keeps duplicate column names, and a statement that reads no record type attaches no structural blind spot', function () {
         ingest([qryRequest('/home', 1)]);
 
-        $envelope = qryAnswer(['sql' => 'SELECT 1 AS n, 2 AS n']);
+        $answer = qryAnswer(['sql' => 'SELECT 1 AS n, 2 AS n']);
 
-        expect($envelope['result']['columns'])->toBe(['n', 'n'])
-            ->and($envelope['result']['rows'])->toBe([[1, 2]])
-            ->and($envelope['coverage']['types_read'])->toBe([])
-            ->and(array_column($envelope['blind_spots'], 'kind'))->not->toContain('structural');
+        expect($answer['result']['columns'])->toBe(['n', 'n'])
+            ->and($answer['result']['rows'])->toBe([[1, 2]])
+            ->and($answer['coverage']['types_read'])->toBe([])
+            ->and(array_column($answer['blind_spots'], 'kind'))->not->toContain('structural');
     })->group('process');
 
     it('answers no rows as no match, keeping the columns, and never as clean', function () {
         ingest([qryRequest('/home', 1)]);
 
-        $envelope = qryAnswer(['sql' => "SELECT route_path FROM requests WHERE route_path = '/nowhere'"]);
+        $answer = qryAnswer(['sql' => "SELECT route_path FROM requests WHERE route_path = '/nowhere'"]);
 
-        expect($envelope['empty'])->toBe([
+        expect($answer['empty'])->toBe([
             'kind' => 'no_match',
             'population' => null,
             'message' => __('firewatch::messages.query_no_rows'),
         ])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.query_no_rows'))
-            ->and($envelope['result']['columns'])->toBe(['route_path'])
-            ->and($envelope['result']['rows'])->toBe([])
-            ->and($envelope['coverage']['types_read'])->toBe(['request']);
+            ->and($answer['summary'])->toBe(__('firewatch::messages.query_no_rows'))
+            ->and($answer['result']['columns'])->toBe(['route_path'])
+            ->and($answer['result']['rows'])->toBe([])
+            ->and($answer['coverage']['types_read'])->toBe(['request']);
     })->group('process');
 });
 
@@ -178,28 +178,28 @@ describe('the limit', function () {
     });
 
     it('answers exactly the limit as complete', function () {
-        $envelope = qryAnswer(['sql' => 'VALUES (1), (2), (3)', 'limit' => 3]);
+        $answer = qryAnswer(['sql' => 'VALUES (1), (2), (3)', 'limit' => 3]);
 
-        expect($envelope['result']['stop'])->toBe('complete')
-            ->and($envelope['truncated'])->toBe([])
-            ->and($envelope['next'])->toBe([]);
+        expect($answer['result']['stop'])->toBe('complete')
+            ->and($answer['truncated'])->toBe([])
+            ->and($answer['next'])->toBe([]);
     })->group('process');
 
     it('stops one row beyond the limit, says so, and offers the most rows an answer holds', function () {
-        $envelope = qryAnswer(['sql' => 'VALUES (1), (2), (3)', 'limit' => 2]);
-        $more = Envelope::assert(Query::class, $envelope['next'][0]['arguments']);
+        $answer = qryAnswer(['sql' => 'VALUES (1), (2), (3)', 'limit' => 2]);
+        $more = Answers::assert(Query::class, $answer['next'][0]['arguments']);
 
-        expect($envelope['result']['rows'])->toBe([[1], [2]])
-            ->and($envelope['result']['stop'])->toBe('limit')
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.query_summary_more', ['rows' => '2 rows', 'columns' => '1 column', 'shown' => 2]))
-            ->and($envelope['truncated'])->toBe([[
+        expect($answer['result']['rows'])->toBe([[1], [2]])
+            ->and($answer['result']['stop'])->toBe('limit')
+            ->and($answer['summary'])->toBe(__('firewatch::messages.query_summary_more', ['rows' => '2 rows', 'columns' => '1 column', 'shown' => 2]))
+            ->and($answer['truncated'])->toBe([[
                 'section' => 'rows',
                 'shown' => 2,
                 'matched' => null,
                 'reason' => 'limit',
                 'how' => __('firewatch::messages.query_limit_how'),
             ]])
-            ->and($envelope['next'])->toBe([[
+            ->and($answer['next'])->toBe([[
                 'tool' => 'query',
                 'arguments' => [
                     'sql' => 'VALUES (1), (2), (3)',
@@ -211,16 +211,16 @@ describe('the limit', function () {
     })->group('process');
 
     it('offers nothing more at the most rows an answer holds', function () {
-        $envelope = qryAnswer(['sql' => 'WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 501) SELECT n FROM c', 'limit' => 500]);
+        $answer = qryAnswer(['sql' => 'WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 501) SELECT n FROM c', 'limit' => 500]);
 
-        expect($envelope['result']['stop'])->toBe('limit')
-            ->and($envelope['next'])->toBe([]);
+        expect($answer['result']['stop'])->toBe('limit')
+            ->and($answer['next'])->toBe([]);
     })->group('process');
 
     it('returns 50 rows when no limit is asked for', function () {
-        $envelope = qryAnswer(['sql' => 'WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 60) SELECT n FROM c']);
+        $answer = qryAnswer(['sql' => 'WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 60) SELECT n FROM c']);
 
-        expect($envelope['result']['rows'])->toHaveCount(50);
+        expect($answer['result']['rows'])->toHaveCount(50);
     })->group('process');
 });
 
@@ -264,10 +264,10 @@ describe('the SQL text', function () {
         ingest([qryRequest('/home', 1)]);
         $sql = 'SELECT 1 AS n'.str_repeat(' ', 16_384 - 13);
 
-        $envelope = qryAnswer(['sql' => $sql]);
+        $answer = qryAnswer(['sql' => $sql]);
 
         expect(strlen($sql))->toBe(16_384)
-            ->and($envelope['result']['rows'])->toBe([[1]]);
+            ->and($answer['result']['rows'])->toBe([[1]]);
     })->group('process');
 
     it('refuses longer SQL and a NUL byte before a child is spawned', function (string $sql, string $subject) {
@@ -297,10 +297,10 @@ describe('the second snapshot', function () {
     it('measures the conditions of the types the statement read', function (string $sql, bool $drift) {
         ingest([qryRequest('/home', 1, fields: ['colour' => 'red'])]);
 
-        $envelope = qryAnswer(['sql' => $sql]);
+        $answer = qryAnswer(['sql' => $sql]);
 
-        expect(in_array('drift', array_column($envelope['blind_spots'], 'id'), true))->toBe($drift)
-            ->and($envelope['coverage']['records'])->toBe(1);
+        expect(in_array('drift', array_column($answer['blind_spots'], 'id'), true))->toBe($drift)
+            ->and($answer['coverage']['records'])->toBe(1);
     })->with([
         'a count of the requests' => ['SELECT count(*) FROM requests', true],
         'a statement that reads no type' => ['SELECT 1', false],
@@ -318,13 +318,13 @@ describe('the second snapshot', function () {
             return new SqlRows(['n'], [[1]], QueryStop::COMPLETE, [RecordType::REQUEST], 3);
         }));
 
-        $envelope = json_decode(qryText(['sql' => 'SELECT count(*) AS n FROM requests', 'format' => 'json']), associative: true);
+        $answer = json_decode(qryText(['sql' => 'SELECT count(*) AS n FROM requests', 'format' => 'json']), associative: true);
 
-        expect($envelope['result']['rows'])->toBe([[1]])
-            ->and($envelope['empty'])->toBeNull()
-            ->and($envelope['coverage']['state'])->toBe('absent')
-            ->and($envelope['coverage']['types_read'])->toBe(['request'])
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('console-requests');
+        expect($answer['result']['rows'])->toBe([[1]])
+            ->and($answer['empty'])->toBeNull()
+            ->and($answer['coverage']['state'])->toBe('absent')
+            ->and($answer['coverage']['types_read'])->toBe(['request'])
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('console-requests');
     })->group('posix');
 });
 
@@ -332,7 +332,7 @@ describe('the state of the store', function () {
     it('answers that there is no store without spawning a child', function () {
         qryStandIn('marker');
 
-        $envelope = qryAnswer(['sql' => 'SELECT 1']);
+        $answer = qryAnswer(['sql' => 'SELECT 1']);
 
         expect(qrySpawned())->toBeFalse()
             ->and(app(Configuration::class)->database)->not->toBeFile();
@@ -342,7 +342,7 @@ describe('the state of the store', function () {
         qryStandIn('marker');
         qryForeignStore();
 
-        $envelope = qryAnswer(['sql' => 'SELECT 1']);
+        $answer = qryAnswer(['sql' => 'SELECT 1']);
 
         expect(qrySpawned())->toBeFalse();
     });
@@ -351,15 +351,15 @@ describe('the state of the store', function () {
         ingest([qryRequest('/home', 1)]);
         app()->instance(SqlRunner::class, new FakeSqlRunner(fn () => throw new StoreUnusable(StoreState::BUSY)));
 
-        $envelope = qryAnswer(['sql' => 'SELECT 1']);
+        $answer = qryAnswer(['sql' => 'SELECT 1']);
 
-        expect($envelope['empty'])->toBe([
+        expect($answer['empty'])->toBe([
             'kind' => 'store_unusable',
             'population' => null,
             'message' => __('firewatch::messages.store_unusable.unreadable', ['path' => app(Configuration::class)->database, 'cause' => __('firewatch::messages.store_causes.busy')]),
         ])
-            ->and($envelope['coverage']['reason'])->toBe('unreadable')
-            ->and($envelope['result'])->toBe([]);
+            ->and($answer['coverage']['reason'])->toBe('unreadable')
+            ->and($answer['result'])->toBe([]);
     });
 });
 

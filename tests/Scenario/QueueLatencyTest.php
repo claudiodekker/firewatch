@@ -2,7 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -59,12 +59,12 @@ it('flags a job no worker picked up as pending, and says the store cannot tell w
     queueLatencyAMinuteLater();
     [$dispatch] = storeRows('SELECT execution_id, group_hash FROM queued_jobs');
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'queue-latency']);
-    $finding = $envelope['result']['findings'][0];
+    $answer = Answers::assert(Detect::class, ['shape' => 'queue-latency']);
+    $finding = $answer['result']['findings'][0];
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
-        ->and($envelope['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
-        ->and($envelope['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_wait'), __('firewatch::messages.detect_caveat_pending')])
+    expect($answer['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+        ->and($answer['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
+        ->and($answer['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_wait'), __('firewatch::messages.detect_caveat_pending')])
         ->and($finding)->toMatchArray(['group' => $dispatch['group_hash'], 'name' => ShipOrder::class, 'latest_execution_id' => $dispatch['execution_id']])
         ->and($finding['count'])->toBeGreaterThanOrEqual(5000)
         ->and($finding['evidence'])->toMatchArray(['jobs' => 1, 'waits_over_threshold' => 0, 'pending' => 1, 'worst_wait_ms' => null, 'median_wait_ms' => null, 'queues' => ['default'], 'connections' => ['database']])
@@ -75,8 +75,8 @@ it('finds nothing in a job a worker picked up at once, on a queue whose jobs do 
     queueLatencyWorkedShipment();
     queueLatencyAMinuteLater();
 
-    $latency = Envelope::assert(Detect::class, ['shape' => 'queue-latency']);
-    $failing = Envelope::assert(Detect::class, ['shape' => 'failing-jobs']);
+    $latency = Answers::assert(Detect::class, ['shape' => 'queue-latency']);
+    $failing = Answers::assert(Detect::class, ['shape' => 'failing-jobs']);
 
     expect($latency['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0, 'findings' => []])
         ->and($latency['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
@@ -87,30 +87,30 @@ it('finds nothing in a job a worker picked up at once, on a queue whose jobs do 
 it('has nothing to examine for a job on the sync connection, whose dispatch the sensors do not record', function () {
     queueLatencyShipment('sync');
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'queue-latency']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'queue-latency']);
 
     expect(storeRows('SELECT id FROM queued_jobs'))->toBe([])
-        ->and($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-        ->and($envelope['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
+        ->and($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+        ->and($answer['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
 });
 
 it('is not evaluated for a job whose dispatch was not recorded, and counts the attempt it cannot place', function () {
     Nightwatch::rejectQueuedJobs(fn () => true);
     queueLatencyWorkedShipment();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'queue-latency']);
+    $answer = Answers::assert(Detect::class, ['shape' => 'queue-latency']);
 
-    expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'prerequisite_missing', 'examined' => 0, 'total' => 0])
-        ->and($envelope['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 1, 'without_first_attempt' => 0])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('uninstrumented-dispatcher');
+    expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'prerequisite_missing', 'examined' => 0, 'total' => 0])
+        ->and($answer['result']['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 1, 'without_first_attempt' => 0])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('uninstrumented-dispatcher');
 });
 
 it('states what it cannot see of queued jobs, on the real dispatch', function () {
     queueLatencyWorkedShipment();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'queue-latency']);
-    $blindSpots = array_column($envelope['blind_spots'], 'message', 'id');
+    $answer = Answers::assert(Detect::class, ['shape' => 'queue-latency']);
+    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
 
     expect($blindSpots)->toHaveKeys(['sync-jobs-unrecorded', 'uninstrumented-dispatcher'])
         ->and($blindSpots['sync-jobs-unrecorded'])->toBe(__('firewatch::messages.blind_spots.sync-jobs-unrecorded'))
@@ -121,11 +121,11 @@ it('opens what a finding points at', function (Closure $shipment, array $argumen
     $shipment();
     queueLatencyAMinuteLater();
 
-    $envelope = Envelope::assert(Detect::class, ['shape' => 'queue-latency', ...$arguments]);
+    $answer = Answers::assert(Detect::class, ['shape' => 'queue-latency', ...$arguments]);
 
-    expect(array_column($envelope['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank']);
+    expect(array_column($answer['next'], 'tool'))->toBe(['execution', 'occurrences', 'rank']);
 
-    expect(array_map(fn (array $call) => Envelope::follow($call)['empty'], $envelope['next']))->each->toBeNull();
+    expect(array_map(fn (array $call) => Answers::follow($call)['empty'], $answer['next']))->each->toBeNull();
 })->with([
     'the request that queued a pending job' => [fn () => queueLatencyShipment(), []],
     'the first attempt of a job that waited' => [fn () => queueLatencyWorkedShipment(), ['threshold' => 1]],
@@ -135,7 +135,7 @@ it('puts the verdict in the overview next to the other shapes', function () {
     queueLatencyShipment();
     queueLatencyAMinuteLater();
 
-    $row = collect(Envelope::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'queue-latency');
+    $row = collect(Answers::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'queue-latency');
 
     expect($row)->toMatchArray(['verdict' => 'findings', 'reason' => null, 'examined' => 1, 'total' => 1])
         ->and($row['worst']['name'])->toBe(ShipOrder::class);

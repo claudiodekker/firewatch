@@ -3,7 +3,7 @@
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -148,15 +148,15 @@ function whatFailedTraffic(): void
 }
 
 /**
- * Assert that every call the answer offers, and every call those answers offer in turn, answers in the envelope, and get the answers.
+ * Assert that every call the answer offers, and every call those answers offer in turn, answers in the answer, and get the answers.
  *
- * @param  array<string, mixed>  $envelope
+ * @param  array<string, mixed>  $answer
  * @return list<array<string, mixed>>
  */
-function whatFailedAssertOfferedCalls(array $envelope): array
+function whatFailedAssertOfferedCalls(array $answer): array
 {
     $answers = [];
-    $offered = $envelope['next'];
+    $offered = $answer['next'];
 
     while ($offered !== []) {
         $call = array_shift($offered);
@@ -166,7 +166,7 @@ function whatFailedAssertOfferedCalls(array $envelope): array
             continue;
         }
 
-        $answers[$key] = Envelope::follow($call);
+        $answers[$key] = Answers::follow($call);
 
         array_push($offered, ...$answers[$key]['next']);
     }
@@ -195,10 +195,10 @@ it('flags the route, the job, the task and the dependency that failed, with the 
     [$task] = storeRows("SELECT execution_id FROM scheduled_tasks WHERE status = 'failed'");
     [$quote] = storeRows('SELECT execution_id FROM outgoing_requests ORDER BY started_at DESC LIMIT 1');
 
-    $routes = Envelope::assert(Detect::class, ['shape' => 'failing-routes'])['result'];
-    $jobs = Envelope::assert(Detect::class, ['shape' => 'failing-jobs'])['result'];
-    $tasks = Envelope::assert(Detect::class, ['shape' => 'failing-tasks'])['result'];
-    $http = Envelope::assert(Detect::class, ['shape' => 'failing-http'])['result'];
+    $routes = Answers::assert(Detect::class, ['shape' => 'failing-routes'])['result'];
+    $jobs = Answers::assert(Detect::class, ['shape' => 'failing-jobs'])['result'];
+    $tasks = Answers::assert(Detect::class, ['shape' => 'failing-tasks'])['result'];
+    $http = Answers::assert(Detect::class, ['shape' => 'failing-http'])['result'];
 
     expect(whatFailedResult($routes))->toBe([
         'detector' => 'failing-routes',
@@ -294,8 +294,8 @@ it('flags the exceptions behind those failures and the error lines the handler w
     [$attempt] = storeRows("SELECT execution_id FROM job_attempts WHERE status = 'failed'");
     [$task] = storeRows("SELECT execution_id FROM scheduled_tasks WHERE status = 'failed'");
 
-    $exceptions = Envelope::assert(Detect::class, ['shape' => 'exception-clusters'])['result'];
-    $logs = Envelope::assert(Detect::class, ['shape' => 'error-logs'])['result'];
+    $exceptions = Answers::assert(Detect::class, ['shape' => 'exception-clusters'])['result'];
+    $logs = Answers::assert(Detect::class, ['shape' => 'error-logs'])['result'];
     $thrown = array_column($exceptions['findings'], 'evidence');
 
     expect(whatFailedResult($exceptions, unstable: ['evidence.file', 'evidence.line', 'evidence.app_frame']))->toBe([
@@ -387,8 +387,8 @@ it('flags the exceptions behind those failures and the error lines the handler w
 it('narrows a shape to the group of a finding, and gets that finding alone', function (string $shape, int $groups) {
     whatFailedTraffic();
 
-    $findings = Envelope::assert(Detect::class, ['shape' => $shape])['result']['findings'];
-    $narrowed = array_map(fn (array $finding) => Envelope::assert(Detect::class, ['shape' => $shape, 'group' => $finding['group']])['result'], $findings);
+    $findings = Answers::assert(Detect::class, ['shape' => $shape])['result']['findings'];
+    $narrowed = array_map(fn (array $finding) => Answers::assert(Detect::class, ['shape' => $shape, 'group' => $finding['group']])['result'], $findings);
 
     expect(array_unique(array_column($findings, 'group')))->toHaveCount($groups)
         ->and(array_column($narrowed, 'total'))->toBe(array_fill(0, $groups, 1))
@@ -404,9 +404,9 @@ it('narrows a shape to the group of a finding, and gets that finding alone', fun
 it('opens the execution a finding points at, and shows what it threw', function (string $shape, array $header, string $message) {
     whatFailedTraffic();
 
-    $finding = Envelope::assert(Detect::class, ['shape' => $shape]);
+    $finding = Answers::assert(Detect::class, ['shape' => $shape]);
     $call = $finding['next'][0];
-    $opened = Envelope::assert(Execution::class, $call['arguments'])['result'];
+    $opened = Answers::assert(Execution::class, $call['arguments'])['result'];
 
     expect($call)->toBe(['tool' => 'execution', 'arguments' => ['execution_id' => $finding['result']['findings'][0]['latest_execution_id']], 'why' => __('firewatch::messages.detect_next_execution')])
         ->and($opened['header'])->toMatchArray([...$header, 'execution_id' => $call['arguments']['execution_id'], 'group' => $finding['result']['findings'][0]['group']])
@@ -422,10 +422,10 @@ it('follows the failed attempt into its trace, which holds the dispatch and both
     whatFailedTraffic();
     $attempts = array_column(storeRows('SELECT execution_id FROM job_attempts ORDER BY started_at'), 'execution_id');
 
-    $finding = Envelope::assert(Detect::class, ['shape' => 'failing-jobs']);
-    $opened = Envelope::assert(Execution::class, $finding['next'][0]['arguments']);
+    $finding = Answers::assert(Detect::class, ['shape' => 'failing-jobs']);
+    $opened = Answers::assert(Execution::class, $finding['next'][0]['arguments']);
     $call = collect($opened['next'])->firstWhere('tool', 'trace');
-    $trace = Envelope::assert(Trace::class, $call['arguments']);
+    $trace = Answers::assert(Trace::class, $call['arguments']);
     $jobs = collect($trace['result']['jobs'])->keyBy('name');
 
     expect($call)->toBe(['tool' => 'trace', 'arguments' => ['trace_id' => $opened['result']['header']['trace_id']], 'why' => __('firewatch::messages.execution_next_trace')])
@@ -453,7 +453,7 @@ it('follows the failed attempt into its trace, which holds the dispatch and both
 it('runs every call the findings of a shape offer, and every call those answers offer in turn', function (string $shape, array $tools) {
     whatFailedTraffic();
 
-    $answers = whatFailedAssertOfferedCalls(Envelope::assert(Detect::class, ['shape' => $shape]));
+    $answers = whatFailedAssertOfferedCalls(Answers::assert(Detect::class, ['shape' => $shape]));
 
     expect(array_values(array_unique(array_column($answers, 'tool'))))->toEqualCanonicalizing($tools)
         ->and(array_column($answers, 'empty'))->each->toBeNull();
@@ -473,7 +473,7 @@ it('finds nothing in work that succeeded, and says how much of it each shape exa
     whatFailedRequest('/');
     whatFailedRequest('/stock', whatFailedUser());
 
-    $answers = array_map(fn (string $shape) => Envelope::assert(Detect::class, ['shape' => $shape]), array_combine(WHAT_FAILED_SHAPES, WHAT_FAILED_SHAPES));
+    $answers = array_map(fn (string $shape) => Answers::assert(Detect::class, ['shape' => $shape]), array_combine(WHAT_FAILED_SHAPES, WHAT_FAILED_SHAPES));
     $clean = fn (string $shape, int $examined, array $caveats = []) => ['detector' => $shape, 'verdict' => 'clean', 'reason' => null, 'examined' => $examined, 'total' => 0, 'findings' => [], 'saw' => [], 'caveats' => $caveats];
 
     expect(array_map(fn (array $answer) => Arr::except($answer['result'], 'threshold'), $answers))->toBe([
@@ -491,7 +491,7 @@ it('finds nothing in work that succeeded, and says how much of it each shape exa
 it('does not evaluate the shapes whose failures left no record, names the blind spot behind each, and is clean only over the request it examined', function () {
     whatFailedRequest('/welcome')->assertOk()->assertContent('failed');
 
-    $answers = array_map(fn (string $shape) => Envelope::assert(Detect::class, ['shape' => $shape]), array_combine(WHAT_FAILED_SHAPES, WHAT_FAILED_SHAPES));
+    $answers = array_map(fn (string $shape) => Answers::assert(Detect::class, ['shape' => $shape]), array_combine(WHAT_FAILED_SHAPES, WHAT_FAILED_SHAPES));
     $blindSpots = array_map(fn (array $answer) => array_column($answer['blind_spots'], 'message', 'id'), $answers);
 
     expect(array_map(fn (array $answer) => Arr::only($answer['result'], ['verdict', 'reason', 'examined', 'total', 'findings']), $answers))->toBe([

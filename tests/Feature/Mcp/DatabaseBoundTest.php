@@ -7,7 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Facades\Date;
 
@@ -74,7 +74,7 @@ function dbbShares(array $percents, string $route = '/orders'): array
  */
 function dbbAnswer(array $arguments = []): array
 {
-    return Envelope::assert(Detect::class, ['shape' => 'database-bound', ...$arguments]);
+    return Answers::assert(Detect::class, ['shape' => 'database-bound', ...$arguments]);
 }
 
 /**
@@ -93,12 +93,12 @@ describe('the verdict', function () {
     it('has findings when the typical share of a group is at least the threshold, over every request examined', function () {
         ingest([...dbbShares([80, 80, 80]), ...dbbShares([5, 5, 5], '/health')]);
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['detector' => 'database-bound', 'verdict' => 'findings', 'reason' => null, 'examined' => 6, 'total' => 1, 'saw' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'database-bound', 'total' => 1, 'examined' => 6, 'input' => __('firewatch::messages.detect_input.database-bound')]))
-            ->and($envelope['result']['threshold'])->toBe(['name' => 'percent', 'value' => 60, 'default' => 60, 'unit' => 'percent', 'range' => ['min' => 1, 'max' => 100], 'is_default' => true])
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('/orders'));
+        expect($answer['result'])->toMatchArray(['detector' => 'database-bound', 'verdict' => 'findings', 'reason' => null, 'examined' => 6, 'total' => 1, 'saw' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_findings_summary', ['detector' => 'database-bound', 'total' => 1, 'examined' => 6, 'input' => __('firewatch::messages.detect_input.database-bound')]))
+            ->and($answer['result']['threshold'])->toBe(['name' => 'percent', 'value' => 60, 'default' => 60, 'unit' => 'percent', 'range' => ['min' => 1, 'max' => 100], 'is_default' => true])
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('/orders'));
     });
 
     it('tells 59 percent from 60, on the aggregate share of a group of one or two requests', function (array $percents, string $verdict) {
@@ -137,9 +137,9 @@ describe('the verdict', function () {
             [0, 1, 2],
         )));
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
 
-        expect($envelope['result']['verdict'])->toBe($verdict);
+        expect($answer['result']['verdict'])->toBe($verdict);
     })->with([
         'a median of just under 5 ms' => [4_999, 'clean'],
         'a median of exactly 5 ms' => [5_000, 'findings'],
@@ -152,9 +152,9 @@ describe('the verdict', function () {
             [0, 1],
         )));
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
 
-        expect($envelope['result']['verdict'])->toBe($verdict);
+        expect($answer['result']['verdict'])->toBe($verdict);
     })->with([
         'a mean of 4,999.5 microseconds' => [5_000, 'clean'],
         'a mean of 5,000 microseconds' => [5_001, 'findings'],
@@ -163,10 +163,10 @@ describe('the verdict', function () {
     it('is clean over the requests examined, and says how many', function () {
         ingest([...dbbShares([5, 5, 5]), ...dbbRequest('quiet', 50_000, 0, '/quiet')]);
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 4, 'total' => 0, 'findings' => []])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'database-bound', 'examined' => 4, 'input' => __('firewatch::messages.detect_input.database-bound')]));
+        expect($answer['result'])->toMatchArray(['verdict' => 'clean', 'reason' => null, 'examined' => 4, 'total' => 0, 'findings' => []])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_clean_summary', ['detector' => 'database-bound', 'examined' => 4, 'input' => __('firewatch::messages.detect_input.database-bound')]));
     });
 
     it('examines requests, and not commands, jobs or tasks', function () {
@@ -183,10 +183,10 @@ describe('the verdict', function () {
     it('is not evaluated when no request was recorded', function () {
         ingest([syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'database-bound', 'reason' => 'no_records']));
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'database-bound', 'reason' => 'no_records']));
     });
 
     it('judges the requests that started in the window', function () {
@@ -195,10 +195,10 @@ describe('the verdict', function () {
             ...dbbRequest('late', 100_000, 90_000, '/late', ['timestamp' => DBB_AT + 300]),
         ]);
 
-        $envelope = dbbAnswer(['since' => DBB_AT]);
+        $answer = dbbAnswer(['since' => DBB_AT]);
 
-        expect($envelope['result'])->toMatchArray(['examined' => 1, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['name'])->toBe('/late');
+        expect($answer['result'])->toMatchArray(['examined' => 1, 'total' => 1])
+            ->and($answer['result']['findings'][0]['name'])->toBe('/late');
     });
 
     it('takes a threshold from the call, and states that it is no default', function () {
@@ -215,9 +215,9 @@ describe('the verdict', function () {
     it('accepts a threshold of 100 percent, which only a request that spent all its time in queries reaches', function (int $percent, string $verdict) {
         ingest(dbbShares([$percent, $percent, $percent]));
 
-        $envelope = dbbAnswer(['threshold' => 100]);
+        $answer = dbbAnswer(['threshold' => 100]);
 
-        expect($envelope['result']['verdict'])->toBe($verdict);
+        expect($answer['result']['verdict'])->toBe($verdict);
     })->with([
         'a share of 99' => [99, 'clean'],
         'a share of 100' => [100, 'findings'],
@@ -226,10 +226,10 @@ describe('the verdict', function () {
     it('takes a fraction of a percent as the threshold', function (int $queryMicros, string $verdict) {
         ingest(dbbRequest('one', 100_000, $queryMicros));
 
-        $envelope = dbbAnswer(['threshold' => 59.5]);
+        $answer = dbbAnswer(['threshold' => 59.5]);
 
-        expect($envelope['result']['verdict'])->toBe($verdict)
-            ->and($envelope['result']['threshold'])->toMatchArray(['value' => 59.5, 'is_default' => false]);
+        expect($answer['result']['verdict'])->toBe($verdict)
+            ->and($answer['result']['threshold'])->toMatchArray(['value' => 59.5, 'is_default' => false]);
     })->with([
         'a share of 59.4' => [59_400, 'clean'],
         'a share of 59.5' => [59_500, 'findings'],
@@ -302,11 +302,11 @@ describe('the typical share', function () {
 
         ingest([...dbbShares([80, 80, 80]), ...$without]);
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
 
-        expect($envelope['result']['examined'])->toBe(4)
-            ->and($envelope['result']['saw'])->toBe(['without_duration' => 1])
-            ->and($envelope['result']['findings'][0]['evidence']['basis'])->toBe('median');
+        expect($answer['result']['examined'])->toBe(4)
+            ->and($answer['result']['saw'])->toBe(['without_duration' => 1])
+            ->and($answer['result']['findings'][0]['evidence']['basis'])->toBe('median');
     })->with([
         'a duration of zero' => [true],
         'no duration' => [false],
@@ -415,11 +415,11 @@ describe('the order', function () {
     it('lists no more findings than the limit, and says how many there are', function () {
         ingest([...dbbRequest('a', 100_000, 90_000, '/a'), ...dbbRequest('b', 100_000, 80_000, '/b'), ...dbbRequest('c', 100_000, 70_000, '/c')]);
 
-        $envelope = dbbAnswer(['limit' => 2]);
+        $answer = dbbAnswer(['limit' => 2]);
 
-        expect($envelope['result']['total'])->toBe(3)
-            ->and($envelope['result']['findings'])->toHaveCount(2)
-            ->and($envelope['truncated'][0])->toMatchArray(['section' => 'findings', 'shown' => 2, 'matched' => 3]);
+        expect($answer['result']['total'])->toBe(3)
+            ->and($answer['result']['findings'])->toHaveCount(2)
+            ->and($answer['truncated'][0])->toMatchArray(['section' => 'findings', 'shown' => 2, 'matched' => 3]);
     });
 });
 
@@ -477,11 +477,11 @@ describe('the history', function () {
         ingest(dbbRequest('one', 100_000, 90_000));
         dbbClearAt(DBB_AT + 600);
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
 
-        expect($envelope['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'database-bound', 'reason' => 'outside_coverage']))
-            ->and(array_column($envelope['blind_spots'], 'id'))->toContain('history-cleared');
+        expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'outside_coverage', 'examined' => 0, 'total' => 0])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', ['detector' => 'database-bound', 'reason' => 'outside_coverage']))
+            ->and(array_column($answer['blind_spots'], 'id'))->toContain('history-cleared');
     });
 
     it('is not evaluated for want of records, when no request is left out and none was recorded since the clear', function () {
@@ -503,19 +503,19 @@ describe('the group', function () {
     it('restricts the judgement to the requests of one group', function () {
         ingest([...dbbRequest('a', 100_000, 90_000, '/a'), ...dbbRequest('b', 100_000, 90_000, '/b'), ...dbbRequest('c', 100_000, 80_000, '/b')]);
 
-        $envelope = dbbAnswer(['group' => md5('/b')]);
+        $answer = dbbAnswer(['group' => md5('/b')]);
 
-        expect($envelope['result'])->toMatchArray(['examined' => 2, 'total' => 1])
-            ->and($envelope['result']['findings'][0]['group'])->toBe(md5('/b'));
+        expect($answer['result'])->toMatchArray(['examined' => 2, 'total' => 1])
+            ->and($answer['result']['findings'][0]['group'])->toBe(md5('/b'));
     });
 
     it('answers a group that holds no requests as no match, not as an error', function () {
         ingest(dbbRequest('a', 100_000, 90_000, '/a'));
 
-        $envelope = dbbAnswer(['group' => md5('/elsewhere')]);
+        $answer = dbbAnswer(['group' => md5('/elsewhere')]);
 
-        expect($envelope['result']['verdict'])->toBe('not_evaluated')
-            ->and($envelope['empty']['kind'])->toBe('no_match');
+        expect($answer['result']['verdict'])->toBe('not_evaluated')
+            ->and($answer['empty']['kind'])->toBe('no_match');
     });
 });
 
@@ -523,14 +523,14 @@ describe('what it points at', function () {
     it('offers the latest request, the records of the group and its ranking, and every call runs', function () {
         ingest([...dbbRequest('a', 100_000, 90_000, '/a'), ...dbbRequest('b', 100_000, 80_000, '/b')]);
 
-        $envelope = dbbAnswer();
+        $answer = dbbAnswer();
         $tools = ['execution' => Execution::class, 'occurrences' => Occurrences::class, 'rank' => Rank::class];
 
-        expect($envelope['next'][0])->toMatchArray(['tool' => 'execution', 'arguments' => ['execution_id' => 'a']])
-            ->and(array_column(array_slice($envelope['next'], 1, 2), 'tool'))->toBe(['occurrences', 'rank']);
+        expect($answer['next'][0])->toMatchArray(['tool' => 'execution', 'arguments' => ['execution_id' => 'a']])
+            ->and(array_column(array_slice($answer['next'], 1, 2), 'tool'))->toBe(['occurrences', 'rank']);
 
-        foreach ($envelope['next'] as $call) {
-            expect(Envelope::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
+        foreach ($answer['next'] as $call) {
+            expect(Answers::assert($tools[$call['tool']], $call['arguments'])['empty'])->toBeNull();
         }
     });
 });
@@ -539,7 +539,7 @@ describe('with the other shapes', function () {
     it('is one row of the overview, after n-plus-one, with its worst finding', function () {
         ingest(dbbRequest('one', 100_000, 90_000));
 
-        $rows = Envelope::assert(Overview::class)['result']['detectors'];
+        $rows = Answers::assert(Overview::class)['result']['detectors'];
 
         expect(array_column($rows, 'detector'))->toBe(['database-bound', 'n-plus-one', 'failing-routes', 'exception-clusters', 'memory', 'failing-jobs', 'queue-latency', 'failing-tasks', 'error-logs', 'failing-http', 'cache'])
             ->and($rows[0])->toBe([
@@ -555,7 +555,7 @@ describe('with the other shapes', function () {
     it('is run with the others when no shape is named', function () {
         ingest(dbbRequest('one', 100_000, 90_000));
 
-        $detectors = Envelope::assert(Detect::class)['result']['detectors'];
+        $detectors = Answers::assert(Detect::class)['result']['detectors'];
 
         expect(array_column($detectors, 'detector'))->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
             ->and($detectors[1])->toMatchArray(['verdict' => 'findings', 'total' => 1]);

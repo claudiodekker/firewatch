@@ -13,7 +13,7 @@ use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\Writer;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use ClaudioDekker\Firewatch\Tests\Support\FakeDetector;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
 use Illuminate\Support\Arr;
@@ -24,9 +24,9 @@ it('answers that no store exists yet, with the store clock', function () {
     $this->travelTo('2026-09-30 14:00:00.250000');
     $path = app(Configuration::class)->database;
 
-    $envelope = Envelope::assert(Overview::class);
+    $answer = Answers::assert(Overview::class);
 
-    expect(Arr::except($envelope, 'blind_spots'))->toBe([
+    expect(Arr::except($answer, 'blind_spots'))->toBe([
         'tool' => 'overview',
         'now' => 1790776800.25,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => null, 'until' => null, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
@@ -53,12 +53,12 @@ it('answers that the store is empty when it holds no records', function () {
     $path = app(Configuration::class)->database;
     app(Writer::class)->transaction(fn () => null);
 
-    $envelope = Envelope::assert(Overview::class);
+    $answer = Answers::assert(Overview::class);
 
-    expect($envelope)->toMatchArray([
+    expect($answer)->toMatchArray([
         'summary' => __('firewatch::messages.empty_summary.store_empty'),
         'empty' => ['kind' => 'store_empty', 'population' => 0, 'message' => __('firewatch::messages.store_empty', ['path' => $path])],
-    ])->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0]);
+    ])->and($answer['coverage'])->toMatchArray(['state' => 'empty', 'reason' => null, 'oldest_at' => null, 'newest_at' => null, 'records' => 0]);
 });
 
 it('counts the records the store holds, and the requests among them', function () {
@@ -66,14 +66,14 @@ it('counts the records the store holds, and the requests among them', function (
     config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
     $this->get('/');
 
-    $envelope = Envelope::assert(Overview::class);
+    $answer = Answers::assert(Overview::class);
 
-    expect($envelope['empty'])->toBeNull()
-        ->and($envelope['result']['error_rate']['requests'])->toBe(1)
-        ->and($envelope['result']['records'])->toBeGreaterThanOrEqual(1)
-        ->and($envelope['summary'])->toBeIn(array_map(fn (string $findings) => $findings.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']).' '.__('firewatch::messages.overview_summary', ['records' => $envelope['result']['records'], 'server_errors' => 0, 'client_errors' => 0, 'with_status' => 1]), ['', __('firewatch::messages.overview_detectors_findings', ['shapes' => 'memory (1)']).' ']))
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $envelope['result']['records']])
-        ->and($envelope['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($envelope['coverage']['newest_at']);
+    expect($answer['empty'])->toBeNull()
+        ->and($answer['result']['error_rate']['requests'])->toBe(1)
+        ->and($answer['result']['records'])->toBeGreaterThanOrEqual(1)
+        ->and($answer['summary'])->toBeIn(array_map(fn (string $findings) => $findings.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']).' '.__('firewatch::messages.overview_summary', ['records' => $answer['result']['records'], 'server_errors' => 0, 'client_errors' => 0, 'with_status' => 1]), ['', __('firewatch::messages.overview_detectors_findings', ['shapes' => 'memory (1)']).' ']))
+        ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'reason' => null, 'records' => $answer['result']['records']])
+        ->and($answer['coverage']['oldest_at'])->toBeFloat()->toBeLessThanOrEqual($answer['coverage']['newest_at']);
 });
 
 it('answers in JSON for a format of json', function () {
@@ -147,12 +147,12 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
     mkdir(dirname($path), recursive: true);
     $arrange($path);
 
-    $envelope = Envelope::assert(Overview::class);
+    $answer = Answers::assert(Overview::class);
 
-    expect($envelope['empty'])->toBe(['kind' => 'store_unusable', 'population' => null, 'message' => __("firewatch::messages.store_unusable.{$key}", $replace($path))])
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.store_unusable'))
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => $key, 'records' => null])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('console-requests', 'values-truncated');
+    expect($answer['empty'])->toBe(['kind' => 'store_unusable', 'population' => null, 'message' => __("firewatch::messages.store_unusable.{$key}", $replace($path))])
+        ->and($answer['summary'])->toBe(__('firewatch::messages.empty_summary.store_unusable'))
+        ->and($answer['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => $key, 'records' => null])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('console-requests', 'values-truncated');
 })->with([
     'a foreign file' => [
         fn (string $path) => (new SQLite3($path))->exec('CREATE TABLE orders (id INTEGER)'),
@@ -186,10 +186,10 @@ it('answers that a damaged store cannot be read', function () {
     fwrite($handle, str_repeat("\xff", filesize($path) - 4096));
     fclose($handle);
 
-    $envelope = Envelope::assert(Overview::class);
+    $answer = Answers::assert(Overview::class);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')])])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'unreadable']);
+    expect($answer['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.corrupt')])])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'unreadable']);
 });
 
 it('answers that a busy store cannot be read yet', function () {
@@ -204,10 +204,10 @@ it('answers that a busy store cannot be read yet', function () {
         protected const BUSY_TIMEOUT_MILLISECONDS = 20;
     });
 
-    $envelope = Envelope::assert(Overview::class);
+    $answer = Answers::assert(Overview::class);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')])])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'unreadable']);
+    expect($answer['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.unreadable', ['path' => $path, 'cause' => __('firewatch::messages.store_causes.busy')])])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'unreadable']);
     $connection->exec('ROLLBACK');
 });
 
@@ -216,10 +216,10 @@ it('answers that SQLite is too old to read the store', function () {
     app(Writer::class)->transaction(fn (SQLite3 $connection) => null);
     app()->instance(Reader::class, new Reader(app(Configuration::class), sqliteVersion: '3.37.2'));
 
-    $envelope = Envelope::assert(Overview::class);
+    $answer = Answers::assert(Overview::class);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => '3.37.2', 'minimum' => '3.41.0'])])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'sqlite_too_old']);
+    expect($answer['empty'])->toMatchArray(['kind' => 'store_unusable', 'message' => __('firewatch::messages.store_unusable.sqlite_too_old', ['path' => $path, 'version' => '3.37.2', 'minimum' => '3.41.0'])])
+        ->and($answer['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'sqlite_too_old']);
 });
 
 it('does not touch an unusable store', function () {
@@ -248,49 +248,49 @@ describe('windows', function () {
     it('counts only the records that started in the window', function () {
         requestsAt(1790690400.0, 1790766000.0, 1790773200.0);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => '-2h']);
+        $answer = Answers::assert(Overview::class, ['since' => '-2h']);
 
-        expect($envelope['result']['records'])->toBe(1)
-            ->and($envelope['result']['error_rate']['requests'])->toBe(1)
-            ->and($envelope['window'])->toMatchArray(['windowed' => true, 'basis' => 'started_at', 'since' => 1790769600.0, 'until' => null, 'timezone' => 'Europe/Amsterdam'])
-            ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'oldest_at' => 1790690400.0, 'newest_at' => 1790773200.0, 'records' => 3]);
+        expect($answer['result']['records'])->toBe(1)
+            ->and($answer['result']['error_rate']['requests'])->toBe(1)
+            ->and($answer['window'])->toMatchArray(['windowed' => true, 'basis' => 'started_at', 'since' => 1790769600.0, 'until' => null, 'timezone' => 'Europe/Amsterdam'])
+            ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'oldest_at' => 1790690400.0, 'newest_at' => 1790773200.0, 'records' => 3]);
     });
 
     it('takes a record at since in and a record at until out', function () {
         requestsAt(1790766000.0, 1790769600.0, 1790773200.0);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => 1790766000, 'until' => 1790773200]);
+        $answer = Answers::assert(Overview::class, ['since' => 1790766000, 'until' => 1790773200]);
 
-        expect($envelope['result']['error_rate']['requests'])->toBe(2)
-            ->and($envelope['window'])->toMatchArray(['since' => 1790766000.0, 'until' => 1790773200.0]);
+        expect($answer['result']['error_rate']['requests'])->toBe(2)
+            ->and($answer['window'])->toMatchArray(['since' => 1790766000.0, 'until' => 1790773200.0]);
     });
 
     it('reads the bounds in the application timezone', function () {
         requestsAt(1790719200.0, 1790719199.0);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => '2026-09-30', 'until' => '2026-09-30 02:00']);
+        $answer = Answers::assert(Overview::class, ['since' => '2026-09-30', 'until' => '2026-09-30 02:00']);
 
-        expect($envelope['result']['error_rate']['requests'])->toBe(1)
-            ->and($envelope['window'])->toMatchArray(['since' => 1790719200.0, 'until' => 1790726400.0]);
+        expect($answer['result']['error_rate']['requests'])->toBe(1)
+            ->and($answer['window'])->toMatchArray(['since' => 1790719200.0, 'until' => 1790726400.0]);
     });
 
     it('answers that the window is empty, among the records the store holds', function () {
         requestsAt(1790690400.0, 1790773200.0);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => '-30m']);
+        $answer = Answers::assert(Overview::class, ['since' => '-30m']);
 
-        expect($envelope['empty'])->toBe(['kind' => 'window_empty', 'population' => 2, 'message' => __('firewatch::messages.window_empty', ['population' => 2])])
-            ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.window_empty'))
-            ->and($envelope['result'])->toBe([])
-            ->and($envelope['coverage'])->toMatchArray(['state' => 'ok', 'records' => 2]);
+        expect($answer['empty'])->toBe(['kind' => 'window_empty', 'population' => 2, 'message' => __('firewatch::messages.window_empty', ['population' => 2])])
+            ->and($answer['summary'])->toBe(__('firewatch::messages.empty_summary.window_empty'))
+            ->and($answer['result'])->toBe([])
+            ->and($answer['coverage'])->toMatchArray(['state' => 'ok', 'records' => 2]);
     });
 
     it('answers that the store is empty before it looks at the window', function () {
         app(Writer::class)->transaction(fn () => null);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => '-1d']);
+        $answer = Answers::assert(Overview::class, ['since' => '-1d']);
 
-        expect($envelope['empty']['kind'])->toBe('store_empty');
+        expect($answer['empty']['kind'])->toBe('store_empty');
     });
 
     it('refuses a time the grammar does not read', function (string $argument, mixed $value, string $shown) {
@@ -315,9 +315,9 @@ describe('windows', function () {
     it('takes a window one microsecond long', function () {
         requestsAt(1790773200.0);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => '2026-09-30 15:00:00', 'until' => '2026-09-30 15:00:00.000001']);
+        $answer = Answers::assert(Overview::class, ['since' => '2026-09-30 15:00:00', 'until' => '2026-09-30 15:00:00.000001']);
 
-        expect($envelope['result']['error_rate']['requests'])->toBe(1);
+        expect($answer['result']['error_rate']['requests'])->toBe(1);
     });
 });
 
@@ -339,9 +339,9 @@ describe('coverage and blind spots', function () {
         app(Writer::class)->transaction(fn () => null);
         $this->travelTo('2026-09-30 15:00:00');
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['coverage'])->toMatchArray([
+        expect($answer['coverage'])->toMatchArray([
             'types_read' => $types,
             'history' => ['from' => 1790776800.5, 'reason' => 'created', 'retention' => ['age_seconds' => 604800, 'records' => 100000]],
             'straddling' => null,
@@ -354,15 +354,15 @@ describe('coverage and blind spots', function () {
         $this->travelTo('2026-09-30 16:00:00');
         app(Writer::class)->transaction(fn () => null);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['coverage']['history']['from'])->toEqual(1790776800.0);
+        expect($answer['coverage']['history']['from'])->toEqual(1790776800.0);
     });
 
     it('states no start for a history it cannot read, and still the retention and types', function () use ($types) {
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['coverage'])->toMatchArray([
+        expect($answer['coverage'])->toMatchArray([
             'types_read' => $types,
             'history' => ['from' => null, 'reason' => null, 'retention' => ['age_seconds' => 604800, 'records' => 100000]],
         ]);
@@ -371,11 +371,11 @@ describe('coverage and blind spots', function () {
     it('attaches the blind spots of the types it examined to every answer, empty ones included', function (Closure $arrange) use ($ids) {
         $this->travelTo('2026-09-30 14:00:00');
 
-        $envelope = Envelope::assert(Overview::class, $arrange());
+        $answer = Answers::assert(Overview::class, $arrange());
 
-        expect(array_column($envelope['blind_spots'], 'id'))->toBe($ids)
-            ->and(array_unique(array_column($envelope['blind_spots'], 'kind')))->toBe(['structural'])
-            ->and($envelope['blind_spots'][0])->toBe(['id' => 'console-requests', 'kind' => 'structural', 'message' => __('firewatch::messages.blind_spots.console-requests')]);
+        expect(array_column($answer['blind_spots'], 'id'))->toBe($ids)
+            ->and(array_unique(array_column($answer['blind_spots'], 'kind')))->toBe(['structural'])
+            ->and($answer['blind_spots'][0])->toBe(['id' => 'console-requests', 'kind' => 'structural', 'message' => __('firewatch::messages.blind_spots.console-requests')]);
     })->with([
         'no store' => [fn () => []],
         'an empty store' => [function () {
@@ -405,9 +405,9 @@ describe('the error rate', function () {
     it('counts server errors from 500 and client errors from 400 to 499', function (int $status, int $server, int $client) {
         ovwStatuses($status);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 1, 'server_errors' => $server, 'server_error_pct' => $server * 100, 'client_errors' => $client, 'client_error_pct' => $client * 100]);
+        expect($answer['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 1, 'server_errors' => $server, 'server_error_pct' => $server * 100, 'client_errors' => $client, 'client_error_pct' => $client * 100]);
     })->with([
         'just below a client error' => [399, 0, 0],
         'the first client error' => [400, 0, 1],
@@ -418,25 +418,25 @@ describe('the error rate', function () {
     it('shares the errors among the requests with a status, to one decimal', function () {
         ovwStatuses(200, 404, 503, null, 'gone');
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['error_rate'])->toBe(['requests' => 5, 'with_status' => 3, 'server_errors' => 1, 'server_error_pct' => 33.3, 'client_errors' => 1, 'client_error_pct' => 33.3]);
+        expect($answer['result']['error_rate'])->toBe(['requests' => 5, 'with_status' => 3, 'server_errors' => 1, 'server_error_pct' => 33.3, 'client_errors' => 1, 'client_error_pct' => 33.3]);
     });
 
     it('states no share when no request has a status, and counts of zero', function () {
         ovwStatuses(null);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 0, 'server_errors' => 0, 'server_error_pct' => null, 'client_errors' => 0, 'client_error_pct' => null]);
+        expect($answer['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 0, 'server_errors' => 0, 'server_error_pct' => null, 'client_errors' => 0, 'client_error_pct' => null]);
     });
 
     it('states no share when the window holds no request', function () {
         ingest([syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['error_rate'])->toBe(['requests' => 0, 'with_status' => 0, 'server_errors' => 0, 'server_error_pct' => null, 'client_errors' => 0, 'client_error_pct' => null]);
+        expect($answer['result']['error_rate'])->toBe(['requests' => 0, 'with_status' => 0, 'server_errors' => 0, 'server_error_pct' => null, 'client_errors' => 0, 'client_error_pct' => null]);
     });
 
     it('counts only the requests that started in the window', function () {
@@ -445,9 +445,9 @@ describe('the error rate', function () {
             syntheticRecord(RecordType::REQUEST)->with(['status_code' => 404, 'timestamp' => 1790773200.0]),
         ]);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+        $answer = Answers::assert(Overview::class, ['since' => 1790773000]);
 
-        expect($envelope['result']['error_rate'])->toMatchArray(['requests' => 1, 'server_errors' => 0, 'client_errors' => 1]);
+        expect($answer['result']['error_rate'])->toMatchArray(['requests' => 1, 'server_errors' => 0, 'client_errors' => 1]);
     });
 });
 
@@ -475,7 +475,7 @@ describe('the slowest groups by total time', function () {
      */
     function ovwSlowest(array $arguments = []): array
     {
-        return Envelope::assert(Overview::class, $arguments)['result']['slowest_by_total_time'];
+        return Answers::assert(Overview::class, $arguments)['result']['slowest_by_total_time'];
     }
 
     it('lists the groups by the time they took in total, worst first, with their records and their total in milliseconds', function () {
@@ -605,10 +605,10 @@ describe('the record counts and the user directory', function () {
     it('counts all twelve types in catalogue order, zeros included', function () {
         ingest([syntheticRecord(RecordType::QUERY), syntheticRecord(RecordType::QUERY), syntheticRecord(RecordType::LOG), syntheticRecord(RecordType::QUEUED_JOB)]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['records'])->toBe(4)
-            ->and($envelope['result']['records_by_type'])->toBe([
+        expect($answer['result']['records'])->toBe(4)
+            ->and($answer['result']['records_by_type'])->toBe([
                 ['type' => 'request', 'records' => 0],
                 ['type' => 'command', 'records' => 0],
                 ['type' => 'job-attempt', 'records' => 0],
@@ -622,38 +622,38 @@ describe('the record counts and the user directory', function () {
                 ['type' => 'outgoing-request', 'records' => 0],
                 ['type' => 'queued-job', 'records' => 1],
             ])
-            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
+            ->and($answer['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
     });
 
     it('counts a record of no known type among the records and in no row, and says how many', function () {
         ingest([syntheticRecord(RecordType::QUERY), syntheticRecord(RecordType::CACHE_EVENT)->with(['t' => 'future-type']), syntheticRecord(RecordType::CACHE_EVENT)->with(['t' => 'other-type'])]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['records'])->toBe(3)
-            ->and(array_sum(array_column($envelope['result']['records_by_type'], 'records')))->toBe(1)
-            ->and($envelope['result']['records_by_type'])->toHaveCount(12)
-            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), trans_choice('firewatch::messages.overview_unknown_types', 2, ['count' => 2])]);
+        expect($answer['result']['records'])->toBe(3)
+            ->and(array_sum(array_column($answer['result']['records_by_type'], 'records')))->toBe(1)
+            ->and($answer['result']['records_by_type'])->toHaveCount(12)
+            ->and($answer['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), trans_choice('firewatch::messages.overview_unknown_types', 2, ['count' => 2])]);
     });
 
     it('counts only the records that started in the window, by type', function () {
         ingest([syntheticRecord(RecordType::QUERY)->with(['timestamp' => 1790690400.0]), syntheticRecord(RecordType::QUERY)->with(['timestamp' => 1790773200.0])]);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+        $answer = Answers::assert(Overview::class, ['since' => 1790773000]);
 
-        expect($envelope['result']['records'])->toBe(1)
-            ->and($envelope['result']['records_by_type'][4])->toBe(['type' => 'query', 'records' => 1]);
+        expect($answer['result']['records'])->toBe(1)
+            ->and($answer['result']['records_by_type'][4])->toBe(['type' => 'query', 'records' => 1]);
     });
 
     it('counts the user directory apart from the records', function () {
         ingest([syntheticRecord(RecordType::USER), syntheticRecord(RecordType::USER)->with(['id' => '8']), syntheticRecord(RecordType::REQUEST)]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['user_directory'])->toBe(2)
-            ->and($envelope['result']['records'])->toBe(1)
-            ->and(array_sum(array_column($envelope['result']['records_by_type'], 'records')))->toBe(1)
-            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
+        expect($answer['result']['user_directory'])->toBe(2)
+            ->and($answer['result']['records'])->toBe(1)
+            ->and(array_sum(array_column($answer['result']['records_by_type'], 'records')))->toBe(1)
+            ->and($answer['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => ''])]);
     });
 
     it('counts the user directory over the whole store whatever the window, and says so', function (array $arguments) {
@@ -663,10 +663,10 @@ describe('the record counts and the user directory', function () {
             syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790773200.0]),
         ]);
 
-        $envelope = Envelope::assert(Overview::class, $arguments);
+        $answer = Answers::assert(Overview::class, $arguments);
 
-        expect($envelope['result']['user_directory'])->toBe(2)
-            ->and($envelope['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), __('firewatch::messages.overview_directory_unwindowed')]);
+        expect($answer['result']['user_directory'])->toBe(2)
+            ->and($answer['notes'])->toBe([__('firewatch::messages.overview_budgets_unevaluated', ['reason' => 'no_budget_configured', 'ignored' => '']), __('firewatch::messages.overview_directory_unwindowed')]);
     })->with([
         'a start' => [['since' => 1790773000]],
         'an end' => [['until' => 1790773300]],
@@ -675,7 +675,7 @@ describe('the record counts and the user directory', function () {
     it('counts an empty user directory as zero', function () {
         ingest([syntheticRecord(RecordType::REQUEST)]);
 
-        expect(Envelope::assert(Overview::class)['result']['user_directory'])->toBe(0);
+        expect(Answers::assert(Overview::class)['result']['user_directory'])->toBe(0);
     });
 });
 
@@ -690,25 +690,25 @@ describe('the actors', function () {
             syntheticRecord(RecordType::JOB_ATTEMPT)->without('user'),
         ]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['actors'])->toBe(['executions' => 6, 'signed_in_actors' => 2, 'without_actor' => 2]);
+        expect($answer['result']['actors'])->toBe(['executions' => 6, 'signed_in_actors' => 2, 'without_actor' => 2]);
     });
 
     it('counts a command and a scheduled task as executions with no user', function () {
         ingest([syntheticRecord(RecordType::COMMAND), syntheticRecord(RecordType::SCHEDULED_TASK)]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['actors'])->toBe(['executions' => 2, 'signed_in_actors' => 0, 'without_actor' => 2]);
+        expect($answer['result']['actors'])->toBe(['executions' => 2, 'signed_in_actors' => 0, 'without_actor' => 2]);
     });
 
     it('does not count the user a child record carries', function () {
         ingest([syntheticRecord(RecordType::QUERY)->with(['user' => '9']), syntheticRecord(RecordType::LOG)->with(['user' => '9'])]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['actors'])->toBe(['executions' => 0, 'signed_in_actors' => 0, 'without_actor' => 0]);
+        expect($answer['result']['actors'])->toBe(['executions' => 0, 'signed_in_actors' => 0, 'without_actor' => 0]);
     });
 
     it('counts only the executions that started in the window', function () {
@@ -718,9 +718,9 @@ describe('the actors', function () {
             syntheticRecord(RecordType::REQUEST)->with(['user' => '8', 'timestamp' => 1790773200.0]),
         ]);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+        $answer = Answers::assert(Overview::class, ['since' => 1790773000]);
 
-        expect($envelope['result']['actors'])->toBe(['executions' => 1, 'signed_in_actors' => 1, 'without_actor' => 0]);
+        expect($answer['result']['actors'])->toBe(['executions' => 1, 'signed_in_actors' => 1, 'without_actor' => 0]);
     });
 });
 
@@ -735,7 +735,7 @@ describe('the next calls', function () {
     {
         $tool = ['detect' => Detect::class, 'rank' => Rank::class, 'execution' => Execution::class][$call['tool']];
 
-        return Envelope::assert($tool, $call['arguments']);
+        return Answers::assert($tool, $call['arguments']);
     }
 
     /**
@@ -768,18 +768,18 @@ describe('the next calls', function () {
         ]);
         FakeDetector::ship(new FakeDetector(DetectorName::FAILING_ROUTES, examined: 1));
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['next'])->toBe(ovwLadder('query', 'the-request'))
-            ->and(ovwFollow($envelope['next'][0])['result']['groups'][0])->toMatchArray(['group' => $envelope['result']['slowest_by_total_time'][0]['group'], 'total_ms' => $envelope['result']['slowest_by_total_time'][0]['total_ms']])
-            ->and(ovwFollow($envelope['next'][1])['result']['header']['type'])->toBe('request');
+        expect($answer['next'])->toBe(ovwLadder('query', 'the-request'))
+            ->and(ovwFollow($answer['next'][0])['result']['groups'][0])->toMatchArray(['group' => $answer['result']['slowest_by_total_time'][0]['group'], 'total_ms' => $answer['result']['slowest_by_total_time'][0]['total_ms']])
+            ->and(ovwFollow($answer['next'][1])['result']['header']['type'])->toBe('request');
     });
 
     it('offers no ranking when no group has a duration, and no execution when the window holds none', function () {
         ingest([syntheticRecord(RecordType::EXCEPTION), syntheticRecord(RecordType::LOG)]);
         FakeDetector::ship(new FakeDetector(DetectorName::EXCEPTION_CLUSTERS, examined: 1));
 
-        expect(Envelope::assert(Overview::class)['next'])->toBe([]);
+        expect(Answers::assert(Overview::class)['next'])->toBe([]);
     });
 
     it('offers the execution of the window that finished last, and none when no execution of the window finished', function (array $arguments, ?string $offered) {
@@ -792,13 +792,13 @@ describe('the next calls', function () {
         ]);
         FakeDetector::ship(new FakeDetector(DetectorName::FAILING_ROUTES, examined: 1));
 
-        $envelope = Envelope::assert(Overview::class, $arguments);
-        $calls = array_column(array_filter($envelope['next'], fn (array $call) => $call['tool'] === 'execution'), 'arguments');
+        $answer = Answers::assert(Overview::class, $arguments);
+        $calls = array_column(array_filter($answer['next'], fn (array $call) => $call['tool'] === 'execution'), 'arguments');
 
         expect($calls)->toBe($offered === null ? [] : [['execution_id' => $offered]]);
 
         if ($offered !== null) {
-            expect(Envelope::assert(Execution::class, $calls[0])['result']['header']['execution_id'])->toBe($offered);
+            expect(Answers::assert(Execution::class, $calls[0])['result']['header']['execution_id'])->toBe($offered);
         }
     })->with([
         'the whole store' => [[], 'later'],
@@ -811,11 +811,11 @@ describe('the next calls', function () {
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'trace_id' => 'the-request', 'timestamp' => 1790773200.0])]);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => '-2h', 'until' => '2026-09-30 14:00:00']);
+        $answer = Answers::assert(Overview::class, ['since' => '-2h', 'until' => '2026-09-30 14:00:00']);
         $this->travel(3)->hours();
-        $answers = array_map(ovwFollow(...), $envelope['next']);
+        $answers = array_map(ovwFollow(...), $answer['next']);
 
-        expect($envelope['next'])->toEqual([
+        expect($answer['next'])->toEqual([
             ['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes', 'since' => 1790769600.0, 'until' => 1790776800.0], 'why' => __('firewatch::messages.detect_next_shape')],
             ['tool' => 'rank', 'arguments' => ['type' => 'request', 'by' => 'total_duration', 'since' => 1790769600.0, 'until' => 1790776800.0], 'why' => __('firewatch::messages.overview_next_rank', ['type' => 'request'])],
             ['tool' => 'execution', 'arguments' => ['execution_id' => 'the-request'], 'why' => __('firewatch::messages.overview_next_execution')],
@@ -831,16 +831,16 @@ describe('the next calls', function () {
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'timestamp' => 1790773200.0])]);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => '-2h']);
+        $answer = Answers::assert(Overview::class, ['since' => '-2h']);
 
-        expect(array_map(array_keys(...), array_column($envelope['next'], 'arguments')))->toBe([['shape', 'since'], ['type', 'by', 'since'], ['execution_id']]);
+        expect(array_map(array_keys(...), array_column($answer['next'], 'arguments')))->toBe([['shape', 'since'], ['type', 'by', 'since'], ['execution_id']]);
     });
 
     it('offers the shapes with findings first and at most five calls', function (int $shapes, array $tools) {
         ingest([syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000])]);
         FakeDetector::ship(...array_map(fn (DetectorName $name) => new FakeDetector($name, examined: 1, total: 1), array_slice(DetectorName::cases(), 0, $shapes)));
 
-        expect(array_column(Envelope::assert(Overview::class)['next'], 'tool'))->toBe($tools);
+        expect(array_column(Answers::assert(Overview::class)['next'], 'tool'))->toBe($tools);
     })->with([
         'three shapes' => [3, ['detect', 'detect', 'detect', 'rank', 'execution']],
         'four shapes' => [4, ['detect', 'detect', 'detect', 'detect', 'rank']],
@@ -860,9 +860,9 @@ describe('the summary', function () {
         ]);
         FakeDetector::ship(new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4, total: 3), new FakeDetector(DetectorName::MEMORY));
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['summary'])->toBe(implode(' ', [
+        expect($answer['summary'])->toBe(implode(' ', [
             __('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (3)']),
             __('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'memory']),
             __('firewatch::messages.overview_summary', ['records' => 5, 'server_errors' => 1, 'client_errors' => 2, 'with_status' => 3]),
@@ -873,9 +873,9 @@ describe('the summary', function () {
         ingest([$record]);
         FakeDetector::ship(new FakeDetector(DetectorName::MEMORY, examined: 1));
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.overview_detectors_clean', 1, ['count' => 1]).' '.__('firewatch::messages.overview_summary_no_status', ['records' => 1]));
+        expect($answer['summary'])->toBe(trans_choice('firewatch::messages.overview_detectors_clean', 1, ['count' => 1]).' '.__('firewatch::messages.overview_summary_no_status', ['records' => 1]));
     })->with([
         'a request without a status' => [fn () => syntheticRecord(RecordType::REQUEST)->without('status_code')],
         'no request' => [fn () => syntheticRecord(RecordType::COMMAND)],
@@ -890,10 +890,10 @@ describe('the summary', function () {
         $totals = array_map(fn (int $position) => (int) str_repeat('7', 1 + intdiv($missing, 8) + ($position < $missing % 8 ? 1 : 0)), range(0, 7));
         FakeDetector::ship(...array_map(fn (DetectorName $name, int $total) => new FakeDetector($name, examined: 1, total: $total), $names, $totals));
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
         expect(mb_strlen($shapes($totals).' '.$figures))->toBe(Answer::SUMMARY_CHARACTERS + $over)
-            ->and($envelope['summary'])->toBe($kept ? $shapes($totals).' '.$figures : $shapes($totals));
+            ->and($answer['summary'])->toBe($kept ? $shapes($totals).' '.$figures : $shapes($totals));
     })->with([
         'the most characters' => [0, true],
         'one character more' => [1, false],
@@ -904,9 +904,9 @@ describe('the fixed order', function () {
     it('answers the sections in the fixed order, before the detector table', function () {
         ingest([syntheticRecord(RecordType::LOG)]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect(array_keys($envelope['result']))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'budgets', 'detectors']);
+        expect(array_keys($answer['result']))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'budgets', 'detectors']);
     });
 
     it('answers every section when the deadline passed before the first shape started', function () {
@@ -921,17 +921,17 @@ describe('the fixed order', function () {
             }
         });
 
-        $envelope = ovwJson();
+        $answer = ovwJson();
 
-        expect(array_unique(array_column($envelope['result']['detectors'], 'reason')))->toBe(['deadline'])
-            ->and($envelope['result']['detectors'])->toHaveCount(11)
-            ->and($envelope['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 1, 'server_errors' => 1, 'server_error_pct' => 100, 'client_errors' => 0, 'client_error_pct' => 0])
-            ->and($envelope['result']['slowest_by_total_time'])->toBe([['type' => 'request', 'group' => md5('/orders'), 'label' => '/orders', 'occurrences' => 1, 'total_ms' => 2.5]])
-            ->and($envelope['result']['records'])->toBe(1)
-            ->and(array_column($envelope['result']['records_by_type'], 'records'))->toBe([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-            ->and($envelope['result']['user_directory'])->toBe(1)
-            ->and($envelope['result']['actors'])->toBe(['executions' => 1, 'signed_in_actors' => 1, 'without_actor' => 0])
-            ->and(array_column($envelope['next'], 'tool'))->toBe(['rank', 'execution']);
+        expect(array_unique(array_column($answer['result']['detectors'], 'reason')))->toBe(['deadline'])
+            ->and($answer['result']['detectors'])->toHaveCount(11)
+            ->and($answer['result']['error_rate'])->toBe(['requests' => 1, 'with_status' => 1, 'server_errors' => 1, 'server_error_pct' => 100, 'client_errors' => 0, 'client_error_pct' => 0])
+            ->and($answer['result']['slowest_by_total_time'])->toBe([['type' => 'request', 'group' => md5('/orders'), 'label' => '/orders', 'occurrences' => 1, 'total_ms' => 2.5]])
+            ->and($answer['result']['records'])->toBe(1)
+            ->and(array_column($answer['result']['records_by_type'], 'records'))->toBe([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+            ->and($answer['result']['user_directory'])->toBe(1)
+            ->and($answer['result']['actors'])->toBe(['executions' => 1, 'signed_in_actors' => 1, 'without_actor' => 0])
+            ->and(array_column($answer['next'], 'tool'))->toBe(['rank', 'execution']);
     });
 });
 
@@ -948,16 +948,16 @@ describe('the answer budget', function () {
 
         ingest($records);
 
-        $envelope = Envelope::assert(Overview::class);
-        $slowest = $envelope['result']['slowest_by_total_time'];
+        $answer = Answers::assert(Overview::class);
+        $slowest = $answer['result']['slowest_by_total_time'];
 
         expect(count($slowest))->toBeLessThan(10)->toBeGreaterThan(0)
             ->and($slowest[0])->toMatchArray(['type' => 'queued-job', 'occurrences' => 1])
-            ->and($envelope['result']['detectors'])->toHaveCount(11)
-            ->and($envelope['result']['records_by_type'])->toHaveCount(12)
-            ->and(array_keys($envelope['result']))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'budgets', 'detectors'])
-            ->and($envelope['truncated'])->toBe([['section' => 'slowest_by_total_time', 'shown' => count($slowest), 'matched' => 10, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]])
-            ->and(mb_strlen(json_encode($envelope, RecordMapper::JSON_FLAGS)))->toBeLessThanOrEqual(24000);
+            ->and($answer['result']['detectors'])->toHaveCount(11)
+            ->and($answer['result']['records_by_type'])->toHaveCount(12)
+            ->and(array_keys($answer['result']))->toBe(['error_rate', 'slowest_by_total_time', 'records', 'records_by_type', 'user_directory', 'actors', 'budgets', 'detectors'])
+            ->and($answer['truncated'])->toBe([['section' => 'slowest_by_total_time', 'shown' => count($slowest), 'matched' => 10, 'reason' => 'size', 'how' => __('firewatch::messages.size_how', ['characters' => '24,000'])]])
+            ->and(mb_strlen(json_encode($answer, RecordMapper::JSON_FLAGS)))->toBeLessThanOrEqual(24000);
     });
 });
 
@@ -980,9 +980,9 @@ describe('the problem shapes', function () {
     it('lists each shape that ships with its verdict, what it examined, its total and its worst finding', function () {
         ovwRequests(200, 500, 404);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect($envelope['result']['detectors'])->toBe([
+        expect($answer['result']['detectors'])->toBe([
             [
                 'detector' => 'failing-routes',
                 'verdict' => 'findings',
@@ -1001,13 +1001,13 @@ describe('the problem shapes', function () {
             ['detector' => 'error-logs', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
             ['detector' => 'failing-http', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
             ['detector' => 'cache', 'verdict' => 'not_evaluated', 'reason' => 'no_records', 'examined' => 0, 'total' => 0, 'worst' => null],
-        ])->and($envelope['summary'])->toBe(__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']).' '.__('firewatch::messages.overview_summary', ['records' => 3, 'server_errors' => 1, 'client_errors' => 1, 'with_status' => 3]));
+        ])->and($answer['summary'])->toBe(__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']).' '.__('firewatch::messages.overview_summary', ['records' => 3, 'server_errors' => 1, 'client_errors' => 1, 'with_status' => 3]));
     });
 
     it('is clean over the requests examined, with no worst finding', function () {
         ovwRequests(200, 201);
 
-        $row = collect(Envelope::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'failing-routes');
+        $row = collect(Answers::assert(Overview::class)['result']['detectors'])->firstWhere('detector', 'failing-routes');
 
         expect($row)->toBe(['detector' => 'failing-routes', 'verdict' => 'clean', 'reason' => null, 'examined' => 2, 'total' => 0, 'worst' => null]);
     });
@@ -1015,11 +1015,11 @@ describe('the problem shapes', function () {
     it('is not evaluated where there is nothing of the kind a shape judges', function () {
         ingest([syntheticRecord(RecordType::COMMAND)]);
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect(array_column($envelope['result']['detectors'], 'reason'))->toBe([null, null, 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records'])
-            ->and($envelope['result']['detectors'][4])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
-            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']));
+        expect(array_column($answer['result']['detectors'], 'reason'))->toBe([null, null, 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records', 'no_records'])
+            ->and($answer['result']['detectors'][4])->toMatchArray(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'examined' => 0])
+            ->and($answer['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, database-bound, failing-routes, failing-jobs, queue-latency, failing-tasks, error-logs, failing-http, cache']));
     });
 
     it('judges the requests of the window', function () {
@@ -1028,28 +1028,28 @@ describe('the problem shapes', function () {
             syntheticRecord(RecordType::REQUEST)->with(['status_code' => 200, 'timestamp' => 1790773200.0]),
         ]);
 
-        $envelope = Envelope::assert(Overview::class, ['since' => 1790773000]);
+        $answer = Answers::assert(Overview::class, ['since' => 1790773000]);
 
-        expect(collect($envelope['result']['detectors'])->firstWhere('detector', 'failing-routes'))->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
+        expect(collect($answer['result']['detectors'])->firstWhere('detector', 'failing-routes'))->toMatchArray(['verdict' => 'clean', 'examined' => 1]);
     });
 
     it('offers to list the findings of a shape that has some, and the call runs', function () {
         ovwRequests(500);
 
-        $envelope = Envelope::assert(Overview::class);
-        $call = $envelope['next'][0];
+        $answer = Answers::assert(Overview::class);
+        $call = $answer['next'][0];
         $executionId = storeRows('SELECT execution_id FROM records')[0]['execution_id'];
 
-        expect($envelope['next'])->toBe([ovwShapeCall('failing-routes'), ...ovwLadder('request', $executionId)])
+        expect($answer['next'])->toBe([ovwShapeCall('failing-routes'), ...ovwLadder('request', $executionId)])
             ->and($call)->toBe(['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes'], 'why' => __('firewatch::messages.detect_next_shape')])
-            ->and(Envelope::assert(Detect::class, $call['arguments'])['result']['verdict'])->toBe('findings');
+            ->and(Answers::assert(Detect::class, $call['arguments'])['result']['verdict'])->toBe('findings');
     });
 
     it('offers no shape to list when no shape has findings', function () {
         ovwRequests(200);
         $executionId = storeRows('SELECT execution_id FROM records')[0]['execution_id'];
 
-        expect(Envelope::assert(Overview::class)['next'])->toBe(ovwLadder('request', $executionId));
+        expect(Answers::assert(Overview::class)['next'])->toBe(ovwLadder('request', $executionId));
     });
 
     it('lists the shapes with findings first, then the clean ones, then those not evaluated, in the order of the catalogue within each', function () {
@@ -1063,25 +1063,25 @@ describe('the problem shapes', function () {
             new FakeDetector(DetectorName::MEMORY),
         );
 
-        $envelope = Envelope::assert(Overview::class);
+        $answer = Answers::assert(Overview::class);
 
-        expect(array_column($envelope['result']['detectors'], 'detector'))->toBe(['failing-routes', 'failing-jobs', 'database-bound', 'failing-tasks', 'n-plus-one', 'memory'])
-            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (2), failing-jobs (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, memory']))
-            ->and($envelope['next'])->toBe([ovwShapeCall('failing-routes'), ovwShapeCall('failing-jobs'), ...ovwLadder('request', storeRows('SELECT execution_id FROM records')[0]['execution_id'])]);
+        expect(array_column($answer['result']['detectors'], 'detector'))->toBe(['failing-routes', 'failing-jobs', 'database-bound', 'failing-tasks', 'n-plus-one', 'memory'])
+            ->and($answer['summary'])->toContain(__('firewatch::messages.overview_detectors_findings', ['shapes' => 'failing-routes (2), failing-jobs (1)']).' '.__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'n-plus-one, memory']))
+            ->and($answer['next'])->toBe([ovwShapeCall('failing-routes'), ovwShapeCall('failing-jobs'), ...ovwLadder('request', storeRows('SELECT execution_id FROM records')[0]['execution_id'])]);
     });
 
     it('says there are no findings only when every shape is clean', function () {
         ovwRequests(200);
         FakeDetector::ship(new FakeDetector(DetectorName::DATABASE_BOUND, examined: 5), new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4));
 
-        expect(Envelope::assert(Overview::class)['summary'])->toStartWith(trans_choice('firewatch::messages.overview_detectors_clean', 2, ['count' => 2]));
+        expect(Answers::assert(Overview::class)['summary'])->toStartWith(trans_choice('firewatch::messages.overview_detectors_clean', 2, ['count' => 2]));
     });
 
     it('offers at most five shapes to list', function () {
         ovwRequests(200);
         FakeDetector::ship(...array_map(fn (DetectorName $name) => new FakeDetector($name, examined: 1, total: 1), array_slice(DetectorName::cases(), 0, 6)));
 
-        expect(Envelope::assert(Overview::class)['next'])->toHaveCount(5);
+        expect(Answers::assert(Overview::class)['next'])->toHaveCount(5);
     });
 
     it('does not start a shape once five seconds have passed since the call began', function (float $seconds, string $verdict) {
@@ -1111,10 +1111,10 @@ describe('the problem shapes', function () {
             new FakeDetector(DetectorName::FAILING_ROUTES, examined: 4, total: 2),
         );
 
-        $envelope = ovwJson();
+        $answer = ovwJson();
 
-        expect($envelope['result']['detectors'][1])->toBe(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'reason' => 'deadline', 'examined' => 0, 'total' => 0, 'worst' => null])
-            ->and($envelope['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'failing-routes']));
+        expect($answer['result']['detectors'][1])->toBe(['detector' => 'failing-routes', 'verdict' => 'not_evaluated', 'reason' => 'deadline', 'examined' => 0, 'total' => 0, 'worst' => null])
+            ->and($answer['summary'])->toContain(__('firewatch::messages.overview_detectors_not_evaluated', ['shapes' => 'failing-routes']));
     });
 
     it('starts every shape when the call is quick', function () {

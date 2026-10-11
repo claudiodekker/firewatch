@@ -3,7 +3,7 @@
 use ClaudioDekker\Firewatch\Mcp\Tools\Compare;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
-use ClaudioDekker\Firewatch\Tests\Support\Envelope;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Route;
@@ -63,7 +63,7 @@ function afterTheDeployServeAll(): float
  */
 function afterTheDeployGroups(): array
 {
-    $rows = Envelope::assert(Rank::class, ['type' => 'request', 'limit' => 10])['result']['groups'];
+    $rows = Answers::assert(Rank::class, ['type' => 'request', 'limit' => 10])['result']['groups'];
 
     return array_column($rows, 'group', 'label');
 }
@@ -159,7 +159,7 @@ it('moves a count between two deploys only past both the 10% band and the noise 
     $created = afterTheDeployServeAll();
     $groups = afterTheDeployGroups();
 
-    $pair = Envelope::assert(Compare::class, ['type' => 'request', 'by' => 'occurrences', 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
+    $pair = Answers::assert(Compare::class, ['type' => 'request', 'by' => 'occurrences', 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
 
     $rows = [
         afterTheDeployRow($groups['/cart'], '/cart', 5, 7, 'more_calls'),
@@ -205,7 +205,7 @@ it('moves a count between two deploys only past both the 10% band and the noise 
     ]);
 
     $splitWindow = ['since' => $created, 'until' => $created + 1800];
-    $bySplit = Envelope::assert(Compare::class, ['type' => 'request', 'by' => 'occurrences', 'split_at' => $created + 800, 'until' => $created + 1800]);
+    $bySplit = Answers::assert(Compare::class, ['type' => 'request', 'by' => 'occurrences', 'split_at' => $created + 800, 'until' => $created + 1800]);
 
     expect(Arr::except($bySplit, 'coverage.straddling'))->toEqual([
         'tool' => 'compare',
@@ -237,8 +237,8 @@ it('moves a count between two deploys only past both the 10% band and the noise 
         // Each request ends on the real clock, after every start the test sets, so all of v1 straddles the split.
         ->and($bySplit['coverage']['straddling'])->toBe(52);
 
-    // PHP 8.6.0RC3 compiles array_map(Envelope::follow(...), ...) without the file's imports and looks for a global Envelope.
-    [$before, $after, $breakdown] = array_map(fn (array $call) => Envelope::follow($call), $pair['next']);
+    // PHP 8.6.0RC3 compiles array_map(Answers::follow(...), ...) without the file's imports and looks for a global Answers.
+    [$before, $after, $breakdown] = array_map(fn (array $call) => Answers::follow($call), $pair['next']);
 
     expect([$before['empty'], $after['empty'], $breakdown['empty']])->toBe([null, null, null])
         ->and([$before['window'], $after['window'], $breakdown['window']])->each->toMatchArray($window)
@@ -254,10 +254,10 @@ it('judges no count between deploys whose observed spans differ more than twofol
     $created = afterTheDeployServeAll();
     $groups = afterTheDeployGroups();
 
-    $envelope = Envelope::assert(Compare::class, ['group' => $groups['/orders'], 'by' => 'occurrences', 'deploy_before' => 'v2', 'deploy_after' => 'v3']);
+    $answer = Answers::assert(Compare::class, ['group' => $groups['/orders'], 'by' => 'occurrences', 'deploy_before' => 'v2', 'deploy_after' => 'v3']);
 
-    expect($envelope['summary'])->toBe(trans_choice('firewatch::messages.compare_pair_summary', 1, ['groups' => 1, 'type' => 'request', 'by' => 'occurrences', 'before' => 'v2', 'after' => 'v3', 'changes' => '1 not_evaluated']))
-        ->and($envelope['result'])->toEqual([
+    expect($answer['summary'])->toBe(trans_choice('firewatch::messages.compare_pair_summary', 1, ['groups' => 1, 'type' => 'request', 'by' => 'occurrences', 'before' => 'v2', 'after' => 'v3', 'changes' => '1 not_evaluated']))
+        ->and($answer['result'])->toEqual([
             'type' => 'request',
             'by' => 'occurrences',
             'change' => null,
@@ -269,15 +269,15 @@ it('judges no count between deploys whose observed spans differ more than twofol
             'groups' => [afterTheDeployRow($groups['/orders'], '/orders', 22, 22, 'not_evaluated', reason: 'unequal_spans')],
             'deploys' => null,
         ])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.compare_deploy_pair_note')]);
+        ->and($answer['notes'])->toBe([__('firewatch::messages.compare_deploy_pair_note')]);
 });
 
 it('evaluates nothing for a deploy that served nothing, lists the deploys that did, and never says no regression', function () {
     $created = afterTheDeployServeAll();
 
-    $envelope = Envelope::assert(Compare::class, ['type' => 'request', 'by' => 'occurrences', 'deploy_before' => 'v2', 'deploy_after' => 'v9']);
+    $answer = Answers::assert(Compare::class, ['type' => 'request', 'by' => 'occurrences', 'deploy_before' => 'v2', 'deploy_after' => 'v9']);
 
-    expect($envelope)->toEqual([
+    expect($answer)->toEqual([
         'tool' => 'compare',
         'now' => $created + 5000,
         'window' => ['windowed' => true, 'basis' => 'started_at', 'since' => $created, 'until' => $created + 5000, 'timezone' => 'UTC', 'description' => __('firewatch::messages.window_description')],
@@ -310,11 +310,11 @@ it('evaluates nothing for a deploy that served nothing, lists the deploys that d
 it('answers that no job ran under either deploy, with the blind spots that say why an absence is no proof', function () {
     afterTheDeployServeAll();
 
-    $envelope = Envelope::assert(Compare::class, ['type' => 'job-attempt', 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
+    $answer = Answers::assert(Compare::class, ['type' => 'job-attempt', 'deploy_before' => 'v1', 'deploy_after' => 'v2']);
 
-    expect($envelope['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 134, 'filters' => 'type: job-attempt, deploy_before: v1, deploy_after: v2'])])
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['notes'])->toBe([__('firewatch::messages.compare_deploy_pair_note')])
-        ->and($envelope['next'])->toBe([])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
+    expect($answer['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 134, 'filters' => 'type: job-attempt, deploy_before: v1, deploy_after: v2'])])
+        ->and($answer['result'])->toBe([])
+        ->and($answer['notes'])->toBe([__('firewatch::messages.compare_deploy_pair_note')])
+        ->and($answer['next'])->toBe([])
+        ->and(array_column($answer['blind_spots'], 'id'))->toContain('sync-jobs-unrecorded');
 });
