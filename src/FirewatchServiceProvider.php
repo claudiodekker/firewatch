@@ -26,7 +26,6 @@ use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Events\IngestingEvents;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
-use ReflectionClass;
 use RuntimeException;
 use SQLite3;
 use Throwable;
@@ -352,8 +351,7 @@ class FirewatchServiceProvider extends ServiceProvider
             $deployment = $config->get('nightwatch.deployment');
         } else {
             // Nightwatch merges its defaults under the published file in its own register(), after this one.
-            $provider = (new ReflectionClass(NightwatchServiceProvider::class))->getFileName();
-            $path = dirname((string) $provider).'/../config/nightwatch.php';
+            $path = InstalledVersions::getInstallPath('laravel/nightwatch').'/config/nightwatch.php';
             $defaults = is_file($path) ? require $path : [];
             $deployment = is_array($defaults) ? ($defaults['deployment'] ?? null) : null;
         }

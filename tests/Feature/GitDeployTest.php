@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Tests\Support\GitRepository;
+use Composer\InstalledVersions;
 use Illuminate\Filesystem\Filesystem;
 
 /**
@@ -220,4 +221,18 @@ it('leaves a deploy published in the application\'s nightwatch config file over 
     registerFirewatch();
 
     expect(config('nightwatch.deployment'))->toBe('published-deploy');
+});
+
+it('gives git HEAD the deploy, with no notice, when Nightwatch\'s default config file is missing', function () {
+    $installed = InstalledVersions::getAllRawData()[0];
+    $emptyInstall = gitEmptyDirectory();
+    $moved = $installed;
+    $moved['versions']['laravel/nightwatch']['install_path'] = $emptyInstall;
+    InstalledVersions::reload($moved);
+    test()->beforeApplicationDestroyed(fn () => InstalledVersions::reload($installed));
+    $repository = gitRepository();
+
+    expect(is_file("{$emptyInstall}/config/nightwatch.php"))->toBeFalse()
+        ->and(deployUnderGit($repository->path))->toBe($repository->head())
+        ->and(notices())->toBe([]);
 });
