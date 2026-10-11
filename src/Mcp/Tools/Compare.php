@@ -13,7 +13,6 @@ use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\DeployPair;
-use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\SplitPoint;
@@ -147,17 +146,11 @@ class Compare extends Tool
         }
 
         $filters = [...$this->filters($group, $explicit), ...$boundary->filters()];
+        $hasRows = $comparison !== null && ! $comparison->isEmpty();
+        $empty = $frame->vacancy(inWindow: $inWindow, groupHeld: $group === null || $held !== [], hasRows: $hasRows, filters: $filters);
 
-        if ($group !== null && $held === []) {
-            return $frame->empty(Emptiness::noMatch($inWindow, $filters), $notes);
-        }
-
-        if ($inWindow === 0) {
-            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records), $notes);
-        }
-
-        if ($comparison === null || $comparison->isEmpty()) {
-            return $frame->empty(Emptiness::noMatch($inWindow, $filters), $notes);
+        if ($empty !== null || $comparison === null) {
+            return $frame->empty($empty, $notes);
         }
 
         $shared = $explicit === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);

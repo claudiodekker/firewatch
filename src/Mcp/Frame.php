@@ -154,6 +154,24 @@ class Frame
     }
 
     /**
+     * Get why a store that holds records gave no result, or null when the tool has rows to answer with.
+     *
+     * The rungs run from the widest cause to the narrowest: a requested group the store never held, which no window or filter can change, then a window that holds no records, then filters that matched none of the rest.
+     *
+     * @param  bool  $groupHeld  true when no group was requested
+     * @param  list<string>  $filters
+     */
+    public function vacancy(int $inWindow, bool $groupHeld, bool $hasRows, array $filters): ?Emptiness
+    {
+        return match (true) {
+            ! $groupHeld => Emptiness::noMatch($inWindow, $filters),
+            $inWindow === 0 => Emptiness::windowEmpty($this->facts()->records),
+            ! $hasRows => Emptiness::noMatch($inWindow, $filters),
+            default => null,
+        };
+    }
+
+    /**
      * Get an answer that holds no result, by default because of the store itself.
      *
      * @param  list<string>  $notes

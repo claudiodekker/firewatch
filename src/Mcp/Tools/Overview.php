@@ -14,7 +14,6 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Deadline;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
-use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
@@ -113,8 +112,10 @@ class Overview extends Tool
 
         [$sections, $budgets, $judgements] = $read;
 
-        if ($sections->records === 0) {
-            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records));
+        $empty = $frame->vacancy(inWindow: $sections->records, groupHeld: true, hasRows: true, filters: []);
+
+        if ($empty !== null) {
+            return $frame->empty($empty);
         }
 
         return $frame->answer(

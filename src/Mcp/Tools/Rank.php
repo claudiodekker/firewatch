@@ -9,7 +9,6 @@ use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
-use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Measure;
@@ -195,11 +194,7 @@ class Rank extends Tool
      */
     protected function unranked(Frame $frame, array $filters, int $inWindow, ?string $group, array $held): Answer
     {
-        $empty = $group === null || $held !== []
-            ? Emptiness::windowEmpty($frame->facts()->records)
-            : Emptiness::noMatch($inWindow, $filters);
-
-        return $frame->empty($empty);
+        return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: $group === null || $held !== [], hasRows: false, filters: $filters));
     }
 
     /**
@@ -225,7 +220,7 @@ class Rank extends Tool
     protected function ranking(Request $request, Frame $frame, Window $window, array $filters, int $inWindow, RecordType $type, Measure $by, array $ranked): Answer
     {
         if ($ranked['ranked'] === 0) {
-            return $frame->empty(Emptiness::noMatch($inWindow, $filters));
+            return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
         }
 
         $page = $ranked['page'];
@@ -277,7 +272,7 @@ class Rank extends Tool
     protected function breakdown(Request $request, Frame $frame, array $filters, int $inWindow, RecordType $type, string $group, array $held, int $limit, array $breakdown): Answer
     {
         if ($breakdown['rows'] === []) {
-            return $frame->empty(Emptiness::noMatch($inWindow, $filters));
+            return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
         }
 
         $shared = $request->get('type') === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);

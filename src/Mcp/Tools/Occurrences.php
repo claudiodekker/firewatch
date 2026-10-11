@@ -12,7 +12,6 @@ use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
-use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Listing;
 use ClaudioDekker\Firewatch\Mcp\LogLevel;
@@ -176,12 +175,11 @@ class Occurrences extends Tool
             return $frame->empty();
         }
 
-        if ($read['inWindow'] === 0) {
-            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records));
-        }
+        $hasRows = $read['listed'] !== null && $read['listed']['rows'] !== [];
+        $empty = $frame->vacancy(inWindow: $read['inWindow'], groupHeld: $read['groupHeld'], hasRows: $hasRows, filters: $this->given($group, $type, $ids, $deploy, $filters));
 
-        if ($read['listed'] === null || $read['listed']['rows'] === []) {
-            return $frame->empty(Emptiness::noMatch($read['inWindow'], $this->given($group, $type, $ids, $deploy, $filters)));
+        if ($empty !== null) {
+            return $frame->empty($empty);
         }
 
         return $this->listing($request, $frame, $window, $order, $group, $ids['user_id'], $limit, $read);
@@ -193,13 +191,15 @@ class Occurrences extends Tool
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
      * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
-     * @return array{inWindow: int, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
+     * @return array{inWindow: int, groupHeld: bool, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
      */
     protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, array $filters, int $limit, string $selector, ?Cursor $cursor): array
     {
         $inWindow = $this->inWindow($connection, $window);
+        $held = $group === null ? [] : Listing::typesOf($connection, $group);
         $nothing = [
             'inWindow' => $inWindow,
+            'groupHeld' => $group === null || $held !== [],
             'baseline' => null,
             'listed' => null,
             'sites' => null,
@@ -208,8 +208,6 @@ class Occurrences extends Tool
         if ($inWindow === 0) {
             return $nothing;
         }
-
-        $held = $group === null ? [] : Listing::typesOf($connection, $group);
 
         if ($held !== [] && $type !== null && ! in_array($type, $held, true)) {
             $holding = implode(', ', array_map(fn (RecordType $held) => $held->value, $held));
