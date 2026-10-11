@@ -82,11 +82,7 @@ it('hands a tool its arguments over stdio, answering in JSON beside the same JSO
     $replies = serverReplies($process);
     $result = $replies[3]['result'];
 
-    // Testbench's CLI discovers Nightwatch beside Firewatch, which composer.json keeps real installs from doing.
-    $errors = array_filter(
-        explode("\n", $process->getErrorOutput()),
-        fn (string $line) => $line !== '' && ! str_starts_with($line, "Nightwatch's provider was registered before Firewatch's"),
-    );
+    $errors = array_filter(explode("\n", $process->getErrorOutput()), fn (string $line) => $line !== '');
 
     expect($errors)->toBe([])
         ->and($result['isError'])->toBeFalse()
