@@ -7,8 +7,8 @@ use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Route;
 
-// A cold application boot on the Windows runner can take more than 30 ms, and the slow route must still dominate it.
-const SLOW_ROUTE_MS = 150;
+// A request's boot on the Windows runner can stall for over 300 ms, and the slow route must still dominate it.
+const SLOW_ROUTE_MS = 500;
 
 /**
  * Let the scheduler run a task, then serve the given URIs, by default the slow route three times and the quick route once.
