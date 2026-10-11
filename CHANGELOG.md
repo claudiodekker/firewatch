@@ -66,3 +66,4 @@
 - A markdown answer writes a whole-number value in a next call the same way everywhere, as `since: 1790775990` and not `1790775990.0` in the Next list, so it matches the call in a budget row, a truncated entry and a refusal example.
 - `composer.json` requires the `illuminate/*` components, `ext-mbstring` and `ext-ctype` that Firewatch uses, and carries Packagist metadata. Foundation (`AliasLoader` and the `config()`, `app()` and `report()` helpers) still comes from `laravel/framework` through Nightwatch.
 - A `firewatch:` command run as `php artisan --env local firewatch:server` is recognised by its name and runs Off, as it does with `--env=local`, so the server no longer captures itself or leaves stray output on stdout.
+- A prune whose closing `PRAGMA optimize` or checkpoint fails for a reason other than a busy store, such as a disk I/O error, is logged to `failures.jsonl` and reported like any other failed prune, instead of passing unnoticed.

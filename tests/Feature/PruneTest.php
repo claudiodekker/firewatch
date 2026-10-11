@@ -375,13 +375,7 @@ describe('the pass', function () {
     });
 
     it('reports a step that fails for another reason, never throws it, and keeps the batch', function () {
-        app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class)) extends Pruner
-        {
-            protected function prune(float $now): void
-            {
-                throw new RuntimeException('the pass broke');
-            }
-        });
+        app()->instance(Pruner::class, app()->make(Pruner::class, ['reader' => new Reader(app(Configuration::class), sqliteVersion: '3.30.0')]));
         registerFirewatch();
 
         requestsStartedAt([PRUNE_CUTOFF + 1]);
@@ -394,6 +388,32 @@ describe('the pass', function () {
             ->and($lines)->toHaveCount(1)
             ->and($lines[0])->toMatchArray(['entry' => 'prune', 'kind' => 'other'])
             ->and($lines[0])->not->toHaveKey('dropped');
+    });
+
+    it('reports a maintenance step that fails for a reason other than a busy store', function () {
+        app()->bind(Writer::class, fn () => new class(app(Configuration::class), app(FailureLog::class)) extends Writer
+        {
+            public function maintain(Closure $callback): mixed
+            {
+                $path = $this->configuration->database.'-damaged';
+                file_put_contents($path, str_repeat('not a database', 512));
+                $damaged = new SQLite3($path);
+                $damaged->enableExceptions(true);
+
+                try {
+                    return $callback($damaged);
+                } finally {
+                    $damaged->close();
+                }
+            }
+        });
+        registerFirewatch();
+
+        requestsStartedAt([PRUNE_CUTOFF - 1, PRUNE_CUTOFF + 1]);
+
+        expect(startedAts())->toBe([PRUNE_CUTOFF + 1])
+            ->and(pruneFailures())->toHaveCount(1)
+            ->and(pruneFailures()[0])->toMatchArray(['entry' => 'prune', 'kind' => 'foreign']);
     });
 });
 

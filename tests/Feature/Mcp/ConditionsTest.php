@@ -12,6 +12,7 @@ use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\PruneReason;
+use ClaudioDekker\Firewatch\Store\RebuildReason;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
@@ -106,7 +107,7 @@ describe('history', function () {
 
 describe('a rebuilt store', function () {
     it('says earlier data is gone from the rebuild, with when and why', function (string $why) {
-        $conditions = conditionsFor(new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: $why));
+        $conditions = conditionsFor(new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: RebuildReason::from($why)));
 
         expect($conditions)->toBe([[
             'id' => 'store-rebuilt',
@@ -118,7 +119,7 @@ describe('a rebuilt store', function () {
     })->with(['a schema change' => 'schema', 'corruption' => 'corrupt']);
 
     it('attaches only while the window starts before the rebuild', function (?float $since, bool $attached) {
-        $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema');
+        $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: RebuildReason::SCHEMA);
 
         expect(array_column(conditionsFor($markers, since: $since), 'id'))->toBe($attached ? ['store-rebuilt'] : []);
     })->with([
@@ -126,6 +127,22 @@ describe('a rebuilt store', function () {
         'a start before it' => [599.0, true],
         'a start at it' => [600.0, false],
     ]);
+
+    it('still states a rebuild whose stored reason this release does not know', function (string $stored) {
+        $this->travelTo('2026-09-30 14:00:00');
+        ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
+        $store = new SQLite3(app(Configuration::class)->database);
+        $store->exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('rebuilt_at', '1790776800.0'), ('rebuilt_why', '{$stored}')");
+        $store->close();
+
+        expect(conditionsOf())->toEqual([[
+            'id' => 'store-rebuilt',
+            'kind' => 'condition',
+            'message' => __('firewatch::messages.conditions.store-rebuilt', ['at' => '2026-09-30 14:00:00.000000', 'why' => 'unknown']),
+            'rebuilt_at' => 1790776800.0,
+            'why' => 'unknown',
+        ]]);
+    })->with(['a later release\'s reason' => 'manual', 'no reason' => '']);
 
     it('stamps a store its schema rebuilt, and states it in the answer', function () {
         $this->travelTo('2026-09-30 14:00:00');
@@ -325,7 +342,7 @@ it('attaches the conditions after the structural blind spots, in the order of th
     config()->set('firewatch.capture.redact_headers', ['Authorization']);
     registerFirewatch();
 
-    $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: 'schema', prunedThrough: 700.0, prunedReason: PruneReason::AGE, nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
+    $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: RebuildReason::SCHEMA, prunedThrough: 700.0, prunedReason: PruneReason::AGE, nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
 
     $conditions = conditionsFor($markers, drift: [['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen' => 5.0]]);
 
