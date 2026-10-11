@@ -59,7 +59,6 @@ function notices(): array
 
 function registerFirewatch(): Configuration
 {
-    // Registering again stands for a new process, which reads its configuration into a writer and failure log of its own.
     app()->forgetInstance(Writer::class);
     app()->forgetInstance(FailureLog::class);
 
