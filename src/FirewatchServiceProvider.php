@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch;
 
-use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Capture\DefaultLogChannel;
 use ClaudioDekker\Firewatch\Capture\HeaderRedactor;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
@@ -214,18 +213,12 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Keep one store writer and one failure log for this process, unless they are already bound, and give the clear a writer of its own.
+     * Keep one store writer and one failure log for this process, unless they are already bound.
      */
     protected function registerStore(): void
     {
         $this->app->singletonIf(FailureLog::class);
         $this->app->singletonIf(Writer::class);
-
-        $this->app->when(ClearStore::class)->needs(Writer::class)->give(fn (Application $app) => new Writer(
-            $app->make(Configuration::class),
-            $app->make(FailureLog::class),
-            busyTimeoutMilliseconds: ClearStore::BUSY_TIMEOUT_MILLISECONDS,
-        ));
     }
 
     /**

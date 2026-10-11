@@ -102,9 +102,9 @@ class Writer
     protected Closure $pid;
 
     /**
-     * How long a write waits for a busy store, in milliseconds.
+     * How long writes wait for a busy store while a caller has asked for longer or shorter than configured, in milliseconds.
      */
-    protected int $busyTimeoutMilliseconds;
+    protected ?int $busyTimeoutMilliseconds = null;
 
     /**
      * Create a new store writer instance.
@@ -112,15 +112,41 @@ class Writer
     public function __construct(
         protected Configuration $configuration,
         protected FailureLog $failures,
-        ?int $busyTimeoutMilliseconds = null,
         ?string $sqliteVersion = null,
         ?FileIdentity $identity = null,
         ?Closure $pid = null,
     ) {
-        $this->busyTimeoutMilliseconds = $busyTimeoutMilliseconds ?? $configuration->busyTimeoutMilliseconds;
         $this->sqliteVersion = $sqliteVersion ?? (string) Sqlite::version();
         $this->identity = $identity ?? new FileIdentity;
         $this->pid = $pid ?? static fn (): int => getmypid() ?: 0;
+    }
+
+    /**
+     * Run the callback with every write in it waiting for a busy store this long, instead of what capture is configured to wait.
+     *
+     * @template TResult
+     *
+     * @param  Closure(): TResult  $callback
+     * @return TResult
+     */
+    public function waitingUpTo(int $milliseconds, Closure $callback): mixed
+    {
+        $previous = $this->busyTimeoutMilliseconds;
+        $this->busyTimeoutMilliseconds = $milliseconds;
+
+        try {
+            return $callback();
+        } finally {
+            $this->busyTimeoutMilliseconds = $previous;
+        }
+    }
+
+    /**
+     * Get how long a write waits for a busy store, in milliseconds.
+     */
+    protected function busyTimeout(): int
+    {
+        return $this->busyTimeoutMilliseconds ?? $this->configuration->busyTimeoutMilliseconds;
     }
 
     /**
@@ -208,7 +234,10 @@ class Writer
         $run = fn (SQLite3 $connection) => $transactional ? $this->transactionOn($connection, fn () => $callback($connection)) : $callback($connection);
 
         if (! Sqlite::hasWalResetBug($this->sqliteVersion)) {
-            return $run($this->connection());
+            $connection = $this->connection();
+            $connection->busyTimeout($this->busyTimeout());
+
+            return $run($connection);
         }
 
         // A connection kept across the lock could reset the write-ahead log under another writer.
@@ -236,7 +265,7 @@ class Writer
         }
 
         if ($this->connection === null) {
-            $this->connection = $this->open($this->busyTimeoutMilliseconds);
+            $this->connection = $this->open($this->busyTimeout());
             $this->connectionPid = $pid;
 
             // Read before the open, so a file swapped in after it is seen by the next batch; a store that did not exist yet was created by the open, and is read after it.
@@ -273,7 +302,7 @@ class Writer
     protected function locked(Closure $callback): mixed
     {
         $path = $this->configuration->database.'.lock';
-        $budget = $this->busyTimeoutMilliseconds;
+        $budget = $this->busyTimeout();
 
         $this->createDirectory(dirname($path));
         $handle = $this->openLockFile($path);
