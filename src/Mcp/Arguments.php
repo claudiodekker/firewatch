@@ -9,7 +9,6 @@ use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Server\Tool;
 use LogicException;
-use SQLite3;
 
 /**
  * @internal
@@ -227,19 +226,34 @@ class Arguments
     }
 
     /**
-     * Read text, or null when none is given.
+     * Read text of the declared length, or null when none is given.
      */
     public function text(string $argument, string $example): ?string
     {
         $value = $this->get($argument);
 
-        if ($value === null || is_string($value)) {
+        if ($value !== null && ! is_string($value)) {
+            $text = __('firewatch::messages.argument_values.text');
+
+            throw $this->invalid(argument: $argument, expected: $text, accepted: $text, example: $example);
+        }
+
+        $declared = $this->declared($argument);
+
+        if ($value === null || ! isset($declared['minLength'], $declared['maxLength'])) {
             return $value;
         }
 
-        $text = __('firewatch::messages.argument_values.text');
+        $length = [
+            'minimum' => $declared['minLength'],
+            'maximum' => $declared['maxLength'],
+        ];
 
-        throw $this->invalid(argument: $argument, expected: $text, accepted: $text, example: $example);
+        if (mb_strlen($value) >= $length['minimum'] && mb_strlen($value) <= $length['maximum']) {
+            return $value;
+        }
+
+        throw $this->invalid(argument: $argument, expected: __('firewatch::messages.argument_values.length', $length), accepted: __('firewatch::messages.argument_values.text_of_length', $length), example: $example);
     }
 
     /**
@@ -256,26 +270,6 @@ class Arguments
         $deploy = __('firewatch::messages.argument_values.deploy');
 
         throw $this->invalid(argument: 'deploy', expected: $deploy, accepted: $deploy, example: $example);
-    }
-
-    /**
-     * Resolve the type a group is read as, with the types that hold it: the type the call names, else the one the group is best known by.
-     *
-     * @return array{RecordType|null, list<RecordType>}
-     */
-    public function resolveGroupType(SQLite3 $connection, ?string $group, ?RecordType $type, string $example): array
-    {
-        if ($group === null) {
-            return [$type, []];
-        }
-
-        $held = Stored::holders($connection, $group);
-
-        if ($type !== null && $held !== [] && ! in_array($type, $held, true)) {
-            throw Refusal::conflicting(argument: 'type', with: 'group', accepted: __('firewatch::messages.argument_values.holding', ['types' => $this->listed($held)]), example: $example);
-        }
-
-        return [$type ?? Ranking::preferred($held), $held];
     }
 
     /**

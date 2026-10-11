@@ -149,6 +149,26 @@ it('refuses a type that does not hold the group, naming the types that do', func
     'rank' => [Rank::class, [], 'rank(group: "'.str_repeat('a', 32).'")'],
     'compare' => [Compare::class, ['split_at' => '-1h'], 'compare(group: "'.str_repeat('a', 32).'", split_at: "<time>")'],
     'trend' => [Trend::class, [], 'trend(group: "'.str_repeat('a', 32).'")'],
+    'occurrences' => [Occurrences::class, [], 'occurrences(group: "'.str_repeat('a', 32).'")'],
+]);
+
+it('declares the matching length it enforces', function (string $tool) {
+    expect(listedArgument($tool, 'matching'))->toMatchArray(['minLength' => 1, 'maxLength' => 200]);
+})->with([
+    'rank' => [Rank::class],
+    'occurrences' => [Occurrences::class],
+]);
+
+it('refuses a matching outside the declared length, naming the length', function (string $tool, array $arguments, string $example, string $matching) {
+    $text = argumentText($tool, [...$arguments, 'matching' => $matching]);
+
+    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'matching', 'expected' => '1 to 200 characters', 'value' => json_encode($matching), 'accepted' => 'a text of 1 to 200 characters', 'example' => $example]));
+})->with([
+    'rank' => [Rank::class, ['type' => 'request'], 'rank(type: "request", matching: "orders")'],
+    'occurrences' => [Occurrences::class, ['type' => 'log'], 'occurrences(type: "request")'],
+])->with([
+    'empty' => [''],
+    'too long' => [str_repeat('a', 201)],
 ]);
 
 it('refuses a deploy that is no text', function (string $tool, array $arguments, string $example) {

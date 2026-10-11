@@ -414,6 +414,8 @@ return [
         'whole_number' => 'a whole number from :minimum to :maximum',
         'deploy' => 'an exact deploy string',
         'text' => 'text',
+        'length' => ':minimum to :maximum characters',
+        'text_of_length' => 'a text of :minimum to :maximum characters',
         'grouped_type' => 'one of the types with groups',
         'holding' => 'a type that holds the group: :types',
     ],
@@ -490,7 +492,7 @@ return [
 
     'rank_group_argument' => 'Group id (32 hex): one row per deploy, first seen first. Excludes matching, deploy, cursor; refused with by=queries.',
 
-    'rank_matching_argument' => 'Case-insensitive substring of the group label, 1 to 200 characters. Excludes group.',
+    'rank_matching_argument' => 'Case-insensitive substring of the group label. Excludes group.',
 
     'rank_cursor_how' => 'Call rank again with this cursor to see the rest: :call',
 
@@ -1097,7 +1099,7 @@ return [
 
     'occurrences_at_or_above_argument' => 'Percentile of the selection\'s durations. Too few records: not applied, every row returns, with a note.',
 
-    'occurrences_matching_argument' => 'Substring, 1 to 200 characters, ASCII case ignored, in the type\'s fields. Needs type.',
+    'occurrences_matching_argument' => 'Substring, ASCII case ignored, in the type\'s fields. Needs type.',
 
     'occurrences_summary' => 'Listed :count record, ordered by :order.|Listed :count records, ordered by :order.',
 

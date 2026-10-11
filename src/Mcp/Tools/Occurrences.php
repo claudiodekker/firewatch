@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Continuation;
 use ClaudioDekker\Firewatch\Mcp\Frame;
+use ClaudioDekker\Firewatch\Mcp\GroupSelection;
 use ClaudioDekker\Firewatch\Mcp\Listing;
 use ClaudioDekker\Firewatch\Mcp\LogLevel;
 use ClaudioDekker\Firewatch\Mcp\OccurrenceFilters;
@@ -106,7 +107,7 @@ class Occurrences extends Tool
             'level' => $schema->string()->enum(LogLevel::class)->description(__('firewatch::messages.occurrences_level_argument')),
             'slower_than_ms' => $schema->number()->description(__('firewatch::messages.occurrences_slower_than_ms_argument')),
             'at_or_above' => $schema->string()->enum(Percentile::class)->description(__('firewatch::messages.occurrences_at_or_above_argument')),
-            'matching' => $schema->string()->description(__('firewatch::messages.occurrences_matching_argument')),
+            'matching' => $this->matchingArgument($schema)->description(__('firewatch::messages.occurrences_matching_argument')),
             ...$this->windowSchema($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
@@ -167,7 +168,7 @@ class Occurrences extends Tool
         }
 
         $hasRows = $read['listed'] !== null && $read['listed']['rows'] !== [];
-        $empty = $frame->vacancy(inWindow: $read['inWindow'], groupHeld: $read['groupHeld'], hasRows: $hasRows, filters: $this->given($group, $type, $ids, $deploy, $filters));
+        $empty = $frame->vacancy(inWindow: $read['inWindow'], groupHeld: $read['selection']->isHeld(), hasRows: $hasRows, filters: $read['selection']->filters($this->given($ids, $filters)));
 
         if ($empty !== null) {
             return $frame->empty($empty);
@@ -181,15 +182,15 @@ class Occurrences extends Tool
      *
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  Continuation<array{value: int|float, id: int}>  $continuation
-     * @return array{inWindow: int, groupHeld: bool, baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
+     * @return array{inWindow: int, selection: GroupSelection, baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
      */
     protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, OccurrenceFilters $filters, int $limit, string $selector, Continuation $continuation): array
     {
         $inWindow = $window->count($connection);
-        $held = $group === null ? [] : Stored::holders($connection, $group);
+        $selection = GroupSelection::resolve($connection, $group, $type, $deploy, "occurrences(group: \"{$group}\")");
         $nothing = [
             'inWindow' => $inWindow,
-            'groupHeld' => $group === null || $held !== [],
+            'selection' => $selection,
             'baseline' => null,
             'listed' => null,
             'sites' => null,
@@ -199,17 +200,11 @@ class Occurrences extends Tool
             return $nothing;
         }
 
-        if ($held !== [] && $type !== null && ! in_array($type, $held, true)) {
-            $holding = implode(', ', array_map(fn (RecordType $held) => $held->value, $held));
-
-            throw Refusal::conflicting(argument: 'group', with: 'type', accepted: "a `type` that holds the group: {$holding}", example: self::EXAMPLE);
-        }
-
-        if ($group !== null && $held === []) {
+        if (! $selection->isHeld()) {
             return $nothing;
         }
 
-        $resolved = $type ?? (count($held) === 1 ? $held[0] : null);
+        $resolved = $selection->listed();
 
         $filters->refuseMisfits($order, $resolved, $selector);
 
@@ -328,19 +323,16 @@ class Occurrences extends Tool
     }
 
     /**
-     * Get the filters and selectors the call was given, as the words of an empty answer name them.
+     * Get the identifiers and filters the call was given, as the words of an empty answer name them.
      *
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @return list<string>
      */
-    protected function given(?string $group, ?RecordType $type, array $ids, ?string $deploy, OccurrenceFilters $filters): array
+    protected function given(array $ids, OccurrenceFilters $filters): array
     {
         $given = array_filter([
-            'group' => $group,
-            'type' => $type?->value,
             ...$ids,
             ...$filters->given(),
-            'deploy' => $deploy,
         ], fn (mixed $value) => $value !== null);
 
         return array_map(fn (string $name, mixed $value) => "{$name}: {$value}", array_keys($given), $given);
