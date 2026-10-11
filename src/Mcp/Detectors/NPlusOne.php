@@ -60,15 +60,15 @@ class NPlusOne implements Detector
     {
         $this->refuseQueryGroup($connection, $group);
 
-        $population = Population::queried($connection, $meta, $window, $group, ExecutionType::records());
-        $caveats = [__('firewatch::messages.detect_caveat_reads'), ...$population->caveats()];
+        $examination = Examination::queried($connection, $meta, $window, $group, ExecutionType::records());
+        $caveats = [__('firewatch::messages.detect_caveat_reads'), ...$examination->caveats()];
         $described = $this->threshold()->describe($threshold);
 
-        if ($population->examined === 0) {
+        if ($examination->examined === 0) {
             return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS, caveats: $caveats);
         }
 
-        $ranked = $this->ranked($population->executions, $threshold);
+        $ranked = $this->ranked($examination->executions, $threshold);
         $reach = Fragment::reach();
 
         $groups = Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, max(runs) AS worst_runs, count(*) AS affected, sum(runs) AS total_runs, total(micros) AS total_micros,
@@ -76,14 +76,14 @@ class NPlusOne implements Detector
             FROM ranked GROUP BY eg, qg", $ranked->bindings, $window);
 
         if ($groups === []) {
-            return Judgement::of($this->name(), $described, examined: $population->examined, total: 0, findings: [], caveats: $caveats);
+            return Judgement::of($this->name(), $described, examined: $examination->examined, total: 0, findings: [], caveats: $caveats);
         }
 
         $shown = Judgement::worst($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']], $limit);
         $details = $this->details($connection, $window, $ranked);
         $findings = array_map(fn (array $row) => $this->finding($row, $details), $shown);
 
-        return Judgement::of($this->name(), $described, examined: $population->examined, total: count($groups), findings: $findings, caveats: $caveats);
+        return Judgement::of($this->name(), $described, examined: $examination->examined, total: count($groups), findings: $findings, caveats: $caveats);
     }
 
     /**

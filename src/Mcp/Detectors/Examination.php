@@ -11,10 +11,20 @@ use SQLite3;
 /**
  * @internal
  */
-readonly class Population
+readonly class Examination
 {
     /**
-     * Create a new population instance.
+     * The condition that counts every execution as examined.
+     */
+    protected const EVERY = 'TRUE';
+
+    /**
+     * The condition that counts an execution as examined when it captured a query.
+     */
+    protected const QUERIED = 'captured > 0';
+
+    /**
+     * Create a new examination instance.
      */
     public function __construct(
         public Fragment $executions,
@@ -31,7 +41,7 @@ readonly class Population
      */
     public static function every(SQLite3 $connection, Markers $meta, Window $window, ?string $group, array $types): self
     {
-        return self::examining($connection, $meta, $window, $group, $types, 'TRUE');
+        return self::examining($connection, $meta, $window, $group, $types, self::EVERY);
     }
 
     /**
@@ -41,11 +51,11 @@ readonly class Population
      */
     public static function queried(SQLite3 $connection, Markers $meta, Window $window, ?string $group, array $types): self
     {
-        return self::examining($connection, $meta, $window, $group, $types, 'captured > 0');
+        return self::examining($connection, $meta, $window, $group, $types, self::QUERIED);
     }
 
     /**
-     * Get the population, examined where the executions meet the condition.
+     * Get the examination, counting as examined the executions that meet the condition.
      *
      * @param  list<RecordType>  $types
      */

@@ -17,7 +17,7 @@ class Executions
     /**
      * Get the SQL of the executions that started in the window, of one group when the call names it.
      */
-    public static function table(Window $window, ?string $group): Fragment
+    public static function withoutCoverage(Window $window, ?string $group): Fragment
     {
         return self::union(Fragment::selecting($window, $group), ExecutionType::records());
     }
