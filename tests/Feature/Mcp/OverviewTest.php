@@ -179,6 +179,7 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
 it('answers that a damaged store cannot be read', function () {
     $path = app(Configuration::class)->database;
     app(Writer::class)->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('request', '{}')"));
+    $this->endCapture();
     clearstatcache(true, $path);
     $handle = fopen($path, 'r+b');
     fseek($handle, 4096);
@@ -194,6 +195,7 @@ it('answers that a damaged store cannot be read', function () {
 it('answers that a busy store cannot be read yet', function () {
     $path = app(Configuration::class)->database;
     app(Writer::class)->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('request', '{}')"));
+    $this->endCapture();
     $connection = new SQLite3($path);
     $connection->exec('PRAGMA journal_mode = DELETE');
     $connection->exec('BEGIN EXCLUSIVE');
