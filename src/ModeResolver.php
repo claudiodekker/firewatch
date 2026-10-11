@@ -3,17 +3,13 @@
 namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 
 /**
  * @internal
  */
 class ModeResolver
 {
-    /**
-     * The oldest SQLite version the store can run on.
-     */
-    public const MINIMUM_SQLITE_VERSION = '3.41.0';
-
     /**
      * Resolve the mode of this process.
      *
@@ -64,6 +60,6 @@ class ModeResolver
      */
     protected function isUsableSqlite(?string $sqliteVersion): bool
     {
-        return $sqliteVersion !== null && version_compare($sqliteVersion, static::MINIMUM_SQLITE_VERSION, '>=');
+        return $sqliteVersion !== null && ! Sqlite::isTooOld($sqliteVersion);
     }
 }

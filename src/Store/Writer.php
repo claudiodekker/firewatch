@@ -48,15 +48,6 @@ class Writer
     protected const JOURNAL_SIZE_LIMIT_BYTES = 33554432;
 
     /**
-     * The SQLite releases with the WAL-reset bug, each from its first affected release up to the release that fixed it.
-     */
-    protected const WAL_RESET_BUG = [
-        ['3.7.0', '3.44.6'],
-        ['3.45.0', '3.50.7'],
-        ['3.51.0', '3.51.3'],
-    ];
-
-    /**
      * The share of the backstop's pages a burst between two passes may reach, as a multiple.
      */
     protected const BURST_HEADROOM = 1.25;
@@ -127,7 +118,7 @@ class Writer
         ?Closure $pid = null,
     ) {
         $this->busyTimeoutMilliseconds = $busyTimeoutMilliseconds ?? $configuration->busyTimeoutMilliseconds;
-        $this->sqliteVersion = $sqliteVersion ?? SQLite3::version()['versionString'];
+        $this->sqliteVersion = $sqliteVersion ?? (string) Sqlite::version();
         $this->identity = $identity ?? new FileIdentity;
         $this->pid = $pid ?? static fn (): int => getmypid() ?: 0;
     }
@@ -216,7 +207,7 @@ class Writer
     {
         $run = fn (SQLite3 $connection) => $transactional ? $this->transactionOn($connection, fn () => $callback($connection)) : $callback($connection);
 
-        if (! static::hasWalResetBug($this->sqliteVersion)) {
+        if (! Sqlite::hasWalResetBug($this->sqliteVersion)) {
             return $run($this->connection());
         }
 
@@ -267,20 +258,6 @@ class Writer
         }
 
         $this->connection = null;
-    }
-
-    /**
-     * Determine if a SQLite release can reset the write-ahead log under a concurrent writer.
-     */
-    public static function hasWalResetBug(string $sqliteVersion): bool
-    {
-        foreach (static::WAL_RESET_BUG as [$affected, $fixed]) {
-            if (version_compare($sqliteVersion, $affected, '>=') && version_compare($sqliteVersion, $fixed, '<')) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

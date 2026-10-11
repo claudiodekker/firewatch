@@ -4,8 +4,8 @@ namespace ClaudioDekker\Firewatch\Console\Doctor;
 
 use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
-use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use Illuminate\Contracts\Foundation\Application;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 
@@ -67,7 +67,7 @@ class ServerChecks
             __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __("firewatch::messages.sql_unavailable.{$reason->value}")]),
             __("firewatch::messages.doctor.sql-access.{$reason->value}_fix", [
                 'binary' => $this->runner->phpBinary(),
-                'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+                'minimum' => Sqlite::MINIMUM_VERSION,
             ]),
         );
     }

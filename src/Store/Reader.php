@@ -3,7 +3,6 @@
 namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\ModeResolver;
 use Closure;
 use SQLite3;
 use SQLite3Exception;
@@ -28,7 +27,7 @@ class Reader
      */
     public function __construct(protected Configuration $configuration, ?string $sqliteVersion = null)
     {
-        $this->sqliteVersion = $sqliteVersion ?? SQLite3::version()['versionString'];
+        $this->sqliteVersion = $sqliteVersion ?? (string) Sqlite::version();
     }
 
     /**
@@ -89,7 +88,7 @@ class Reader
      */
     protected function check(): void
     {
-        if (version_compare($this->sqliteVersion, ModeResolver::MINIMUM_SQLITE_VERSION, '<')) {
+        if (Sqlite::isTooOld($this->sqliteVersion)) {
             throw new StoreUnusable(StoreState::UNAVAILABLE, $this->sqliteVersion);
         }
 

@@ -6,10 +6,10 @@ use ClaudioDekker\Firewatch\Actions\ClearStore;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Console\Concerns\FormatsFileSizes;
 use ClaudioDekker\Firewatch\Console\Concerns\ReadsFlags;
-use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
@@ -234,7 +234,7 @@ class ClearCommand extends Command
             StoreState::FOREIGN => __('firewatch::messages.clear.foreign', ['path' => $path]),
             StoreState::UNAVAILABLE => __('firewatch::messages.clear.sqlite', [
                 'version' => (string) $unusable->found,
-                'minimum' => ModeResolver::MINIMUM_SQLITE_VERSION,
+                'minimum' => Sqlite::MINIMUM_VERSION,
             ]),
             StoreState::BUSY => __('firewatch::messages.clear.busy'),
         });

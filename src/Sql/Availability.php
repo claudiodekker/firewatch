@@ -2,8 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Sql;
 
-use ClaudioDekker\Firewatch\ModeResolver;
 use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use Closure;
 use SQLite3;
 
@@ -30,7 +30,7 @@ class Availability
         public readonly string $phpBinary = PHP_BINARY,
         ?Closure $sqliteVersion = null,
     ) {
-        $this->sqliteVersion = $sqliteVersion ?? static fn (): ?string => class_exists(SQLite3::class) ? SQLite3::version()['versionString'] : null;
+        $this->sqliteVersion = $sqliteVersion ?? static fn (): ?string => Sqlite::version();
     }
 
     /**
@@ -46,7 +46,7 @@ class Availability
             ! function_exists('proc_open') => Unavailable::PROC_OPEN_MISSING,
             $version === null => Unavailable::SQLITE3_MISSING,
             ! is_file($this->phpBinary) || ! is_executable($this->phpBinary) => Unavailable::PHP_BINARY,
-            version_compare($version, ModeResolver::MINIMUM_SQLITE_VERSION, '<') => Unavailable::SQLITE_TOO_OLD,
+            Sqlite::isTooOld($version) => Unavailable::SQLITE_TOO_OLD,
             default => null,
         };
     }
