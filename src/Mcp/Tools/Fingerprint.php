@@ -13,7 +13,6 @@ use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Holdings;
-use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Recipe;
 use ClaudioDekker\Firewatch\Mcp\RecipeCheck;
 use ClaudioDekker\Firewatch\Mcp\Refusal;

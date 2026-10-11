@@ -153,7 +153,7 @@ Nightwatch's own grouping hash for a record, stored verbatim so a group here is 
 _Avoid_: Fingerprint (the tool that computes one from source), group key
 
 **Group label**:
-The human-readable name of a group: a fixed display field per record type, read from the group's latest record in the window. A blank one shows as "(no route matched)" for a request (an unrouted request) and as "(unnamed)" for every other type, a nameless job, scheduled task or command included.
+The human-readable name of a group: a fixed display field per record type, read from the group's latest record in the window. A blank one shows as "(no route matched)" for an unrouted request and as "(unnamed)" for any other type, such as a job, scheduled task or command without a name.
 _Avoid_: Group name, title
 
 **Unrouted request**:
