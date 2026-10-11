@@ -11,7 +11,6 @@ use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
@@ -152,17 +151,10 @@ class Trend extends Tool
         }
 
         $filters = $this->filters($group, $explicit, $deploy);
+        $empty = $frame->vacancy(inWindow: $inWindow, groupHeld: $group === null || $held !== [], hasRows: $buckets !== null, filters: $filters);
 
-        if ($group !== null && $held === []) {
-            return $frame->empty(Emptiness::noMatch($inWindow, $filters));
-        }
-
-        if ($inWindow === 0) {
-            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records));
-        }
-
-        if ($buckets === null) {
-            return $frame->empty(Emptiness::noMatch($inWindow, $filters));
+        if ($empty !== null || $buckets === null) {
+            return $frame->empty($empty);
         }
 
         $shared = $explicit === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);

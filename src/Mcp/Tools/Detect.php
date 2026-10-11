@@ -139,11 +139,7 @@ class Detect extends Tool
 
         [$inWindow, $judgements] = $read;
 
-        $empty = $frame->storeEmpty() ?? match (true) {
-            $inWindow === 0 => Emptiness::windowEmpty($frame->facts()->records),
-            $group !== null && $judgements[0]->matchedNothing() => Emptiness::noMatch($inWindow, ["group: {$group}"]),
-            default => null,
-        };
+        $empty = $frame->storeEmpty() ?? $frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: $group === null || ! $judgements[0]->matchedNothing(), filters: ["group: {$group}"]);
 
         return $this->answerFor($frame, $window, $shape, $judgements, $empty);
     }
