@@ -56,3 +56,4 @@
 - A README covering the quick start, install, a configuration snippet for each assistant client, the dev-only warning, what is stored and never redacted, the tools, the blind spots, configuration, retention, commands and troubleshooting. A contract test fails when its configuration, tool, detector or command tables disagree with the code.
 - Firewatch is released under the MIT license.
 - Records are labelled with the commit git HEAD points to when neither `FIREWATCH_DEPLOY` nor Nightwatch has a deploy, so a deploy pair can compare the last commit with the one before it. Firewatch reads the commit from the repository's files and starts no `git` process.
+- `overview` takes `by_deploy` to break the slowest groups down per deploy: one block for each of the five most recent deploys, with an `avg_ms` per group, and a `compare` of the two newest offered.
