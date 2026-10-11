@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Sql\Availability;
 use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
+use ClaudioDekker\Firewatch\Sql\Limits;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\FailureLog;
@@ -128,9 +129,9 @@ describe('the temp files', function () {
         expect(qaText())->toStartWith($text)
             ->and(qaLeft($directory))->toBe([]);
     })->with([
-        'a child that exits' => ['marker', ChildRunner::DEADLINE_SECONDS, '## query'],
+        'a child that exits' => ['marker', Limits::DEADLINE_SECONDS, '## query'],
         'a child killed at the deadline' => ['sleep', 0.2, 'error: deadline'],
-        'a child killed at the output cap' => ['flood', ChildRunner::DEADLINE_SECONDS, 'error: aborted'],
+        'a child killed at the output cap' => ['flood', Limits::DEADLINE_SECONDS, 'error: aborted'],
     ])->group('process');
 
     it('leaves none of the call\'s files behind when the child can not be started', function () {
@@ -146,9 +147,9 @@ describe('the temp files', function () {
 /**
  * Get a runner on the given stand-in child, or on the real one.
  */
-function qaRunner(?string $script = null, float $deadline = ChildRunner::DEADLINE_SECONDS): ChildRunner
+function qaRunner(?string $script = null, float $deadline = Limits::DEADLINE_SECONDS, Availability $availability = new Availability): ChildRunner
 {
-    return new ChildRunner(app(Configuration::class), deadline: $deadline, script: $script === null ? ChildRunner::SCRIPT : dirname(__DIR__, 2)."/Fixtures/Sql/{$script}.php");
+    return new ChildRunner(app(Configuration::class), deadline: $deadline, availability: $availability, script: $script === null ? ChildRunner::SCRIPT : dirname(__DIR__, 2)."/Fixtures/Sql/{$script}.php");
 }
 
 describe('the probe', function () {
@@ -157,19 +158,19 @@ describe('the probe', function () {
             @unlink(app(Configuration::class)->database.$suffix);
         }
 
-        expect((new Availability)->reason(probe: qaRunner()))->toBeNull();
+        expect(qaRunner()->probe())->toBeNull();
     })->group('process');
 
     it('names the reason a child\'s self-check reports', function () {
-        expect((new Availability)->reason(probe: qaRunner('unavailable')))->toBe(Unavailable::HEAP_LIMIT);
+        expect(qaRunner('unavailable')->probe())->toBe(Unavailable::HEAP_LIMIT);
     })->group('process');
 
     it('is spawn_failed when the child never answers', function () {
-        expect((new Availability)->reason(probe: qaRunner('sleep', deadline: 0.2)))->toBe(Unavailable::SPAWN_FAILED);
+        expect(qaRunner('sleep', deadline: 0.2)->probe())->toBe(Unavailable::SPAWN_FAILED);
     })->group('process');
 
     it('never spawns when a static reason holds', function () {
-        expect((new Availability(sqliteVersion: fn () => '3.37.2'))->reason(probe: qaRunner('marker')))->toBe(Unavailable::SQLITE_TOO_OLD)
+        expect(qaRunner('marker', availability: new Availability(sqliteVersion: fn () => '3.37.2'))->probe())->toBe(Unavailable::SQLITE_TOO_OLD)
             ->and(qaSpawned())->toBeFalse();
     })->group('process');
 });

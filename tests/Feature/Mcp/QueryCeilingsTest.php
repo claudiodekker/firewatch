@@ -126,7 +126,7 @@ describe('the deadline', function () {
 
         $sql = 'WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 20000) SELECT count(*) FROM c AS a, c AS b, c AS d';
 
-        expect(qclAnswerText(['sql' => $sql]))->toBe(__('firewatch::messages.deadline', ['seconds' => 10]));
+        expect(qclAnswerText(['sql' => $sql]))->toBe(__('firewatch::messages.deadline', ['seconds' => 1]));
     })->group('process');
 });
 

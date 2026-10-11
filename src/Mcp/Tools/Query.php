@@ -17,7 +17,6 @@ use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
-use ClaudioDekker\Firewatch\Sql\Availability;
 use ClaudioDekker\Firewatch\Sql\QueryStop;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use ClaudioDekker\Firewatch\Sql\SqlRows;
@@ -78,7 +77,6 @@ class Query extends Tool
         protected Reader $reader,
         protected Conditions $conditions,
         protected SqlRunner $runner,
-        protected Availability $availability,
     ) {
         //
     }
@@ -118,10 +116,10 @@ class Query extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $reason = $this->availability->reason();
+        $reason = $this->runner->unavailable();
 
         if ($reason !== null) {
-            throw Refusal::sql(SqlFailure::unavailable($reason));
+            throw Refusal::sql(SqlFailure::unavailable($reason), $this->runner->limits());
         }
 
         $arguments = new Arguments($request, $this->name());
@@ -160,7 +158,7 @@ class Query extends Tool
                 report($failure);
             }
 
-            throw Refusal::sql($failure);
+            throw Refusal::sql($failure, $this->runner->limits());
         }
     }
 
