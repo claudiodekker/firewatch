@@ -82,26 +82,24 @@ class Fingerprint extends Tool
      */
     public function schema(JsonSchema $schema): array
     {
-        $text = fn (string $argument) => $schema->string()->description(__("firewatch::messages.fingerprint_arguments.{$argument}"));
-
         return [
             'type' => $schema->string()->enum(array_keys(RecipeArguments::ARGUMENTS))->required(),
-            'methods' => $schema->array()->items($schema->string())->description(__('firewatch::messages.fingerprint_arguments.methods')),
-            'path' => $text('path'),
-            'domain' => $text('domain'),
-            'name' => $text('name'),
-            'cron' => $text('cron'),
-            'timezone' => $text('timezone'),
-            'repeat_seconds' => $schema->integer()->enum(RecipeArguments::REPEAT_SECONDS)->default(0)->description(__('firewatch::messages.fingerprint_arguments.repeat_seconds')),
-            'connection' => $text('connection'),
-            'sql' => $text('sql'),
-            'driver' => $text('driver'),
-            'store' => $text('store'),
-            'key' => $text('key'),
-            'host' => $text('host'),
-            'class' => $text('class'),
-            'file' => $text('file'),
-            'line' => $schema->integer()->min(1)->description(__('firewatch::messages.fingerprint_arguments.line')),
+            'methods' => $schema->array()->items($schema->string()),
+            'path' => $schema->string(),
+            'domain' => $schema->string(),
+            'name' => $schema->string(),
+            'cron' => $schema->string(),
+            'timezone' => $schema->string(),
+            'repeat_seconds' => $schema->integer()->enum(RecipeArguments::REPEAT_SECONDS)->default(0),
+            'connection' => $schema->string(),
+            'sql' => $schema->string(),
+            'driver' => $schema->string(),
+            'store' => $schema->string(),
+            'key' => $schema->string(),
+            'host' => $schema->string(),
+            'class' => $schema->string(),
+            'file' => $schema->string(),
+            'line' => $schema->integer()->min(1),
             ...$this->formatSchema($schema),
         ];
     }
