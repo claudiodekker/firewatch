@@ -22,6 +22,8 @@ class PackageSource
 
     protected const ROOT_NAMESPACE = 'ClaudioDekker\\Firewatch\\';
 
+    protected const LARAVEL_FRAMEWORK_NAMESPACES = ['Foundation'];
+
     protected const CONSOLE_OUTPUT_METHODS = ['info', 'line', 'comment', 'question', 'warn', 'error', 'alert', 'newLine', 'table', 'write', 'writeln'];
 
     protected const STDOUT_NAMES = ['STDOUT', 'printf', 'vprintf', 'fpassthru', 'readfile', 'passthru'];
@@ -32,6 +34,35 @@ class PackageSource
     public static function manifest(): array
     {
         return json_decode(file_get_contents(static::ROOT.'/../composer.json'), associative: true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function requiredPackages(): array
+    {
+        $packages = [];
+
+        foreach (static::files() as $contents) {
+            preg_match_all('/Illuminate\\\\(\w+)\\\\/', $contents, $namespaces);
+
+            foreach ($namespaces[1] as $namespace) {
+                if (! in_array($namespace, static::LARAVEL_FRAMEWORK_NAMESPACES, true)) {
+                    $packages[] = 'illuminate/'.strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $namespace));
+                }
+            }
+
+            foreach (['mb_' => 'ext-mbstring', 'ctype_' => 'ext-ctype'] as $prefix => $extension) {
+                if (preg_match('/(?<![\w>:$])'.$prefix.'\w+\(/', $contents) === 1) {
+                    $packages[] = $extension;
+                }
+            }
+        }
+
+        $packages = array_values(array_unique($packages));
+        sort($packages);
+
+        return $packages;
     }
 
     /**

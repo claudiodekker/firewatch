@@ -7,7 +7,6 @@ use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
@@ -119,13 +118,9 @@ class ExceptionClusters implements Detector
      */
     protected function examined(SQLite3 $connection, Markers $meta, Window $window): int
     {
-        $executions = Executions::table($window, group: null);
-        $bindings = [
-            ...$executions->bindings,
-            'from' => History::removedThrough($meta, [RecordType::EXCEPTION]),
-        ];
+        $executions = Executions::covered($meta, RecordType::EXCEPTION, $window, group: null, types: ExecutionType::records());
 
-        [$row] = Stored::rows($connection, $executions->sql.' SELECT count(*) AS examined FROM executions WHERE :from IS NULL OR started_at >= :from', $bindings, $window);
+        [$row] = Stored::rows($connection, $executions->sql.' SELECT count(*) AS examined FROM executions', $executions->bindings, $window);
 
         return $row['examined'];
     }

@@ -71,8 +71,7 @@ class QueueLatency implements Detector
         ];
 
         if ($examined + $inline === 0 && $orphans > 0 && ! $this->hasDispatches($connection, $window)) {
-            $removed = History::removedThrough($meta, [RecordType::QUEUED_JOB]);
-            $reason = $removed !== null && ($window->since() === null || $window->since() < $removed) ? Reason::OUTSIDE_COVERAGE : Reason::PREREQUISITE_MISSING;
+            $reason = History::removedFrom($meta, [RecordType::QUEUED_JOB], $window->since()) ? Reason::OUTSIDE_COVERAGE : Reason::PREREQUISITE_MISSING;
 
             return Judgement::notEvaluated($this->name(), $described, $reason, saw: $saw, caveats: $caveats);
         }

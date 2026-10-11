@@ -80,11 +80,11 @@ class Judgement
     }
 
     /**
-     * Get the judgement with its reason set to outside the coverage, when history removed what a window that reaches back before it would have judged.
+     * Get the judgement with its reason set to outside the coverage, when history removed what the window would have held.
      */
-    public function afterRemoval(?float $removedThrough, ?float $since): self
+    public function afterRemoval(bool $removed): self
     {
-        if ($this->reason !== Reason::NO_RECORDS || $removedThrough === null || ($since !== null && $since >= $removedThrough)) {
+        if ($this->reason !== Reason::NO_RECORDS || ! $removed) {
             return $this;
         }
 
