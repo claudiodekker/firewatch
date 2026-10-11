@@ -96,6 +96,15 @@ test('only the SQL area and the provider binding name the SQL child runner, so t
         ->and($outside)->toBe([]);
 });
 
+test('only the memory detector reads executions without the coverage exclusion', function () {
+    $offences = PackageSource::offendingTokens('Mcp/Detectors', fn (PhpToken $token) => $token->is(T_STRING) && $token->text === 'withoutCoverage');
+
+    $outside = array_filter($offences, fn (string $offence) => ! str_starts_with($offence, 'src/Mcp/Detectors/Executions.php:') && ! str_starts_with($offence, 'src/Mcp/Detectors/Memory.php:'));
+
+    expect($offences)->not->toBe([])
+        ->and($outside)->toBe([]);
+});
+
 foreach (['Store', 'Actions'] as $area) {
     arch("{$area} is never reached through Laravel's database layer")
         ->expect("ClaudioDekker\\Firewatch\\{$area}")

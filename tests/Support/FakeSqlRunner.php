@@ -19,8 +19,9 @@ class FakeSqlRunner implements SqlRunner
      *
      * @param  (Closure(): SqlRows)|null  $outcome  the answer to a run, none when the test must not run a statement
      * @param  Unavailable|null  $reason  why the runner reports itself unavailable, null when it can run
+     * @param  string  $binary  the PHP binary the fake reports
      */
-    public function __construct(protected ?Closure $outcome = null, protected ?Unavailable $reason = null)
+    public function __construct(protected ?Closure $outcome = null, protected ?Unavailable $reason = null, protected string $binary = PHP_BINARY)
     {
         //
     }
@@ -62,6 +63,6 @@ class FakeSqlRunner implements SqlRunner
      */
     public function phpBinary(): string
     {
-        return PHP_BINARY;
+        return $this->binary;
     }
 }

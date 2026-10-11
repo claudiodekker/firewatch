@@ -1,9 +1,10 @@
 <?php
 
+use ClaudioDekker\Firewatch\Mode;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 
 it('compares the installed version with the verified line', function (string $version, bool $verified) {
-    $install = new NightwatchInstall(version: $version, registeredFirst: false);
+    $install = new NightwatchInstall(version: $version, registeredFirst: false, mode: Mode::ACTIVE);
 
     expect($install->isVerified())->toBe($verified);
 })->with([

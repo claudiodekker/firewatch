@@ -49,7 +49,7 @@ class Memory implements Detector
         $described = $this->threshold()->describe($threshold);
         $caveats = [__('firewatch::messages.detect_caveat_memory')];
 
-        $executions = Executions::table($window, $group);
+        $executions = Executions::withoutCoverage($window, $group);
         $groups = $this->groups($connection, $window, $executions, $threshold);
 
         $examined = array_sum(array_column($groups, 'executions'));

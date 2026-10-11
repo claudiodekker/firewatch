@@ -176,6 +176,17 @@ describe('after history was removed', function () {
             ->and($after['result']['reason'])->toBe('prerequisite_missing');
     });
 
+    it('answers queue-latency outside the coverage only for a window that reaches back before the dispatches were removed', function (float $since, string $reason) {
+        ingest([syntheticRecord(RecordType::QUEUED_JOB)->inExecution('dispatch-a')->with(['job_id' => 'a', 'timestamp' => HRM_AT, 'duration' => 0])]);
+        hrmClear(['--type' => 'queued-job']);
+        ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->inExecution('b-1')->with(['job_id' => 'b', 'attempt' => 1, 'timestamp' => HRM_REMOVED_AT + 60])]);
+
+        expect(Envelope::assert(Detect::class, ['shape' => 'queue-latency', 'since' => (string) $since])['result']['reason'])->toBe($reason);
+    })->with([
+        'a moment before the removal' => [HRM_REMOVED_AT - 0.001, 'outside_coverage'],
+        'as the removal ends' => [HRM_REMOVED_AT, 'prerequisite_missing'],
+    ]);
+
     it('still blames the dispatcher when only attempts were removed', function () {
         ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->inExecution('a-1')->with(['job_id' => 'a', 'attempt' => 1, 'timestamp' => HRM_AT])]);
         hrmClear(['--type' => 'job-attempt']);

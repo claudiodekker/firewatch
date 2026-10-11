@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
@@ -61,27 +60,22 @@ class DatabaseBound implements Detector
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $selected = Fragment::selecting($window, $group);
-        $requests = new Fragment($selected->sql, [
-            ...$selected->bindings,
-            'from' => History::removedThrough($meta, [RecordType::QUERY]),
-        ]);
-
+        $examination = Examination::every($connection, $meta, $window, $group, [RecordType::REQUEST]);
+        $requests = $examination->executions;
         $described = $this->threshold()->describe($threshold);
-        $population = $this->population($connection, $window, $requests);
 
-        if ($population['examined'] === 0) {
+        if ($examination->examined === 0) {
             return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS);
         }
 
-        $caveats = $this->caveats($population['incomplete']);
+        $caveats = $examination->caveats();
         $groups = $this->groups($connection, $window, $requests);
         $judged = array_sum(array_column($groups, 'requests'));
-        $saw = $judged === $population['examined'] ? [] : ['without_duration' => $population['examined'] - $judged];
+        $saw = $judged === $examination->examined ? [] : ['without_duration' => $examination->examined - $judged];
 
         $bound = $this->bound($groups, $threshold);
         if ($bound === []) {
-            return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], saw: $saw, caveats: $caveats);
+            return Judgement::of($this->name(), $described, examined: $examination->examined, total: 0, findings: [], saw: $saw, caveats: $caveats);
         }
 
         $shown = Judgement::worst($bound, $this->worse(...), $limit);
@@ -92,28 +86,7 @@ class DatabaseBound implements Detector
             $shown,
         );
 
-        return Judgement::of($this->name(), $described, examined: $population['examined'], total: count($bound), findings: $findings, saw: $saw, caveats: $caveats);
-    }
-
-    /**
-     * Get what the window holds.
-     *
-     * @return array{examined: int, incomplete: int}
-     */
-    protected function population(SQLite3 $connection, Window $window, Fragment $selected): array
-    {
-        $counted = Stored::number('queries');
-
-        $row = Stored::rows($connection, "SELECT count(*) FILTER (WHERE eligible) AS examined,
-            count(*) FILTER (WHERE eligible AND counted > captured) AS incomplete
-            FROM (SELECT counted, (:from IS NULL OR started_at >= :from) AS eligible,
-                CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = requests.execution_id) ELSE 0 END AS captured
-                FROM (SELECT started_at, execution_id, {$counted} AS counted FROM requests WHERE {$selected->sql}) AS requests)", $selected->bindings, $window)[0];
-
-        return [
-            'examined' => $row['examined'],
-            'incomplete' => $row['incomplete'],
-        ];
+        return Judgement::of($this->name(), $described, examined: $examination->examined, total: count($bound), findings: $findings, saw: $saw, caveats: $caveats);
     }
 
     /**
@@ -121,18 +94,15 @@ class DatabaseBound implements Detector
      *
      * @return list<array<string, mixed>>
      */
-    protected function groups(SQLite3 $connection, Window $window, Fragment $selected): array
+    protected function groups(SQLite3 $connection, Window $window, Fragment $requests): array
     {
         $rank = Percentile::MEDIAN->nearestRank();
-        $durationMicros = Stored::number('duration');
-
         $reach = Fragment::reach();
 
-        return Stored::rows($connection, "WITH judged AS (
-            SELECT group_hash, id, started_at, execution_id, route_path, NULLIF(user_id, '') AS user_id, duration_micros, query_micros FROM (
-                SELECT group_hash, id, started_at, execution_id, route_path, user_id, {$durationMicros} AS duration_micros,
-                    (SELECT total(queries.duration) FROM queries WHERE queries.execution_id = requests.execution_id) AS query_micros
-                FROM requests WHERE {$selected->sql} AND (:from IS NULL OR started_at >= :from)) WHERE duration_micros > 0
+        return Stored::rows($connection, "{$requests->sql}, judged AS (
+            SELECT group_hash, id, started_at, execution_id, label AS route_path, NULLIF(user_id, '') AS user_id, duration AS duration_micros,
+                (SELECT total(queries.duration) FROM queries WHERE queries.execution_id = executions.execution_id) AS query_micros
+            FROM executions WHERE duration > 0
         ), ranked AS (
             SELECT *, count(*) OVER (PARTITION BY group_hash) AS n,
                 ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY query_micros * 1.0 / duration_micros, id) AS by_share,
@@ -147,7 +117,7 @@ class DatabaseBound implements Detector
             max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
             max(CASE WHEN by_latest = 1 THEN route_path END) AS route_path,
             {$reach}
-        FROM ranked GROUP BY group_hash", $selected->bindings, $window);
+        FROM ranked GROUP BY group_hash", $requests->bindings, $window);
     }
 
     /**
@@ -256,18 +226,17 @@ class DatabaseBound implements Detector
      * @param  list<string>  $groups
      * @return array<string, list<array<string, mixed>>>
      */
-    protected function topQueries(SQLite3 $connection, Window $window, Fragment $selected, array $groups): array
+    protected function topQueries(SQLite3 $connection, Window $window, Fragment $requests, array $groups): array
     {
         $names = array_map(fn (int $index) => "member{$index}", array_keys($groups));
         $members = implode(', ', array_map(fn (string $name) => ":{$name}", $names));
-        $bindings = [...$selected->bindings, ...array_combine($names, $groups)];
+        $bindings = [...$requests->bindings, ...array_combine($names, $groups)];
         $top = self::TOP_QUERIES;
-        $durationMicros = Stored::number('duration');
 
-        $rows = Stored::rows($connection, "SELECT eg, qg, sql, calls, micros FROM (
+        $rows = Stored::rows($connection, "{$requests->sql} SELECT eg, qg, sql, calls, micros FROM (
             SELECT judged.group_hash AS eg, queries.group_hash AS qg, min(queries.sql) AS sql, count(*) AS calls, total(queries.duration) AS micros,
                 ROW_NUMBER() OVER (PARTITION BY judged.group_hash ORDER BY total(queries.duration) DESC, queries.group_hash) AS position
-            FROM (SELECT group_hash, execution_id FROM requests WHERE {$selected->sql} AND (:from IS NULL OR started_at >= :from) AND {$durationMicros} > 0 AND group_hash IN ({$members})) AS judged
+            FROM (SELECT group_hash, execution_id FROM executions WHERE duration > 0 AND group_hash IN ({$members})) AS judged
             JOIN queries ON queries.execution_id = judged.execution_id
             GROUP BY judged.group_hash, queries.group_hash) WHERE position <= {$top}", $bindings, $window);
 
@@ -283,15 +252,5 @@ class DatabaseBound implements Detector
         }
 
         return $queries;
-    }
-
-    /**
-     * Get the caveats of the answer.
-     *
-     * @return list<string>
-     */
-    protected function caveats(int $incomplete): array
-    {
-        return $incomplete > 0 ? [trans_choice('firewatch::messages.detect_caveat_incomplete', $incomplete, ['count' => $incomplete])] : [];
     }
 }

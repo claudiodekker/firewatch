@@ -85,6 +85,6 @@ class Detectors
 
         $judgement = $detector->judge($connection, $meta, $window, $threshold ?? $default ?? 0, $group, $limit);
 
-        return $judgement->afterRemoval(History::removedThrough($meta, $detector->types()), $window->since());
+        return $judgement->afterRemoval(History::removedFrom($meta, $detector->types(), $window->since()));
     }
 }

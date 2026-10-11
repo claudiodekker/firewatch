@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\Mode;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureKind;
@@ -274,7 +275,7 @@ describe('drift', function () {
 
 describe('an unverified Nightwatch', function () {
     it('names the installed release and the verified line', function (string $version) {
-        app()->bind(NightwatchInstall::class, fn () => new NightwatchInstall($version, registeredFirst: false));
+        app()->bind(NightwatchInstall::class, fn () => new NightwatchInstall($version, registeredFirst: false, mode: Mode::ACTIVE));
         registerFirewatch();
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
@@ -291,7 +292,7 @@ describe('an unverified Nightwatch', function () {
     })->with(['a newer minor' => 'v1.31.0', 'a newer major' => 'v2.0.0', 'a development branch' => 'dev-main']);
 
     it('says nothing of the verified line, its patch releases or lower releases', function (string $version) {
-        app()->bind(NightwatchInstall::class, fn () => new NightwatchInstall($version, registeredFirst: false));
+        app()->bind(NightwatchInstall::class, fn () => new NightwatchInstall($version, registeredFirst: false, mode: Mode::ACTIVE));
         registerFirewatch();
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
