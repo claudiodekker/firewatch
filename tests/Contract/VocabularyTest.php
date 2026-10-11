@@ -11,7 +11,7 @@ test('the words the glossary says to avoid stay out of the code and the standard
     $root = realpath(__DIR__.'/../..');
     $files = [$root.'/CODING_STANDARDS.md'];
 
-    foreach (['src', 'tests'] as $directory) {
+    foreach (['src', 'tests', 'lang'] as $directory) {
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/'.$directory, FilesystemIterator::SKIP_DOTS)) as $file) {
             if ($file->getExtension() === 'php' && $file->getFilename() !== 'VocabularyTest.php') {
                 $files[] = $file->getPathname();
