@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Sleep;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
+/**
+ * Register Firewatch with a writer that believes it runs on the given SQLite release.
+ */
 function registerFirewatchOnSqlite(string $version): void
 {
     app()->bind(Writer::class, fn () => new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $version));

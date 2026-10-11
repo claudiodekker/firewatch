@@ -17,9 +17,15 @@ function writeHandles(string $path): int
     $path = realpath($path);
 
     if (is_dir('/proc/self/fd')) {
-        $handles = array_filter(glob('/proc/self/fd/*') ?: [], fn (string $fd) => @readlink($fd) === $path
-            && preg_match('/^flags:\s+(\d+)/m', (string) @file_get_contents('/proc/self/fdinfo/'.basename($fd)), $flags) === 1
-            && (octdec($flags[1]) & 3) === 2);
+        $handles = array_filter(glob('/proc/self/fd/*') ?: [], function (string $fd) use ($path) {
+            if (@readlink($fd) !== $path) {
+                return false;
+            }
+
+            $info = (string) @file_get_contents('/proc/self/fdinfo/'.basename($fd));
+
+            return preg_match('/^flags:\s+(\d+)/m', $info, $flags) === 1 && (octdec($flags[1]) & 3) === 2;
+        });
 
         return count($handles);
     }

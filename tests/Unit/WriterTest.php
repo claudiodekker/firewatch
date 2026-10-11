@@ -7,6 +7,9 @@ use ClaudioDekker\Firewatch\Store\FileIdentity;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Filesystem\Filesystem;
 
+/**
+ * Create a writer on its own temporary store.
+ */
 function writerWith(?FileIdentity $identity = null, ?Closure $pid = null): Writer
 {
     $directory = sys_get_temp_dir().'/firewatch-writer-tests/'.bin2hex(random_bytes(8));

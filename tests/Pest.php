@@ -57,6 +57,9 @@ function notices(): array
     return $notices->written();
 }
 
+/**
+ * Register Firewatch again, so that its store writer and failure log are built from the current configuration.
+ */
 function registerFirewatch(): Configuration
 {
     app()->forgetInstance(Writer::class);
