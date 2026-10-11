@@ -1,5 +1,6 @@
 <?php
 
+use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
@@ -197,6 +198,18 @@ describe('the exceeded groups', function () {
         $row = overviewBudgetAnswer(['since' => OVERVIEW_BUDGET_AT - 10])['result']['budgets_exceeded'][0];
 
         expect($row['next'])->toBe('rank(group: "'.str_repeat('a', 32).'", since: '.json_encode(OVERVIEW_BUDGET_AT - 10).')');
+    });
+
+    it('writes the window of its calls the same way in the budget table and in the next calls', function () {
+        overviewBudgetsAre([['type' => 'command', 'duration' => 100]]);
+        ingest(overviewBudgetGroup(RecordType::COMMAND, 'a', [300]));
+
+        $response = FirewatchServer::tool(Overview::class, ['since' => OVERVIEW_BUDGET_AT - 10]);
+        $markdown = (fn () => $this->content())->call($response)[0];
+
+        expect($markdown)
+            ->toContain('| rank(group: "'.str_repeat('a', 32).'", since: 1790775990) |')
+            ->toContain('- rank(type: "command", by: "total_duration", since: 1790775990) - ');
     });
 
     it('lists at most 10 groups, with the standard truncated entry', function () {
