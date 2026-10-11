@@ -170,10 +170,8 @@ class RecipeArguments
     {
         return match ($argument) {
             'methods' => self::methods($arguments, $type, $value),
-            'path' => '/'.trim(self::text($arguments, $type, $argument, $value), '/'),
-            'domain' => str_replace(['http://', 'https://'], '', self::text($arguments, $type, $argument, $value)),
             'repeat_seconds' => self::repeatSeconds($arguments, $type, $value),
-            default => self::text($arguments, $type, $argument, $value),
+            default => self::textField($arguments, $type, $argument, $value),
         };
     }
 
@@ -213,10 +211,27 @@ class RecipeArguments
     protected static function repeatSeconds(Arguments $arguments, RecordType $type, mixed $value): int
     {
         if (! is_int($value) || ! in_array($value, self::REPEAT_SECONDS, true)) {
-            throw $arguments->invalid(argument: 'repeat_seconds', expected: 'a whole number of seconds that divides the minute', accepted: '0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20 or 30', example: self::example($type));
+            $allowed = self::REPEAT_SECONDS;
+            $last = array_pop($allowed);
+
+            throw $arguments->invalid(argument: 'repeat_seconds', expected: 'a whole number of seconds that divides the minute', accepted: implode(', ', $allowed)." or {$last}", example: self::example($type));
         }
 
         return $value;
+    }
+
+    /**
+     * Read a text argument as the field its recipe reads: a path trimmed to one leading slash, a domain without its scheme.
+     */
+    protected static function textField(Arguments $arguments, RecordType $type, string $argument, mixed $value): string
+    {
+        $text = self::text($arguments, $type, $argument, $value);
+
+        return match ($argument) {
+            'path' => '/'.trim($text, '/'),
+            'domain' => str_replace(['http://', 'https://'], '', $text),
+            default => $text,
+        };
     }
 
     protected static function text(Arguments $arguments, RecordType $type, string $argument, mixed $value): string

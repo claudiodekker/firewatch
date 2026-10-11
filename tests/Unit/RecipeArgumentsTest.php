@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Arguments;
+use ClaudioDekker\Firewatch\Mcp\ErrorCode;
 use ClaudioDekker\Firewatch\Mcp\RecipeArguments;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\RecordType;
@@ -45,22 +46,23 @@ it('gives a task no timezone when the schedule timezone is set to null', functio
     expect(RecipeArguments::scheduleTimezone())->toBe('');
 });
 
-it('refuses an argument that is missing, foreign or malformed', function (RecordType $type, array $given, string $argument) {
+it('refuses an argument that is missing, foreign or malformed', function (RecordType $type, array $given, ErrorCode $code, string $argument) {
     try {
         recipeArguments($type, $given);
     } catch (Refusal $refusal) {
-        expect($refusal->getMessage())->toContain($argument);
+        expect($refusal->error)->toBe($code)
+            ->and($refusal->getMessage())->toContain($argument);
 
         return;
     }
 
     $this->fail('The arguments were accepted.');
 })->with([
-    'missing required' => [RecordType::COMMAND, [], 'name'],
-    'foreign argument' => [RecordType::COMMAND, ['name' => 'a', 'host' => 'b'], 'host'],
-    'lowercase method' => [RecordType::REQUEST, ['methods' => ['get'], 'path' => '/a'], 'methods'],
-    'empty methods' => [RecordType::REQUEST, ['methods' => [], 'path' => '/a'], 'methods'],
-    'non-string path' => [RecordType::REQUEST, ['methods' => ['GET'], 'path' => 5], 'path'],
-    'repeat that does not divide the minute' => [RecordType::SCHEDULED_TASK, ['name' => 'a', 'cron' => '* * * * *', 'repeat_seconds' => 7], 'repeat_seconds'],
-    'empty driver' => [RecordType::QUERY, ['connection' => 'c', 'sql' => 's', 'driver' => ''], 'driver'],
+    'missing required' => [RecordType::COMMAND, [], ErrorCode::MISSING_ARGUMENT, 'name'],
+    'foreign argument' => [RecordType::COMMAND, ['name' => 'a', 'host' => 'b'], ErrorCode::CONFLICTING_ARGUMENTS, 'host'],
+    'lowercase method' => [RecordType::REQUEST, ['methods' => ['get'], 'path' => '/a'], ErrorCode::INVALID_ARGUMENT, 'methods'],
+    'empty methods' => [RecordType::REQUEST, ['methods' => [], 'path' => '/a'], ErrorCode::INVALID_ARGUMENT, 'methods'],
+    'non-string path' => [RecordType::REQUEST, ['methods' => ['GET'], 'path' => 5], ErrorCode::INVALID_ARGUMENT, 'path'],
+    'repeat that does not divide the minute' => [RecordType::SCHEDULED_TASK, ['name' => 'a', 'cron' => '* * * * *', 'repeat_seconds' => 7], ErrorCode::INVALID_ARGUMENT, 'repeat_seconds'],
+    'empty driver' => [RecordType::QUERY, ['connection' => 'c', 'sql' => 's', 'driver' => ''], ErrorCode::INVALID_ARGUMENT, 'driver'],
 ]);
