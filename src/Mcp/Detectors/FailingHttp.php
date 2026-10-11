@@ -122,13 +122,13 @@ class FailingHttp implements Thresholded
                 ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY count(*) DESC, url) AS position
             FROM calls WHERE failed GROUP BY group_hash, url
         ), labelled AS (
-            SELECT execution_id, COALESCE(label, '') AS label, ROW_NUMBER() OVER (PARTITION BY execution_id ORDER BY started_at DESC, id DESC) AS position
+            SELECT execution_id, type, COALESCE(label, '') AS label, ROW_NUMBER() OVER (PARTITION BY execution_id ORDER BY started_at DESC, id DESC) AS position
             FROM (SELECT DISTINCT execution_id FROM calls WHERE failed AND execution_id IS NOT NULL) AS carried JOIN labels USING (execution_id)
         ), units AS (
-            SELECT calls.group_hash, calls.source, labelled.label, count(*) AS calls,
+            SELECT calls.group_hash, calls.source, labelled.type, labelled.label, count(*) AS calls,
                 ROW_NUMBER() OVER (PARTITION BY calls.group_hash ORDER BY count(*) DESC, calls.source, labelled.label) AS position
             FROM calls LEFT JOIN labelled ON labelled.execution_id = calls.execution_id AND labelled.position = 1
-            WHERE calls.failed GROUP BY calls.group_hash, calls.source, labelled.label
+            WHERE calls.failed GROUP BY calls.group_hash, calls.source, labelled.type, labelled.label
         )
         SELECT group_hash, host, calls, answered, failures, latest_execution_id, first_seen, last_seen, actors, anonymous, total,
             (SELECT json_group_object(status, calls) FROM (
@@ -137,8 +137,8 @@ class FailingHttp implements Thresholded
             (SELECT json_group_array(json_object('url', url, 'failures', failures)) FROM (
                 SELECT url, failures FROM urls WHERE urls.group_hash IS ranked.group_hash AND position <= {$listed} ORDER BY position
             )) AS top_urls,
-            (SELECT json_group_array(json_object('source', source, 'label', label, 'calls', calls)) FROM (
-                SELECT source, label, calls FROM units WHERE units.group_hash IS ranked.group_hash AND position <= {$listed} ORDER BY position
+            (SELECT json_group_array(json_object('source', source, 'type', type, 'label', label, 'calls', calls)) FROM (
+                SELECT source, type, label, calls FROM units WHERE units.group_hash IS ranked.group_hash AND position <= {$listed} ORDER BY position
             )) AS ran_in
         FROM ranked ORDER BY {$worstFirst}", [
             ...$selected->bindings,
@@ -188,7 +188,7 @@ class FailingHttp implements Thresholded
     {
         return [
             'source' => $unit['source'],
-            'label' => Executions::label($unit['label']),
+            'label' => Executions::label($unit['type'], $unit['label']),
             'calls' => $unit['calls'],
         ];
     }

@@ -266,7 +266,7 @@ class Comparison
 
         $shown = [
             'group' => $row['hash'],
-            'label' => Ranking::shownLabel($this->type, $row['label']),
+            'label' => $this->type->groupLabel($row['label']),
         ];
 
         if (in_array($this->type, [RecordType::REQUEST, RecordType::OUTGOING_REQUEST], true)) {

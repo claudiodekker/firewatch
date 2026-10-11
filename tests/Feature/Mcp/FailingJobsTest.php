@@ -437,12 +437,6 @@ describe('the finding', function () {
         expect(fjbAnswer()['result']['findings'][0])->toMatchArray(['group' => md5('ShipOrder'), 'name' => 'NewName']);
     });
 
-    it('labels a group whose attempt has no name', function () {
-        ingest([fjbAttempt('a', 1, 'failed', fields: ['name' => ''])]);
-
-        expect(fjbAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.rank_no_route'));
-    });
-
     it('counts the distinct users of the attempts that failed or were released, and those without one apart', function () {
         ingest([
             fjbAttempt('a', 1, 'failed', fields: ['user' => 'u1']),

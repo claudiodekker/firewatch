@@ -9,7 +9,6 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Microseconds;
@@ -195,7 +194,7 @@ class QueueLatency implements Thresholded
     {
         return [
             'group' => $row['group_hash'],
-            'name' => Cell::blank($row['name']) ?? __('firewatch::messages.rank_no_route'),
+            'name' => RecordType::QUEUED_JOB->groupLabel($row['name']),
             'count' => Stored::milliseconds($row['worst']),
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],

@@ -493,6 +493,8 @@ return [
 
     'rank_no_route' => '(no route matched)',
 
+    'group_unnamed' => '(unnamed)',
+
     'compare_group_argument' => 'A group id (32 hex). Excludes limit.',
 
     'compare_split_at_argument' => 'Where after begins, in the forms of since; a record at it is after. Strictly inside the window.',

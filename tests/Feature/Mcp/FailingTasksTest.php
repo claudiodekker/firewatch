@@ -210,7 +210,7 @@ describe('the finding', function () {
     it('labels a group whose scheduled task has no name', function () {
         ingest([ftkTask('a', 'failed', fields: ['name' => ''])]);
 
-        expect(ftkAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.rank_no_route'));
+        expect(ftkAnswer()['result']['findings'][0]['name'])->toBe(__('firewatch::messages.group_unnamed'));
     });
 });
 

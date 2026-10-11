@@ -8,7 +8,6 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Cell;
 use SQLite3;
 
 /**
@@ -83,6 +82,7 @@ class Memory implements Thresholded
             max(CASE WHEN by_peak = {$rank} THEN peak END) AS median,
             max(CASE WHEN by_worst = 1 THEN execution_id END) AS worst_execution_id,
             max(CASE WHEN by_latest = 1 THEN execution_id END) AS latest_execution_id,
+            max(CASE WHEN by_latest = 1 THEN type END) AS type,
             max(CASE WHEN by_latest = 1 THEN label END) AS label,
             min(started_at) FILTER (WHERE reached) AS first_seen, max(started_at) FILTER (WHERE reached) AS last_seen,
             count(DISTINCT NULLIF(user_id, '')) FILTER (WHERE reached) AS actors,
@@ -106,7 +106,7 @@ class Memory implements Thresholded
 
         return [
             'group' => $row['group_hash'],
-            'name' => Cell::blank($row['label']) ?? __('firewatch::messages.rank_no_route'),
+            'name' => RecordType::from($row['type'])->groupLabel($row['label']),
             'count' => $peak,
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],

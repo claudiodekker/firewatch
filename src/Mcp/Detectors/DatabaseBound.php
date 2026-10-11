@@ -8,7 +8,6 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
@@ -247,11 +246,10 @@ class DatabaseBound implements Thresholded
     {
         $share = $this->share($typical);
         $aggregate = round(Ranking::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
-        $route = Cell::blank($group['route_path']);
 
         return [
             'group' => $group['group_hash'],
-            'name' => $route ?? __('firewatch::messages.rank_no_route'),
+            'name' => RecordType::REQUEST->groupLabel($group['route_path']),
             'count' => $share,
             'first_seen_at' => $group['first_seen'],
             'last_seen_at' => $group['last_seen'],

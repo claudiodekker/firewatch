@@ -274,7 +274,7 @@ class Attribution
     protected static function listed(SQLite3 $connection, Window $window, array $bindings, int $limit): array
     {
         $labels = implode(' ', array_map(
-            fn (RecordType $type) => 'WHEN :'.self::parameter($type).' THEN (SELECT '.Ranking::labelField($type)." FROM {$type->view()} v WHERE v.id = linked.id)",
+            fn (RecordType $type) => 'WHEN :'.self::parameter($type).' THEN (SELECT '.$type->labelColumn()." FROM {$type->view()} v WHERE v.id = linked.id)",
             ExecutionType::records(),
         ));
 
@@ -291,7 +291,7 @@ class Attribution
             'type' => $row['type'],
             'execution_id' => $row['execution_id'],
             'group_hash' => $row['group_hash'],
-            'label' => Ranking::shownLabel(RecordType::from($row['type']), $row['label']),
+            'label' => RecordType::from($row['type'])->groupLabel($row['label']),
             'link' => AttributionLink::from($row['link'])->value,
         ], $rows);
     }

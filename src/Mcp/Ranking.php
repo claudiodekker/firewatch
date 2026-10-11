@@ -484,17 +484,7 @@ class Ranking
      */
     protected function label(array $group): string
     {
-        return self::shownLabel($this->type, $group['label']);
-    }
-
-    /**
-     * Get a stored label as an answer shows it: a request that no route matched has an empty one or none.
-     */
-    public static function shownLabel(RecordType $type, mixed $label): string
-    {
-        $label = is_string($label) ? $label : '';
-
-        return $label === '' && $type === RecordType::REQUEST ? __('firewatch::messages.rank_no_route') : $label;
+        return $this->type->groupLabel($group['label']);
     }
 
     /**
@@ -652,21 +642,6 @@ class Ranking
     }
 
     /**
-     * Get the field a group of the type is labelled by.
-     */
-    public static function labelField(RecordType $type): string
-    {
-        return match ($type) {
-            RecordType::REQUEST => 'route_path',
-            RecordType::QUERY => 'sql',
-            RecordType::OUTGOING_REQUEST => 'host',
-            RecordType::CACHE_EVENT => 'key',
-            RecordType::EXCEPTION, RecordType::MAIL, RecordType::NOTIFICATION => 'class',
-            default => 'name',
-        };
-    }
-
-    /**
      * Run a query over the records of the type that the window and the deploy leave, as the table `base`.
      *
      * @param  array<string, int|float>  $bindings  bound by name after the window, the deploy and the group
@@ -677,7 +652,7 @@ class Ranking
         if ($filtered) {
             $deploy = "NULLIF(deploy, '')";
             $duration = $this->hasDuration() ? Stored::duration($this->type) : 'NULL';
-            $label = self::labelField($this->type);
+            $label = $this->type->labelColumn();
             $columns = [$this->group === null ? 'group_hash' : "COALESCE({$deploy}, char(1)) AS group_hash", 'id', 'started_at', "{$deploy} AS deploy", 'execution_id', "{$duration} AS d", "{$label} AS label"];
 
             if ($this->hasMethod()) {

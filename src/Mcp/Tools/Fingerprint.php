@@ -466,7 +466,7 @@ class Fingerprint extends Tool
                     continue;
                 }
 
-                $label = Ranking::labelField($type);
+                $label = $type->labelColumn();
                 $latest = Stored::rows($connection, "SELECT \"{$label}\" AS label FROM {$type->view()} WHERE group_hash = :group ORDER BY started_at DESC, id DESC LIMIT 1", ['group' => $candidate['group']]);
 
                 $held[] = [
@@ -475,7 +475,7 @@ class Fingerprint extends Tool
                     'records' => $records,
                     'first_started_at' => Cell::float($span['first']),
                     'last_started_at' => Cell::float($span['last']),
-                    'label' => Ranking::shownLabel($type, $latest[0]['label'] ?? null),
+                    'label' => $type->groupLabel($latest[0]['label'] ?? null),
                 ];
             }
         }

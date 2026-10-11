@@ -376,6 +376,33 @@ enum RecordType: string
     }
 
     /**
+     * Get the column a group of the type is labelled by.
+     */
+    public function labelColumn(): string
+    {
+        return match ($this) {
+            self::REQUEST => 'route_path',
+            self::QUERY => 'sql',
+            self::OUTGOING_REQUEST => 'host',
+            self::CACHE_EVENT => 'key',
+            self::EXCEPTION, self::MAIL, self::NOTIFICATION => 'class',
+            default => 'name',
+        };
+    }
+
+    /**
+     * Get a stored group label as an answer shows it: a blank one is an unrouted request, or unnamed.
+     */
+    public function groupLabel(mixed $label): string
+    {
+        if (is_string($label) && $label !== '') {
+            return $label;
+        }
+
+        return $this === self::REQUEST ? __('firewatch::messages.rank_no_route') : __('firewatch::messages.group_unnamed');
+    }
+
+    /**
      * Get the name of the type's record view, or null for a type that has none.
      */
     public function view(): ?string

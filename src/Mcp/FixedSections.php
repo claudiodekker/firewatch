@@ -191,7 +191,7 @@ class FixedSections
         foreach ($leaders as $row => $leader) {
             $bindings["row{$row}"] = $row;
             $bindings["group{$row}"] = $leader['hash'];
-            $field = Ranking::labelField($leader['type']);
+            $field = $leader['type']->labelColumn();
             $branches[] = "SELECT :row{$row} AS row, (SELECT {$field} FROM {$leader['type']->view()} WHERE group_hash = :group{$row} AND {$window->condition()} ORDER BY started_at DESC, id DESC LIMIT 1) AS label";
         }
 
@@ -201,7 +201,7 @@ class FixedSections
         return array_map(fn (array $leader, int $row) => [
             'type' => $leader['type']->value,
             'group' => $leader['hash'],
-            'label' => Ranking::shownLabel($leader['type'], $labels[$row]),
+            'label' => $leader['type']->groupLabel($labels[$row]),
             'occurrences' => $leader['occurrences'],
             'total_ms' => Stored::milliseconds($leader['value']),
         ], $leaders, array_keys($leaders));
