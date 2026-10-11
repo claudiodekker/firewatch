@@ -62,6 +62,18 @@ class History
     }
 
     /**
+     * Determine if a clear or a prune removed records of the types that a window from the instant would hold.
+     *
+     * @param  list<RecordType>  $types
+     */
+    public static function removedFrom(Markers $meta, array $types, ?float $since): bool
+    {
+        $removedThrough = self::removedThrough($meta, $types);
+
+        return $removedThrough !== null && ($since === null || $since < $removedThrough);
+    }
+
+    /**
      * Get the history of a store that can't be read.
      */
     public static function unknown(?int $retentionAge, ?int $retentionRecords): self

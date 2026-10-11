@@ -9,7 +9,6 @@ use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
@@ -61,17 +60,15 @@ class NPlusOne implements Detector
     {
         $this->refuseQueryGroup($connection, $group);
 
-        $from = History::removedThrough($meta, [RecordType::QUERY]);
-        $executions = Executions::table($window, $group);
-        $population = $this->population($connection, $window, $executions, $from);
-        $caveats = $this->caveats($population['incomplete']);
+        $population = Population::queried($connection, $meta, $window, $group, ExecutionType::records());
+        $caveats = [__('firewatch::messages.detect_caveat_reads'), ...$population->caveats()];
         $described = $this->threshold()->describe($threshold);
 
-        if ($population['examined'] === 0) {
+        if ($population->examined === 0) {
             return Judgement::notEvaluated($this->name(), $described, Reason::NO_RECORDS, caveats: $caveats);
         }
 
-        $ranked = $this->ranked($executions, $threshold, $from);
+        $ranked = $this->ranked($population->executions, $threshold);
         $reach = Fragment::reach();
 
         $groups = Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, max(runs) AS worst_runs, count(*) AS affected, sum(runs) AS total_runs, total(micros) AS total_micros,
@@ -79,14 +76,14 @@ class NPlusOne implements Detector
             FROM ranked GROUP BY eg, qg", $ranked->bindings, $window);
 
         if ($groups === []) {
-            return Judgement::of($this->name(), $described, examined: $population['examined'], total: 0, findings: [], caveats: $caveats);
+            return Judgement::of($this->name(), $described, examined: $population->examined, total: 0, findings: [], caveats: $caveats);
         }
 
         $shown = Judgement::worst($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']], $limit);
         $details = $this->details($connection, $window, $ranked);
         $findings = array_map(fn (array $row) => $this->finding($row, $details), $shown);
 
-        return Judgement::of($this->name(), $described, examined: $population['examined'], total: count($groups), findings: $findings, caveats: $caveats);
+        return Judgement::of($this->name(), $described, examined: $population->examined, total: count($groups), findings: $findings, caveats: $caveats);
     }
 
     /**
@@ -108,32 +105,9 @@ class NPlusOne implements Detector
     }
 
     /**
-     * Get what the window holds.
-     *
-     * @return array{examined: int, incomplete: int}
-     */
-    protected function population(SQLite3 $connection, Window $window, Fragment $executions, int|float|null $from): array
-    {
-        $bindings = [
-            ...$executions->bindings,
-            'from' => $from,
-        ];
-
-        $row = Stored::rows($connection, "{$executions->sql} SELECT count(*) FILTER (WHERE captured > 0) AS examined, count(*) FILTER (WHERE captured > 0 AND counted > captured) AS incomplete
-            FROM (SELECT counted,
-                CASE WHEN :from IS NULL OR started_at >= :from THEN (SELECT count(*) FROM queries WHERE queries.execution_id = executions.execution_id) ELSE 0 END AS captured
-                FROM executions)", $bindings, $window)[0];
-
-        return [
-            'examined' => $row['examined'],
-            'incomplete' => $row['incomplete'],
-        ];
-    }
-
-    /**
      * Get the SQL of the runs that qualify.
      */
-    protected function ranked(Fragment $executions, int|float $runs, int|float|null $from): Fragment
+    protected function ranked(Fragment $executions, int|float $runs): Fragment
     {
         $trimmed = 'lower(ltrim(queries.sql, '.self::LEADING_WHITESPACE.'))';
 
@@ -141,7 +115,7 @@ class NPlusOne implements Detector
             SELECT executions.execution_id, executions.group_hash AS eg, queries.group_hash AS qg, executions.id, executions.started_at, executions.user_id,
                 executions.duration, executions.type, executions.source, executions.label, count(*) AS runs, total(queries.duration) AS micros
             FROM executions JOIN queries ON queries.execution_id = executions.execution_id
-            WHERE (:from IS NULL OR executions.started_at >= :from) AND ({$trimmed} LIKE 'select%' OR {$trimmed} LIKE 'with%')
+            WHERE ({$trimmed} LIKE 'select%' OR {$trimmed} LIKE 'with%')
             GROUP BY executions.execution_id, queries.group_hash HAVING count(*) >= :runs
         ), ranked AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY eg, qg ORDER BY runs DESC, micros DESC, started_at DESC, id DESC) AS worst_position,
@@ -152,7 +126,6 @@ class NPlusOne implements Detector
         return new Fragment($sql, [
             ...$executions->bindings,
             'runs' => $runs,
-            'from' => $from,
         ]);
     }
 
@@ -251,18 +224,5 @@ class NPlusOne implements Detector
     protected function key(array $row): string
     {
         return "{$row['eg']}|{$row['qg']}";
-    }
-
-    /**
-     * Get the caveats of the answer.
-     *
-     * @return list<string>
-     */
-    protected function caveats(int $incomplete): array
-    {
-        return array_values(array_filter([
-            __('firewatch::messages.detect_caveat_reads'),
-            $incomplete > 0 ? trans_choice('firewatch::messages.detect_caveat_incomplete', $incomplete, ['count' => $incomplete]) : null,
-        ]));
     }
 }
