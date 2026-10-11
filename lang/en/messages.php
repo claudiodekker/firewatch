@@ -407,6 +407,16 @@ return [
 
     'invalid_argument' => "error: invalid_argument\n`:argument` must be :expected; got :value.\nargument: :argument\naccepted: :accepted\nexample: :example",
 
+    'argument_values' => [
+        'group' => 'a 32-character lowercase hex group id',
+        'range' => ':minimum to :maximum',
+        'whole_number' => 'a whole number from :minimum to :maximum',
+        'deploy' => 'an exact deploy string',
+        'text' => 'text',
+        'grouped_type' => 'one of the types with groups',
+        'holding' => 'a type that holds the group: :types',
+    ],
+
     'unknown_argument' => "error: invalid_argument\n`:argument` is not an argument of :tool.\nargument: :argument\naccepted: :accepted\nexample: :example",
 
     'inapplicable_argument' => "error: conflicting_arguments\n`:argument` does not apply to :tool.\nargument: :argument\naccepted: :accepted\nexample: :example",
