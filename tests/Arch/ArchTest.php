@@ -145,3 +145,19 @@ foreach (['Store', 'Actions', 'Capture', 'Configuration', 'Ingest'] as $area) {
 arch('the git HEAD reader starts no process, because it runs at every boot')
     ->expect(GitHead::class)
     ->not->toUse(['proc_open', 'popen', 'exec', 'shell_exec', 'system', 'passthru', 'pcntl_exec', 'Symfony\\Component\\Process', 'Illuminate\\Support\\Facades\\Process', 'Illuminate\\Process']);
+
+arch('every method in the package source is documented')
+    ->expect('ClaudioDekker\\Firewatch')
+    ->toHaveMethodsDocumented();
+
+arch('every property in the package source is documented')
+    ->expect('ClaudioDekker\\Firewatch')
+    ->toHavePropertiesDocumented();
+
+test('every constant in the package source is documented', function () {
+    expect(PackageSource::undocumentedConstants())->toBe([]);
+});
+
+test('every class in the package source is marked internal or a supported entry point', function () {
+    expect(PackageSource::declarationsWithoutSurfaceTag())->toBe([]);
+});

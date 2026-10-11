@@ -3,6 +3,9 @@
 use ClaudioDekker\Firewatch\Tests\Support\GitRepository;
 use Illuminate\Filesystem\Filesystem;
 
+/**
+ * Get the deploy Nightwatch ends up with in a new application whose git lookup starts at a path.
+ */
 function deployUnderGit(string $start): ?string
 {
     test()->gitStart = $start;
@@ -11,20 +14,41 @@ function deployUnderGit(string $start): ?string
     return config('nightwatch.deployment');
 }
 
-function gitRepository(bool $commit = true, string $format = 'sha1'): GitRepository
+/**
+ * Get a repository with a first commit, deleted when the test ends.
+ */
+function gitRepository(string $format = 'sha1'): GitRepository
 {
-    $repository = GitRepository::create($commit, $format);
+    $repository = GitRepository::create($format);
 
     gitCleanup($repository->path);
 
     return $repository;
 }
 
+/**
+ * Get a repository with no commit yet, deleted when the test ends.
+ */
+function gitUnbornRepository(): GitRepository
+{
+    $repository = GitRepository::init();
+
+    gitCleanup($repository->path);
+
+    return $repository;
+}
+
+/**
+ * Delete a directory when the test ends.
+ */
 function gitCleanup(string $path): void
 {
     test()->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($path));
 }
 
+/**
+ * Get an empty directory outside any repository, deleted when the test ends.
+ */
 function gitEmptyDirectory(): string
 {
     $path = GitRepository::temporaryPath();
@@ -129,7 +153,7 @@ it('lowercases the commit', function () {
 });
 
 it('skips the header and peeled lines of packed-refs', function () {
-    $repository = gitRepository(commit: false);
+    $repository = gitUnbornRepository();
     $packed = "# pack-refs with: peeled fully-peeled sorted\n".str_repeat('a', 40)." refs/tags/v1\n^".str_repeat('b', 40)."\n".str_repeat('c', 40)." refs/heads/main\n";
     file_put_contents("{$repository->path}/.git/packed-refs", $packed);
 
@@ -137,7 +161,7 @@ it('skips the header and peeled lines of packed-refs', function () {
 });
 
 it('gives no deploy and no notice for what it cannot read', function (Closure $arrange) {
-    $repository = gitRepository(commit: false);
+    $repository = gitUnbornRepository();
     $arrange($repository);
 
     expect(deployUnderGit($repository->path))->toBeNull()

@@ -22,6 +22,9 @@ abstract class TestCase extends Orchestra
 
     protected string $storeDirectory;
 
+    /**
+     * The directory every application the test creates starts its git lookup at, outside any repository by default.
+     */
     public string $gitStart;
 
     /**

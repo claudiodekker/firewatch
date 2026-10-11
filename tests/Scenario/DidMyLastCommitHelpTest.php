@@ -10,11 +10,13 @@ use Illuminate\Support\Facades\Route;
 const LAST_COMMIT_SLOWDOWN_MS = 150;
 
 /**
+ * Serve each URI in an application of its own whose git lookup starts at a directory, with the order list taking at least the given time.
+ *
  * @param  list<string>  $uris
  */
-function lastCommitServe(GitRepository $repository, bool $slowed, array $uris): void
+function lastCommitServe(string $start, int $ordersMs, array $uris): void
 {
-    test()->gitStart = $repository->path;
+    test()->gitStart = $start;
 
     $started = $_SERVER['REQUEST_TIME_FLOAT'];
     test()->beforeApplicationDestroyed(fn () => $_SERVER['REQUEST_TIME_FLOAT'] = $started);
@@ -25,10 +27,8 @@ function lastCommitServe(GitRepository $repository, bool $slowed, array $uris): 
         forceRequests();
         config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
 
-        Route::get('/orders', function () use ($slowed) {
-            if ($slowed) {
-                takeAtLeast(LAST_COMMIT_SLOWDOWN_MS);
-            }
+        Route::get('/orders', function () use ($ordersMs) {
+            takeAtLeast($ordersMs);
 
             return 'ok';
         });
@@ -39,6 +39,8 @@ function lastCommitServe(GitRepository $repository, bool $slowed, array $uris): 
 }
 
 /**
+ * Serve the application at its first commit, then at a second commit that slows the order list, and get both commits.
+ *
  * @return array{string, string}
  */
 function lastCommitServeBothCommits(): array
@@ -47,11 +49,11 @@ function lastCommitServeBothCommits(): array
     test()->beforeApplicationDestroyed(fn () => $repository->delete());
 
     $first = $repository->head();
-    lastCommitServe($repository, slowed: false, uris: ['/up', '/orders', '/orders', '/orders']);
+    lastCommitServe($repository->path, ordersMs: 0, uris: ['/up', '/orders', '/orders', '/orders']);
 
     $repository->commit();
     $second = $repository->head();
-    lastCommitServe($repository, slowed: true, uris: ['/orders', '/orders', '/orders']);
+    lastCommitServe($repository->path, ordersMs: LAST_COMMIT_SLOWDOWN_MS, uris: ['/orders', '/orders', '/orders']);
 
     return [$first, $second];
 }
@@ -87,7 +89,7 @@ it('labels nothing when the application is not in a repository', function () {
     (new Filesystem)->ensureDirectoryExists($directory);
     test()->beforeApplicationDestroyed(fn () => (new Filesystem)->deleteDirectory($directory));
 
-    lastCommitServe(new GitRepository($directory), slowed: false, uris: ['/up', '/orders']);
+    lastCommitServe($directory, ordersMs: 0, uris: ['/up', '/orders']);
 
     expect(storeRows('SELECT DISTINCT deploy FROM records'))->toBe([['deploy' => '']]);
 });
