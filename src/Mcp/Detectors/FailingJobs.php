@@ -58,7 +58,8 @@ class FailingJobs implements Thresholded
         }
 
         $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['jobs_failed'], $b['failing_attempts'], $b['last_seen'], $a['group_hash']] <=> [$a['jobs_failed'], $a['failing_attempts'], $a['last_seen'], $b['group_hash']], $limit);
-        $exceptions = Stored::byGroup($this->exceptions($connection, $window, $attempts));
+        $thrown = $this->exceptions($connection, $window, $attempts);
+        $exceptions = Stored::byGroup($thrown);
         $findings = array_map(fn (array $row) => $this->finding($row, $exceptions[$row['group_hash']][0] ?? null), $shown);
 
         return Judgement::of($this->name(), $described, examined: $examined, total: count($failing), findings: $findings);

@@ -156,7 +156,7 @@ class ErrorLogs implements Thresholded, Ungrouped
     {
         $shape = $this->shape($row['message']);
 
-        return Finding::from($row, $shape->text, $row['occurrences'], [
+        return Finding::from($row, name: $shape->text, count: $row['occurrences'], evidence: [
             'level' => $row['level'],
             'message' => $row['message'],
             'shape' => $shape->text,

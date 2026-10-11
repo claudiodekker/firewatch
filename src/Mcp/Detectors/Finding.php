@@ -50,7 +50,7 @@ readonly class Finding
     }
 
     /**
-     * Get the call that follows the finding's execution: the worst one when the finding names it.
+     * Get the execution to open for the finding: the worst one when the finding names it, the latest otherwise.
      */
     public function executionId(): ?string
     {

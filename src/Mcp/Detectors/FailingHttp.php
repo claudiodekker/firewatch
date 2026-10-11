@@ -91,9 +91,9 @@ class FailingHttp implements Thresholded
         $listed = self::LISTED;
         $worstFirst = 'failures DESC, CAST(failures AS REAL) / answered DESC, last_seen DESC, group_hash ASC';
 
-        // A group hash is compared with IS, so that the requests the wire sent without one stay one group.
         $reach = Fragment::reach('failed');
 
+        // A group hash is compared with IS, so that the requests the wire sent without one stay one group.
         return Stored::rows($connection, "{$labels}, calls AS MATERIALIZED (
             SELECT id, started_at, group_hash, host, execution_source AS source,
                 CASE WHEN instr(url, '?') > 0 THEN substr(url, 1, instr(url, '?') - 1) ELSE url END AS url,

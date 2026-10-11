@@ -70,10 +70,12 @@ class FailingRoutes implements Thresholded
             return Judgement::of($this->name(), $this->threshold()->describe($threshold), examined: $examined, total: 0, findings: []);
         }
 
-        $latest = Stored::byGroup(Stored::rows($connection, "SELECT group_hash, execution_id, route_path, method FROM (
+        $latestRows = Stored::rows($connection, "SELECT group_hash, execution_id, route_path, method FROM (
             SELECT group_hash, execution_id, route_path, method, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS position
-            FROM requests WHERE {$failed}) WHERE position = 1", $bindings, $window));
-        $statuses = Stored::byGroup(Stored::rows($connection, "SELECT group_hash, status_code, count(*) AS requests FROM requests WHERE {$failed} GROUP BY group_hash, status_code ORDER BY status_code", $bindings, $window));
+            FROM requests WHERE {$failed}) WHERE position = 1", $bindings, $window);
+        $statusRows = Stored::rows($connection, "SELECT group_hash, status_code, count(*) AS requests FROM requests WHERE {$failed} GROUP BY group_hash, status_code ORDER BY status_code", $bindings, $window);
+        $latest = Stored::byGroup($latestRows);
+        $statuses = Stored::byGroup($statusRows);
 
         $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['server_errors'], $b['failed'], $this->failurePct($b), $a['group_hash']] <=> [$a['server_errors'], $a['failed'], $this->failurePct($a), $b['group_hash']], $limit);
         $findings = array_map(fn (array $row) => $this->finding(
