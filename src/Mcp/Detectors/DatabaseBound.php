@@ -13,7 +13,7 @@ use SQLite3;
 /**
  * @internal
  */
-class DatabaseBound implements Thresholded
+class DatabaseBound implements Detector
 {
     /**
      * The fewest microseconds of typical duration a group needs, so that a fast request that is mostly one query is not called bound.

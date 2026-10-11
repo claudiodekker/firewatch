@@ -14,7 +14,7 @@ use SQLite3;
 /**
  * @internal
  */
-class ExceptionClusters implements Thresholded
+class ExceptionClusters implements Detector
 {
     /**
      * The most units a finding lists.

@@ -12,7 +12,7 @@ use SQLite3;
 /**
  * @internal
  */
-class ErrorLogs implements Thresholded, Ungrouped
+class ErrorLogs implements Ungrouped
 {
     /**
      * Get the name of the shape the detector judges.

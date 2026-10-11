@@ -12,7 +12,7 @@ use SQLite3;
 /**
  * @internal
  */
-class Cache implements Thresholded
+class Cache implements Detector
 {
     /**
      * The fewest reads of a key whose hit rate is judged, as one miss is a cold fill.

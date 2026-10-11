@@ -16,7 +16,7 @@ use SQLite3;
 /**
  * @internal
  */
-class QueueLatency implements Thresholded
+class QueueLatency implements Detector
 {
     /**
      * Get the name of the shape the detector judges.

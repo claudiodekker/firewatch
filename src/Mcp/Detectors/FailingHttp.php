@@ -13,7 +13,7 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingHttp implements Thresholded
+class FailingHttp implements Detector
 {
     /**
      * The most URLs and the most execution groups a finding lists.

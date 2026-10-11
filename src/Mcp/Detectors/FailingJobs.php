@@ -12,7 +12,7 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingJobs implements Thresholded
+class FailingJobs implements Detector
 {
     /**
      * Get the name of the shape the detector judges.

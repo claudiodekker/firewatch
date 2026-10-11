@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
 use Illuminate\Contracts\Container\Container;
-use LogicException;
 use SQLite3;
 
 /**
@@ -14,6 +13,11 @@ use SQLite3;
  */
 class Detectors
 {
+    /**
+     * @var list<Detector>|null
+     */
+    protected ?array $built = null;
+
     /**
      * Create a new detectors instance.
      *
@@ -33,7 +37,7 @@ class Detectors
      */
     public function all(): array
     {
-        return array_map(fn (string $detector) => $this->container->make($detector), $this->shipped);
+        return $this->built ??= array_map(fn (string $detector) => $this->container->make($detector), $this->shipped);
     }
 
     /**
@@ -68,7 +72,7 @@ class Detectors
     public function judgeAll(SQLite3 $connection, Markers $meta, Window $window, Deadline $deadline): array
     {
         return array_map(fn (Detector $detector) => $deadline->passed()
-            ? Judgement::notEvaluated($detector->name(), $detector instanceof Thresholded ? $detector->threshold()->describe() : null, Reason::DEADLINE)
+            ? Judgement::notEvaluated($detector->name(), $detector->threshold()?->describe(), Reason::DEADLINE)
             : $this->judge($connection, $meta, $detector, $window, threshold: null, group: null, limit: 1), $this->all());
     }
 
@@ -77,11 +81,9 @@ class Detectors
      */
     public function judge(SQLite3 $connection, Markers $meta, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
-        $judgement = match (true) {
-            $detector instanceof Thresholded => $detector->judge($connection, $meta, $window, $threshold ?? $detector->threshold()->default, $group, $limit),
-            $detector instanceof Thresholdless => $detector->judge($connection, $meta, $window, $group, $limit),
-            default => throw new LogicException('A detector is either thresholded or thresholdless.'),
-        };
+        $default = $detector->threshold()?->default;
+
+        $judgement = $detector->judge($connection, $meta, $window, $threshold ?? $default ?? 0, $group, $limit);
 
         return $judgement->afterRemoval(History::removedThrough($meta, $detector->types()), $window->since());
     }

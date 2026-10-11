@@ -15,7 +15,7 @@ use SQLite3;
 /**
  * @internal
  */
-class NPlusOne implements Thresholded
+class NPlusOne implements Detector
 {
     /**
      * The most call sites a finding lists.

@@ -12,7 +12,7 @@ use SQLite3;
 /**
  * @internal
  */
-class FailingTasks implements Thresholdless
+class FailingTasks implements Detector
 {
     /**
      * Get the name of the shape the detector judges.
@@ -20,6 +20,14 @@ class FailingTasks implements Thresholdless
     public function name(): DetectorName
     {
         return DetectorName::FAILING_TASKS;
+    }
+
+    /**
+     * Get the threshold the detector takes, which is none.
+     */
+    public function threshold(): ?Threshold
+    {
+        return null;
     }
 
     /**
@@ -35,7 +43,7 @@ class FailingTasks implements Thresholdless
     /**
      * Judge the scheduled tasks that started in the window.
      */
-    public function judge(SQLite3 $connection, Markers $meta, Window $window, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $caveats = [
             __('firewatch::messages.detect_caveat_skipped'),
