@@ -166,6 +166,9 @@ class RecipeArguments
         return strtolower($value);
     }
 
+    /**
+     * Read one source argument as the field its recipe reads.
+     */
     protected static function value(Arguments $arguments, RecordType $type, string $argument, mixed $value): mixed
     {
         return match ($argument) {
@@ -234,6 +237,9 @@ class RecipeArguments
         };
     }
 
+    /**
+     * Read a source argument that is text.
+     */
     protected static function text(Arguments $arguments, RecordType $type, string $argument, mixed $value): string
     {
         if (! is_string($value)) {
