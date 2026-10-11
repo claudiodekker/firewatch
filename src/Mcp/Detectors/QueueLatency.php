@@ -3,13 +3,14 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\History;
-use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Lineage;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
+use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
@@ -194,7 +195,7 @@ class QueueLatency implements Thresholded
     {
         return [
             'group' => $row['group_hash'],
-            'name' => Stored::blank($row['name']) ?? __('firewatch::messages.rank_no_route'),
+            'name' => Cell::blank($row['name']) ?? __('firewatch::messages.rank_no_route'),
             'count' => Stored::milliseconds($row['worst']),
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],

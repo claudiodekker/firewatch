@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Sql\Child\Policy;
 use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
+use ClaudioDekker\Firewatch\Store\Instant;
 use RuntimeException;
 
 /**

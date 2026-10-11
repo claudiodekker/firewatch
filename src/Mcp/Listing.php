@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
 
@@ -256,15 +257,15 @@ class Listing
             'started_at' => $record['started_at'],
             'type' => $record['type'],
             'source' => $record['source'],
-            'stage' => Stored::blank($data['execution_stage'] ?? null),
+            'stage' => Cell::blank($data['execution_stage'] ?? null),
             'duration_ms' => Stored::milliseconds($record['duration']),
             'execution_id' => $record['execution_id'],
             'trace_id' => $record['trace_id'],
             'group' => $record['group_hash'],
             'name' => $this->name($type, $data),
             'location' => $located ? Stored::location($data['file'] ?? null, $data['line'] ?? null) : null,
-            'user_id' => Stored::blank($record['user_id']),
-            'deploy' => Stored::blank($record['deploy']),
+            'user_id' => Cell::blank($record['user_id']),
+            'deploy' => Cell::blank($record['deploy']),
         ];
 
         if ($this->matching !== null && $type !== null) {

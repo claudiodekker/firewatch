@@ -3,7 +3,7 @@
 namespace ClaudioDekker\Firewatch\Configuration;
 
 use ClaudioDekker\Firewatch\ExecutionType;
-use ClaudioDekker\Firewatch\Mcp\Stored;
+use ClaudioDekker\Firewatch\Store\Cell;
 use Illuminate\Support\Str;
 
 /**
@@ -61,7 +61,7 @@ readonly class BudgetEntry
             return true;
         }
 
-        $routeMethods = Stored::json($row['route_methods'] ?? null);
+        $routeMethods = Cell::json($row['route_methods'] ?? null);
 
         return is_array($routeMethods) && array_diff($this->methods, $routeMethods) === [];
     }
@@ -77,7 +77,7 @@ readonly class BudgetEntry
             return true;
         }
 
-        $path = Stored::blank($row['route_path'] ?? null);
+        $path = Cell::blank($row['route_path'] ?? null);
 
         return is_string($path) && Str::is(ltrim($this->path, '/'), ltrim($path, '/'));
     }

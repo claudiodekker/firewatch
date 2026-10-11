@@ -3,7 +3,6 @@
 namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\Mcp\Instant;
 use Closure;
 use SQLite3;
 use SQLite3Exception;

@@ -13,7 +13,6 @@ use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Holdings;
-use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Recipe;
 use ClaudioDekker\Firewatch\Mcp\RecipeCheck;
@@ -23,6 +22,7 @@ use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
+use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -497,7 +497,7 @@ class Fingerprint extends Tool
         }
 
         foreach ($rows as $row) {
-            $data = Stored::json($row['data']);
+            $data = Cell::json($row['data']);
             $fields = is_array($data) ? $data : [];
 
             if (! Recipe::isWhole($type, $fields)) {

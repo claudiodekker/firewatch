@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
+use ClaudioDekker\Firewatch\Store\Instant;
 use Closure;
 use InvalidArgumentException;
 use Laravel\Mcp\Response;

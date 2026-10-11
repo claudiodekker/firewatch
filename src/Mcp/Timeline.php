@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 
 /**
  * @internal
@@ -90,7 +91,7 @@ class Timeline
         return [
             'started_at' => $child['started_at'],
             'type' => $type->value,
-            'stage' => Stored::blank($child['execution_stage'] ?? null),
+            'stage' => Cell::blank($child['execution_stage'] ?? null),
             'duration_ms' => Stored::milliseconds($child['duration'] ?? null),
             'name' => self::name($type, $child),
             'location' => Stored::location(file: $child['file'] ?? null, line: $child['line'] ?? null),
@@ -152,7 +153,7 @@ class Timeline
             RecordType::QUERY => [
                 'connection' => $child['connection'] ?? null,
                 'connection_type' => $child['connection_type'] ?? null,
-                'bindings' => Stored::json($child['bindings'] ?? null),
+                'bindings' => Cell::json($child['bindings'] ?? null),
             ],
             RecordType::EXCEPTION => [
                 'message' => $child['message'] ?? null,

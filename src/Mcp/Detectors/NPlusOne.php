@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
@@ -217,7 +218,7 @@ class NPlusOne implements Thresholded
         $worst = $details['executions'][$key]['worst'];
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
-        $label = Stored::blank($worst['label']) ?? __('firewatch::messages.rank_no_route');
+        $label = Cell::blank($worst['label']) ?? __('firewatch::messages.rank_no_route');
         $share = is_numeric($worst['duration']) && $worst['duration'] > 0 ? round(Ranking::PERCENT * $worst['micros'] / $worst['duration'], self::PERCENT_DECIMALS) : null;
 
         return [

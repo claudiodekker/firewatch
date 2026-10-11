@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use SQLite3;
 
 /**
@@ -170,9 +171,9 @@ class FailingHttp implements Thresholded
                 'calls' => $row['calls'],
                 'failures' => $row['failures'],
                 'failure_pct' => round(Ranking::PERCENT * $row['failures'] / $row['answered'], self::PERCENT_DECIMALS),
-                'status_counts' => Stored::json($row['status_counts']),
-                'top_urls' => Stored::json($row['top_urls']),
-                'ran_in' => array_map($this->unit(...), Stored::json($row['ran_in'])),
+                'status_counts' => Cell::json($row['status_counts']),
+                'top_urls' => Cell::json($row['top_urls']),
+                'ran_in' => array_map($this->unit(...), Cell::json($row['ran_in'])),
             ],
         ];
     }

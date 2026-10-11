@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
-use JsonException;
 use SQLite3;
 use SQLite3Result;
 use SQLite3Stmt;
@@ -56,14 +55,6 @@ class Stored
         }
 
         return $rows;
-    }
-
-    /**
-     * Get a stored value, or null for the empty string a wire field is sent as when it has no value.
-     */
-    public static function blank(mixed $value): mixed
-    {
-        return $value === '' ? null : $value;
     }
 
     /**
@@ -128,21 +119,5 @@ class Stored
         }
 
         return is_int($line) ? "{$file}:{$line}" : $file;
-    }
-
-    /**
-     * Decode the JSON text a column holds, or keep what is not JSON as it is.
-     */
-    public static function json(mixed $value): mixed
-    {
-        if (! is_string($value) || $value === '') {
-            return self::blank($value);
-        }
-
-        try {
-            return json_decode($value, associative: true, flags: JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            return $value;
-        }
     }
 }

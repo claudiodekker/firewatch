@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 
 /**
  * @internal
@@ -44,7 +45,7 @@ class ExceptionSection
      */
     protected static function row(array $exception): array
     {
-        [$frames, $note] = self::frames(Stored::json($exception['trace'] ?? null));
+        [$frames, $note] = self::frames(Cell::json($exception['trace'] ?? null));
 
         return [
             'class' => $exception['class'] ?? null,
@@ -95,7 +96,7 @@ class ExceptionSection
             $missing = $missing || $code === null;
             $frames[] = [
                 'file' => $file,
-                'source' => Stored::blank($frame['source'] ?? null),
+                'source' => Cell::blank($frame['source'] ?? null),
                 'code' => $code,
             ];
         }
@@ -112,7 +113,7 @@ class ExceptionSection
      */
     public static function applicationFrame(mixed $trace): ?string
     {
-        $frames = Stored::json($trace);
+        $frames = Cell::json($trace);
         if (! is_array($frames)) {
             return null;
         }

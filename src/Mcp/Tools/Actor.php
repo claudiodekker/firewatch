@@ -14,13 +14,14 @@ use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Identification;
-use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\MatchedBy;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
+use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -226,7 +227,7 @@ class Actor extends Tool
     protected function identified(MatchedBy $decidedBy, Identification $identification, Attribution $attribution, Window $window): array
     {
         $person = $identification->found->rows[0];
-        $name = Stored::blank($person['name']);
+        $name = Cell::blank($person['name']);
         $named = is_string($name) ? $name : $person['id'];
 
         $empty = $attribution->attributed() === 0 ? Emptiness::nothingAttributed($named, $attribution->total()) : null;
@@ -242,7 +243,7 @@ class Actor extends Tool
                 'identity' => [
                     'id' => $person['id'],
                     'name' => $name,
-                    'username' => Stored::blank($person['username']),
+                    'username' => Cell::blank($person['username']),
                     'first_seen_at' => $person['first_seen'],
                     'last_seen_at' => $person['last_seen'],
                     'matched_by' => $decidedBy->value,
@@ -456,8 +457,8 @@ class Actor extends Tool
     {
         return [
             'id' => $person['id'],
-            'name' => Stored::blank($person['name']),
-            'username' => Stored::blank($person['username']),
+            'name' => Cell::blank($person['name']),
+            'username' => Cell::blank($person['username']),
             'last_seen_at' => $person['last_seen'],
         ];
     }

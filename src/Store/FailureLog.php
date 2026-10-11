@@ -4,7 +4,6 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\Mcp\Instant;
 use RuntimeException;
 use SQLite3Exception;
 use Throwable;

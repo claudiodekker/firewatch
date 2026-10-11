@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use SQLite3;
 
 /**
@@ -83,7 +84,7 @@ readonly class TraceRecords
         $dispatch = Stored::rows($connection, 'SELECT trace_id FROM queued_jobs WHERE job_id = :job ORDER BY started_at, id LIMIT 1', ['job' => $job])[0] ?? null;
         $attempt = Stored::rows($connection, 'SELECT trace_id FROM job_attempts WHERE job_id = :job ORDER BY started_at, attempt, id LIMIT 1', ['job' => $job])[0] ?? null;
 
-        return [Stored::blank($dispatch['trace_id'] ?? $attempt['trace_id'] ?? null), $dispatch !== null || $attempt !== null];
+        return [Cell::blank($dispatch['trace_id'] ?? $attempt['trace_id'] ?? null), $dispatch !== null || $attempt !== null];
     }
 
     /**

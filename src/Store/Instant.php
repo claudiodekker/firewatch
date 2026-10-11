@@ -1,6 +1,6 @@
 <?php
 
-namespace ClaudioDekker\Firewatch\Mcp;
+namespace ClaudioDekker\Firewatch\Store;
 
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;

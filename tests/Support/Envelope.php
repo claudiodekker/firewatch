@@ -3,7 +3,7 @@
 namespace ClaudioDekker\Firewatch\Tests\Support;
 
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
-use ClaudioDekker\Firewatch\Mcp\Instant;
+use ClaudioDekker\Firewatch\Store\Instant;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
