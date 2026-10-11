@@ -108,11 +108,12 @@ class Markers
         }
 
         $prunedThrough = self::instant($meta[self::PRUNED_THROUGH] ?? null);
+        $rebuiltAt = self::instant($meta[self::REBUILT_AT] ?? null);
 
         return new self(
             createdAt: self::instant($meta[self::CREATED_AT] ?? null),
-            rebuiltAt: self::instant($meta[self::REBUILT_AT] ?? null),
-            rebuiltWhy: RebuildReason::tryFrom($meta[self::REBUILT_WHY] ?? ''),
+            rebuiltAt: $rebuiltAt,
+            rebuiltWhy: $rebuiltAt === null ? null : RebuildReason::tryFrom($meta[self::REBUILT_WHY] ?? '') ?? RebuildReason::UNKNOWN,
             prunedThrough: $prunedThrough,
             prunedReason: $prunedThrough === null ? null : PruneReason::tryFrom($meta[self::PRUNED_BY] ?? '') ?? self::DEFAULT_PRUNED_REASON,
             clearedAt: self::instant($meta[self::CLEARED_AT] ?? null),

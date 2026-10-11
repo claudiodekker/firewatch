@@ -127,6 +127,22 @@ describe('a rebuilt store', function () {
         'a start at it' => [600.0, false],
     ]);
 
+    it('still states a rebuild whose stored reason this release does not know', function (string $stored) {
+        $this->travelTo('2026-09-30 14:00:00');
+        ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
+        $store = new SQLite3(app(Configuration::class)->database);
+        $store->exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('rebuilt_at', '1790776800.0'), ('rebuilt_why', '{$stored}')");
+        $store->close();
+
+        expect(conditionsOf())->toEqual([[
+            'id' => 'store-rebuilt',
+            'kind' => 'condition',
+            'message' => __('firewatch::messages.conditions.store-rebuilt', ['at' => '2026-09-30 14:00:00.000000', 'why' => 'unknown']),
+            'rebuilt_at' => 1790776800.0,
+            'why' => 'unknown',
+        ]]);
+    })->with(['a later release\'s reason' => 'manual', 'no reason' => '']);
+
     it('stamps a store its schema rebuilt, and states it in the answer', function () {
         $this->travelTo('2026-09-30 14:00:00');
         $path = app(Configuration::class)->database;
