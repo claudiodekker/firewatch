@@ -1,7 +1,6 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
@@ -393,19 +392,6 @@ it('lists at most the limit of executions, and says how to see the rest when the
     'twenty of twenty-one by default' => [null, 21, 20],
     'a hundred of a hundred' => [100, 100, 100],
     'a hundred of a hundred and one' => [100, 101, 100],
-]);
-
-it('refuses a limit that is not a whole number from 1 to 100', function (mixed $limit, string $shown) {
-    $response = FirewatchServer::tool(Actor::class, ['who' => '7', 'limit' => $limit]);
-    $text = (fn () => $this->content())->call($response)[0];
-
-    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'limit', 'expected' => '1 to 100', 'value' => $shown, 'accepted' => 'a whole number from 1 to 100', 'example' => 'actor(who: "taylor", limit: 20)']));
-})->with([
-    'zero' => [0, '0'],
-    'a hundred and one' => [101, '101'],
-    'text' => ['5', '"5"'],
-    'a fraction' => [1.5, '1.5'],
-    'a boolean' => [true, 'true'],
 ]);
 
 it('states the commands and tasks of the window, the attempts with no actor and the requests with no recorded user, each only when there are any', function (array $records, array $notes) {

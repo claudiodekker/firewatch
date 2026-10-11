@@ -117,8 +117,6 @@ class ChildRunner implements SqlRunner
     /**
      * Run one read-only statement of the assistant in the SQL child and get its rows.
      *
-     * @param  int<1, 500>  $limit
-     *
      * @throws StoreUnusable
      * @throws SqlFailure
      */

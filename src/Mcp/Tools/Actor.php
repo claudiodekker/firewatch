@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Attribution;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -125,10 +126,11 @@ class Actor extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $who = $this->who($request);
+        $arguments = new Arguments($request, $this->name());
+        $who = $this->who($arguments);
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
-        $limit = $this->limit($request);
+        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['who' => 'taylor']);
 
         $frame->about(RecordType::events(), $window, actor: true);
 
@@ -432,9 +434,9 @@ class Actor extends Tool
     /**
      * Read who is meant: text of the accepted length once trimmed, which holds no control character.
      */
-    protected function who(Request $request): string
+    protected function who(Arguments $arguments): string
     {
-        $value = $request->get('who');
+        $value = $arguments->get('who');
 
         if ($value === null) {
             throw Refusal::missing(argument: 'who', accepted: self::ACCEPTED, example: self::EXAMPLE);
@@ -456,26 +458,6 @@ class Actor extends Tool
         }
 
         return $who;
-    }
-
-    /**
-     * Read the most executions to list.
-     */
-    protected function limit(Request $request): int
-    {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'actor(who: "taylor", limit: '.self::DEFAULT_LIMIT.')');
     }
 
     /**

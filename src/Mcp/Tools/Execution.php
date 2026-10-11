@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Accounting;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\BudgetVerdict;
 use ClaudioDekker\Firewatch\Mcp\Children;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
@@ -110,9 +111,10 @@ class Execution extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $id = $this->executionId($request);
-        $type = $this->type($request, $id);
-        $limit = $this->limit($request);
+        $arguments = new Arguments($request, $this->name());
+        $id = $this->executionId($arguments);
+        $type = $this->type($arguments, $id);
+        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT);
 
         $frame = $this->frame($now);
         $window = Window::none(reason: __('firewatch::messages.execution_window_reason'), timezone: $frame->timezone);
@@ -357,9 +359,9 @@ class Execution extends Tool
     /**
      * Read the execution id, or null for none.
      */
-    protected function executionId(Request $request): ?string
+    protected function executionId(Arguments $arguments): ?string
     {
-        $value = $request->get('execution_id');
+        $value = $arguments->get('execution_id');
 
         if ($value === null) {
             return null;
@@ -369,55 +371,20 @@ class Execution extends Tool
             return $value;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'execution_id', expected: 'an execution id', value: $shown, accepted: 'an execution id', example: 'execution(execution_id: "<execution id>")');
+        throw $arguments->invalid(argument: 'execution_id', expected: 'an execution id', accepted: 'an execution id', example: 'execution(execution_id: "<execution id>")');
     }
 
     /**
      * Read the type of execution to take the latest of.
      */
-    protected function type(Request $request, ?string $id): ?ExecutionType
+    protected function type(Arguments $arguments, ?string $id): ?ExecutionType
     {
-        $value = $request->get('type');
+        $type = $arguments->choice('type', ExecutionType::cases(), 'one of the four execution types', 'execution(type: "request")');
 
-        if ($value === null) {
-            return null;
-        }
-
-        $type = is_string($value) ? ExecutionType::tryFrom($value) : null;
-
-        if ($type === null) {
-            $accepted = implode(', ', array_map(fn (ExecutionType $case) => $case->value, ExecutionType::cases()));
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'type', expected: 'one of the four execution types', value: $shown, accepted: $accepted, example: 'execution(type: "request")');
-        }
-
-        if ($id !== null) {
+        if ($type !== null && $id !== null) {
             throw Refusal::conflicting(argument: 'type', with: 'execution_id', accepted: 'a call with `execution_id` or with `type`, not both', example: 'execution(execution_id: "<execution id>")');
         }
 
         return $type;
-    }
-
-    /**
-     * Read the most timeline entries to list.
-     */
-    protected function limit(Request $request): int
-    {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'execution(limit: '.self::DEFAULT_LIMIT.')');
     }
 }

@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Boundary;
 use ClaudioDekker\Firewatch\Mcp\Comparison;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
@@ -13,7 +14,6 @@ use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\DeployPair;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Measure;
-use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\SplitPoint;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
@@ -57,11 +57,6 @@ class Compare extends Tool
      * The most groups an answer lists.
      */
     protected const MAXIMUM_LIMIT = 100;
-
-    /**
-     * What a group id is, as the refusal of a malformed one says it.
-     */
-    protected const GROUP_ID_DESCRIPTION = 'a 32-character lowercase hex group id';
 
     /**
      * The boundaries a call accepts, as a refusal names them.
@@ -120,12 +115,13 @@ class Compare extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $group = $this->group($request);
-        $explicit = $this->type($request, $group === null);
-        $limit = $this->limit($request, $group);
+        $arguments = new Arguments($request, $this->name());
+        $group = $arguments->group('compare(group: "<group id>", split_at: "<time>")');
+        $explicit = $arguments->typeWithGroups($group, SplitPoint::EXAMPLE);
+        $limit = $this->limit($arguments, $group);
 
         if ($explicit !== null) {
-            $this->measure($request, $explicit);
+            $this->measure($arguments, $explicit);
         }
 
         $frame = $this->frame($now);
@@ -135,7 +131,7 @@ class Compare extends Tool
 
         $frame->about($explicit === null ? [] : [$explicit], Window::between($given->since(), $given->until() ?? $frame->now, $frame->timezone), anchored: $boundary->isInstant());
 
-        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $request, $given, $frame->now, $boundary, $explicit, $group, $limit));
+        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $arguments, $given, $frame->now, $boundary, $explicit, $group, $limit));
 
         if ($read === null) {
             return $frame->empty(notes: $notes);
@@ -201,18 +197,10 @@ class Compare extends Tool
      *
      * @return array{RecordType|null, list<RecordType>, Window, int, Comparison|null}
      */
-    protected function load(SQLite3 $connection, StoreFacts $facts, Request $request, Window $given, float $epoch, Boundary $boundary, ?RecordType $explicit, ?string $group, int $limit): array
+    protected function load(SQLite3 $connection, StoreFacts $facts, Arguments $arguments, Window $given, float $epoch, Boundary $boundary, ?RecordType $explicit, ?string $group, int $limit): array
     {
-        $held = $group === null ? [] : Ranking::holders($connection, $group);
-
-        if ($group !== null && $explicit !== null && $held !== [] && ! in_array($explicit, $held, true)) {
-            $holding = implode(', ', array_map(fn (RecordType $type) => $type->value, $held));
-
-            throw Refusal::conflicting(argument: 'type', with: 'group', accepted: "a type that holds the group: {$holding}", example: "compare(group: \"{$group}\", split_at: \"<time>\")");
-        }
-
-        $type = $explicit ?? Ranking::preferred($held);
-        $by = $type === null ? null : $this->measure($request, $type);
+        [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "compare(group: \"{$group}\", split_at: \"<time>\")");
+        $by = $type === null ? null : $this->measure($arguments, $type);
         $coverageStart = $type === null ? null : $facts->historyFrom([$type]);
 
         $window = $this->window($given, $epoch, $coverageStart);
@@ -340,95 +328,30 @@ class Compare extends Tool
     }
 
     /**
-     * Read the type to compare.
-     */
-    protected function type(Request $request, bool $required): ?RecordType
-    {
-        $types = implode(', ', array_map(fn (RecordType $type) => $type->value, Measure::types()));
-        $value = $request->get('type');
-
-        if ($value === null) {
-            return $required ? throw Refusal::missing(argument: 'type', accepted: $types, example: SplitPoint::EXAMPLE) : null;
-        }
-
-        $type = is_string($value) ? RecordType::tryFrom($value) : null;
-
-        if ($type === null || ! in_array($type, Measure::types(), true)) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'type', expected: 'one of the types with groups', value: $shown, accepted: $types, example: SplitPoint::EXAMPLE);
-        }
-
-        return $type;
-    }
-
-    /**
      * Read the measure to compare by.
      */
-    protected function measure(Request $request, RecordType $type): Measure
+    protected function measure(Arguments $arguments, RecordType $type): Measure
     {
-        $value = $request->get('by');
         $default = Measure::default($type);
 
-        if ($value === null) {
-            return $default;
-        }
-
-        $measure = is_string($value) ? Measure::tryFrom($value) : null;
-        $fitting = Measure::compared($type);
-
-        if ($measure !== null && in_array($measure, $fitting, true)) {
-            return $measure;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $accepted = implode(', ', array_map(fn (Measure $measure) => $measure->value, $fitting));
-
-        throw Refusal::invalid(argument: 'by', expected: "a measure of {$type->value}", value: $shown, accepted: $accepted, example: "compare(type: \"{$type->value}\", split_at: \"<time>\", by: \"{$default->value}\")");
+        return $arguments->choice('by', Measure::compared($type), "a measure of {$type->value}", "compare(type: \"{$type->value}\", split_at: \"<time>\", by: \"{$default->value}\")") ?? $default;
     }
 
     /**
      * Read the most groups to list, which a comparison of one group has no use for.
      */
-    protected function limit(Request $request, ?string $group): int
+    protected function limit(Arguments $arguments, ?string $group): int
     {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if ($group !== null) {
+        if ($group !== null && $arguments->get('limit') !== null) {
             throw Refusal::conflicting(argument: 'limit', with: 'group', accepted: 'a call without `limit`: one group is one row', example: "compare(group: \"{$group}\", split_at: \"<time>\")");
         }
 
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
+        $alongside = [
+            'type' => 'request',
+            'split_at' => '<time>',
+        ];
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'compare(type: "request", split_at: "<time>", limit: '.self::DEFAULT_LIMIT.')');
-    }
-
-    /**
-     * Read the group to compare.
-     */
-    protected function group(Request $request): ?string
-    {
-        $value = $request->get('group');
-
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'group', expected: self::GROUP_ID_DESCRIPTION, value: $shown, accepted: self::GROUP_ID_DESCRIPTION, example: 'compare(group: "<group id>", split_at: "<time>")');
+        return $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: $alongside);
     }
 
     /**

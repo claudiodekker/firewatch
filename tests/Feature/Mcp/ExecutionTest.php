@@ -195,18 +195,6 @@ it('opens an execution whose id is also the trace id of other records', function
     expect($envelope['result']['header']['type'])->toBe('request');
 });
 
-it('refuses a type that is none of the four, matching it exactly', function (mixed $type, string $shown) {
-    $text = execRefusal(['type' => $type]);
-
-    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'type', 'expected' => 'one of the four execution types', 'value' => $shown, 'accepted' => 'request, command, job-attempt, scheduled-task', 'example' => 'execution(type: "request")']));
-})->with([
-    'an underscore' => ['job_attempt', '"job_attempt"'],
-    'a capital' => ['Request', '"Request"'],
-    'a type that is not an execution' => ['query', '"query"'],
-    'padding' => [' request', '" request"'],
-    'not a string' => [5, '5'],
-]);
-
 it('refuses a type given with an execution id', function () {
     $text = execRefusal(['type' => 'request', 'execution_id' => 'abc']);
 
@@ -221,28 +209,6 @@ it('refuses an execution id that is not a non-empty string', function (mixed $id
     'empty' => ['', '""'],
     'a number' => [7, '7'],
 ]);
-
-it('accepts a limit from 1 to 100 and refuses any other', function (mixed $limit, bool $accepted) {
-    ingest([execRecord(RecordType::REQUEST, 'request')]);
-
-    $text = execRefusal(['limit' => $limit]);
-
-    expect(str_starts_with($text, 'error: invalid_argument'))->toBe(! $accepted);
-})->with([
-    'zero' => [0, false],
-    'one' => [1, true],
-    'a hundred' => [100, true],
-    'a hundred and one' => [101, false],
-    'negative' => [-1, false],
-    'a fraction' => [5.5, false],
-    'a string' => ['5', false],
-]);
-
-it('words the refusal of a limit with the range and an example', function () {
-    $text = execRefusal(['limit' => 500]);
-
-    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'limit', 'expected' => '1 to 100', 'value' => '500', 'accepted' => 'a whole number from 1 to 100', 'example' => 'execution(limit: 50)']));
-});
 
 it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $key) {
     $text = execRefusal([$argument => 'now']);

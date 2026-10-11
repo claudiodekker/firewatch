@@ -5,12 +5,12 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Catalogue;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
 use ClaudioDekker\Firewatch\Mcp\Holdings;
-use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Unit;
@@ -117,7 +117,7 @@ class Describe extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $type = $this->type($request);
+        $type = (new Arguments($request, $this->name()))->type(RecordType::cases(), 'one of the twelve record types or user', 'describe(type: "request")');
         $catalogue = new Catalogue;
 
         $frame = $this->frame($now);
@@ -396,28 +396,5 @@ class Describe extends Tool
         $recipe = trans()->has($key) ? __($key) : null;
 
         return is_string($recipe) ? $recipe : null;
-    }
-
-    /**
-     * Read the type to describe: a record type or user.
-     */
-    protected function type(Request $request): ?RecordType
-    {
-        $value = $request->get('type');
-
-        if ($value === null) {
-            return null;
-        }
-
-        $type = is_string($value) ? RecordType::tryFrom($value) : null;
-
-        if ($type === null) {
-            $accepted = implode(', ', array_map(fn (RecordType $case) => $case->value, RecordType::cases()));
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'type', expected: 'one of the twelve record types or user', value: $shown, accepted: $accepted, example: 'describe(type: "request")');
-        }
-
-        return $type;
     }
 }

@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detector;
@@ -60,11 +61,6 @@ class Detect extends Tool
     protected const MAXIMUM_LIMIT = 100;
 
     /**
-     * What a group id is, as the refusal of a malformed one says it.
-     */
-    protected const GROUP_ID_DESCRIPTION = 'a 32-character lowercase hex group id';
-
-    /**
      * Create a new tool instance.
      */
     public function __construct(
@@ -114,10 +110,11 @@ class Detect extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $shape = $this->shape($request);
+        $arguments = new Arguments($request, $this->name());
+        $shape = $this->shape($arguments);
         $threshold = $this->threshold($request, $shape);
-        $group = $this->group($request, $shape);
-        $limit = $this->limit($request);
+        $group = $this->group($arguments, $shape);
+        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['shape' => $this->detectors->names()[0]]);
 
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
@@ -326,9 +323,9 @@ class Detect extends Tool
     /**
      * Read the shape to run, or null for every shape that ships.
      */
-    protected function shape(Request $request): ?Detector
+    protected function shape(Arguments $arguments): ?Detector
     {
-        $value = $request->get('shape');
+        $value = $arguments->get('shape');
 
         if ($value === null) {
             return null;
@@ -340,10 +337,7 @@ class Detect extends Tool
             return $detector;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $accepted = implode(', ', $names);
-
-        throw Refusal::invalid(argument: 'shape', expected: 'one of the shapes', value: $shown, accepted: $accepted, example: "detect(shape: \"{$names[0]}\")");
+        throw $arguments->invalid(argument: 'shape', expected: 'one of the shapes', accepted: implode(', ', $names), example: "detect(shape: \"{$names[0]}\")");
     }
 
     /**
@@ -373,9 +367,9 @@ class Detect extends Tool
     /**
      * Read the group to restrict the shape to.
      */
-    protected function group(Request $request, ?Detector $shape): ?string
+    protected function group(Arguments $arguments, ?Detector $shape): ?string
     {
-        $value = $request->get('group');
+        $value = $arguments->get('group');
 
         if ($value === null) {
             return null;
@@ -389,33 +383,7 @@ class Detect extends Tool
             throw Refusal::conflicting(argument: 'group', with: 'shape: '.$shape->name()->value, accepted: 'a call without `group`', example: "detect(shape: \"{$shape->name()->value}\")");
         }
 
-        if (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'group', expected: self::GROUP_ID_DESCRIPTION, value: $shown, accepted: self::GROUP_ID_DESCRIPTION, example: "detect(shape: \"{$shape->name()->value}\", group: \"<group id>\")");
-    }
-
-    /**
-     * Read the most findings to list.
-     */
-    protected function limit(Request $request): int
-    {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'detect(shape: "'.$this->detectors->names()[0].'", limit: '.self::DEFAULT_LIMIT.')');
+        return $arguments->group("detect(shape: \"{$shape->name()->value}\", group: \"<group id>\")");
     }
 
     /**

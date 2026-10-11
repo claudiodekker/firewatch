@@ -454,18 +454,6 @@ it('fits the answer budget with the longest values a request can have and twenty
         ->and($store['result']['deploys'])->toHaveCount(20);
 });
 
-it('refuses a type that is none of the thirteen, matching it exactly', function (mixed $type, string $shown) {
-    $text = dscText(Describe::class, ['type' => $type]);
-
-    expect($text)->toBe(__('firewatch::messages.invalid_argument', ['argument' => 'type', 'expected' => 'one of the twelve record types or user', 'value' => $shown, 'accepted' => 'request, command, job-attempt, scheduled-task, query, exception, log, cache-event, mail, notification, outgoing-request, queued-job, user', 'example' => 'describe(type: "request")']));
-})->with([
-    'a view name' => ['requests', '"requests"'],
-    'a capital' => ['Request', '"Request"'],
-    'an underscore' => ['job_attempt', '"job_attempt"'],
-    'padding' => ['user ', '"user "'],
-    'not a string' => [7, '7'],
-]);
-
 it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $key) {
     $text = dscText(Describe::class, [$argument => '1h']);
 

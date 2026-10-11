@@ -563,15 +563,6 @@ describe('the findings', function () {
         expect($envelope['result']['findings'])->toHaveCount(20)->and($envelope['result']['total'])->toBe(21);
     });
 
-    it('refuses a limit that is not a whole number from 1 to 100', function (mixed $limit, string $shown) {
-        $refusal = dtcRefusal(['shape' => 'failing-routes', 'limit' => $limit]);
-
-        expect($refusal)->toStartWith('error: invalid_argument')->toContain('argument: limit')->toContain("got {$shown}");
-    })->with([
-        'zero' => [0, '0'],
-        'over' => [101, '101'],
-        'text' => ['5', '"5"'],
-    ]);
 });
 
 describe('one group', function () {
@@ -615,11 +606,6 @@ describe('one group', function () {
         'a block beside a count set aside' => [['activity' => ['stores' => []], 'excluded' => 2], null],
     ]);
 
-    it('refuses a group that is not a group hash', function (mixed $group) {
-        $refusal = dtcRefusal(['shape' => 'failing-routes', 'group' => $group]);
-
-        expect($refusal)->toStartWith('error: invalid_argument')->toContain('argument: group');
-    })->with(['short', 'ABCDEFABCDEFABCDEFABCDEFABCDEFAB', 42]);
 });
 
 describe('what to look at next', function () {

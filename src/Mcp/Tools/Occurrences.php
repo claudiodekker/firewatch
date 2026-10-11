@@ -2,10 +2,12 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Tools;
 
+use BackedEnum;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
@@ -132,19 +134,20 @@ class Occurrences extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $group = $this->group($request);
-        $type = $this->type($request);
-        $ids = $this->ids($request);
+        $arguments = new Arguments($request, $this->name());
+        $group = $arguments->group('occurrences(group: "<group id>")');
+        $type = $arguments->type(RecordType::events(), 'one of the record types', self::EXAMPLE);
+        $ids = $this->ids($arguments);
 
         if ($group === null && $type === null && array_filter($ids) === []) {
             throw Refusal::missing(argument: 'selector', accepted: 'group, type, execution_id, trace_id, job_id or user_id', example: self::EXAMPLE);
         }
 
-        $order = $this->order($request);
-        $limit = $this->limit($request);
-        $deploy = $this->deploy($request);
+        $order = $arguments->choice('order', Order::cases(), 'one of the orders', 'occurrences(type: "request", order: "slowest")') ?? Order::RECENT;
+        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['type' => 'request']);
+        $deploy = $arguments->deploy('occurrences(type: "request", deploy: "v1")');
         $selector = $group !== null ? 'group' : (array_key_first(array_filter($ids)) ?? 'type');
-        $filters = $this->filters($request);
+        $filters = $this->filters($arguments);
 
         $this->refuseMisfits(filters: $filters, order: $order, type: $type, selector: $selector, resolvable: $group !== null);
 
@@ -454,136 +457,32 @@ class Occurrences extends Tool
     }
 
     /**
-     * Read the group.
-     */
-    protected function group(Request $request): ?string
-    {
-        $value = $request->get('group');
-
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'group', expected: 'a group id of 32 lowercase hex characters', value: $shown, accepted: 'the `group` of a row of `rank` or `occurrences`', example: 'occurrences(group: "'.str_repeat('0', 32).'")');
-    }
-
-    /**
-     * Read the type of the records.
-     */
-    protected function type(Request $request): ?RecordType
-    {
-        $value = $request->get('type');
-
-        if ($value === null) {
-            return null;
-        }
-
-        $type = is_string($value) ? RecordType::tryFrom($value) : null;
-
-        if ($type === null || $type === RecordType::USER) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-            $accepted = implode(', ', array_map(fn (RecordType $type) => $type->value, RecordType::events()));
-
-            throw Refusal::invalid(argument: 'type', expected: 'one of the record types', value: $shown, accepted: $accepted, example: self::EXAMPLE);
-        }
-
-        return $type;
-    }
-
-    /**
      * Read the identifiers that select records.
      *
      * @return array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}
      */
-    protected function ids(Request $request): array
+    protected function ids(Arguments $arguments): array
     {
         return [
-            'execution_id' => $this->id($request, 'execution_id'),
-            'trace_id' => $this->id($request, 'trace_id'),
-            'job_id' => $this->id($request, 'job_id'),
-            'user_id' => $this->id($request, 'user_id'),
+            'execution_id' => $this->id($arguments, 'execution_id'),
+            'trace_id' => $this->id($arguments, 'trace_id'),
+            'job_id' => $this->id($arguments, 'job_id'),
+            'user_id' => $this->id($arguments, 'user_id'),
         ];
     }
 
     /**
      * Read an identifier.
      */
-    protected function id(Request $request, string $argument): ?string
+    protected function id(Arguments $arguments, string $argument): ?string
     {
-        $value = $request->get($argument);
+        $value = $arguments->get($argument);
 
         if ($value === null || (is_string($value) && $value !== '')) {
             return $value;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: $argument, expected: 'an id of at least one character', value: $shown, accepted: "the `{$argument}` of a record", example: "occurrences({$argument}: \"abc\")");
-    }
-
-    /**
-     * Read the order of the list.
-     */
-    protected function order(Request $request): Order
-    {
-        $value = $request->get('order');
-
-        if ($value === null) {
-            return Order::RECENT;
-        }
-
-        $order = is_string($value) ? Order::tryFrom($value) : null;
-
-        if ($order !== null) {
-            return $order;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $accepted = implode(', ', array_map(fn (Order $order) => $order->value, Order::cases()));
-
-        throw Refusal::invalid(argument: 'order', expected: 'one of the orders', value: $shown, accepted: $accepted, example: 'occurrences(type: "request", order: "slowest")');
-    }
-
-    /**
-     * Read the most rows to list.
-     */
-    protected function limit(Request $request): int
-    {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'occurrences(type: "request", limit: '.self::DEFAULT_LIMIT.')');
-    }
-
-    /**
-     * Read the exact deploy the records are restricted to, or null for all of them.
-     */
-    protected function deploy(Request $request): ?string
-    {
-        $value = $request->get('deploy');
-
-        if ($value === null || is_string($value)) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'deploy', expected: 'an exact deploy string', value: $shown, accepted: 'an exact deploy string', example: 'occurrences(type: "request", deploy: "v1")');
+        throw $arguments->invalid(argument: $argument, expected: 'an id of at least one character', accepted: "the `{$argument}` of a record", example: "occurrences({$argument}: \"abc\")");
     }
 
     /**
@@ -591,36 +490,20 @@ class Occurrences extends Tool
      *
      * @return array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}
      */
-    protected function filters(Request $request): array
+    protected function filters(Arguments $arguments): array
     {
-        $status = $this->text($request, 'status');
+        $status = $arguments->text('status', self::EXAMPLE);
 
         return [
-            'method' => $this->text($request, 'method'),
-            'status' => $status === null ? null : $this->status($status),
+            'method' => $arguments->text('method', self::EXAMPLE),
+            'status' => $status === null ? null : $this->status($arguments, $status),
             'status_text' => $status,
-            'outcome' => $this->outcome($request),
-            'level' => $this->level($request),
-            'slower_than_ms' => $this->slowerThan($request),
-            'at_or_above' => $this->percentile($request),
-            'matching' => $this->matching($request),
+            'outcome' => $this->choice($arguments, 'outcome', Outcome::cases(), 'an outcome', 'occurrences(type: "job-attempt", outcome: "failed")'),
+            'level' => $this->choice($arguments, 'level', LogLevel::cases(), 'a log level', 'occurrences(type: "log", level: "error")'),
+            'slower_than_ms' => $this->slowerThan($arguments),
+            'at_or_above' => $this->choice($arguments, 'at_or_above', Percentile::cases(), 'median or p95', 'occurrences(type: "request", at_or_above: "p95")'),
+            'matching' => $this->matching($arguments),
         ];
-    }
-
-    /**
-     * Read a filter that is text.
-     */
-    protected function text(Request $request, string $argument): ?string
-    {
-        $value = $request->get($argument);
-
-        if ($value === null || is_string($value)) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: $argument, expected: 'text', value: $shown, accepted: 'text', example: self::EXAMPLE);
     }
 
     /**
@@ -628,7 +511,7 @@ class Occurrences extends Tool
      *
      * @return array{int, int}
      */
-    protected function status(string $status): array
+    protected function status(Arguments $arguments, string $status): array
     {
         $classes = [
             '1xx' => 100,
@@ -651,85 +534,32 @@ class Occurrences extends Tool
             }
         }
 
-        $shown = json_encode($status, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'status', expected: 'a status such as 500, 5xx or 400-499', value: $shown, accepted: '500, 5xx or 400-499', example: 'occurrences(type: "request", status: "5xx")');
+        throw $arguments->invalid(argument: 'status', expected: 'a status such as 500, 5xx or 400-499', accepted: '500, 5xx or 400-499', example: 'occurrences(type: "request", status: "5xx")');
     }
 
     /**
-     * Read the outcome of a job attempt or a scheduled task.
+     * Read one of the cases of a filter that is text.
+     *
+     * @template TCase of BackedEnum
+     *
+     * @param  list<TCase>  $accepted
+     * @return TCase|null
      */
-    protected function outcome(Request $request): ?Outcome
+    protected function choice(Arguments $arguments, string $argument, array $accepted, string $expected, string $example): ?BackedEnum
     {
-        $value = $this->text($request, 'outcome');
-
-        if ($value === null) {
+        if ($arguments->text($argument, self::EXAMPLE) === null) {
             return null;
         }
 
-        $outcome = Outcome::tryFrom($value);
-
-        if ($outcome !== null) {
-            return $outcome;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $accepted = implode(', ', array_map(fn (Outcome $outcome) => $outcome->value, Outcome::cases()));
-
-        throw Refusal::invalid(argument: 'outcome', expected: 'an outcome', value: $shown, accepted: $accepted, example: 'occurrences(type: "job-attempt", outcome: "failed")');
-    }
-
-    /**
-     * Read the log level the list starts at.
-     */
-    protected function level(Request $request): ?LogLevel
-    {
-        $value = $this->text($request, 'level');
-
-        if ($value === null) {
-            return null;
-        }
-
-        $level = LogLevel::tryFrom($value);
-
-        if ($level !== null) {
-            return $level;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $accepted = implode(', ', array_map(fn (LogLevel $level) => $level->value, LogLevel::cases()));
-
-        throw Refusal::invalid(argument: 'level', expected: 'a log level', value: $shown, accepted: $accepted, example: 'occurrences(type: "log", level: "error")');
-    }
-
-    /**
-     * Read the percentile of the duration the list starts at.
-     */
-    protected function percentile(Request $request): ?Percentile
-    {
-        $value = $this->text($request, 'at_or_above');
-
-        if ($value === null) {
-            return null;
-        }
-
-        $percentile = Percentile::tryFrom($value);
-
-        if ($percentile !== null) {
-            return $percentile;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'at_or_above', expected: 'median or p95', value: $shown, accepted: 'median, p95', example: 'occurrences(type: "request", at_or_above: "p95")');
+        return $arguments->choice($argument, $accepted, $expected, $example);
     }
 
     /**
      * Read the milliseconds a record must be slower than.
      */
-    protected function slowerThan(Request $request): int|float|null
+    protected function slowerThan(Arguments $arguments): int|float|null
     {
-        $value = $request->get('slower_than_ms');
+        $value = $arguments->get('slower_than_ms');
 
         if ($value === null) {
             return null;
@@ -739,17 +569,15 @@ class Occurrences extends Tool
             return $value;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'slower_than_ms', expected: 'a number of milliseconds from 0', value: $shown, accepted: 'a number of milliseconds from 0', example: 'occurrences(type: "request", slower_than_ms: 500)');
+        throw $arguments->invalid(argument: 'slower_than_ms', expected: 'a number of milliseconds from 0', accepted: 'a number of milliseconds from 0', example: 'occurrences(type: "request", slower_than_ms: 500)');
     }
 
     /**
      * Read the text a record must contain.
      */
-    protected function matching(Request $request): ?string
+    protected function matching(Arguments $arguments): ?string
     {
-        $value = $this->text($request, 'matching');
+        $value = $arguments->text('matching', self::EXAMPLE);
 
         if ($value === null) {
             return null;
@@ -759,9 +587,7 @@ class Occurrences extends Tool
             return $value;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'matching', expected: '1 to '.self::MAXIMUM_MATCHING.' characters', value: $shown, accepted: 'a substring of 1 to '.self::MAXIMUM_MATCHING.' characters', example: 'occurrences(type: "log", matching: "timeout")');
+        throw $arguments->invalid(argument: 'matching', expected: '1 to '.self::MAXIMUM_MATCHING.' characters', accepted: 'a substring of 1 to '.self::MAXIMUM_MATCHING.' characters', example: 'occurrences(type: "log", matching: "timeout")');
     }
 
     /**
