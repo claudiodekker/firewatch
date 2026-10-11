@@ -7,17 +7,14 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Accounting;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\BudgetVerdict;
 use ClaudioDekker\Firewatch\Mcp\Children;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
 use ClaudioDekker\Firewatch\Mcp\ExecutionHeader;
-use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
@@ -28,9 +25,7 @@ use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -119,37 +114,28 @@ class Execution extends Tool
         $type = $this->type($request, $id);
         $limit = $this->limit($request);
 
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::none(reason: __('firewatch::messages.execution_window_reason'), timezone: $timezone);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
+        $frame = $this->frame($now);
+        $window = Window::none(reason: __('firewatch::messages.execution_window_reason'), timezone: $frame->timezone);
         $searched = $type === null ? ExecutionType::records() : [RecordType::from($type->value)];
 
-        try {
-            [$total, $oldest, $newest, $facts, $found, $traced] = $this->reader->snapshot(fn (SQLite3 $connection) => $this->load($connection, $id, $type));
-        } catch (StoreUnusable $unusable) {
-            $blindSpots = [...BlindSpots::for($searched, anchored: $id === null), ...$this->conditions->for(null, $searched, $window)];
-            $empty = Emptiness::of($unusable, $this->configuration->database);
-            $coverage = Coverage::of($unusable, $searched, History::unknown(...$retention));
+        $frame->about($searched, $window, anchored: $id === null);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $id, $type));
+
+        if ($read === null) {
+            return $frame->empty();
         }
 
-        $types = $found === null ? $searched : [RecordType::from($found['row']['type']), ...Children::types()];
-        $blindSpots = [...BlindSpots::for($types, anchored: $id === null), ...$this->conditions->for($facts, $types, $window)];
-        $history = History::of($facts->meta, $types, ...$retention);
+        [$found, $traced] = $read;
 
-        if ($total === 0) {
-            $empty = Emptiness::storeEmpty($this->configuration->database);
-            $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
+        $frame->about($found === null ? $searched : [RecordType::from($found['row']['type']), ...Children::types()], $window, anchored: $id === null);
 
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($frame->isEmpty()) {
+            return $frame->empty();
         }
-
-        $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
 
         if ($found !== null) {
-            return $this->execution($epoch, $timezone, $window, $coverage, $blindSpots, $facts, $found, $limit);
+            return $this->execution($frame, $found, $limit);
         }
 
         if ($id !== null) {
@@ -157,18 +143,16 @@ class Execution extends Tool
         }
 
         $filters = [$type === null ? __('firewatch::messages.execution_any_type') : "type: {$type->value}"];
-        $empty = Emptiness::noMatch($total, $filters);
 
-        return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        return $frame->empty(Emptiness::noMatch($frame->facts()->records, $filters));
     }
 
     /**
      * Put one execution in the envelope.
      *
-     * @param  list<array<string, mixed>>  $blindSpots
      * @param  array{row: array<string, mixed>, children: list<array<string, mixed>>}  $found
      */
-    protected function execution(float $epoch, string $timezone, Window $window, Coverage $coverage, array $blindSpots, StoreFacts $facts, array $found, int $limit): Answer
+    protected function execution(Frame $frame, array $found, int $limit): Answer
     {
         $row = $found['row'];
         $children = $found['children'];
@@ -188,7 +172,7 @@ class Execution extends Tool
             $result['request'] = $this->request($row);
         }
 
-        $result['accounting'] = Accounting::of($row, $children, $facts->meta, $timezone);
+        $result['accounting'] = Accounting::of($row, $children, $frame->facts()->meta, $frame->timezone);
         $result['exceptions'] = $exceptions['rows'];
         $result['timeline'] = $timeline->rows;
         $result['caused'] = [
@@ -210,16 +194,9 @@ class Execution extends Tool
 
         $next = $this->next($row, $children);
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $summary,
-            empty: null,
             result: $result,
-            coverage: $coverage,
-            blindSpots: $blindSpots,
             truncated: $truncated,
             next: $next,
             notes: [$budget->line()],
@@ -316,19 +293,16 @@ class Execution extends Tool
     }
 
     /**
-     * Read the store's span and facts, and find the execution, with its children, in one snapshot.
+     * Find the execution, with its children, and whether the id is a trace's.
      *
-     * @return array{int, float|null, float|null, StoreFacts, array{row: array<string, mixed>, children: list<array<string, mixed>>}|null, bool}
+     * @return array{array{row: array<string, mixed>, children: list<array<string, mixed>>}|null, bool}
      */
-    protected function load(SQLite3 $connection, ?string $id, ?ExecutionType $type): array
+    protected function load(SQLite3 $connection, StoreFacts $facts, ?string $id, ?ExecutionType $type): array
     {
-        $span = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
-        $total = is_int($span['total']) ? $span['total'] : 0;
-        $found = $total === 0 ? null : $this->find($connection, $id, $type);
+        $found = $facts->records === 0 ? null : $this->find($connection, $id, $type);
         $traced = $id !== null && $this->isTrace($connection, $id);
-        $facts = StoreFacts::read($connection);
 
-        return [$total, $span['oldest'], $span['newest'], $facts, $found, $traced];
+        return [$found, $traced];
     }
 
     /**

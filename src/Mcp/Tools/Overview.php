@@ -5,28 +5,20 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
-use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\BudgetSection;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Coverage;
-use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Deadline;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\FixedSections;
-use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
-use ClaudioDekker\Firewatch\Mcp\Stored;
-use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
-use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
 use Laravel\Mcp\Request;
@@ -101,64 +93,35 @@ class Overview extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $epoch = Instant::of($now);
-        $timezone = config()->string('app.timezone');
-        $window = Window::read($request, $now, timezone: $timezone, tool: $this->name());
+        $frame = $this->frame($now);
+        $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
         $byDeploy = $this->byDeploy($request);
 
-        $types = RecordType::events();
-        $structural = BlindSpots::for($types, actor: true, storeLevel: true);
-        $retention = [$this->configuration->retentionAgeSeconds, $this->configuration->retentionRecords];
+        $frame->about(RecordType::events(), $window, actor: true, storeLevel: true);
 
-        try {
-            [[$total, $oldest, $newest], $sections, $budgets, $facts, $judgements] = $this->reader->snapshot(fn (SQLite3 $connection) => [
-                $this->countRecords($connection),
-                $byDeploy ? FixedSections::readByDeploy($connection, $window) : FixedSections::read($connection, $window),
-                BudgetSection::read($connection, $window, $this->configuration),
-                StoreFacts::read($connection),
-                $this->detectors->judgeAll($connection, $window, new Deadline($epoch)),
-            ]);
-        } catch (StoreUnusable $unusable) {
-            $blindSpots = [...$structural, ...$this->conditions->for(null, $types, $window)];
-            $empty = Emptiness::of($unusable, $this->configuration->database);
+        $read = $frame->read(fn (SQLite3 $connection) => [
+            $byDeploy ? FixedSections::readByDeploy($connection, $window) : FixedSections::read($connection, $window),
+            BudgetSection::read($connection, $window, $this->configuration),
+            $this->detectors->judgeAll($connection, $window, new Deadline($frame->now)),
+        ]);
 
-            $coverage = Coverage::of($unusable, $types, History::unknown(...$retention));
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+        if ($read === null || $frame->isEmpty()) {
+            return $frame->empty();
         }
 
-        $blindSpots = [...$structural, ...$this->conditions->for($facts, $types, $window)];
-        $history = History::of($facts->meta, $types, ...$retention);
-
-        if ($total === 0) {
-            $empty = Emptiness::storeEmpty($this->configuration->database);
-            $coverage = new Coverage(CoverageState::EMPTY, $types, $history, records: 0);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
-        }
-
-        $coverage = new Coverage(CoverageState::OK, $types, $history, oldest: $oldest, newest: $newest, records: $total);
+        [$sections, $budgets, $judgements] = $read;
 
         if ($sections->records === 0) {
-            $empty = Emptiness::windowEmpty($total);
-
-            return Answer::empty(tool: $this->name(), now: $epoch, timezone: $timezone, window: $window, empty: $empty, coverage: $coverage, blindSpots: $blindSpots);
+            return $frame->empty(Emptiness::windowEmpty($frame->facts()->records));
         }
 
-        return new Answer(
-            tool: $this->name(),
-            now: $epoch,
-            timezone: $timezone,
-            window: $window,
+        return $frame->answer(
             summary: $this->summary($sections, $budgets, $judgements),
-            empty: null,
             result: [
                 ...$sections->result(),
                 ...$budgets->result(),
                 'detectors' => $this->detectorRows($judgements),
             ],
-            coverage: $coverage,
-            blindSpots: $blindSpots,
             notes: $this->notes($sections, $budgets, $window),
             truncated: array_values(array_filter([$budgets->truncation(), $sections->truncation()])),
             next: $this->next($window, $sections, $judgements),
@@ -341,18 +304,5 @@ class Overview extends Tool
         }
 
         return array_slice($calls, 0, Answer::LISTED);
-    }
-
-    /**
-     * Count all records and find the span they cover.
-     *
-     * @return array{int, float|null, float|null}
-     */
-    protected function countRecords(SQLite3 $connection): array
-    {
-        $rows = Stored::rows($connection, 'SELECT count(*) AS total, min(started_at) AS oldest, max(started_at) AS newest FROM records');
-
-        /** @var array{int, float|null, float|null} */
-        return array_values($rows[0]);
     }
 }
