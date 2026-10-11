@@ -60,7 +60,7 @@ class CompiledView
     }
 
     /**
-     * Get the template a compiled file names, relative to the base path as Nightwatch prints a file, or null when the file is gone or names none.
+     * Get the template a compiled file names, as Nightwatch prints a file, or null when the file is gone or names none.
      */
     protected static function template(string $compiled): ?string
     {
@@ -70,9 +70,18 @@ class CompiledView
             return null;
         }
 
-        $base = rtrim(self::comparable(app()->basePath()), '/').'/';
+        return self::printed($matches[1], app()->basePath());
+    }
 
-        return str_starts_with(self::comparable($matches[1]), $base) ? substr($matches[1], strlen($base)) : $matches[1];
+    /**
+     * Get a template's path as Nightwatch prints a file on a host with the given separator: in that separator, since Blade's footer joins the view path and the template with `/`, and relative to the base path when under it.
+     */
+    public static function printed(string $template, string $basePath, string $separator = DIRECTORY_SEPARATOR): string
+    {
+        $file = Recipe::hostFile($template, $separator);
+        $base = rtrim(Recipe::hostFile($basePath, $separator), $separator).$separator;
+
+        return str_starts_with($file, $base) ? substr($file, strlen($base)) : $file;
     }
 
     /**
