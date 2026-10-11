@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Store;
 
+use ClaudioDekker\Firewatch\RecordType;
 use Closure;
 use SQLite3;
 use SQLite3Result;
@@ -60,11 +61,51 @@ class Deletion
     }
 
     /**
+     * Delete one chunk of the records up to an id, of one type or of every type, and get how many there were.
+     */
+    public function deleteThrough(int $through, ?RecordType $type, float $clearedAt): int
+    {
+        return $this->deleteChunk(
+            function (SQLite3 $connection) use ($through, $type) {
+                /** @var SQLite3Stmt $statement */
+                $statement = $connection->prepare('DELETE FROM records WHERE id IN (SELECT id FROM records WHERE id <= :through AND (:type IS NULL OR type = :type) ORDER BY id LIMIT :limit)');
+
+                $statement->bindValue(':through', $through, SQLITE3_INTEGER);
+                $statement->bindValue(':type', $type?->value, $type === null ? SQLITE3_NULL : SQLITE3_TEXT);
+                $statement->bindValue(':limit', $this->chunkRows, SQLITE3_INTEGER);
+                $statement->execute();
+
+                return [$connection->changes(), null];
+            },
+            function (SQLite3 $connection) use ($type, $clearedAt) {
+                if ($type === null) {
+                    Markers::markCleared($connection, $clearedAt);
+                } else {
+                    Markers::markTypeCleared($connection, $type, $clearedAt);
+                }
+            },
+        );
+    }
+
+    /**
      * Give up to the reclaim page count of freed pages back to the file.
      */
     public function reclaim(): void
     {
         $this->writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.$this->reclaimPages.')'));
+    }
+
+    /**
+     * Give every freed page back to the file.
+     */
+    public function reclaimAll(): void
+    {
+        $freePages = Cell::integer($this->writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count')));
+
+        // One step frees a fixed number of pages, so the steps needed are known and the loop always ends.
+        for ($steps = intdiv($freePages + $this->reclaimPages - 1, $this->reclaimPages); $steps > 0; $steps--) {
+            $this->reclaim();
+        }
     }
 
     /**

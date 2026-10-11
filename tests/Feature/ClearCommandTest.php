@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\PendingCommand;
@@ -191,10 +192,7 @@ describe('a store in every state', function () {
     it('says the store is busy after its fixed wait, and deletes nothing', function () {
         clearPopulatedStore();
         $this->endCapture();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
-        {
-            protected const BUSY_TIMEOUT_MILLISECONDS = 20;
-        });
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => new Writer(app(Configuration::class), app(FailureLog::class), busyTimeoutMilliseconds: 20)]));
         $connection = new SQLite3(clearStorePath());
         $connection->busyTimeout(20);
         $connection->exec('PRAGMA journal_mode = DELETE');
@@ -266,20 +264,21 @@ describe('clearing everything', function () {
     it('keeps a batch that arrives while it clears', function () {
         clearPopulatedStore();
         $last = max(clearIds());
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
+        $writer = new class(app(Configuration::class), app(FailureLog::class)) extends Writer
         {
-            protected bool $arrived = false;
+            protected int $transactions = 0;
 
-            protected function deleteChunk(?string $type, int $through): int
+            public function transaction(Closure $callback): mixed
             {
-                if (! $this->arrived) {
-                    $this->arrived = true;
+                // The clear reads the newest id in its first transaction and deletes from its second.
+                if (++$this->transactions === 2) {
                     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776100.0])]);
                 }
 
-                return parent::deleteChunk($type, $through);
+                return parent::transaction($callback);
             }
-        });
+        };
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['writer' => $writer]));
 
         $result = clearResult();
 
@@ -290,10 +289,7 @@ describe('clearing everything', function () {
 
     it('deletes in chunks until none are left up to the newest id it saw', function () {
         clearPopulatedStore();
-        app()->instance(ClearStore::class, new class(app(Reader::class), app(Configuration::class), app(FailureLog::class)) extends ClearStore
-        {
-            protected const CHUNK_ROWS = 2;
-        });
+        app()->instance(ClearStore::class, app()->make(ClearStore::class, ['chunkRows' => 2]));
 
         $result = clearResult();
 

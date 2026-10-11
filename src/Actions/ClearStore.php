@@ -5,9 +5,9 @@ namespace ClaudioDekker\Firewatch\Actions;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
+use ClaudioDekker\Firewatch\Store\Deletion;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Instant;
-use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
@@ -23,32 +23,26 @@ class ClearStore
     /**
      * How long the clear waits for a busy store, in milliseconds, whatever capture is configured to wait.
      */
-    protected const BUSY_TIMEOUT_MILLISECONDS = 5000;
+    public const BUSY_TIMEOUT_MILLISECONDS = 5000;
 
     /**
-     * The most records one delete transaction removes.
+     * The deletion the clear removes records and reclaims pages with.
      */
-    protected const CHUNK_ROWS = 2000;
-
-    /**
-     * The pages one incremental vacuum frees.
-     */
-    protected const RECLAIM_PAGES = 1024;
-
-    /**
-     * The writer the clear runs with, once it is first needed.
-     */
-    protected ?Writer $writer = null;
+    protected Deletion $deletion;
 
     /**
      * Create a new clear store action instance.
+     *
+     * @param  Writer  $writer  a writer of its own, which waits for a busy store as long as the clear does
      */
     public function __construct(
         protected Reader $reader,
         protected Configuration $configuration,
         protected FailureLog $failures,
+        protected Writer $writer,
+        protected int $chunkRows = Deletion::CHUNK_ROWS,
     ) {
-        //
+        $this->deletion = new Deletion($writer, $chunkRows);
     }
 
     /**
@@ -76,14 +70,15 @@ class ClearStore
         $before = $this->size();
         $instant = Instant::now();
 
-        // Stamped before anything is deleted, so a reader that sees a half-cleared store already clips its history; records that arrive meanwhile have newer ids and stay.
-        $through = $this->stamp($type, $instant);
+        // Records that arrive while the clear runs have newer ids and stay.
+        $through = $this->newestId();
         $records = 0;
 
+        // Every chunk writes the marker of the clear, so the first one stamps the clear even when nothing is left to delete.
         do {
-            $removed = $this->deleteChunk($type?->value, $through);
+            $removed = $this->deletion->deleteThrough($through, $type, $instant);
             $records += $removed;
-        } while ($removed === static::CHUNK_ROWS);
+        } while ($removed === $this->chunkRows);
 
         $users = 0;
 
@@ -93,7 +88,7 @@ class ClearStore
             $this->failures->clear();
         }
 
-        $this->giveBackFreePages();
+        $this->deletion->reclaimAll();
 
         $truncated = $this->truncateLog();
 
@@ -115,19 +110,18 @@ class ClearStore
     public function drop(?StoreState $state): array
     {
         $before = $this->size();
-        $writer = $this->writer();
 
         match ($state) {
-            StoreState::CORRUPT => $writer->replaceDamaged(),
-            StoreState::SCHEMA_MISMATCH => $writer->replaceOtherSchema(),
-            default => $writer->rebuild(),
+            StoreState::CORRUPT => $this->writer->replaceDamaged(),
+            StoreState::SCHEMA_MISMATCH => $this->writer->replaceOtherSchema(),
+            default => $this->writer->rebuild(),
         };
 
-        $writer->maintain(fn (SQLite3 $connection) => $connection->exec('VACUUM'));
+        $this->writer->maintain(fn (SQLite3 $connection) => $connection->exec('VACUUM'));
 
         $this->failures->clear();
 
-        $this->giveBackFreePages();
+        $this->deletion->reclaimAll();
 
         $truncated = $this->truncateLog();
 
@@ -140,39 +134,11 @@ class ClearStore
     }
 
     /**
-     * Write the marker of the clear and read the newest id, in one transaction.
+     * Read the newest id the store holds.
      */
-    protected function stamp(?RecordType $type, float $instant): int
+    protected function newestId(): int
     {
-        return $this->writer()->transaction(function (SQLite3 $connection) use ($type, $instant) {
-            $through = Cell::integer($connection->querySingle('SELECT coalesce(max(id), 0) FROM records'));
-
-            if ($type === null) {
-                Markers::markCleared($connection, $instant);
-            } else {
-                Markers::markTypeCleared($connection, $type, $instant);
-            }
-
-            return $through;
-        });
-    }
-
-    /**
-     * Delete one chunk of the records up to the newest id the clear saw.
-     */
-    protected function deleteChunk(?string $type, int $through): int
-    {
-        return $this->writer()->transaction(function (SQLite3 $connection) use ($type, $through) {
-            /** @var SQLite3Stmt $statement */
-            $statement = $connection->prepare('DELETE FROM records WHERE id IN (SELECT id FROM records WHERE id <= :through AND (:type IS NULL OR type = :type) ORDER BY id LIMIT :limit)');
-
-            $statement->bindValue(':through', $through, SQLITE3_INTEGER);
-            $statement->bindValue(':type', $type, $type === null ? SQLITE3_NULL : SQLITE3_TEXT);
-            $statement->bindValue(':limit', static::CHUNK_ROWS, SQLITE3_INTEGER);
-            $statement->execute();
-
-            return $connection->changes();
-        });
+        return Cell::integer($this->writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('SELECT coalesce(max(id), 0) FROM records')));
     }
 
     /**
@@ -180,7 +146,7 @@ class ClearStore
      */
     protected function deleteUsers(float $instant): int
     {
-        return $this->writer()->transaction(function (SQLite3 $connection) use ($instant) {
+        return $this->writer->transaction(function (SQLite3 $connection) use ($instant) {
             /** @var SQLite3Stmt $statement */
             $statement = $connection->prepare('DELETE FROM users WHERE last_seen <= :instant');
 
@@ -192,26 +158,11 @@ class ClearStore
     }
 
     /**
-     * Give every freed page back to the file.
-     */
-    protected function giveBackFreePages(): void
-    {
-        $writer = $this->writer();
-
-        $freePages = Cell::integer($writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count')));
-        // One step frees a fixed number of pages, so the steps needed are known and the loop always ends.
-
-        for ($steps = intdiv($freePages + static::RECLAIM_PAGES - 1, static::RECLAIM_PAGES); $steps > 0; $steps--) {
-            $writer->transaction(fn (SQLite3 $connection) => $connection->exec('PRAGMA incremental_vacuum('.static::RECLAIM_PAGES.')'));
-        }
-    }
-
-    /**
      * Truncate the write-ahead log, and determine if it was: a reader that still uses the log keeps it from being truncated.
      */
     protected function truncateLog(): bool
     {
-        $checkpoint = $this->writer()->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA wal_checkpoint(TRUNCATE)', entireRow: true));
+        $checkpoint = $this->writer->maintain(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA wal_checkpoint(TRUNCATE)', entireRow: true));
 
         return ! (is_array($checkpoint) && Cell::integer($checkpoint['busy']) === 1);
     }
@@ -224,13 +175,5 @@ class ClearStore
         clearstatcache();
 
         return Cell::integer(@filesize($this->configuration->database)) + Cell::integer(@filesize($this->configuration->database.'-wal'));
-    }
-
-    /**
-     * Get the writer the clear runs with.
-     */
-    protected function writer(): Writer
-    {
-        return $this->writer ??= new Writer($this->configuration, $this->failures, busyTimeoutMilliseconds: static::BUSY_TIMEOUT_MILLISECONDS);
     }
 }
