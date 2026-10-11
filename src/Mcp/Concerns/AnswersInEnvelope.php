@@ -101,20 +101,10 @@ trait AnswersInEnvelope
                 continue;
             }
 
-            throw in_array($argument, $this->knownArguments(), true)
+            throw in_array($argument, FirewatchServer::arguments(), true)
                 ? Refusal::inapplicable(argument: $argument, tool: $this->name(), accepted: $accepted)
                 : Refusal::unknown(argument: $argument, tool: $this->name(), accepted: $accepted);
         }
-    }
-
-    /**
-     * Get the arguments any tool of the server takes.
-     *
-     * @return list<string>
-     */
-    protected function knownArguments(): array
-    {
-        return FirewatchServer::arguments();
     }
 
     /**
