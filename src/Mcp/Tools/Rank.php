@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Cursor;
@@ -56,11 +57,6 @@ class Rank extends Tool
      * The most rows an answer lists.
      */
     protected const MAXIMUM_LIMIT = 100;
-
-    /**
-     * What a group id is, as the refusal of a malformed one says it.
-     */
-    protected const GROUP_ID_DESCRIPTION = 'a 32-character lowercase hex group id';
 
     /**
      * The most characters a label match has.
@@ -119,17 +115,21 @@ class Rank extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $group = $this->group($request);
-        $matching = $this->matching($request);
-        $explicit = $this->type($request, $group === null);
-        $limit = $this->limit($request, $explicit);
-        $deploy = $this->deploy($request, $explicit);
+        $arguments = new Arguments($request, $this->name());
+        $group = $arguments->group('rank(group: "<group id>")');
+        $matching = $this->matching($arguments);
+        $explicit = $arguments->typeWithGroups($group, 'rank(type: "request", by: "p95_duration")');
+        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: $explicit === null ? ['group' => '<group id>'] : ['type' => $explicit->value]);
+        $deploy = $arguments->deploy($this->call([
+            'type' => ($explicit ?? RecordType::REQUEST)->value,
+            'deploy' => 'v1',
+        ]));
 
         if ($group !== null) {
             $this->refuseWithGroup($request);
         }
 
-        $by = $explicit === null ? null : $this->measure($request, $explicit, $group);
+        $by = $explicit === null ? null : $this->measure($arguments, $explicit, $group);
 
         $cursorValue = $request->get('cursor');
         $cursor = $cursorValue === null ? null : Cursor::read(value: $cursorValue, tool: $this->name(), arguments: $request->all(), key: $this->key(...));
@@ -142,24 +142,16 @@ class Rank extends Tool
 
         $frame->about($explicit === null ? [] : [$explicit], $window);
 
-        $read = $frame->read(function (SQLite3 $connection) use ($request, $window, $group, $explicit, $matching, $deploy, $limit, $by, $cursor, $filters) {
+        $read = $frame->read(function (SQLite3 $connection) use ($request, $arguments, $window, $group, $explicit, $matching, $deploy, $limit, $by, $cursor, $filters) {
             $inWindow = $this->inWindow($connection, $window);
-            $held = $group === null ? [] : Ranking::holders($connection, $group);
-
-            if ($group !== null && $explicit !== null && $held !== [] && ! in_array($explicit, $held, true)) {
-                $holding = implode(', ', array_map(fn (RecordType $type) => $type->value, $held));
-
-                throw Refusal::conflicting(argument: 'type', with: 'group', accepted: "a type that holds the group: {$holding}", example: "rank(group: \"{$group}\")");
-            }
-
-            $type = $explicit ?? ($group === null ? null : Ranking::preferred($held));
+            [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "rank(group: \"{$group}\")");
             $unranked = fn (Frame $frame) => $this->unranked($frame, $filters, $inWindow, $group, $held);
 
             if ($type === null || ($group !== null && $held === [])) {
                 return [$type, $unranked];
             }
 
-            $measure = $by ?? $this->measure($request, $type, $group);
+            $measure = $by ?? $this->measure($arguments, $type, $group);
             $ranking = new Ranking($type, $measure, $window, $deploy, $matching, $group, $this->configuration);
 
             if ($inWindow === 0) {
@@ -392,118 +384,23 @@ class Rank extends Tool
     }
 
     /**
-     * Read the type to rank.
-     */
-    protected function type(Request $request, bool $required): ?RecordType
-    {
-        $types = implode(', ', array_map(fn (RecordType $type) => $type->value, Measure::types()));
-        $example = 'rank(type: "request", by: "p95_duration")';
-        $value = $request->get('type');
-
-        if ($value === null) {
-            return $required ? throw Refusal::missing(argument: 'type', accepted: $types, example: $example) : null;
-        }
-
-        $type = is_string($value) ? RecordType::tryFrom($value) : null;
-
-        if ($type === null || ! in_array($type, Measure::types(), true)) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'type', expected: 'one of the types with groups', value: $shown, accepted: $types, example: $example);
-        }
-
-        return $type;
-    }
-
-    /**
      * Read the measure to rank by.
      */
-    protected function measure(Request $request, RecordType $type, ?string $group): Measure
+    protected function measure(Arguments $arguments, RecordType $type, ?string $group): Measure
     {
-        $value = $request->get('by');
         $default = Measure::default($type);
-
-        if ($value === null) {
-            return $default;
-        }
-
-        $measure = is_string($value) ? Measure::tryFrom($value) : null;
-
         $fitting = $group === null ? Measure::for($type) : Measure::forBreakdown($type);
-
-        if ($measure !== null && in_array($measure, $fitting, true)) {
-            return $measure;
-        }
-
         $expected = "a measure of {$type->value}".($group === null ? '' : ' in a breakdown of one group');
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $accepted = implode(', ', array_map(fn (Measure $measure) => $measure->value, $fitting));
 
-        throw Refusal::invalid(argument: 'by', expected: $expected, value: $shown, accepted: $accepted, example: "rank(type: \"{$type->value}\", by: \"{$default->value}\")");
-    }
-
-    /**
-     * Read the most rows to list.
-     */
-    protected function limit(Request $request, ?RecordType $type): int
-    {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: ($type === null ? 'rank(group: "<group id>", limit: ' : "rank(type: \"{$type->value}\", limit: ").self::DEFAULT_LIMIT.')');
-    }
-
-    /**
-     * Read the exact deploy the records are restricted to, or null for all of them.
-     */
-    protected function deploy(Request $request, ?RecordType $type): ?string
-    {
-        $value = $request->get('deploy');
-
-        if ($value === null || is_string($value)) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'deploy', expected: 'an exact deploy string', value: $shown, accepted: 'an exact deploy string', example: ($type === null ? 'rank(type: "request", deploy: "v1")' : "rank(type: \"{$type->value}\", deploy: \"v1\")"));
-    }
-
-    /**
-     * Read the group to break down.
-     */
-    protected function group(Request $request): ?string
-    {
-        $value = $request->get('group');
-
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'group', expected: self::GROUP_ID_DESCRIPTION, value: $shown, accepted: self::GROUP_ID_DESCRIPTION, example: 'rank(group: "<group id>")');
+        return $arguments->choice('by', $fitting, $expected, "rank(type: \"{$type->value}\", by: \"{$default->value}\")") ?? $default;
     }
 
     /**
      * Read the text a group's label must contain.
      */
-    protected function matching(Request $request): ?string
+    protected function matching(Arguments $arguments): ?string
     {
-        $value = $request->get('matching');
+        $value = $arguments->get('matching');
 
         if ($value === null) {
             return null;
@@ -513,9 +410,7 @@ class Rank extends Tool
             return $value;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'matching', expected: '1 to '.self::MAXIMUM_MATCHING.' characters', value: $shown, accepted: 'a text of 1 to '.self::MAXIMUM_MATCHING.' characters', example: 'rank(type: "request", matching: "orders")');
+        throw $arguments->invalid(argument: 'matching', expected: '1 to '.self::MAXIMUM_MATCHING.' characters', accepted: 'a text of 1 to '.self::MAXIMUM_MATCHING.' characters', example: 'rank(type: "request", matching: "orders")');
     }
 
     /**

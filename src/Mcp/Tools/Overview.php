@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\BudgetSection;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -15,7 +16,6 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\Measure;
-use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -95,7 +95,7 @@ class Overview extends Tool
     {
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
-        $byDeploy = $this->byDeploy($request);
+        $byDeploy = $this->byDeploy(new Arguments($request, $this->name()));
 
         $frame->about(RecordType::events(), $window, actor: true, storeLevel: true);
 
@@ -132,17 +132,15 @@ class Overview extends Tool
     /**
      * Read whether the slowest groups are broken down per deploy.
      */
-    protected function byDeploy(Request $request): bool
+    protected function byDeploy(Arguments $arguments): bool
     {
-        $value = $request->get('by_deploy');
+        $value = $arguments->get('by_deploy');
 
         if ($value === null || is_bool($value)) {
             return $value ?? false;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'by_deploy', expected: 'true or false', value: $shown, accepted: 'true or false', example: 'overview(by_deploy: true)');
+        throw $arguments->invalid(argument: 'by_deploy', expected: 'true or false', accepted: 'true or false', example: 'overview(by_deploy: true)');
     }
 
     /**

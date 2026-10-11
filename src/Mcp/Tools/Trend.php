@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Buckets;
 use ClaudioDekker\Firewatch\Mcp\ComparisonReason;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
@@ -12,7 +13,6 @@ use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Measure;
-use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
@@ -59,11 +59,6 @@ class Trend extends Tool
      * The most buckets a trend has.
      */
     protected const MOST_BUCKETS = 60;
-
-    /**
-     * What a group id is, as the refusal of a malformed one says it.
-     */
-    protected const GROUP_ID_DESCRIPTION = 'a 32-character lowercase hex group id';
 
     /**
      * The call a refusal shows when it has no better one.
@@ -120,13 +115,14 @@ class Trend extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $group = $this->group($request);
-        $explicit = $this->type($request, $group === null);
-        $count = $this->buckets($request);
-        $deploy = $this->deploy($request);
+        $arguments = new Arguments($request, $this->name());
+        $group = $arguments->group('trend(group: "<group id>")');
+        $explicit = $arguments->typeWithGroups($group, self::EXAMPLE);
+        $count = $arguments->between('buckets', minimum: self::FEWEST_BUCKETS, maximum: self::MOST_BUCKETS, default: self::DEFAULT_BUCKETS, alongside: ['type' => 'request']);
+        $deploy = $arguments->deploy('trend(type: "request", deploy: "v1")');
 
         if ($explicit !== null) {
-            $this->measure($request, $explicit);
+            $this->measure($arguments, $explicit);
         }
 
         $frame = $this->frame($now);
@@ -134,7 +130,7 @@ class Trend extends Tool
 
         $frame->about($explicit === null ? [] : [$explicit], $given->derive(null, null), anchored: true);
 
-        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $request, $given, $explicit, $group, $deploy, $count));
+        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => $this->load($connection, $facts, $arguments, $given, $explicit, $group, $deploy, $count));
 
         if ($read === null) {
             return $frame->empty();
@@ -202,21 +198,13 @@ class Trend extends Tool
      *
      * @return array{RecordType|null, list<RecordType>, Window, int, Buckets|null}
      */
-    protected function load(SQLite3 $connection, StoreFacts $facts, Request $request, Window $given, ?RecordType $explicit, ?string $group, ?string $deploy, int $count): array
+    protected function load(SQLite3 $connection, StoreFacts $facts, Arguments $arguments, Window $given, ?RecordType $explicit, ?string $group, ?string $deploy, int $count): array
     {
-        $held = $group === null ? [] : Ranking::holders($connection, $group);
-
-        if ($group !== null && $explicit !== null && $held !== [] && ! in_array($explicit, $held, true)) {
-            $holding = implode(', ', array_map(fn (RecordType $type) => $type->value, $held));
-
-            throw Refusal::conflicting(argument: 'type', with: 'group', accepted: "a type that holds the group: {$holding}", example: "trend(group: \"{$group}\")");
-        }
-
-        $type = $explicit ?? Ranking::preferred($held);
+        [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "trend(group: \"{$group}\")");
         $buckets = null;
 
         if ($type !== null) {
-            $by = $this->measure($request, $type);
+            $by = $this->measure($arguments, $type);
             $coverageStart = $facts->historyFrom([$type]);
             $buckets = Buckets::read($connection, $type, $by, $given, $coverageStart, $group, $deploy, $count);
         }
@@ -332,110 +320,18 @@ class Trend extends Tool
     }
 
     /**
-     * Read the type to trend.
-     */
-    protected function type(Request $request, bool $required): ?RecordType
-    {
-        $types = implode(', ', array_map(fn (RecordType $type) => $type->value, Measure::types()));
-        $value = $request->get('type');
-
-        if ($value === null) {
-            return $required ? throw Refusal::missing(argument: 'type', accepted: $types, example: self::EXAMPLE) : null;
-        }
-
-        $type = is_string($value) ? RecordType::tryFrom($value) : null;
-
-        if ($type === null || ! in_array($type, Measure::types(), true)) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'type', expected: 'one of the types with groups', value: $shown, accepted: $types, example: self::EXAMPLE);
-        }
-
-        return $type;
-    }
-
-    /**
      * Read the measure to trend by; a percentile per bucket is refused with a pointer to rank.
      */
-    protected function measure(Request $request, RecordType $type): Measure
+    protected function measure(Arguments $arguments, RecordType $type): Measure
     {
-        $value = $request->get('by');
-
-        if ($value === null) {
-            return Measure::OCCURRENCES;
-        }
-
+        $value = $arguments->get('by');
         $measure = is_string($value) ? Measure::tryFrom($value) : null;
         $fitting = Measure::trended($type);
 
-        if ($measure !== null && in_array($measure, $fitting, true)) {
-            return $measure;
+        if ($measure?->percentile() !== null && ! in_array($measure, $fitting, true)) {
+            throw $arguments->invalid(argument: 'by', expected: 'a measure per bucket; a percentile per bucket is never shown', accepted: implode(', ', array_map(fn (Measure $measure) => $measure->value, $fitting)), example: "rank(type: \"{$type->value}\", by: \"{$measure->value}\")");
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $accepted = implode(', ', array_map(fn (Measure $measure) => $measure->value, $fitting));
-
-        if ($measure?->percentile() !== null) {
-            throw Refusal::invalid(argument: 'by', expected: 'a measure per bucket; a percentile per bucket is never shown', value: $shown, accepted: $accepted, example: "rank(type: \"{$type->value}\", by: \"{$measure->value}\")");
-        }
-
-        throw Refusal::invalid(argument: 'by', expected: "a measure of {$type->value} per bucket", value: $shown, accepted: $accepted, example: "trend(type: \"{$type->value}\", by: \"occurrences\")");
-    }
-
-    /**
-     * Read how many buckets to cut the window into.
-     */
-    protected function buckets(Request $request): int
-    {
-        $value = $request->get('buckets');
-
-        if ($value === null) {
-            return self::DEFAULT_BUCKETS;
-        }
-
-        if (is_int($value) && $value >= self::FEWEST_BUCKETS && $value <= self::MOST_BUCKETS) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-        $range = self::FEWEST_BUCKETS.' to '.self::MOST_BUCKETS;
-
-        throw Refusal::invalid(argument: 'buckets', expected: $range, value: $shown, accepted: "a whole number from {$range}", example: 'trend(type: "request", buckets: '.self::DEFAULT_BUCKETS.')');
-    }
-
-    /**
-     * Read the group to trend.
-     */
-    protected function group(Request $request): ?string
-    {
-        $value = $request->get('group');
-
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'group', expected: self::GROUP_ID_DESCRIPTION, value: $shown, accepted: self::GROUP_ID_DESCRIPTION, example: 'trend(group: "<group id>")');
-    }
-
-    /**
-     * Read the exact deploy whose records alone count.
-     */
-    protected function deploy(Request $request): ?string
-    {
-        $value = $request->get('deploy');
-
-        if ($value === null || is_string($value)) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'deploy', expected: 'an exact deploy string', value: $shown, accepted: 'an exact deploy string', example: 'trend(type: "request", deploy: "v1")');
+        return $arguments->choice('by', $fitting, "a measure of {$type->value} per bucket", "trend(type: \"{$type->value}\", by: \"occurrences\")") ?? Measure::OCCURRENCES;
     }
 }

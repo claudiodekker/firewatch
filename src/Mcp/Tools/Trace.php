@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\ExecutionHeader;
@@ -105,10 +106,11 @@ class Trace extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $traceId = $this->id($request, 'trace_id');
-        $jobId = $this->id($request, 'job_id');
+        $arguments = new Arguments($request, $this->name());
+        $traceId = $this->id($arguments, 'trace_id');
+        $jobId = $this->id($arguments, 'job_id');
         $this->requireOne($traceId, $jobId);
-        $limit = $this->limit($request);
+        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['trace_id' => '<trace id>']);
 
         $frame = $this->frame($now);
 
@@ -320,9 +322,9 @@ class Trace extends Tool
     /**
      * Read an id, or null for none.
      */
-    protected function id(Request $request, string $argument): ?string
+    protected function id(Arguments $arguments, string $argument): ?string
     {
-        $value = $request->get($argument);
+        $value = $arguments->get($argument);
 
         if ($value === null) {
             return null;
@@ -332,10 +334,9 @@ class Trace extends Tool
             return $value;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
         $name = str_replace('_id', ' id', $argument);
 
-        throw Refusal::invalid(argument: $argument, expected: 'a non-empty string', value: $shown, accepted: "a {$name}", example: "trace({$argument}: \"<{$name}>\")");
+        throw $arguments->invalid(argument: $argument, expected: 'a non-empty string', accepted: "a {$name}", example: "trace({$argument}: \"<{$name}>\")");
     }
 
     /**
@@ -350,25 +351,5 @@ class Trace extends Tool
         if ($traceId !== null && $jobId !== null) {
             throw Refusal::conflicting(argument: 'job_id', with: 'trace_id', accepted: 'a call with `trace_id` or with `job_id`, not both', example: 'trace(trace_id: "<trace id>")');
         }
-    }
-
-    /**
-     * Read the most executions to list.
-     */
-    protected function limit(Request $request): int
-    {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'trace(trace_id: "<trace id>", limit: '.self::DEFAULT_LIMIT.')');
     }
 }

@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
@@ -150,9 +151,10 @@ class Fingerprint extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
-        $type = $this->type($request);
-        $fields = $this->fields($request, $type);
-        $driver = $this->driver($request);
+        $arguments = new Arguments($request, $this->name());
+        $type = $this->type($arguments);
+        $fields = $this->fields($arguments, $type);
+        $driver = $this->driver($arguments);
         $candidates = Recipe::candidates($type, $fields, $driver);
         $types = $this->types($type);
 
@@ -220,29 +222,18 @@ class Fingerprint extends Tool
     /**
      * Read the type to fingerprint: one of the ten types whose group source can give.
      */
-    protected function type(Request $request): RecordType
+    protected function type(Arguments $arguments): RecordType
     {
-        $value = $request->get('type');
         $accepted = implode(', ', array_keys(self::ARGUMENTS));
         $example = $this->example(RecordType::REQUEST);
+        $value = $arguments->get('type');
+        $named = is_string($value) ? RecordType::tryFrom($value) : null;
 
-        if ($value === null) {
-            throw Refusal::missing('type', $accepted, $example);
+        if ($named !== null && ! array_key_exists($named->value, self::ARGUMENTS)) {
+            throw Refusal::noRecipe($named->value, $accepted, $example);
         }
 
-        $type = is_string($value) ? RecordType::tryFrom($value) : null;
-
-        if ($type === null) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'type', expected: 'one of the ten types with a recipe', value: $shown, accepted: $accepted, example: $example);
-        }
-
-        if (! array_key_exists($type->value, self::ARGUMENTS)) {
-            throw Refusal::noRecipe($type->value, $accepted, $example);
-        }
-
-        return $type;
+        return $arguments->requiredType(array_map(RecordType::from(...), array_keys(self::ARGUMENTS)), 'one of the ten types with a recipe', $example);
     }
 
     /**
@@ -250,18 +241,18 @@ class Fingerprint extends Tool
      *
      * @return array<string, mixed>
      */
-    protected function fields(Request $request, RecordType $type): array
+    protected function fields(Arguments $arguments, RecordType $type): array
     {
         $taken = $this->arguments($type);
 
-        foreach (array_keys($request->all()) as $argument) {
+        foreach ($arguments->names() as $argument) {
             if (! in_array($argument, ['type', 'format'], true) && ! in_array($argument, $taken, true)) {
                 throw Refusal::conflicting(argument: $argument, with: "type: {$type->value}", accepted: $this->accepted($type), example: $this->example($type));
             }
         }
 
         foreach ($taken as $argument) {
-            if ($request->get($argument) === null && ! in_array($argument, self::OPTIONAL, true)) {
+            if ($arguments->get($argument) === null && ! in_array($argument, self::OPTIONAL, true)) {
                 throw Refusal::missing($argument, $this->accepted($type), $this->example($type));
             }
         }
@@ -269,10 +260,10 @@ class Fingerprint extends Tool
         $fields = $this->defaults($type);
 
         foreach (array_diff($taken, ['driver']) as $argument) {
-            $value = $request->get($argument);
+            $value = $arguments->get($argument);
 
             if ($value !== null) {
-                $fields[self::FIELDS[$argument] ?? $argument] = $this->value($type, $argument, $value);
+                $fields[self::FIELDS[$argument] ?? $argument] = $this->value($arguments, $type, $argument, $value);
             }
         }
 
@@ -282,18 +273,16 @@ class Fingerprint extends Tool
     /**
      * Read the driver of a query's connection, which picks one reading of its SQL.
      */
-    protected function driver(Request $request): ?string
+    protected function driver(Arguments $arguments): ?string
     {
-        $value = $request->get('driver');
+        $value = $arguments->get('driver');
 
         if ($value === null) {
             return null;
         }
 
         if (! is_string($value) || $value === '') {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'driver', expected: 'a non-empty string', value: $shown, accepted: 'a driver name, such as "mysql"', example: $this->example(RecordType::QUERY));
+            throw $arguments->invalid(argument: 'driver', expected: 'a non-empty string', accepted: 'a driver name, such as "mysql"', example: $this->example(RecordType::QUERY));
         }
 
         return strtolower($value);
@@ -329,14 +318,14 @@ class Fingerprint extends Tool
     /**
      * Read one source argument as the field its recipe reads.
      */
-    protected function value(RecordType $type, string $argument, mixed $value): mixed
+    protected function value(Arguments $arguments, RecordType $type, string $argument, mixed $value): mixed
     {
         return match ($argument) {
-            'methods' => $this->methods($type, $value),
-            'path' => '/'.trim($this->text($type, $argument, $value), '/'),
-            'domain' => str_replace(['http://', 'https://'], '', $this->text($type, $argument, $value)),
-            'repeat_seconds' => $this->repeatSeconds($type, $value),
-            default => $this->text($type, $argument, $value),
+            'methods' => $this->methods($arguments, $type, $value),
+            'path' => '/'.trim($this->text($arguments, $type, $argument, $value), '/'),
+            'domain' => str_replace(['http://', 'https://'], '', $this->text($arguments, $type, $argument, $value)),
+            'repeat_seconds' => $this->repeatSeconds($arguments, $type, $value),
+            default => $this->text($arguments, $type, $argument, $value),
         };
     }
 
@@ -345,12 +334,10 @@ class Fingerprint extends Tool
      *
      * @return list<string>
      */
-    protected function methods(RecordType $type, mixed $value): array
+    protected function methods(Arguments $arguments, RecordType $type, mixed $value): array
     {
         if (! $this->isMethods($value)) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'methods', expected: 'a non-empty list of uppercase HTTP methods', value: $shown, accepted: 'uppercase HTTP methods, such as ["GET","HEAD"]', example: $this->example($type));
+            throw $arguments->invalid(argument: 'methods', expected: 'a non-empty list of uppercase HTTP methods', accepted: 'uppercase HTTP methods, such as ["GET","HEAD"]', example: $this->example($type));
         }
 
         $methods = array_values(array_unique(in_array('GET', $value, true) ? [...$value, 'HEAD'] : $value));
@@ -377,12 +364,10 @@ class Fingerprint extends Tool
     /**
      * Read the repeat seconds of a task: 0, or a number of seconds that divides the minute.
      */
-    protected function repeatSeconds(RecordType $type, mixed $value): int
+    protected function repeatSeconds(Arguments $arguments, RecordType $type, mixed $value): int
     {
         if (! is_int($value) || ! in_array($value, self::REPEAT_SECONDS, true)) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: 'repeat_seconds', expected: 'a whole number of seconds that divides the minute', value: $shown, accepted: '0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20 or 30', example: $this->example($type));
+            throw $arguments->invalid(argument: 'repeat_seconds', expected: 'a whole number of seconds that divides the minute', accepted: '0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20 or 30', example: $this->example($type));
         }
 
         return $value;
@@ -391,12 +376,10 @@ class Fingerprint extends Tool
     /**
      * Read a source argument that is text.
      */
-    protected function text(RecordType $type, string $argument, mixed $value): string
+    protected function text(Arguments $arguments, RecordType $type, string $argument, mixed $value): string
     {
         if (! is_string($value)) {
-            $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-            throw Refusal::invalid(argument: $argument, expected: 'a string', value: $shown, accepted: 'a string', example: $this->example($type));
+            throw $arguments->invalid(argument: $argument, expected: 'a string', accepted: 'a string', example: $this->example($type));
         }
 
         return $value;

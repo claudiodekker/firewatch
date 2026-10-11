@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp\Tools;
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
+use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Bounds;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
@@ -123,8 +124,9 @@ class Query extends Tool
             throw Refusal::sql(SqlFailure::unavailable($reason));
         }
 
-        $sql = $this->sql($request);
-        $limit = $this->limit($request);
+        $arguments = new Arguments($request, $this->name());
+        $sql = $this->sql($arguments);
+        $limit = $arguments->limit(self::MAXIMUM_LIMIT, self::DEFAULT_LIMIT, alongside: ['sql' => 'SELECT * FROM requests']);
 
         $frame = $this->frame($now);
         $window = Window::none(reason: __('firewatch::messages.query_window_reason'), timezone: $frame->timezone);
@@ -146,8 +148,6 @@ class Query extends Tool
 
     /**
      * Run the statement on a store that can be read, refusing a statement that fails.
-     *
-     * @param  int<1, 500>  $limit
      */
     protected function run(string $sql, int $limit): SqlRows
     {
@@ -276,9 +276,9 @@ class Query extends Tool
     /**
      * Read the statement, refusing one that is missing or empty.
      */
-    protected function sql(Request $request): string
+    protected function sql(Arguments $arguments): string
     {
-        $value = $request->get('sql');
+        $value = $arguments->get('sql');
 
         if ($value === null || $value === '') {
             throw Refusal::missing(argument: 'sql', accepted: self::ACCEPTED, example: self::EXAMPLE);
@@ -288,30 +288,6 @@ class Query extends Tool
             return $value;
         }
 
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'sql', expected: 'a string', value: $shown, accepted: self::ACCEPTED, example: self::EXAMPLE);
-    }
-
-    /**
-     * Read the most rows to return.
-     *
-     * @return int<1, 500>
-     */
-    protected function limit(Request $request): int
-    {
-        $value = $request->get('limit');
-
-        if ($value === null) {
-            return self::DEFAULT_LIMIT;
-        }
-
-        if (is_int($value) && $value >= 1 && $value <= self::MAXIMUM_LIMIT) {
-            return $value;
-        }
-
-        $shown = json_encode($value, JSON_THROW_ON_ERROR);
-
-        throw Refusal::invalid(argument: 'limit', expected: '1 to '.self::MAXIMUM_LIMIT, value: $shown, accepted: 'a whole number from 1 to '.self::MAXIMUM_LIMIT, example: 'query(sql: "SELECT * FROM requests", limit: '.self::DEFAULT_LIMIT.')');
+        throw $arguments->invalid(argument: 'sql', expected: 'a string', accepted: self::ACCEPTED, example: self::EXAMPLE);
     }
 }
