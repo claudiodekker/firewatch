@@ -21,11 +21,20 @@ test('the package requires exactly what the install decision lists', function ()
     ]);
 });
 
-test('every Illuminate component and extension the source uses is required', function () {
+test('every Illuminate namespace and mb_ or ctype_ function family the source uses is required', function () {
     $require = array_keys(PackageSource::manifest()['require']);
     $needed = PackageSource::requiredPackages();
 
-    expect($needed)->not->toBeEmpty();
+    expect($needed)->toBe([
+        'ext-ctype',
+        'ext-mbstring',
+        'illuminate/console',
+        'illuminate/contracts',
+        'illuminate/database',
+        'illuminate/events',
+        'illuminate/json-schema',
+        'illuminate/support',
+    ]);
     expect(array_values(array_diff($needed, $require)))->toBe([]);
 });
 

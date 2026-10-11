@@ -22,6 +22,8 @@ class PackageSource
 
     protected const ROOT_NAMESPACE = 'ClaudioDekker\\Firewatch\\';
 
+    protected const LARAVEL_FRAMEWORK_NAMESPACES = ['Foundation'];
+
     protected const CONSOLE_OUTPUT_METHODS = ['info', 'line', 'comment', 'question', 'warn', 'error', 'alert', 'newLine', 'table', 'write', 'writeln'];
 
     protected const STDOUT_NAMES = ['STDOUT', 'printf', 'vprintf', 'fpassthru', 'readfile', 'passthru'];
@@ -35,9 +37,6 @@ class PackageSource
     }
 
     /**
-     * The composer packages `src` imports: one `illuminate/*` component per `Illuminate\X` namespace and one `ext-*` per extension function prefix.
-     * `Illuminate\Foundation` has no split package and is left out: the host Laravel application provides it.
-     *
      * @return list<string>
      */
     public static function requiredPackages(): array
@@ -48,7 +47,7 @@ class PackageSource
             preg_match_all('/Illuminate\\\\(\w+)\\\\/', $contents, $namespaces);
 
             foreach ($namespaces[1] as $namespace) {
-                if ($namespace !== 'Foundation') {
+                if (! in_array($namespace, static::LARAVEL_FRAMEWORK_NAMESPACES, true)) {
                     $packages[] = 'illuminate/'.strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $namespace));
                 }
             }
