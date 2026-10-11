@@ -145,7 +145,7 @@ class Pruner
         $transactions = $this->passTransactions;
 
         while ($transactions > 0) {
-            $removed = $this->deletion->deleteOldest('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows, PruneReason::AGE);
+            $removed = $this->deletion->pruneChunk('started_at < :cutoff', ['cutoff' => $cutoff], $this->chunkRows, PruneReason::AGE);
             $deleted = $deleted || $removed > 0;
 
             // A transaction that found nothing to delete does not count against the pass.
@@ -164,7 +164,7 @@ class Pruner
             while ($transactions > 0 && $excess > 0) {
                 $transactions--;
                 $limit = min($this->chunkRows, $excess);
-                $removed = $this->deletion->deleteOldest('1 = 1', [], $limit, PruneReason::CAP);
+                $removed = $this->deletion->pruneChunk('1 = 1', [], $limit, PruneReason::CAP);
                 $excess -= $removed;
                 $deleted = $deleted || $removed > 0;
 
@@ -184,7 +184,7 @@ class Pruner
             $transactions--;
 
             // Freed pages land on the freelist at once, so the counts are read again after each committed chunk.
-            if ($this->deletion->deleteOldest('1 = 1', [], $this->chunkRows, PruneReason::SIZE) === 0) {
+            if ($this->deletion->pruneChunk('1 = 1', [], $this->chunkRows, PruneReason::SIZE) === 0) {
                 break;
             }
 

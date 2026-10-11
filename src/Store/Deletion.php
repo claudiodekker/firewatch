@@ -35,17 +35,16 @@ class Deletion
     }
 
     /**
-     * Delete the oldest records that match in one chunk, and get how many matched.
+     * Prune one chunk of the oldest records that match, and get how many matched.
      *
      * @param  array<string, float>  $bindings
      */
-    public function deleteOldest(string $condition, array $bindings, int $limit, PruneReason $reason): int
+    public function pruneChunk(string $condition, array $bindings, int $limit, PruneReason $reason): int
     {
         return $this->deleteChunk(
             function (SQLite3 $connection) use ($condition, $bindings, $limit, $reason) {
                 [$removed, $newest] = $this->deleteOldestStarted($connection, $condition, $bindings, $limit);
 
-                // A record of unknown start has no age, but it counts towards the cap and the size, after every record of known start.
                 if ($removed < $limit && $reason->countsUnstarted()) {
                     $removed += $this->deleteUnstarted($connection, $limit - $removed);
                 }
@@ -61,9 +60,9 @@ class Deletion
     }
 
     /**
-     * Delete one chunk of the records up to an id, of one type or of every type, and get how many there were.
+     * Clear one chunk of the records up to an id, of one type or of every type, and get how many there were.
      */
-    public function deleteThrough(int $through, ?RecordType $type, float $clearedAt): int
+    public function clearChunk(int $through, ?RecordType $type, float $clearedAt): int
     {
         return $this->deleteChunk(
             function (SQLite3 $connection) use ($through, $type) {
@@ -102,7 +101,6 @@ class Deletion
     {
         $freePages = Cell::integer($this->writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('PRAGMA freelist_count')));
 
-        // One step frees a fixed number of pages, so the steps needed are known and the loop always ends.
         for ($steps = intdiv($freePages + $this->reclaimPages - 1, $this->reclaimPages); $steps > 0; $steps--) {
             $this->reclaim();
         }

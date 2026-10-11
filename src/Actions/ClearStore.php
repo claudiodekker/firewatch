@@ -70,13 +70,11 @@ class ClearStore
         $before = $this->size();
         $instant = Instant::now();
 
-        // Records that arrive while the clear runs have newer ids and stay.
-        $through = $this->newestId();
+        $newestId = $this->newestId();
         $records = 0;
 
-        // Every chunk writes the marker of the clear, so the first one stamps the clear even when nothing is left to delete.
         do {
-            $removed = $this->deletion->deleteThrough($through, $type, $instant);
+            $removed = $this->deletion->clearChunk($newestId, $type, $instant);
             $records += $removed;
         } while ($removed === $this->chunkRows);
 
