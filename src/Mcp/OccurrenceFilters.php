@@ -160,7 +160,7 @@ class OccurrenceFilters
             $bindings['matching'] = $this->matching;
         }
 
-        return [implode(' AND ', $conditions) ?: '1 = 1', $bindings];
+        return [implode(' AND ', $conditions), $bindings];
     }
 
     /**

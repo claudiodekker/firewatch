@@ -166,7 +166,11 @@ class Listing
         $duration = Stored::number('duration');
 
         [$filtered, $filterBindings] = $this->filters->condition($this->type);
-        $conditions[] = $filtered;
+
+        if ($filtered !== '') {
+            $conditions[] = $filtered;
+        }
+
         $bindings = [...$bindings, ...$filterBindings];
 
         if ($threshold !== null) {
