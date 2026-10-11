@@ -26,7 +26,7 @@ Once per checkout, run `composer install`. The helper also calls `sqlite3`, `jq`
 
 Every process `app.sh` starts for a run gets `FIREWATCH_DATABASE=.verify/runs/<run>/store/firewatch.sqlite`, `DB_DATABASE=.verify/runs/<run>/app.sqlite`, `QUEUE_CONNECTION=database`, `CACHE_STORE=array` and `MAIL_MAILER=array`. A fresh run has no store. The first captured batch creates it.
 
-Every other variable comes from the shell that calls `app.sh`. To run a process with other Firewatch configuration, set the variable in front of the subcommand, for example `FIREWATCH_ENABLED=false app.sh start` or `FIREWATCH_REDACT_HEADERS=user-agent app.sh start`. The server keeps what `start` was given. `app.sh restart <run>` serves the same run again, store and port kept, with the variables set in front of it, for example `NIGHTWATCH_DEPLOY=v2 app.sh restart <run>`. Later `artisan` and `mcp` calls are separate processes and need the variable again. Before a run that must use the defaults, check that `env | grep -E '^(FIREWATCH|NIGHTWATCH|DB|QUEUE)_'` prints nothing.
+Every other variable comes from the shell that calls `app.sh`. To run a process with other Firewatch configuration, set the variable in front of the subcommand, for example `FIREWATCH_ENABLED=false app.sh start` or `FIREWATCH_REDACT_HEADERS=user-agent app.sh start`. The server keeps what `start` was given. `app.sh restart <run>` serves the same run again, store and port kept, with the variables set in front of it, for example `FIREWATCH_DEPLOY=v2 app.sh restart <run>`. Later `artisan` and `mcp` calls are separate processes and need the variable again. Before a run that must use the defaults, check that `env | grep -E '^(FIREWATCH|NIGHTWATCH|DB|QUEUE)_'` prints nothing.
 
 ## Doctor
 
@@ -138,7 +138,7 @@ Never point a run at `storage/firewatch/firewatch.sqlite` in the skeleton, which
 
 ## Gotchas
 
-- `testbench.yaml` lists `laravel/nightwatch` under `dont-discover`, so Firewatch registers Nightwatch itself, as in a real install. A testbench process that prints `Nightwatch's provider was registered before Firewatch's…` to stderr is a finding, not noise. Nightwatch has then read its config before Firewatch wrote the Active values (deploy, sampling, filtering, `capture_exception_source_code`, header redaction), so answers that depend on them are wrong. Check the `dont-discover` entry, run `php vendor/bin/testbench package:discover` and start a fresh run. Any other notice is also a finding.
+- `testbench.yaml` lists `laravel/nightwatch` under `dont-discover`, so Firewatch registers Nightwatch itself, as in a real install. A testbench process that prints `Nightwatch's provider was registered before Firewatch's…` to stderr is a finding, not noise. Nightwatch has then read its config before Firewatch wrote the Active values, so answers that depend on them are wrong. Check the `dont-discover` entry, then follow the next bullet. Any other notice is a finding too.
 - A Pest run of the in-process tests rewrites the skeleton's package manifest without Firewatch, and `doctor` then fails with `firewatch:server --list printed no tools`. Run `php vendor/bin/testbench package:discover` and start a fresh run.
 - A `firewatch:*` command always runs Off. It never records itself, so `artisan <run> firewatch:clear` adds nothing to the store.
 - `queue:work` leaves no command record, because Nightwatch records its job attempts in place of the command. The workbench has no `inspire` command. Use `about` when a recipe needs a recorded command.
