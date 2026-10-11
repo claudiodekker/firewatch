@@ -15,8 +15,6 @@ readonly class Population
 {
     /**
      * Create a new population instance.
-     *
-     * @param  int  $incomplete  the examined executions that captured fewer queries than they counted
      */
     public function __construct(
         public Fragment $executions,
@@ -47,15 +45,15 @@ readonly class Population
     }
 
     /**
-     * Get the population, examined where the executions meet a condition.
+     * Get the population, examined where the executions meet the condition.
      *
      * @param  list<RecordType>  $types
      */
-    protected static function examining(SQLite3 $connection, Markers $meta, Window $window, ?string $group, array $types, string $examined): self
+    protected static function examining(SQLite3 $connection, Markers $meta, Window $window, ?string $group, array $types, string $examinedWhere): self
     {
         $executions = Executions::covered($meta, RecordType::QUERY, $window, $group, $types);
 
-        [$row] = Stored::rows($connection, "{$executions->sql} SELECT count(*) FILTER (WHERE {$examined}) AS examined, count(*) FILTER (WHERE {$examined} AND counted > captured) AS incomplete
+        [$row] = Stored::rows($connection, "{$executions->sql} SELECT count(*) FILTER (WHERE {$examinedWhere}) AS examined, count(*) FILTER (WHERE {$examinedWhere} AND counted > captured) AS incomplete
             FROM (SELECT counted, (SELECT count(*) FROM queries WHERE queries.execution_id = executions.execution_id) AS captured FROM executions)", $executions->bindings, $window);
 
         return new self($executions, $row['examined'], $row['incomplete']);

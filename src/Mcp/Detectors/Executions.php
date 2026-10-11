@@ -23,7 +23,7 @@ class Executions
     }
 
     /**
-     * Get the SQL of the executions of the types that started in the window, of one group when the call names it, leaving out those whose children of a type a clear or a prune removed.
+     * Get the SQL of the executions of the types that started in the window, leaving out those whose children of the type lie outside coverage.
      *
      * @param  list<RecordType>  $types
      */
