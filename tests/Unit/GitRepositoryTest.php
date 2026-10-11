@@ -20,11 +20,13 @@ it('keeps its repository apart from the one the environment points git at', func
         $previous === false ? putenv('GIT_DIR') : putenv("GIT_DIR={$previous}");
     }
 
-    expect($outer->head())->toBe($outerHead)
-        ->and($outer->run('branch', '--all'))->toBe($outerBranches)
-        ->and($inner->run('rev-list', '--count', 'HEAD'))->toBe('2')
-        ->and($inner->run('branch', '--show-current'))->toBe('feature');
-
-    $outer->delete();
-    $inner->delete();
-});
+    try {
+        expect($outer->head())->toBe($outerHead)
+            ->and($outer->run('branch', '--all'))->toBe($outerBranches)
+            ->and($inner->run('rev-list', '--count', 'HEAD'))->toBe('2')
+            ->and($inner->run('branch', '--show-current'))->toBe('feature');
+    } finally {
+        $outer->delete();
+        $inner->delete();
+    }
+})->group('process');
