@@ -3,6 +3,9 @@ laravel: '@testbench'
 providers:
   - Workbench\App\Providers\WorkbenchServiceProvider
 
+dont-discover:
+  - laravel/nightwatch
+
 workbench:
   start: '/'
   discovers:

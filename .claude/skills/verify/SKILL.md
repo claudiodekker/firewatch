@@ -138,7 +138,7 @@ Never point a run at `storage/firewatch/firewatch.sqlite` in the skeleton, which
 
 ## Gotchas
 
-- Every testbench process prints `Nightwatch's provider was registered before Firewatch's…` to stderr. Testbench's CLI discovers Nightwatch beside Firewatch, which `composer.json` keeps a real install from doing. It is expected here, and the store notes it once as `structure` drift with detail `provider order`. Any other notice is a finding.
+- `testbench.yaml` lists `laravel/nightwatch` under `dont-discover`, so Firewatch registers Nightwatch itself, as in a real install. A testbench process that prints `Nightwatch's provider was registered before Firewatch's…` to stderr is a finding, not noise. Nightwatch has then snapshotted its config before Firewatch wrote the Active values (deploy, sampling, filtering, `capture_exception_source_code`, header redaction), so every answer that depends on them is wrong. Check that `testbench.yaml` still holds the `dont-discover` entry, run `php vendor/bin/testbench package:discover` and start a fresh run. Any other notice is also a finding.
 - A Pest run of the in-process tests rewrites the skeleton's package manifest without Firewatch, and `doctor` then fails with `firewatch:server --list printed no tools`. Run `php vendor/bin/testbench package:discover` and start a fresh run.
 - A `firewatch:*` command always runs Off. It never records itself, so `artisan <run> firewatch:clear` adds nothing to the store.
 - `queue:work` leaves no command record, because Nightwatch records its job attempts in place of the command. The workbench has no `inspire` command. Use `about` when a recipe needs a recorded command.

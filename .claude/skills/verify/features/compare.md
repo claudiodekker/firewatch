@@ -52,4 +52,4 @@ Preconditions:
 - Real durations are not controllable, so `slower`, `faster` and `steady` on a group present on both sides depend on timing. Assert `new`, `gone`, the counts and `measured_on` instead.
 - Three requests a side step the default `p95_duration` down to `p50`. Below three on either side the row is `sample_too_small`.
 - The workbench sets no deploy identity unless the run is started with one, so `deploys` is `[]` on an empty-side answer of a plain run.
-- Set the deploy with `NIGHTWATCH_DEPLOY`, not `FIREWATCH_DEPLOY`. Testbench's CLI registers Nightwatch's provider before Firewatch's (the `provider order` notice), so Nightwatch has read its deployment before Firewatch writes `FIREWATCH_DEPLOY` into it, and every record's deploy stays empty. A real install registers them in the right order.
+- Set the deploy with `FIREWATCH_DEPLOY`, as a real install does. Records with an empty deploy mean the `provider order` notice is back, so fix the workbench's discovery first (see Gotchas in `SKILL.md`).
