@@ -73,7 +73,7 @@ class BlindSpots
      * Get the blind spots of the record types a call examined.
      *
      * @param  list<RecordType>  $types
-     * @param  list<CallFact>  $facts  what holds of the call beyond the types it examined
+     * @param  list<CallFact>  $facts
      * @return list<array{id: string, kind: string, message: string}>
      */
     public static function for(array $types, array $facts = []): array

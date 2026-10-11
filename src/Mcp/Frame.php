@@ -227,11 +227,11 @@ class Frame
      */
     protected function blindSpots(): array
     {
-        $facts = $this->store instanceof StoreFacts ? $this->store : null;
+        $store = $this->store instanceof StoreFacts ? $this->store : null;
 
         return [
             ...BlindSpots::for($this->types, $this->facts),
-            ...$this->conditions->for($facts, $this->types, $this->window),
+            ...$this->conditions->for($store, $this->types, $this->window),
         ];
     }
 }

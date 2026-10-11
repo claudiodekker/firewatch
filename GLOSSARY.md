@@ -307,13 +307,13 @@ _Avoid_: Completeness, health
 A blind spot from the fixed catalogue, attached to every answer that examined the record types it applies to.
 _Avoid_: Limitation, caveat
 
-**Call fact**:
-What holds of a call beyond the record types it examined (it reads by actor, it is anchored on the latest execution, a split or a trend, or it is about the whole store), which decides the structural blind spots that depend on it.
-_Avoid_: Flag, mode
-
 **Condition blind spot**:
 A blind spot measured from the store at call time (pruned or cleared history, rebuild, dropped records, drift, unverified Nightwatch version, active redaction).
 _Avoid_: Warning, alert
+
+**Call fact**:
+What holds of a call beyond the record types it examined (it reads by actor, anchors on the latest execution, a split or a trend, or is about the whole store), deciding which structural blind spots that depend on it attach.
+_Avoid_: Flag, mode
 
 **Empty kind**:
 The named reason an answer has nothing to show: no store, unusable store, empty store, empty window or no match.
