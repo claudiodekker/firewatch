@@ -118,7 +118,7 @@ class Query extends Tool
         $reason = $this->runner->unavailable();
 
         if ($reason !== null) {
-            throw Refusal::sql(SqlFailure::unavailable($reason));
+            throw Refusal::sql(SqlFailure::unavailable($reason), $this->runner->limits());
         }
 
         $sql = $this->sql($request);
@@ -158,7 +158,7 @@ class Query extends Tool
                 report($failure);
             }
 
-            throw Refusal::sql($failure);
+            throw Refusal::sql($failure, $this->runner->limits());
         }
     }
 

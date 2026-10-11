@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
+use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\Limits;
@@ -179,11 +180,21 @@ describe('the protocol', function () {
     })->group('process');
 
     it('kills a child that runs past its deadline before a row, and answers deadline', function () {
-        qcStandIn('sleep', deadline: 0.2);
+        qcStandIn('sleep', deadline: 1.0);
 
         $text = FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']);
 
-        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.deadline', ['seconds' => 10]));
+        expect((fn () => $this->content())->call($text)[0])->toBe(__('firewatch::messages.deadline', ['seconds' => 1]));
+    })->group('process');
+
+    it('names the deadline of the runner that ran, the one describe reports', function () {
+        qcStandIn('sleep', deadline: 1.0);
+
+        $refusal = (fn () => $this->content())->call(FirewatchServer::tool(Query::class, ['sql' => 'SELECT 1']))[0];
+        $ceilings = Envelope::assert(Describe::class)['result']['sql']['ceilings'];
+
+        expect($ceilings['deadline_ms'])->toBe(1000)
+            ->and($refusal)->toBe(__('firewatch::messages.deadline', ['seconds' => $ceilings['deadline_ms'] / 1000]));
     })->group('process');
 
     it('returns the rows of a child killed at its deadline as partial with stop deadline', function () {

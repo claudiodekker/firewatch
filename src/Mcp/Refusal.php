@@ -161,15 +161,15 @@ class Refusal extends RuntimeException
     }
 
     /**
-     * Get the refusal of a SQL statement that was refused or could not be run; the SQL itself is never echoed.
+     * Get the refusal of a SQL statement that was refused or could not be run, naming the deadline of the runner that ran it; the SQL itself is never echoed.
      */
-    public static function sql(SqlFailure $failure): self
+    public static function sql(SqlFailure $failure, Limits $limits): self
     {
         $text = match ($failure->error) {
             ErrorCode::NOT_ALLOWED => self::notAllowed($failure->denied ?? Denied::ACTION, (string) $failure->name),
             ErrorCode::INVALID_SQL => self::invalidSql((string) $failure->detail),
             ErrorCode::ABORTED => self::aborted((string) $failure->detail),
-            ErrorCode::DEADLINE => __('firewatch::messages.deadline', ['seconds' => (int) Limits::DEADLINE_SECONDS]),
+            ErrorCode::DEADLINE => __('firewatch::messages.deadline', ['seconds' => (int) ceil($limits->deadlineSeconds)]),
             ErrorCode::MEMORY => __('firewatch::messages.memory', ['mebibytes' => Policy::HEAP_LIMIT_MEBIBYTES]),
             ErrorCode::ROW_TOO_LARGE => __('firewatch::messages.row_too_large', ['bytes' => number_format(Policy::ROW_BUDGET_BYTES)]),
             ErrorCode::UNAVAILABLE => self::unavailable($failure->unavailable),

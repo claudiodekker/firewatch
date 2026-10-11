@@ -4,6 +4,7 @@ use ClaudioDekker\Firewatch\Mcp\ErrorCode;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Sql\Child\Denied;
 use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
+use ClaudioDekker\Firewatch\Sql\Limits;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
 
 test('every general error code has pinned text', function (Closure $refusal, ErrorCode $code, string $text) {
@@ -80,7 +81,7 @@ test('every general error code has pinned text', function (Closure $refusal, Err
 ]);
 
 test('every SQL error code has pinned text', function (SqlFailure $failure, ErrorCode $code, string $text) {
-    $refusal = Refusal::sql($failure);
+    $refusal = Refusal::sql($failure, new Limits);
 
     expect($refusal->error)->toBe($code)
         ->and($refusal->getMessage())->toBe($text);
