@@ -1,8 +1,6 @@
 <?php
 
-namespace ClaudioDekker\Firewatch\Mcp;
-
-use ClaudioDekker\Firewatch\Store\PruneReason;
+namespace ClaudioDekker\Firewatch\Store;
 
 /**
  * @internal

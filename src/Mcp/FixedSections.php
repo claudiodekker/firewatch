@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\UserDirectory;
 use SQLite3;
 
 /**
@@ -60,7 +61,7 @@ class FixedSections
         $leaders = self::leaders($connection, $window);
         $slowest = self::labelled($connection, $window, $leaders);
         $counts = self::countByType($connection, $window);
-        $userDirectory = self::countUsers($connection);
+        $userDirectory = UserDirectory::count($connection);
         $actors = self::actors($connection, $window);
         $latestExecution = self::latestExecution($connection, $window);
 
@@ -410,14 +411,6 @@ class FixedSections
         $rows = Stored::rows($connection, "SELECT COALESCE(type, '') AS type, count(*) AS records FROM records WHERE {$window->condition()} GROUP BY 1", window: $window);
 
         return array_column($rows, 'records', 'type');
-    }
-
-    /**
-     * Count the rows of the user directory, which has no start to window by.
-     */
-    protected static function countUsers(SQLite3 $connection): int
-    {
-        return Stored::rows($connection, 'SELECT count(*) AS users FROM users')[0]['users'];
     }
 
     /**

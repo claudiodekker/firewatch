@@ -10,7 +10,6 @@ use ClaudioDekker\Firewatch\Mcp\Bounds;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
-use ClaudioDekker\Firewatch\Mcp\ErrorCode;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -19,6 +18,7 @@ use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Sql\QueryStop;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
+use ClaudioDekker\Firewatch\Sql\SqlFailureKind;
 use ClaudioDekker\Firewatch\Sql\SqlRows;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -154,7 +154,7 @@ class Query extends Tool
         try {
             return $this->runner->run($sql, $limit);
         } catch (SqlFailure $failure) {
-            if ($failure->error === ErrorCode::FAILED) {
+            if ($failure->kind === SqlFailureKind::FAILED) {
                 report($failure);
             }
 

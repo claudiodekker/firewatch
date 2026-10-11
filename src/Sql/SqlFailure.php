@@ -2,7 +2,6 @@
 
 namespace ClaudioDekker\Firewatch\Sql;
 
-use ClaudioDekker\Firewatch\Mcp\ErrorCode;
 use ClaudioDekker\Firewatch\Sql\Child\Denied;
 use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
 use RuntimeException;
@@ -19,13 +18,13 @@ class SqlFailure extends RuntimeException
      * @param  string|null  $detail  SQLite's message, the child's stderr, or what broke
      */
     public function __construct(
-        public readonly ErrorCode $error,
+        public readonly SqlFailureKind $kind,
         public readonly ?Denied $denied = null,
         public readonly ?string $name = null,
         public readonly ?Unavailable $unavailable = null,
         public readonly ?string $detail = null,
     ) {
-        parent::__construct("The SQL tool ended with {$error->value}: {$detail}");
+        parent::__construct("The SQL tool ended with {$kind->value}: {$detail}");
     }
 
     /**
@@ -33,7 +32,7 @@ class SqlFailure extends RuntimeException
      */
     public static function notAllowed(Denied $denied, ?string $name = null): self
     {
-        return new self(ErrorCode::NOT_ALLOWED, denied: $denied, name: $name);
+        return new self(SqlFailureKind::NOT_ALLOWED, denied: $denied, name: $name);
     }
 
     /**
@@ -41,7 +40,7 @@ class SqlFailure extends RuntimeException
      */
     public static function invalid(string $message): self
     {
-        return new self(ErrorCode::INVALID_SQL, detail: $message);
+        return new self(SqlFailureKind::INVALID_SQL, detail: $message);
     }
 
     /**
@@ -49,7 +48,7 @@ class SqlFailure extends RuntimeException
      */
     public static function unavailable(Unavailable $reason): self
     {
-        return new self(ErrorCode::UNAVAILABLE, unavailable: $reason);
+        return new self(SqlFailureKind::UNAVAILABLE, unavailable: $reason);
     }
 
     /**
@@ -57,7 +56,7 @@ class SqlFailure extends RuntimeException
      */
     public static function aborted(string $stderr): self
     {
-        return new self(ErrorCode::ABORTED, detail: $stderr);
+        return new self(SqlFailureKind::ABORTED, detail: $stderr);
     }
 
     /**
@@ -65,7 +64,7 @@ class SqlFailure extends RuntimeException
      */
     public static function deadline(): self
     {
-        return new self(ErrorCode::DEADLINE);
+        return new self(SqlFailureKind::DEADLINE);
     }
 
     /**
@@ -73,7 +72,7 @@ class SqlFailure extends RuntimeException
      */
     public static function memory(): self
     {
-        return new self(ErrorCode::MEMORY);
+        return new self(SqlFailureKind::MEMORY);
     }
 
     /**
@@ -81,7 +80,7 @@ class SqlFailure extends RuntimeException
      */
     public static function rowTooLarge(): self
     {
-        return new self(ErrorCode::ROW_TOO_LARGE);
+        return new self(SqlFailureKind::ROW_TOO_LARGE);
     }
 
     /**
@@ -89,6 +88,6 @@ class SqlFailure extends RuntimeException
      */
     public static function failed(string $detail): self
     {
-        return new self(ErrorCode::FAILED, detail: $detail);
+        return new self(SqlFailureKind::FAILED, detail: $detail);
     }
 }

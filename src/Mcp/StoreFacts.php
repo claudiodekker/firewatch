@@ -3,9 +3,10 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\DriftLedger;
+use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
-use SQLite3Result;
 
 /**
  * @internal
@@ -33,23 +34,17 @@ class StoreFacts
     public static function read(SQLite3 $connection): self
     {
         $span = Stored::rows($connection, 'SELECT count(*) AS records, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
-
-        /** @var SQLite3Result $result */
-        $result = $connection->query('SELECT kind, type, sum(count), max(last_seen) FROM drift WHERE type != \'\' GROUP BY type, kind ORDER BY type, kind');
-        $drift = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_NUM))) {
-            $drift[] = [
-                'kind' => (string) $row[0],
-                'type' => (string) $row[1],
-                'count' => (int) $row[2],
-                'last_seen' => (float) $row[3],
-            ];
-        }
+        $drift = DriftLedger::summary($connection);
+        $typed = array_values(array_filter($drift, fn (array $row) => $row['type'] !== ''));
 
         return new self(
             meta: Markers::read($connection),
-            drift: $drift,
+            drift: array_map(fn (array $row) => [
+                'kind' => $row['kind'],
+                'type' => $row['type'],
+                'count' => $row['count'],
+                'last_seen' => $row['last_seen_at'],
+            ], $typed),
             records: is_int($span['records']) ? $span['records'] : 0,
             oldest: is_float($span['oldest']) ? $span['oldest'] : null,
             newest: is_float($span['newest']) ? $span['newest'] : null,

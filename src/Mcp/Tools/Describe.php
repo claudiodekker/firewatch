@@ -11,7 +11,7 @@ use ClaudioDekker\Firewatch\Mcp\Catalogue;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
-use ClaudioDekker\Firewatch\Mcp\Holdings;
+use ClaudioDekker\Firewatch\Mcp\HoldingsSection;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Unit;
@@ -21,6 +21,7 @@ use ClaudioDekker\Firewatch\Sql\Child\Policy;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
 use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Holdings;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -159,7 +160,7 @@ class Describe extends Tool
             empty: $frame->storeEmpty(),
             result: $result,
             notes: $this->notes($type, $holdings),
-            truncated: $type === null ? array_filter([$holdings->truncation()]) : [],
+            truncated: $type === null ? array_filter([HoldingsSection::truncation($holdings)]) : [],
             next: $this->next($type, $holdings, $catalogue),
             cuttable: ['drift', 'dropped_batches', 'deploys'],
         );
@@ -188,7 +189,8 @@ class Describe extends Tool
             'source_capture' => true,
             'last_prune_at' => $facts->meta->pruneClaimedAt,
             'dropped_records' => array_sum(array_column($dropped, 'dropped')),
-            ...$holdings->result($facts->meta),
+            'types' => HoldingsSection::types($holdings, $facts->meta),
+            'deploys' => array_slice($holdings->deploys, 0, Holdings::DEPLOYS),
             'drift' => $holdings->drift,
             'dropped_batches' => $batches,
             ...$this->schemaSections($catalogue),

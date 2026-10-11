@@ -5,8 +5,9 @@ use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\IngestReplacer;
 use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
-use ClaudioDekker\Firewatch\Mcp\History;
+use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\NullIngest;
+use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
@@ -156,11 +157,16 @@ test('no keyed array with several elements is written on one line', function () 
     expect(PackageSource::inlineKeyedArrays())->toBe([]);
 });
 
-foreach (['Store', 'Actions', 'Capture', 'Configuration', 'Ingest'] as $area) {
+foreach (['Store', 'Actions', 'Capture', 'Configuration', 'Ingest', 'Sql'] as $area) {
     arch("{$area} never reaches the side that answers the assistant")
         ->expect("ClaudioDekker\\Firewatch\\{$area}")
         ->not->toUse('ClaudioDekker\\Firewatch\\Mcp');
 }
+
+arch('Console reaches the side that answers the assistant only to start and list its server')
+    ->expect('ClaudioDekker\\Firewatch\\Console')
+    ->not->toUse('ClaudioDekker\\Firewatch\\Mcp')
+    ->ignoring(FirewatchServer::class);
 
 arch('the git HEAD reader starts no process, because it runs at every boot')
     ->expect(GitHead::class)
