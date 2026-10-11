@@ -41,13 +41,16 @@ trait AnswersInEnvelope
 
     /**
      * Get the window arguments, with the sentence that says what an absent bound means for the tool.
+     * The one tool that lists the accepted time forms is the one that passes $listsForms.
      *
      * @return array{since: StringType, until: StringType}
      */
-    protected function windowSchema(JsonSchema $schema, string $absent = 'unbounded'): array
+    protected function windowSchema(JsonSchema $schema, string $absent = 'unbounded', bool $listsForms = false): array
     {
+        $since = $listsForms ? 'since_argument' : 'since_argument_short';
+
         return [
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.since")])),
+            'since' => $schema->string()->description(__("firewatch::messages.{$since}", ['absent' => __("firewatch::messages.window_absent.{$absent}.since")])),
             'until' => $schema->string()->description(__('firewatch::messages.until_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.until")])),
         ];
     }

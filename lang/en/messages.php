@@ -1109,6 +1109,8 @@ return [
 
     'since_argument' => 'Inclusive start: epoch seconds, ISO 8601, local date(-time), relative (-1d) or now. Absent: :absent.',
 
+    'since_argument_short' => 'Inclusive start, in the forms overview takes. Absent: :absent.',
+
     'until_argument' => 'Exclusive end, as since. Absent: :absent.',
 
     'window_absent' => [
