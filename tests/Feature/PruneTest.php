@@ -379,7 +379,8 @@ describe('the pass', function () {
 
         expect($startedAts)->toBe([PRUNE_CUTOFF + 1])
             ->and($lines)->toHaveCount(1)
-            ->and($lines[0])->toMatchArray(['kind' => 'other', 'dropped' => 0]);
+            ->and($lines[0])->toMatchArray(['entry' => 'prune', 'kind' => 'other'])
+            ->and($lines[0])->not->toHaveKey('dropped');
     });
 });
 
@@ -614,7 +615,7 @@ it('trims a full store at once, though the pass of the minute was claimed, so th
     $startedAts = startedAts();
 
     expect(pruneFailures())->toHaveCount(1)
-        ->and(pruneFailures()[0])->toMatchArray(['kind' => 'full', 'dropped' => 5])
+        ->and(pruneFailures()[0])->toMatchArray(['entry' => 'batch', 'kind' => 'full', 'dropped' => 5])
         ->and($startedAts)->toContain((float) $first + 4)
         ->and($startedAts)->not->toContain(1790776001.0)
         ->and(pruneMarkers()->prunedReason)->toBe(PruneReason::SIZE);

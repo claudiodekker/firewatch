@@ -859,6 +859,20 @@ describe('store-losses', function () {
             ->and($check['message'])->toEndWith('(other): the pass broke');
         Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Firewatch could not prune the store: the pass broke');
     });
+
+    it('quotes both a dropped batch and a failed prune and fixes the newest', function () {
+        doctorStorePath();
+        app(FailureLog::class)->record(new StoreFailure(FailureKind::BUSY, 'database is locked'), dropped: 2);
+        $this->travel(1)->seconds();
+        app(FailureLog::class)->pruneFailed(new StoreFailure(FailureKind::FULL, 'database or disk is full'));
+
+        $check = doctorCheck('store-losses');
+
+        expect($check['message'])->toStartWith('1 batch dropped, holding 2 records in all; the newest at ')
+            ->and($check['message'])->toContain('(busy): database is locked; 1 prune failed; the newest at ')
+            ->and($check['message'])->toEndWith('(full): database or disk is full')
+            ->and($check['fix'])->toBe(__('firewatch::messages.doctor.store-losses.full_fix'));
+    });
 });
 
 describe('store-drift', function () {

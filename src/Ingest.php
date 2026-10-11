@@ -192,7 +192,7 @@ class Ingest implements IngestContract
         try {
             $pass();
         } catch (Throwable $exception) {
-            $this->failures->record($exception, dropped: 0);
+            $this->failures->pruneFailed($exception);
         }
     }
 }

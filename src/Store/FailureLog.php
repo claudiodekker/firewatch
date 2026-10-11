@@ -14,7 +14,7 @@ use Throwable;
 class FailureLog
 {
     /**
-     * The name of the file beside the store that records each dropped batch.
+     * The name of the file beside the store that records each store failure.
      */
     public const FILE = 'failures.jsonl';
 
@@ -29,7 +29,7 @@ class FailureLog
     protected const FILE_MODE = 0600;
 
     /**
-     * Whether this process has reported a dropped batch.
+     * Whether this process has reported a failure.
      */
     protected bool $reported = false;
 
@@ -42,30 +42,28 @@ class FailureLog
     }
 
     /**
-     * Record a dropped batch beside the store and report the first of the process.
+     * Record a dropped batch beside the store and report the first failure of the process.
      */
     public function record(Throwable $exception, int $dropped): void
     {
-        try {
-            $this->append($this->line($exception, FailureKind::of($exception), $dropped));
-        } catch (Throwable) {
-            //
-        }
-
-        try {
-            $this->report($exception, $dropped);
-        } catch (Throwable) {
-            //
-        }
+        $this->log(FailureEntry::BATCH, $exception, "could not store a batch of {$dropped} records", $dropped);
     }
 
     /**
-     * Record a damaged store the writer replaced, with nothing dropped; its damage may read as a file that is not a database.
+     * Record a pruning pass that failed beside the store and report the first failure of the process.
+     */
+    public function pruneFailed(Throwable $exception): void
+    {
+        $this->log(FailureEntry::PRUNE, $exception, 'could not prune the store');
+    }
+
+    /**
+     * Record a damaged store the writer replaced; its damage may read as a file that is not a database.
      */
     public function recovered(Throwable $exception): void
     {
         try {
-            $this->append($this->line($exception, FailureKind::CORRUPT, dropped: 0));
+            $this->append($this->line(FailureEntry::RECOVERY, $exception, FailureKind::CORRUPT));
         } catch (Throwable) {
             //
         }
@@ -78,23 +76,34 @@ class FailureLog
      */
     public function dropped(): array
     {
-        $lines = @file(dirname($this->configuration->database).'/'.static::FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $dropped = [];
 
-        foreach ($lines ?: [] as $line) {
-            $entry = json_decode($line, associative: true);
-
-            if (is_array($entry) && is_numeric($entry['at'] ?? null) && is_string($entry['kind'] ?? null) && is_int($entry['dropped'] ?? null) && $entry['dropped'] > 0) {
+        foreach ($this->entries(FailureEntry::BATCH) as $entry) {
+            if (($entry['dropped'] ?? 0) > 0) {
                 $dropped[] = [
-                    'at' => (float) $entry['at'],
+                    'at' => $entry['at'],
                     'kind' => $entry['kind'],
                     'dropped' => $entry['dropped'],
-                    'message' => is_string($entry['message'] ?? null) ? $entry['message'] : '',
+                    'message' => $entry['message'],
                 ];
             }
         }
 
         return $dropped;
+    }
+
+    /**
+     * Read the failed pruning passes the file still holds, oldest first.
+     *
+     * @return list<array{at: float, kind: string, message: string}>
+     */
+    public function prunes(): array
+    {
+        return array_map(fn (array $entry) => [
+            'at' => $entry['at'],
+            'kind' => $entry['kind'],
+            'message' => $entry['message'],
+        ], $this->entries(FailureEntry::PRUNE));
     }
 
     /**
@@ -119,16 +128,61 @@ class FailureLog
     }
 
     /**
-     * Get the line that records a dropped batch.
+     * Record a failure beside the store and report the first of the process.
      */
-    protected function line(Throwable $exception, FailureKind $kind, int $dropped): string
+    protected function log(FailureEntry $entry, Throwable $exception, string $failed, ?int $dropped = null): void
+    {
+        try {
+            $this->append($this->line($entry, $exception, FailureKind::of($exception), $dropped));
+        } catch (Throwable) {
+            //
+        }
+
+        try {
+            $this->report($exception, $failed);
+        } catch (Throwable) {
+            //
+        }
+    }
+
+    /**
+     * Read the well-formed lines of the given entry the file still holds, oldest first.
+     *
+     * @return list<array{at: float, kind: string, message: string, dropped: int|null}>
+     */
+    protected function entries(FailureEntry $entry): array
+    {
+        $lines = @file(dirname($this->configuration->database).'/'.static::FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $entries = [];
+
+        foreach ($lines ?: [] as $line) {
+            $fields = json_decode($line, associative: true);
+
+            if (is_array($fields) && ($fields['entry'] ?? null) === $entry->value && is_numeric($fields['at'] ?? null) && is_string($fields['kind'] ?? null)) {
+                $entries[] = [
+                    'at' => (float) $fields['at'],
+                    'kind' => $fields['kind'],
+                    'message' => is_string($fields['message'] ?? null) ? $fields['message'] : '',
+                    'dropped' => is_int($fields['dropped'] ?? null) ? $fields['dropped'] : null,
+                ];
+            }
+        }
+
+        return $entries;
+    }
+
+    /**
+     * Get the line that records a failure, with the records it dropped when it dropped a batch.
+     */
+    protected function line(FailureEntry $entry, Throwable $exception, FailureKind $kind, ?int $dropped = null): string
     {
         return json_encode([
             'at' => Instant::now(),
+            'entry' => $entry->value,
             'kind' => $kind->value,
             'code' => $exception instanceof SQLite3Exception ? $exception->getCode() : null,
             'message' => $exception->getMessage(),
-            'dropped' => $dropped,
+            ...($dropped === null ? [] : ['dropped' => $dropped]),
         ], RecordMapper::JSON_FLAGS);
     }
 
@@ -173,9 +227,9 @@ class FailureLog
     }
 
     /**
-     * Report the process's first dropped batch through the exception handler.
+     * Report the process's first failure through the exception handler.
      */
-    protected function report(Throwable $exception, int $dropped): void
+    protected function report(Throwable $exception, string $failed): void
     {
         if ($this->reported) {
             return;
@@ -183,6 +237,6 @@ class FailureLog
 
         $this->reported = true;
 
-        report(new RuntimeException("Firewatch could not store a batch of {$dropped} records: {$exception->getMessage()}", previous: $exception));
+        report(new RuntimeException("Firewatch {$failed}: {$exception->getMessage()}", previous: $exception));
     }
 }

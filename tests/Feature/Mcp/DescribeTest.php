@@ -277,7 +277,7 @@ it('lists the deploys newest first, twenty at most, and says when it cut them', 
 it('lists what Nightwatch\'s output drifted from and the batches the store dropped', function () {
     $clock = dscClock();
     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0, 'made_up' => 1])]);
-    $lines = array_map(fn (int $index) => json_encode(['at' => 1790776000.5 + $index, 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => $index]), range(1, 6));
+    $lines = array_map(fn (int $index) => json_encode(['at' => 1790776000.5 + $index, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => $index]), range(1, 6));
     file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', implode("\n", $lines)."\n");
 
     $result = Envelope::assert(Describe::class)['result'];
