@@ -36,7 +36,7 @@ return [
 
     'tools' => [
         'overview' => 'Entry point: what is wrong now. In order: error rate (5xx and 4xx shares of requests), the 10 slowest groups by total time (at most 3 per type), counts of all twelve types, user directory (whole store), signed-in actors and executions without one, then every problem shape\'s verdict at its default threshold, within five seconds. Nothing is wrong only when every shape ran and is clean; one that did not run says so. Windowed. Empty is not clean.',
-        'rank' => 'Groups of one type (routes, queries, jobs...) worst first by a measure: what is slow, heavy or frequent? Pass `type`, or `group` for one row per deploy, to see whether it changed; request and command groups add each stage\'s mean, share and the dominant stage. Percentiles are null with `withheld` when too few records support them; if no group has enough, the order falls back to the maximum, with a note. Rows carry first and last seen, deploys, the slowest execution and failure_pct. Windowed. Empty is not clean.',
+        'rank' => 'Groups of one type (routes, queries, jobs...) worst first by a measure: what is slow, heavy or frequent? Pass `type`, or `group` to see whether a group changed; request and command groups add each stage\'s mean, share and the dominant stage. Percentiles are null with `withheld` when too few records support them; if no group has enough, the order falls back to the maximum, with a note. Rows carry first and last seen, deploys, the slowest execution and failure_pct. Windowed. Empty is not clean.',
         'execution' => 'One request, command, job attempt or scheduled task in full: outcome, stages, headers and payload as captured, counted-versus-captured accounting, up to five exceptions with source lines, and the child timeline. Only finished work is recorded. Every attempt of a job: `occurrences` with `job_id`. Not windowed.',
         'occurrences' => 'Individual records, newest first by default, for at least one selector: `group`, `type`, `execution_id`, `trace_id`, `job_id`, `user_id`. A filter that does not fit the type is refused. Rows carry group, name, file:line, user and `detail`; a query group lists its call sites. Windowed. Empty is not clean.',
         'trace' => 'One trace\'s executions in start order and each queued job\'s lineage: dispatch, attempts, wait_ms, outcome (processed, failed, retrying, pending, no_dispatch, no_attempts). Lineage joins on job id, across traces. A job on an inline connection (sync, deferred, background, null) records no dispatch; a dispatch on one shows no attempts. Give `trace_id` or `job_id`, not both. Not windowed. Children and exceptions: `execution`.',
@@ -486,7 +486,7 @@ return [
 
     'rank_untimed' => ':count record without duration is counted in occurrences and left out of the duration statistics.|:count records without duration are counted in occurrences and left out of the duration statistics.',
 
-    'rank_group_argument' => 'Group id (32 hex): one row per deploy, first seen first, plus stage means for a request or command. Excludes matching, deploy, cursor; refused with by=queries.',
+    'rank_group_argument' => 'Group id (32 hex): one row per deploy, first seen first. Excludes matching, deploy, cursor; refused with by=queries.',
 
     'rank_matching_argument' => 'Case-insensitive substring of the group label, 1 to 200 characters. Excludes group.',
 
