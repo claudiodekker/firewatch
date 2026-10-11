@@ -771,6 +771,7 @@ it('refuses a cursor that is no cursor, or of another tool or call, or from befo
     'a key with a decimal id' => [fn (string $cursor, array $arguments) => [...$arguments, 'cursor' => Cursor::make(tool: 'occurrences', arguments: $arguments, createdAt: occCreatedAt(), last: ['value' => 1, 'id' => 1.5], since: null, until: null)]],
     'another order' => [fn (string $cursor, array $arguments) => [...$arguments, 'order' => 'slowest', 'cursor' => $cursor]],
     'another type' => [fn (string $cursor, array $arguments) => [...$arguments, 'type' => 'command', 'cursor' => $cursor]],
+    'another window' => [fn (string $cursor, array $arguments) => [...$arguments, 'since' => '1 hour ago', 'cursor' => $cursor]],
     'a rebuilt store' => [function (string $cursor, array $arguments) {
         test()->travel(1)->seconds();
         app(Writer::class)->rebuild();
