@@ -13,7 +13,7 @@ class GroupSelection
     /**
      * Create a new group selection instance.
      *
-     * @param  list<RecordType>  $held  the types that hold the group, none when no group is selected
+     * @param  list<RecordType>  $held
      */
     protected function __construct(
         public readonly ?string $group,
@@ -41,9 +41,7 @@ class GroupSelection
     }
 
     /**
-     * Get the type a measure reads: the named type, else the type the group is best known by.
-     *
-     * A job group is held by its dispatches and its attempts, and the attempts carry the execution measures.
+     * Get the type a measure reads: the named type, else the job attempts of a job group, else the type that holds the group.
      */
     public function measured(): ?RecordType
     {
@@ -67,7 +65,7 @@ class GroupSelection
     }
 
     /**
-     * Determine if the store holds the group, which a selection without one always does.
+     * Determine if the store holds the group, or no group is selected.
      */
     public function isHeld(): bool
     {
@@ -75,7 +73,7 @@ class GroupSelection
     }
 
     /**
-     * Get the note of a job group read without a type, whose dispatches and attempts share its id.
+     * Get the note of a job group read without a type.
      *
      * @return list<string>
      */
@@ -89,7 +87,7 @@ class GroupSelection
     }
 
     /**
-     * Get the filters an empty answer names: the group, the named type, the tool's own, then the deploy.
+     * Get the filters an empty answer names.
      *
      * @param  list<string>  $own
      * @return list<string>

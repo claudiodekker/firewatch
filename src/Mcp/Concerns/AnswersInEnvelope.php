@@ -77,7 +77,7 @@ trait AnswersInEnvelope
     }
 
     /**
-     * Get the matching argument, whose length `Arguments` reads back.
+     * Get the matching argument.
      */
     protected function matchingArgument(JsonSchema $schema): StringType
     {
