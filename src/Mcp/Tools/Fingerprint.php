@@ -11,6 +11,7 @@ use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Holdings;
 use ClaudioDekker\Firewatch\Mcp\Recipe;
+use ClaudioDekker\Firewatch\Mcp\RecipeArguments;
 use ClaudioDekker\Firewatch\Mcp\RecipeCheck;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -44,41 +45,6 @@ class Fingerprint extends Tool
     use AnswersInEnvelope {
         schema as formatSchema;
     }
-
-    /**
-     * The source arguments each type takes.
-     */
-    protected const ARGUMENTS = [
-        'request' => ['methods', 'path', 'domain'],
-        'command' => ['name'],
-        'job-attempt' => ['name'],
-        'queued-job' => ['name'],
-        'scheduled-task' => ['name', 'cron', 'timezone', 'repeat_seconds'],
-        'query' => ['connection', 'sql', 'driver'],
-        'cache-event' => ['store', 'key'],
-        'outgoing-request' => ['host'],
-        'mail' => ['class'],
-        'notification' => ['class'],
-    ];
-
-    /**
-     * The fields the recipes read under another name than the argument that gives them.
-     */
-    protected const FIELDS = [
-        'methods' => 'route_methods',
-        'path' => 'route_path',
-        'domain' => 'route_domain',
-    ];
-
-    /**
-     * The source arguments that may be left out.
-     */
-    protected const OPTIONAL = ['domain', 'timezone', 'repeat_seconds', 'driver'];
-
-    /**
-     * The seconds Laravel repeats a task within the minute by (the divisors of 60), and 0 for a task that does not repeat.
-     */
-    protected const REPEAT_SECONDS = [0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30];
 
     /**
      * The most stored records of a type the recipe check reads.
@@ -119,14 +85,14 @@ class Fingerprint extends Tool
         $text = fn (string $argument) => $schema->string()->description(__("firewatch::messages.fingerprint_arguments.{$argument}"));
 
         return [
-            'type' => $schema->string()->enum(array_keys(self::ARGUMENTS))->required(),
+            'type' => $schema->string()->enum(array_keys(RecipeArguments::ARGUMENTS))->required(),
             'methods' => $schema->array()->items($schema->string())->description(__('firewatch::messages.fingerprint_arguments.methods')),
             'path' => $text('path'),
             'domain' => $text('domain'),
             'name' => $text('name'),
             'cron' => $text('cron'),
             'timezone' => $text('timezone'),
-            'repeat_seconds' => $schema->integer()->enum(self::REPEAT_SECONDS)->default(0)->description(__('firewatch::messages.fingerprint_arguments.repeat_seconds')),
+            'repeat_seconds' => $schema->integer()->enum(RecipeArguments::REPEAT_SECONDS)->default(0)->description(__('firewatch::messages.fingerprint_arguments.repeat_seconds')),
             'connection' => $text('connection'),
             'sql' => $text('sql'),
             'driver' => $text('driver'),
@@ -153,8 +119,9 @@ class Fingerprint extends Tool
     {
         $arguments = new Arguments($request, $this);
         $type = $this->type($arguments);
-        $fields = $this->fields($arguments, $type);
-        $driver = $this->driver($arguments);
+        $source = RecipeArguments::read($arguments, $type);
+        $fields = $source->fields;
+        $driver = $source->driver;
         $candidates = Recipe::candidates($type, $fields, $driver);
         $types = $this->types($type);
 
@@ -224,165 +191,16 @@ class Fingerprint extends Tool
      */
     protected function type(Arguments $arguments): RecordType
     {
-        $accepted = implode(', ', array_keys(self::ARGUMENTS));
-        $example = $this->example(RecordType::REQUEST);
+        $accepted = implode(', ', array_keys(RecipeArguments::ARGUMENTS));
+        $example = RecipeArguments::example(RecordType::REQUEST);
         $value = $arguments->get('type');
         $named = is_string($value) ? RecordType::tryFrom($value) : null;
 
-        if ($named !== null && ! array_key_exists($named->value, self::ARGUMENTS)) {
+        if ($named !== null && ! array_key_exists($named->value, RecipeArguments::ARGUMENTS)) {
             throw Refusal::noRecipe($named->value, $accepted, $example);
         }
 
         return $arguments->requiredType('one of the ten types with a recipe', $example);
-    }
-
-    /**
-     * Read the type's source arguments into the fields its recipe reads, refusing any that belong to another type.
-     *
-     * @return array<string, mixed>
-     */
-    protected function fields(Arguments $arguments, RecordType $type): array
-    {
-        $taken = $this->arguments($type);
-
-        foreach ($arguments->names() as $argument) {
-            if (! in_array($argument, ['type', 'format'], true) && ! in_array($argument, $taken, true)) {
-                throw Refusal::conflicting(argument: $argument, with: "type: {$type->value}", accepted: $this->accepted($type), example: $this->example($type));
-            }
-        }
-
-        foreach ($taken as $argument) {
-            if ($arguments->get($argument) === null && ! in_array($argument, self::OPTIONAL, true)) {
-                throw Refusal::missing($argument, $this->accepted($type), $this->example($type));
-            }
-        }
-
-        $fields = $this->defaults($type);
-
-        foreach (array_diff($taken, ['driver']) as $argument) {
-            $value = $arguments->get($argument);
-
-            if ($value !== null) {
-                $fields[self::FIELDS[$argument] ?? $argument] = $this->value($arguments, $type, $argument, $value);
-            }
-        }
-
-        return $fields;
-    }
-
-    /**
-     * Read the driver of a query's connection, which picks one reading of its SQL.
-     */
-    protected function driver(Arguments $arguments): ?string
-    {
-        $value = $arguments->get('driver');
-
-        if ($value === null) {
-            return null;
-        }
-
-        if (! is_string($value) || $value === '') {
-            throw $arguments->invalid(argument: 'driver', expected: 'a non-empty string', accepted: 'a driver name, such as "mysql"', example: $this->example(RecordType::QUERY));
-        }
-
-        return strtolower($value);
-    }
-
-    /**
-     * Get the fields an optional argument gives when it is left out.
-     *
-     * @return array<string, mixed>
-     */
-    protected function defaults(RecordType $type): array
-    {
-        return match ($type) {
-            RecordType::REQUEST => ['route_domain' => ''],
-            RecordType::SCHEDULED_TASK => [
-                'timezone' => $this->scheduleTimezone(),
-                'repeat_seconds' => 0,
-            ],
-            default => [],
-        };
-    }
-
-    /**
-     * Get the timezone Laravel gives a scheduled task that names none: the schedule's when set, even to null, else the application's.
-     */
-    protected function scheduleTimezone(): string
-    {
-        $timezone = config('app.schedule_timezone', config('app.timezone'));
-
-        return is_string($timezone) ? $timezone : '';
-    }
-
-    /**
-     * Read one source argument as the field its recipe reads.
-     */
-    protected function value(Arguments $arguments, RecordType $type, string $argument, mixed $value): mixed
-    {
-        return match ($argument) {
-            'methods' => $this->methods($arguments, $type, $value),
-            'path' => '/'.trim($this->text($arguments, $type, $argument, $value), '/'),
-            'domain' => str_replace(['http://', 'https://'], '', $this->text($arguments, $type, $argument, $value)),
-            'repeat_seconds' => $this->repeatSeconds($arguments, $type, $value),
-            default => $this->text($arguments, $type, $argument, $value),
-        };
-    }
-
-    /**
-     * Read the route methods as Nightwatch stores them: sorted, with HEAD wherever GET is, as Laravel registers every GET route.
-     *
-     * @return list<string>
-     */
-    protected function methods(Arguments $arguments, RecordType $type, mixed $value): array
-    {
-        if (! $this->isMethods($value)) {
-            throw $arguments->invalid(argument: 'methods', expected: 'a non-empty list of uppercase HTTP methods', accepted: 'uppercase HTTP methods, such as ["GET","HEAD"]', example: $this->example($type));
-        }
-
-        $methods = array_values(array_unique(in_array('GET', $value, true) ? [...$value, 'HEAD'] : $value));
-
-        sort($methods);
-
-        return $methods;
-    }
-
-    /**
-     * Determine if a value is a non-empty list of uppercase HTTP methods.
-     *
-     * @phpstan-assert-if-true list<string> $value
-     */
-    protected function isMethods(mixed $value): bool
-    {
-        if (! is_array($value) || $value === [] || ! array_is_list($value)) {
-            return false;
-        }
-
-        return array_filter($value, fn (mixed $method) => is_string($method) && preg_match('/^[A-Z]+$/', $method) === 1) === $value;
-    }
-
-    /**
-     * Read the repeat seconds of a task: 0, or a number of seconds that divides the minute.
-     */
-    protected function repeatSeconds(Arguments $arguments, RecordType $type, mixed $value): int
-    {
-        if (! is_int($value) || ! in_array($value, self::REPEAT_SECONDS, true)) {
-            throw $arguments->invalid(argument: 'repeat_seconds', expected: 'a whole number of seconds that divides the minute', accepted: '0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20 or 30', example: $this->example($type));
-        }
-
-        return $value;
-    }
-
-    /**
-     * Read a source argument that is text.
-     */
-    protected function text(Arguments $arguments, RecordType $type, string $argument, mixed $value): string
-    {
-        if (! is_string($value)) {
-            throw $arguments->invalid(argument: $argument, expected: 'a string', accepted: 'a string', example: $this->example($type));
-        }
-
-        return $value;
     }
 
     /**
@@ -591,7 +409,7 @@ class Fingerprint extends Tool
         }
 
         if ($type === RecordType::SCHEDULED_TASK && $request->get('timezone') === null) {
-            $notes[] = __('firewatch::messages.fingerprint_timezone_note', ['timezone' => $this->scheduleTimezone()]);
+            $notes[] = __('firewatch::messages.fingerprint_timezone_note', ['timezone' => RecipeArguments::scheduleTimezone()]);
         }
 
         return $notes;
@@ -621,43 +439,5 @@ class Fingerprint extends Tool
         }
 
         return $calls;
-    }
-
-    /**
-     * Get the source arguments the type takes.
-     *
-     * @return list<string>
-     */
-    protected function arguments(RecordType $type): array
-    {
-        return self::ARGUMENTS[$type->value] ?? [];
-    }
-
-    /**
-     * Get the type's arguments as a refusal lists them, such as "methods, path, domain (optional)".
-     */
-    protected function accepted(RecordType $type): string
-    {
-        $arguments = array_map(
-            fn (string $argument) => in_array($argument, self::OPTIONAL, true) ? "{$argument} (optional)" : $argument,
-            $this->arguments($type),
-        );
-
-        return implode(', ', $arguments);
-    }
-
-    /**
-     * Get a call of the tool for the type, as a refusal shows it: its required arguments with placeholders.
-     */
-    protected function example(RecordType $type): string
-    {
-        $required = array_diff($this->arguments($type), self::OPTIONAL);
-        $arguments = ['type' => $type->value];
-
-        foreach ($required as $argument) {
-            $arguments[$argument] = $argument === 'methods' ? ['GET', 'HEAD'] : "<{$argument}>";
-        }
-
-        return $this->call($arguments);
     }
 }
