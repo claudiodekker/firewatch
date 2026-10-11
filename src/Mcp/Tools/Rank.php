@@ -8,7 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Cursor;
+use ClaudioDekker\Firewatch\Mcp\Continuation;
 use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Measure;
@@ -17,7 +17,6 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\StageView;
-use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -131,18 +130,17 @@ class Rank extends Tool
 
         $by = $explicit === null ? null : $this->measure($arguments, $explicit, $group);
 
-        $cursorValue = $request->get('cursor');
-        $cursor = $cursorValue === null ? null : Cursor::read(value: $cursorValue, tool: $this->name(), arguments: $request->all(), key: $this->key(...));
+        $continuation = Continuation::read($request, $this->name(), $this->key(...));
 
         $frame = $this->frame($now);
-        $window = $this->window($request, $now, $frame->timezone, $cursor);
+        $window = $continuation->window($now, $frame->timezone);
         $filters = $group === null
             ? ["type: {$explicit?->value}", ...($matching === null ? [] : ["matching: {$matching}"]), ...($deploy === null ? [] : ["deploy: {$deploy}"])]
             : ["group: {$group}", ...($explicit === null ? [] : ["type: {$explicit->value}"])];
 
         $frame->about($explicit === null ? [] : [$explicit], $window);
 
-        $read = $frame->read(function (SQLite3 $connection) use ($request, $arguments, $window, $group, $explicit, $matching, $deploy, $limit, $by, $cursor, $filters) {
+        $read = $frame->read(function (SQLite3 $connection) use ($request, $arguments, $window, $group, $explicit, $matching, $deploy, $limit, $by, $continuation, $filters) {
             $inWindow = $this->inWindow($connection, $window);
             [$type, $held] = $arguments->resolveGroupType($connection, $group, $explicit, "rank(group: \"{$group}\")");
             $unranked = fn (Frame $frame) => $this->unranked($frame, $filters, $inWindow, $group, $held);
@@ -159,21 +157,21 @@ class Rank extends Tool
             }
 
             if ($group === null) {
-                $ranked = $ranking->read($connection, $cursor?->last, $limit);
+                $ranked = $ranking->read($connection, $continuation->after(), $limit);
 
-                return [$type, fn (Frame $frame) => $this->ranking($request, $frame, $window, $filters, $inWindow, $type, $measure, $ranked)];
+                return [$type, fn (Frame $frame) => $this->ranking($continuation, $frame, $window, $filters, $inWindow, $type, $measure, $ranked)];
             }
 
             $broken = $ranking->breakdown($connection, $limit);
 
-            return [$type, fn (Frame $frame) => $this->breakdown($request, $frame, $filters, $inWindow, $type, $group, $held, $limit, $broken)];
+            return [$type, fn (Frame $frame) => $this->breakdown($request, $frame, $filters, $inWindow, $type, $group, $held, $broken)];
         });
 
         if ($read === null) {
             return $frame->empty();
         }
 
-        $cursor?->belongsTo($frame->facts()->meta->createdAt, $this->name());
+        $continuation->belongsTo($frame->facts()->meta->createdAt);
 
         [$type, $answer] = $read;
 
@@ -198,42 +196,21 @@ class Rank extends Tool
     }
 
     /**
-     * Get the window of the call.
-     *
-     * @param  Cursor<array<string, mixed>>|null  $cursor
-     */
-    protected function window(Request $request, CarbonImmutable $now, string $timezone, ?Cursor $cursor): Window
-    {
-        if ($cursor !== null) {
-            return Window::between(since: $cursor->since, until: $cursor->until, timezone: $timezone);
-        }
-
-        return Window::read($request, $now, timezone: $timezone, tool: $this->name());
-    }
-
-    /**
      * Put the groups, worst first, in the envelope.
      *
      * @param  list<string>  $filters
+     * @param  Continuation<array{value: int|float|null, occurrences: int, hash: string}>  $continuation
      * @param  array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
      */
-    protected function ranking(Request $request, Frame $frame, Window $window, array $filters, int $inWindow, RecordType $type, Measure $by, array $ranked): Answer
+    protected function ranking(Continuation $continuation, Frame $frame, Window $window, array $filters, int $inWindow, RecordType $type, Measure $by, array $ranked): Answer
     {
         if ($ranked['ranked'] === 0) {
             return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
         }
 
         $page = $ranked['page'];
-        $truncated = [];
-
-        if ($page->more) {
-            $arguments = array_diff_key($request->all(), array_flip(['cursor', 'format']));
-            $arguments['cursor'] = Cursor::make(tool: $this->name(), arguments: $request->all(), createdAt: $frame->facts()->meta->createdAt, last: $page->rows[count($page->rows) - 1], since: $window->since(), until: $window->until() ?? $frame->now);
-            $call = $this->call($arguments);
-            $how = __('firewatch::messages.rank_cursor_how', ['call' => $call]);
-            $entry = $page->truncation(section: 'groups', how: $how);
-            $truncated = $entry === null ? [] : [$entry];
-        }
+        $entry = $continuation->truncation($page, $page->rows, 'groups', 'firewatch::messages.rank_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now);
+        $truncated = $entry === null ? [] : [$entry];
 
         $rows = $ranked['rows'];
         $groupsRanked = $ranked['ranked'];
@@ -267,22 +244,17 @@ class Rank extends Tool
      *
      * @param  list<string>  $filters
      * @param  list<RecordType>  $held
-     * @param  array{rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}  $breakdown
+     * @param  array{page: Rows<array<string, mixed>>, rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}  $breakdown
      */
-    protected function breakdown(Request $request, Frame $frame, array $filters, int $inWindow, RecordType $type, string $group, array $held, int $limit, array $breakdown): Answer
+    protected function breakdown(Request $request, Frame $frame, array $filters, int $inWindow, RecordType $type, string $group, array $held, array $breakdown): Answer
     {
         if ($breakdown['rows'] === []) {
             return $frame->empty($frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: false, filters: $filters));
         }
 
         $shared = $request->get('type') === null && in_array(RecordType::JOB_ATTEMPT, $held, true) && in_array(RecordType::QUEUED_JOB, $held, true);
-        $truncated = $breakdown['matched'] > $limit ? [[
-            'section' => 'deploys',
-            'shown' => count($breakdown['rows']),
-            'matched' => $breakdown['matched'],
-            'reason' => TruncationReason::LIMIT->value,
-            'how' => __('firewatch::messages.rank_truncated_how'),
-        ]] : [];
+        $entry = $breakdown['page']->truncation(section: 'deploys', how: __('firewatch::messages.rank_truncated_how'), matched: $breakdown['matched']);
+        $truncated = $entry === null ? [] : [$entry];
         $stages = $breakdown['stages'];
         $summary = trans_choice('firewatch::messages.rank_breakdown_summary', $breakdown['matched'], [
             'group' => $group,

@@ -604,6 +604,7 @@ it('refuses a cursor that is no cursor, or of another tool or call, or from befo
     'another measure' => [fn (string $cursor, array $arguments) => [...$arguments, 'by' => 'total_duration', 'cursor' => $cursor]],
     'another type' => [fn (string $cursor, array $arguments) => [...$arguments, 'type' => 'command', 'cursor' => $cursor]],
     'another matching' => [fn (string $cursor, array $arguments) => [...$arguments, 'matching' => 'route', 'cursor' => $cursor]],
+    'another window' => [fn (string $cursor, array $arguments) => [...$arguments, 'since' => '1 hour ago', 'cursor' => $cursor]],
     'a rebuilt store' => [function (string $cursor, array $arguments) {
         test()->travel(1)->seconds();
         app(Writer::class)->rebuild();

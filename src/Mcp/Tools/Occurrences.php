@@ -11,7 +11,7 @@ use ClaudioDekker\Firewatch\Mcp\Arguments;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Concerns\AnswersInEnvelope;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
-use ClaudioDekker\Firewatch\Mcp\Cursor;
+use ClaudioDekker\Firewatch\Mcp\Continuation;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Listing;
 use ClaudioDekker\Firewatch\Mcp\LogLevel;
@@ -155,21 +155,20 @@ class Occurrences extends Tool
             $this->refuseOutcome($filters['outcome'], $type);
         }
 
-        $cursorValue = $request->get('cursor');
-        $cursor = $cursorValue === null ? null : Cursor::read(value: $cursorValue, tool: $this->name(), arguments: $request->all(), key: $this->key(...));
+        $continuation = Continuation::read($request, $this->name(), $this->key(...));
 
         $frame = $this->frame($now);
-        $window = $this->window($request, $now, $frame->timezone, $cursor);
+        $window = $continuation->window($now, $frame->timezone);
 
         $frame->about($type === null ? RecordType::events() : [$type], $window, facts: $ids['user_id'] !== null ? [CallFact::ACTOR] : []);
 
-        $read = $frame->read(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $deploy, $filters, $limit, $selector, $cursor));
+        $read = $frame->read(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $deploy, $filters, $limit, $selector, $continuation));
 
         if ($read === null) {
             return $frame->empty();
         }
 
-        $cursor?->belongsTo($frame->facts()->meta->createdAt, $this->name());
+        $continuation->belongsTo($frame->facts()->meta->createdAt);
 
         if ($frame->isEmpty()) {
             return $frame->empty();
@@ -182,7 +181,7 @@ class Occurrences extends Tool
             return $frame->empty($empty);
         }
 
-        return $this->listing($request, $frame, $window, $order, $group, $ids['user_id'], $limit, $read);
+        return $this->listing($continuation, $frame, $window, $order, $group, $ids['user_id'], $limit, $read);
     }
 
     /**
@@ -190,10 +189,10 @@ class Occurrences extends Tool
      *
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  array{method: string|null, status: array{int, int}|null, status_text: string|null, outcome: Outcome|null, level: LogLevel|null, slower_than_ms: int|float|null, at_or_above: Percentile|null, matching: string|null}  $filters
-     * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
+     * @param  Continuation<array{value: int|float, id: int}>  $continuation
      * @return array{inWindow: int, groupHeld: bool, baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
      */
-    protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, array $filters, int $limit, string $selector, ?Cursor $cursor): array
+    protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, array $filters, int $limit, string $selector, Continuation $continuation): array
     {
         $inWindow = $this->inWindow($connection, $window);
         $held = $group === null ? [] : Listing::typesOf($connection, $group);
@@ -247,7 +246,7 @@ class Occurrences extends Tool
             'percentile' => $filters['at_or_above'],
         ];
         $threshold = $baseline['threshold'] ?? null;
-        $listed = $listing->rows($connection, $limit, $threshold, $cursor?->last);
+        $listed = $listing->rows($connection, $limit, $threshold, $continuation->after());
         $sites = $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null;
 
         return [
@@ -261,9 +260,10 @@ class Occurrences extends Tool
     /**
      * Put the rows, newest or worst first, in the envelope.
      *
+     * @param  Continuation<array{value: int|float, id: int}>  $continuation
      * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read
      */
-    protected function listing(Request $request, Frame $frame, Window $window, Order $order, ?string $group, ?string $userId, int $limit, array $read): Answer
+    protected function listing(Continuation $continuation, Frame $frame, Window $window, Order $order, ?string $group, ?string $userId, int $limit, array $read): Answer
     {
         /** @var array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>} $listed */
         $listed = $read['listed'];
@@ -286,7 +286,8 @@ class Occurrences extends Tool
             'count' => $count,
             'order' => $order->value,
         ]);
-        $truncated = $this->truncated($request, $rows, $listed['keys'], $frame->now, $window, $frame->facts()->meta->createdAt);
+        $entry = $continuation->truncation($rows, $listed['keys'], 'rows', 'firewatch::messages.occurrences_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now);
+        $truncated = $entry === null ? [] : [$entry];
 
         return $frame->answer(
             summary: $summary,
@@ -323,28 +324,6 @@ class Occurrences extends Tool
     }
 
     /**
-     * Get the `truncated` entries of the answer.
-     *
-     * @param  list<array{value: int|float, id: int}>  $keys
-     * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
-     */
-    protected function truncated(Request $request, Rows $rows, array $keys, float $epoch, Window $window, ?float $createdAt): array
-    {
-        if (! $rows->more) {
-            return [];
-        }
-
-        $last = $keys[count($rows->rows) - 1];
-        $arguments = array_diff_key($request->all(), array_flip(['cursor', 'format']));
-        $arguments['cursor'] = Cursor::make(tool: $this->name(), arguments: $request->all(), createdAt: $createdAt, last: $last, since: $window->since(), until: $window->until() ?? $epoch);
-        $call = $this->call($arguments);
-        $how = __('firewatch::messages.occurrences_cursor_how', ['call' => $call]);
-        $entry = $rows->truncation(section: 'rows', how: $how);
-
-        return $entry === null ? [] : [$entry];
-    }
-
-    /**
      * Get the call that shows how the group of the first row compares with its peers.
      *
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
@@ -363,20 +342,6 @@ class Occurrences extends Tool
             ],
             'why' => __('firewatch::messages.occurrences_next_group'),
         ]];
-    }
-
-    /**
-     * Get the window of the call.
-     *
-     * @param  Cursor<array{value: int|float, id: int}>|null  $cursor
-     */
-    protected function window(Request $request, CarbonImmutable $now, string $timezone, ?Cursor $cursor): Window
-    {
-        if ($cursor !== null) {
-            return Window::between(since: $cursor->since, until: $cursor->until, timezone: $timezone);
-        }
-
-        return Window::read($request, $now, timezone: $timezone, tool: $this->name());
     }
 
     /**

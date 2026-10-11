@@ -118,7 +118,7 @@ class Ranking
     /**
      * Read the deploys one group was recorded under in the window, in the order they were first seen, and only the most recent ones when there are more than the limit, with the group's stage view.
      *
-     * @return array{rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}
+     * @return array{page: Rows<array<string, mixed>>, rows: list<array<string, mixed>>, matched: int, records: int, label: string, stages: StageView|null}
      */
     public function breakdown(SQLite3 $connection, int $limit): array
     {
@@ -132,13 +132,15 @@ class Ranking
             $label = $this->label($deploys[0]);
         }
 
-        $shown = array_slice($deploys, 0, $limit);
+        $page = Rows::bound($deploys, $limit);
+        $shown = $page->rows;
 
         usort($shown, fn (array $a, array $b) => ($a['wfirst'] <=> $b['wfirst']) ?: strcmp($a['hash'], $b['hash']));
 
         $stages = $this->stages($connection, $records);
 
         return [
+            'page' => $page,
             'rows' => array_map($this->deployRow(...), $shown),
             'matched' => count($deploys),
             'records' => $records,
