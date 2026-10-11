@@ -36,9 +36,12 @@ class ModeResolver
      */
     public function command(array $argv): ?string
     {
-        foreach (array_slice($argv, 1) as $argument) {
-            if (! str_starts_with($argument, '-')) {
-                return $argument;
+        for ($i = 1; $i < count($argv); $i++) {
+            // --env is the only global option that takes a value, and Symfony also reads it from the next argument.
+            if ($argv[$i] === '--env' && ! str_starts_with($argv[$i + 1] ?? '-', '-')) {
+                $i++;
+            } elseif (! str_starts_with($argv[$i], '-')) {
+                return $argv[$i];
             }
         }
 
