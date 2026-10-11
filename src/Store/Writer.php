@@ -111,24 +111,25 @@ class Writer
     protected Closure $pid;
 
     /**
-     * The log of the store's recoveries.
+     * How long a write waits for a busy store, in milliseconds.
      */
-    protected FailureLog $failures;
+    protected int $busyTimeoutMilliseconds;
 
     /**
      * Create a new store writer instance.
      */
     public function __construct(
         protected Configuration $configuration,
+        protected FailureLog $failures,
+        ?int $busyTimeoutMilliseconds = null,
         ?string $sqliteVersion = null,
         ?FileIdentity $identity = null,
         ?Closure $pid = null,
-        ?FailureLog $failures = null,
     ) {
+        $this->busyTimeoutMilliseconds = $busyTimeoutMilliseconds ?? $configuration->busyTimeoutMilliseconds;
         $this->sqliteVersion = $sqliteVersion ?? SQLite3::version()['versionString'];
         $this->identity = $identity ?? new FileIdentity;
         $this->pid = $pid ?? static fn (): int => getmypid() ?: 0;
-        $this->failures = $failures ?? new FailureLog($configuration);
     }
 
     /**
@@ -244,7 +245,7 @@ class Writer
         }
 
         if ($this->connection === null) {
-            $this->connection = $this->open($this->configuration->busyTimeoutMilliseconds);
+            $this->connection = $this->open($this->busyTimeoutMilliseconds);
             $this->connectionPid = $pid;
 
             // Read before the open, so a file swapped in after it is seen by the next batch; a store that did not exist yet was created by the open, and is read after it.
@@ -295,7 +296,7 @@ class Writer
     protected function locked(Closure $callback): mixed
     {
         $path = $this->configuration->database.'.lock';
-        $budget = $this->configuration->busyTimeoutMilliseconds;
+        $budget = $this->busyTimeoutMilliseconds;
 
         $this->createDirectory(dirname($path));
         $handle = $this->openLockFile($path);

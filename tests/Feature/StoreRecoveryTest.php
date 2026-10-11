@@ -2,6 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
@@ -22,9 +23,9 @@ function recoveryPath(): string
  */
 function recoveryWriter(string $sqliteVersion): Writer
 {
-    $writer = new Writer(app(Configuration::class), sqliteVersion: $sqliteVersion);
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $sqliteVersion);
 
-    app()->instance(Writer::class, $writer);
+    app()->bind(Writer::class, fn () => $writer);
 
     registerFirewatch();
 
@@ -45,7 +46,7 @@ function recoveryBatch(string $key): void
  */
 function recoveryStore(string $key = 'old'): void
 {
-    $writer = new Writer(app(Configuration::class), sqliteVersion: '3.45.1');
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
 
     $writer->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('cache-event', json_object('key', '{$key}'))"));
 }
@@ -215,7 +216,7 @@ describe('a store of another schema version', function () {
         $store = new SQLite3($path);
         $store->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0; CREATE TABLE records (id INTEGER)');
         $store->close();
-        $other = new Writer(app(Configuration::class), sqliteVersion: '3.51.3');
+        $other = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.51.3');
 
         // The other writer rebuilds the store and stores a record between this writer's check and its transaction.
         $writer = new class(app(Configuration::class), '3.51.3', other: $other) extends Writer
@@ -224,7 +225,7 @@ describe('a store of another schema version', function () {
 
             public function __construct(Configuration $configuration, string $sqliteVersion, protected Writer $other)
             {
-                parent::__construct($configuration, $sqliteVersion);
+                parent::__construct($configuration, app(FailureLog::class), sqliteVersion: $sqliteVersion);
             }
 
             protected function transactionOn(SQLite3 $connection, Closure $callback): mixed
@@ -237,7 +238,7 @@ describe('a store of another schema version', function () {
                 return parent::transactionOn($connection, $callback);
             }
         };
-        app()->instance(Writer::class, $writer);
+        app()->bind(Writer::class, fn () => $writer);
         registerFirewatch();
 
         recoveryBatch('new');
@@ -325,7 +326,7 @@ describe('a damaged Firewatch store', function () {
 
     it('is left alone when another process already replaced it', function () {
         recoveryStore();
-        $other = new Writer(app(Configuration::class), sqliteVersion: '3.51.3');
+        $other = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.51.3');
 
         // The other process finds the damage first, replaces the store and writes to the new one, before this writer sees the same damage.
         $writer = new class(app(Configuration::class), '3.51.3', $other) extends Writer
@@ -334,7 +335,7 @@ describe('a damaged Firewatch store', function () {
 
             public function __construct(Configuration $configuration, string $sqliteVersion, protected Writer $other)
             {
-                parent::__construct($configuration, $sqliteVersion);
+                parent::__construct($configuration, app(FailureLog::class), sqliteVersion: $sqliteVersion);
             }
 
             protected function write(Closure $callback): mixed
@@ -352,7 +353,7 @@ describe('a damaged Firewatch store', function () {
                 return parent::write($callback);
             }
         };
-        app()->instance(Writer::class, $writer);
+        app()->bind(Writer::class, fn () => $writer);
         registerFirewatch();
 
         recoveryBatch('new');

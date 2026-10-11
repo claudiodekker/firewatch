@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -16,9 +17,9 @@ function identityConnection(Writer $writer): SQLite3
  */
 function identityWriter(?Closure $pid = null): Writer
 {
-    $writer = new Writer(app(Configuration::class), sqliteVersion: '3.51.3', pid: $pid);
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.51.3', pid: $pid);
 
-    app()->instance(Writer::class, $writer);
+    app()->bind(Writer::class, fn () => $writer);
 
     registerFirewatch();
 
@@ -55,7 +56,8 @@ function replaceStore(string $key): void
     $path = identityStorePath();
     $replacement = $path.'.replacement';
     $normaliser = new ConfigurationNormaliser(basePath: base_path(), publicPath: public_path(), storagePath: storage_path());
-    $writer = new Writer($normaliser->resolve(['database' => $replacement]), sqliteVersion: '3.51.3');
+    $configuration = $normaliser->resolve(['database' => $replacement]);
+    $writer = new Writer($configuration, new FailureLog($configuration), sqliteVersion: '3.51.3');
 
     $connection = $writer->transaction(function (SQLite3 $connection) use ($key) {
         $connection->exec("INSERT INTO records (type, data) VALUES ('cache-event', json_object('key', '{$key}'))");

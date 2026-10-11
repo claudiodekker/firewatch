@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Symfony\Component\Process\Process;
 
 beforeEach(function () {
-    $writer = new Writer(app(Configuration::class), sqliteVersion: '3.45.1');
+    $writer = new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: '3.45.1');
     $writer->transaction(fn (SQLite3 $connection) => $connection->exec("INSERT INTO records (type, data) VALUES ('request', '{}')"));
 });
 

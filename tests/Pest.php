@@ -5,7 +5,9 @@ use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
@@ -55,8 +57,14 @@ function notices(): array
     return $notices->written();
 }
 
+/**
+ * Register Firewatch again, so that its store writer and failure log are built from the current configuration.
+ */
 function registerFirewatch(): Configuration
 {
+    app()->forgetInstance(Writer::class);
+    app()->forgetInstance(FailureLog::class);
+
     app()->register(FirewatchServiceProvider::class, force: true);
 
     return app(Configuration::class);

@@ -14,6 +14,8 @@ use ClaudioDekker\Firewatch\Console\Commands\ServerCommand;
 use ClaudioDekker\Firewatch\Mcp\StrayOutput;
 use ClaudioDekker\Firewatch\Sql\ChildRunner;
 use ClaudioDekker\Firewatch\Sql\SqlRunner;
+use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Writer;
 use Closure;
 use Composer\InstalledVersions;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
@@ -115,6 +117,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->registerNightwatchInstall();
         $this->registerConfiguration();
         $this->registerGitHead();
+        $this->registerStore();
         $this->registerSqlRunner();
         $this->resolveMode();
         $this->redirectStrayServerOutput();
@@ -207,6 +210,15 @@ class FirewatchServiceProvider extends ServiceProvider
     protected function registerGitHead(): void
     {
         $this->app->bindIf(GitHead::class, fn () => new GitHead($this->app->basePath()));
+    }
+
+    /**
+     * Keep one store writer and one failure log for this process, unless they are already bound.
+     */
+    protected function registerStore(): void
+    {
+        $this->app->singletonIf(FailureLog::class);
+        $this->app->singletonIf(Writer::class);
     }
 
     /**
