@@ -11,6 +11,21 @@ enum Percentile: string
     case P95 = 'p95';
 
     /**
+     * The whole of the scale a share and a percentage are on.
+     */
+    public const PERCENT = 100;
+
+    /**
+     * The records a group needs before its median is shown.
+     */
+    protected const MEDIAN_FLOOR = 3;
+
+    /**
+     * The records a group needs before its 95th percentile is shown.
+     */
+    protected const P95_FLOOR = 20;
+
+    /**
      * Get the share of the records, in percent, that lie at or below the percentile.
      */
     public function share(): int
@@ -27,8 +42,16 @@ enum Percentile: string
     public function floor(): int
     {
         return match ($this) {
-            self::MEDIAN => Ranking::P50_FLOOR,
-            self::P95 => Ranking::P95_FLOOR,
+            self::MEDIAN => self::MEDIAN_FLOOR,
+            self::P95 => self::P95_FLOOR,
         };
+    }
+
+    /**
+     * Get the SQL expression of the row the percentile takes among `n` values in ascending order, by nearest rank.
+     */
+    public function nearestRank(): string
+    {
+        return 'max(1, (n * '.$this->share().' + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
     }
 }

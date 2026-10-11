@@ -5,7 +5,6 @@ namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Lineage;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
-use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -93,7 +92,7 @@ class QueueLatency implements Thresholded
      */
     protected function groups(SQLite3 $connection, Window $window, Fragment $dispatches, int|float $milliseconds): array
     {
-        $rank = Ranking::nearestRank(Percentile::MEDIAN->share());
+        $rank = Percentile::MEDIAN->nearestRank();
 
         return Stored::rows($connection, "{$dispatches->sql}, judged AS (
             SELECT *, coalesce(wait >= :microseconds, 0) AS waited_long, coalesce(wait >= :microseconds OR age >= :microseconds, 0) AS late FROM dispatches

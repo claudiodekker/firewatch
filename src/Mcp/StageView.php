@@ -107,7 +107,7 @@ readonly class StageView
     {
         $total = $this->total();
 
-        return $total <= 0 ? null : round(Ranking::PERCENT * $this->sums[$stage->value] / $total, self::PERCENT_DECIMALS);
+        return $total <= 0 ? null : round(Percentile::PERCENT * $this->sums[$stage->value] / $total, self::PERCENT_DECIMALS);
     }
 
     /**

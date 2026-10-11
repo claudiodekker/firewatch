@@ -570,7 +570,7 @@ class Comparison
             return null;
         }
 
-        return ($after - $before) / $before * Ranking::PERCENT;
+        return ($after - $before) / $before * Percentile::PERCENT;
     }
 
     /**

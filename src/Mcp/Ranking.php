@@ -15,31 +15,6 @@ use SQLite3;
 class Ranking
 {
     /**
-     * The records a group needs before its median is shown.
-     */
-    public const P50_FLOOR = 3;
-
-    /**
-     * The records a group needs before its 95th percentile is shown.
-     */
-    public const P95_FLOOR = 20;
-
-    /**
-     * The nearest rank of the median, as a percentile.
-     */
-    protected const P50_RANK = 50;
-
-    /**
-     * The nearest rank of the 95th percentile, as a percentile.
-     */
-    protected const P95_RANK = 95;
-
-    /**
-     * The whole of a percentile scale.
-     */
-    public const PERCENT = 100;
-
-    /**
      * The decimals a failure percentage is rounded to.
      */
     protected const PERCENT_DECIMALS = 1;
@@ -263,7 +238,7 @@ class Ranking
         foreach ($latest as $row) {
             $hash = $row['group_hash'];
             $counts = array_filter([$durations[$hash]['n'] ?? null, $memories[$hash]['n'] ?? null]);
-            $percentile = $counts !== [] && min($counts) >= self::P95_FLOOR ? 'p95' : 'max';
+            $percentile = $counts !== [] && min($counts) >= Percentile::P95->floor() ? 'p95' : 'max';
 
             $budgets[$hash] = [
                 'ran' => $row['ran'],
@@ -391,9 +366,9 @@ class Ranking
     {
         $percentiles = [];
 
-        $p50Rank = self::nearestRank(self::P50_RANK);
-        $p95Rank = self::nearestRank(self::P95_RANK);
-        $p50Floor = self::P50_FLOOR;
+        $p50Rank = Percentile::MEDIAN->nearestRank();
+        $p95Rank = Percentile::P95->nearestRank();
+        $p50Floor = Percentile::MEDIAN->floor();
 
         $rows = $this->query($connection, "SELECT group_hash, n, max(CASE WHEN rn = {$p50Rank} THEN v END) AS p50, max(CASE WHEN rn = {$p95Rank} THEN v END) AS p95, max(CASE WHEN rn = n THEN v END) AS max, group_concat(CASE WHEN n < {$p50Floor} THEN v END) AS raw FROM (SELECT group_hash, {$column} AS v, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY {$column}, id) AS rn, COUNT(*) OVER (PARTITION BY group_hash) AS n FROM base WHERE group_hash IS NOT NULL AND {$column} IS NOT NULL AND {$where}) GROUP BY group_hash");
 
@@ -418,14 +393,6 @@ class Ranking
     }
 
     /**
-     * Get the SQL expression of the row a nearest-rank percentile of `n` values takes.
-     */
-    public static function nearestRank(int $percentile): string
-    {
-        return 'max(1, (n * '.$percentile.' + '.(self::PERCENT - 1).') / '.self::PERCENT.')';
-    }
-
-    /**
      * Get the unrounded value of a measure for a group, or null when too few of its records have the quantity.
      *
      * @param  array<string, mixed>  $group
@@ -433,14 +400,14 @@ class Ranking
     public static function value(array $group, Measure $measure): int|float|null
     {
         return match ($measure) {
-            Measure::P95_DURATION => $group['timed'] >= self::P95_FLOOR ? $group['p95'] : null,
-            Measure::P50_DURATION => $group['timed'] >= self::P50_FLOOR ? $group['p50'] : null,
+            Measure::P95_DURATION => $group['timed'] >= Percentile::P95->floor() ? $group['p95'] : null,
+            Measure::P50_DURATION => $group['timed'] >= Percentile::MEDIAN->floor() ? $group['p50'] : null,
             Measure::MAX_DURATION => $group['max'],
             Measure::AVG_DURATION => $group['avg'],
             Measure::TOTAL_DURATION => $group['total'],
             Measure::OCCURRENCES => $group['occurrences'],
-            Measure::P95_MEMORY => $group['mem_timed'] >= self::P95_FLOOR ? $group['mem_p95'] : null,
-            Measure::P50_MEMORY => $group['mem_timed'] >= self::P50_FLOOR ? $group['mem_p50'] : null,
+            Measure::P95_MEMORY => $group['mem_timed'] >= Percentile::P95->floor() ? $group['mem_p95'] : null,
+            Measure::P50_MEMORY => $group['mem_timed'] >= Percentile::MEDIAN->floor() ? $group['mem_p50'] : null,
             Measure::MAX_MEMORY => $group['mem_max'] ?? null,
             Measure::LAST_SEEN => $group['last'],
             Measure::QUERIES => $group['queries'] ?? null,
@@ -509,8 +476,8 @@ class Ranking
         $withheld = [];
 
         if ($this->hasDuration()) {
-            $p50 = $this->floored($group, 'p50_ms', $group['timed'], self::P50_FLOOR, $withheld);
-            $p95 = $this->floored($group, 'p95_ms', $group['timed'], self::P95_FLOOR, $withheld);
+            $p50 = $this->floored($group, 'p50_ms', $group['timed'], Percentile::MEDIAN->floor(), $withheld);
+            $p95 = $this->floored($group, 'p95_ms', $group['timed'], Percentile::P95->floor(), $withheld);
 
             $row += [
                 'min_ms' => Stored::milliseconds($group['min']),
@@ -523,7 +490,7 @@ class Ranking
         }
 
         if ($this->type->isExecution()) {
-            $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], self::P95_FLOOR, $withheld, 'mem_p95');
+            $memory = $this->floored($group, 'p95_memory_mb', $group['mem_timed'], Percentile::P95->floor(), $withheld, 'mem_p95');
 
             $row += [
                 'p95_memory_mb' => Stored::megabytes($memory),
@@ -535,7 +502,7 @@ class Ranking
         $failed = $group['failed_of'] ?? 0;
 
         $row += [
-            'failure_pct' => $failed > 0 ? round(self::PERCENT * $group['failed'] / $failed, self::PERCENT_DECIMALS) : null,
+            'failure_pct' => $failed > 0 ? round(Percentile::PERCENT * $group['failed'] / $failed, self::PERCENT_DECIMALS) : null,
             'first_seen_at' => $group['first'],
             'last_seen_at' => $group['last'],
             'deploys' => $group['deploys'],
@@ -571,8 +538,8 @@ class Ranking
         $withheld = [];
 
         if ($this->hasDuration()) {
-            $p50 = $this->floored($deploy, 'p50_ms', $deploy['timed'], self::P50_FLOOR, $withheld);
-            $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], self::P95_FLOOR, $withheld);
+            $p50 = $this->floored($deploy, 'p50_ms', $deploy['timed'], Percentile::MEDIAN->floor(), $withheld);
+            $p95 = $this->floored($deploy, 'p95_ms', $deploy['timed'], Percentile::P95->floor(), $withheld);
 
             $row += [
                 'p50_ms' => Stored::milliseconds($p50),

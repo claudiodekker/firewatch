@@ -2,7 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\Ranking;
+use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -51,7 +51,7 @@ class Cache implements Thresholded
      */
     public function threshold(): Threshold
     {
-        return new Threshold(name: 'percent', unit: 'percent', default: 50, minimum: 1, maximum: Ranking::PERCENT, whole: false);
+        return new Threshold(name: 'percent', unit: 'percent', default: 50, minimum: 1, maximum: Percentile::PERCENT, whole: false);
     }
 
     /**
@@ -114,7 +114,7 @@ class Cache implements Thresholded
     protected function keys(SQLite3 $connection, Window $window, int|float $percent, ?string $group, int $limit): array
     {
         $selected = Fragment::selecting($window, $group);
-        $whole = Ranking::PERCENT;
+        $whole = Percentile::PERCENT;
         $worstFirst = 'failures DESC, hit_rate IS NULL, hit_rate ASC, group_hash ASC';
 
         return Stored::rows($connection, "WITH events AS (
@@ -214,7 +214,7 @@ class Cache implements Thresholded
             'write_failures' => $row['write_failures'],
             'deletes' => $row['deletes'],
             'delete_failures' => $row['delete_failures'],
-            'hit_rate_pct' => $reads > 0 ? round(Ranking::PERCENT * $row['hits'] / $reads, self::PERCENT_DECIMALS) : null,
+            'hit_rate_pct' => $reads > 0 ? round(Percentile::PERCENT * $row['hits'] / $reads, self::PERCENT_DECIMALS) : null,
         ];
     }
 

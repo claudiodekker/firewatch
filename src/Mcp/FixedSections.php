@@ -478,6 +478,6 @@ class FixedSections
      */
     protected static function share(int $part, int $whole): ?float
     {
-        return $whole === 0 ? null : round(Ranking::PERCENT * $part / $whole, self::PERCENT_DECIMALS);
+        return $whole === 0 ? null : round(Percentile::PERCENT * $part / $whole, self::PERCENT_DECIMALS);
     }
 }
