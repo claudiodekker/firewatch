@@ -61,11 +61,10 @@ class NPlusOne implements Thresholded
     /**
      * Judge the executions that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $this->refuseQueryGroup($connection, $group);
 
-        $meta = Markers::read($connection);
         $from = History::removedThrough($meta, [RecordType::QUERY]);
         $executions = Executions::table($window, $group);
         $population = $this->population($connection, $window, $executions, $from);

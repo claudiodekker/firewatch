@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Outcome;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
 /**
@@ -42,7 +43,7 @@ class FailingJobs implements Thresholded
     /**
      * Judge the job attempts that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
         $described = $this->threshold()->describe($threshold);
         $attempts = $this->attempts($window, $group);

@@ -20,6 +20,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
+use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -125,9 +126,9 @@ class Detect extends Tool
 
         $frame->about($types, $window, facts: [CallFact::ACTOR]);
 
-        $read = $frame->read(fn (SQLite3 $connection) => [
+        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => [
             $this->inWindow($connection, $window),
-            array_map(fn (Detector $detector) => $this->detectors->judge($connection, $detector, $window, $threshold, $group, $limit), $detectors),
+            array_map(fn (Detector $detector) => $this->detectors->judge($connection, $facts->meta, $detector, $window, $threshold, $group, $limit), $detectors),
         ]);
 
         if ($read === null) {

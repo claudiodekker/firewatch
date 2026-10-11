@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
 /**
@@ -13,5 +14,5 @@ interface Thresholdless extends Detector
     /**
      * Judge the records of the window, worst first, and list at most the limit of the findings.
      */
-    public function judge(SQLite3 $connection, Window $window, ?string $group, int $limit): Judgement;
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, ?string $group, int $limit): Judgement;
 }

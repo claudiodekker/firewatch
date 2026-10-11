@@ -64,9 +64,8 @@ class DatabaseBound implements Thresholded
     /**
      * Judge the requests that started in the window.
      */
-    public function judge(SQLite3 $connection, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
     {
-        $meta = Markers::read($connection);
         $selected = Fragment::selecting($window, $group);
         $requests = new Fragment($selected->sql, [
             ...$selected->bindings,

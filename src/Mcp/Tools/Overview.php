@@ -17,6 +17,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -100,10 +101,10 @@ class Overview extends Tool
 
         $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR, CallFact::STORE_LEVEL]);
 
-        $read = $frame->read(fn (SQLite3 $connection) => [
+        $read = $frame->read(fn (SQLite3 $connection, StoreFacts $facts) => [
             $byDeploy ? FixedSections::readByDeploy($connection, $window) : FixedSections::read($connection, $window),
             BudgetSection::read($connection, $window, $this->configuration),
-            $this->detectors->judgeAll($connection, $window, new Deadline($frame->now)),
+            $this->detectors->judgeAll($connection, $facts->meta, $window, new Deadline($frame->now)),
         ]);
 
         if ($read === null || $frame->isEmpty()) {

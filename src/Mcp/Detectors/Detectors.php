@@ -65,24 +65,24 @@ class Detectors
      *
      * @return list<Judgement>
      */
-    public function judgeAll(SQLite3 $connection, Window $window, Deadline $deadline): array
+    public function judgeAll(SQLite3 $connection, Markers $meta, Window $window, Deadline $deadline): array
     {
         return array_map(fn (Detector $detector) => $deadline->passed()
             ? Judgement::notEvaluated($detector->name(), $detector instanceof Thresholded ? $detector->threshold()->describe() : null, Reason::DEADLINE)
-            : $this->judge($connection, $detector, $window, threshold: null, group: null, limit: 1), $this->all());
+            : $this->judge($connection, $meta, $detector, $window, threshold: null, group: null, limit: 1), $this->all());
     }
 
     /**
      * Judge the records of the window with a detector, and say so when history removed what it would have judged.
      */
-    public function judge(SQLite3 $connection, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
+    public function judge(SQLite3 $connection, Markers $meta, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
         $judgement = match (true) {
-            $detector instanceof Thresholded => $detector->judge($connection, $window, $threshold ?? $detector->threshold()->default, $group, $limit),
-            $detector instanceof Thresholdless => $detector->judge($connection, $window, $group, $limit),
+            $detector instanceof Thresholded => $detector->judge($connection, $meta, $window, $threshold ?? $detector->threshold()->default, $group, $limit),
+            $detector instanceof Thresholdless => $detector->judge($connection, $meta, $window, $group, $limit),
             default => throw new LogicException('A detector is either thresholded or thresholdless.'),
         };
 
-        return $judgement->afterRemoval(History::removedThrough(Markers::read($connection), $detector->types()), $window->since());
+        return $judgement->afterRemoval(History::removedThrough($meta, $detector->types()), $window->since());
     }
 }
