@@ -395,6 +395,32 @@ describe('the pass', function () {
             ->and($lines[0])->toMatchArray(['entry' => 'prune', 'kind' => 'other'])
             ->and($lines[0])->not->toHaveKey('dropped');
     });
+
+    it('reports a maintenance step that fails for a reason other than a busy store', function () {
+        app()->bind(Writer::class, fn () => new class(app(Configuration::class), app(FailureLog::class)) extends Writer
+        {
+            public function maintain(Closure $callback): mixed
+            {
+                $path = $this->configuration->database.'-damaged';
+                file_put_contents($path, str_repeat('not a database', 512));
+                $damaged = new SQLite3($path);
+                $damaged->enableExceptions(true);
+
+                try {
+                    return $callback($damaged);
+                } finally {
+                    $damaged->close();
+                }
+            }
+        });
+        registerFirewatch();
+
+        requestsStartedAt([PRUNE_CUTOFF - 1, PRUNE_CUTOFF + 1]);
+
+        expect(startedAts())->toBe([PRUNE_CUTOFF + 1])
+            ->and(pruneFailures())->toHaveCount(1)
+            ->and(pruneFailures()[0])->toMatchArray(['entry' => 'prune', 'kind' => 'foreign']);
+    });
 });
 
 /**
