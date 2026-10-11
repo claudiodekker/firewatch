@@ -5,7 +5,9 @@ use ClaudioDekker\Firewatch\FirewatchServiceProvider;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Envelope;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
@@ -57,6 +59,10 @@ function notices(): array
 
 function registerFirewatch(): Configuration
 {
+    // Registering again stands for a new process, which reads its configuration into a writer and failure log of its own.
+    app()->forgetInstance(Writer::class);
+    app()->forgetInstance(FailureLog::class);
+
     app()->register(FirewatchServiceProvider::class, force: true);
 
     return app(Configuration::class);
