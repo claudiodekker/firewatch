@@ -141,7 +141,9 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - Anything the application opted out of (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.
 - Under Octane the request bootstrap stage is zero, so do not compare durations across Octane and PHP-FPM.
 - A location in a compiled Blade view names its template beside it, but the line is the compiled file's. After `view:clear` the template reads null.
-- A memory peak is the whole process's peak. In a long-lived worker every execution inherits what the process already held, so compare executions to each other, not to an absolute number.
+- Exceptions the application does not report are absent, as are vendor commands and framework cache keys on Nightwatch's default exclusion lists.
+- Mail sent by a notification is recorded as a notification, not as mail.
+- A memory peak is the whole process's peak since the sensor last reset it. Requests, scheduled tasks and job attempts reset it, but a command reports its whole process, so compare executions to each other, not to an absolute number.
 
 Answers state these themselves, and `clean` means "none among what was captured".
 
