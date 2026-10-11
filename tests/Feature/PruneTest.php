@@ -61,23 +61,7 @@ function withRetention(int $records): void
 
 function withSmallPasses(int $chunk, int $transactions): void
 {
-    app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class), $chunk, $transactions) extends Pruner
-    {
-        public function __construct(Writer $writer, Reader $reader, Configuration $configuration, protected int $chunkRows, protected int $passTransactions)
-        {
-            parent::__construct($writer, $reader, $configuration);
-        }
-
-        protected function chunkRows(): int
-        {
-            return $this->chunkRows;
-        }
-
-        protected function passTransactions(): int
-        {
-            return $this->passTransactions;
-        }
-    });
+    app()->instance(Pruner::class, app()->make(Pruner::class, ['chunkRows' => $chunk, 'passTransactions' => $transactions]));
 
     registerFirewatch();
 }
@@ -403,33 +387,12 @@ function storePages(): array
 
 function withBackstop(int $pages, int $chunk = 5, int $transactions = 20, int $reclaim = 1024): void
 {
-    app()->instance(Pruner::class, new class(app(Writer::class), app(Reader::class), app(Configuration::class), $pages, $chunk, $transactions, $reclaim) extends Pruner
-    {
-        public function __construct(Writer $writer, Reader $reader, Configuration $configuration, protected int $pages, protected int $chunkRows, protected int $passTransactions, protected int $reclaimPages)
-        {
-            parent::__construct($writer, $reader, $configuration);
-        }
-
-        protected function backstopBytes(): int
-        {
-            return $this->pages * 4096;
-        }
-
-        protected function chunkRows(): int
-        {
-            return $this->chunkRows;
-        }
-
-        protected function passTransactions(): int
-        {
-            return $this->passTransactions;
-        }
-
-        protected function reclaimPages(): int
-        {
-            return $this->reclaimPages;
-        }
-    });
+    app()->instance(Pruner::class, app()->make(Pruner::class, [
+        'chunkRows' => $chunk,
+        'passTransactions' => $transactions,
+        'backstopBytes' => $pages * 4096,
+        'reclaimPages' => $reclaim,
+    ]));
 
     registerFirewatch();
 }
