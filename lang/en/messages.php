@@ -1126,9 +1126,9 @@ return [
 
     'occurrences_next_group' => 'The group of the first row: how it compares with its peers.',
 
-    'since_argument' => 'Start, included: epoch seconds, ISO 8601, local date or date-time, relative such as -1d, or now. Absent: :absent.',
+    'since_argument' => 'Inclusive start: epoch seconds, ISO 8601, local date(-time), relative (-1d) or now. Absent: :absent.',
 
-    'until_argument' => 'End, excluded, as since. Absent: :absent.',
+    'until_argument' => 'Exclusive end, as since. Absent: :absent.',
 
     'window_absent' => [
         'unbounded' => ['since' => 'unbounded', 'until' => 'unbounded'],
@@ -1149,7 +1149,7 @@ return [
 
     'grouped_type_argument' => 'Required unless group.',
 
-    'deploy_argument' => 'An exact deploy string: only its records count.',
+    'deploy_argument' => 'Exact deploy string: only its records count.',
 
     'cursor_argument' => 'From a cut answer, same arguments.',
 
