@@ -3,6 +3,7 @@
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Ingest;
+use ClaudioDekker\Firewatch\Mode;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Tests\Support\RecordBuilder;
@@ -19,7 +20,7 @@ function driftCounts(): array
 
 function installNightwatch(string $version, bool $registeredFirst = false): void
 {
-    app()->instance(NightwatchInstall::class, new NightwatchInstall(version: $version, registeredFirst: $registeredFirst));
+    app()->instance(NightwatchInstall::class, new NightwatchInstall(version: $version, registeredFirst: $registeredFirst, mode: Mode::ACTIVE));
 
     app(Core::class)->ingest = app(Ingest::class);
 }

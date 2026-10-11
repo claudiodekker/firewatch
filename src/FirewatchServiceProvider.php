@@ -25,7 +25,6 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Core;
-use Laravel\Nightwatch\Events\IngestingEvents;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\NightwatchServiceProvider;
 use RuntimeException;
@@ -104,22 +103,16 @@ class FirewatchServiceProvider extends ServiceProvider
     protected const VETO_EVENT_MISSING = 'Firewatch cannot veto Nightwatch\'s transmit: `%s` is missing from Nightwatch %s.';
 
     /**
-     * The mode this process resolved to.
-     */
-    protected Mode $mode;
-
-    /**
      * Register the package services.
      */
     public function register(): void
     {
         $this->registerNotices();
-        $this->registerNightwatchInstall();
         $this->registerConfiguration();
         $this->registerGitHead();
         $this->registerStore();
         $this->registerSqlRunner();
-        $this->resolveMode();
+        $this->registerNightwatchInstall();
         $this->redirectStrayServerOutput();
         $this->configureNightwatch();
         $this->vetoNightwatchTransmit();
@@ -140,7 +133,7 @@ class FirewatchServiceProvider extends ServiceProvider
             return;
         }
 
-        if ($this->mode === Mode::STEPPED_ASIDE) {
+        if ($this->mode() === Mode::STEPPED_ASIDE) {
             $this->notify(sprintf(static::STEPPED_ASIDE_NOTICE, $this->app->environment()));
 
             return;
@@ -169,7 +162,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Keep how Nightwatch is installed, before Firewatch registers its provider.
+     * Keep how Nightwatch is installed and the mode this process resolved to, before Firewatch registers Nightwatch's provider.
      */
     protected function registerNightwatchInstall(): void
     {
@@ -180,9 +173,23 @@ class FirewatchServiceProvider extends ServiceProvider
         $install = $this->app->make(NightwatchInstall::class, [
             'version' => InstalledVersions::getPrettyVersion('laravel/nightwatch') ?? '',
             'registeredFirst' => $registeredFirst,
+            'mode' => (new ModeResolver)->resolve(
+                $this->app->make(Configuration::class),
+                environment: $this->app->environment(),
+                argv: $this->argv(),
+                sqliteVersion: Sqlite::version(),
+            ),
         ]);
 
         $this->app->instance(NightwatchInstall::class, $install);
+    }
+
+    /**
+     * Get the mode this process resolved to.
+     */
+    protected function mode(): Mode
+    {
+        return $this->app->make(NightwatchInstall::class)->mode;
     }
 
     /**
@@ -244,24 +251,11 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Resolve the mode once for this process.
-     */
-    protected function resolveMode(): void
-    {
-        $this->mode = (new ModeResolver)->resolve(
-            $this->app->make(Configuration::class),
-            environment: $this->app->environment(),
-            argv: $this->argv(),
-            sqliteVersion: Sqlite::version(),
-        );
-    }
-
-    /**
      * Keep stdout to protocol messages in a server process, before other providers can print.
      */
     protected function redirectStrayServerOutput(): void
     {
-        if ($this->mode === Mode::STEPPED_ASIDE || (new ModeResolver)->command($this->argv()) !== ServerCommand::NAME) {
+        if ($this->mode() === Mode::STEPPED_ASIDE || (new ModeResolver)->command($this->argv()) !== ServerCommand::NAME) {
             return;
         }
 
@@ -291,7 +285,7 @@ class FirewatchServiceProvider extends ServiceProvider
     {
         $config = $this->app->make('config');
 
-        match ($this->mode) {
+        match ($this->mode()) {
             Mode::ACTIVE => $config->set([
                 'nightwatch.enabled' => true,
                 'nightwatch.token' => static::DEAD_TOKEN,
@@ -365,12 +359,12 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function vetoNightwatchTransmit(): void
     {
-        if ($this->mode !== Mode::ACTIVE) {
+        if ($this->mode() !== Mode::ACTIVE) {
             return;
         }
 
         // until() stops at the first non-null answer, so listen before Nightwatch's provider registers.
-        $this->app->make('events')->listen(IngestingEvents::class, static fn () => false);
+        $this->app->make('events')->listen($this->app->make(NightwatchInstall::class)->vetoEvent(), static fn () => false);
     }
 
     /**
@@ -402,7 +396,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function captureQueryBindings(): void
     {
-        if ($this->mode !== Mode::ACTIVE) {
+        if ($this->mode() !== Mode::ACTIVE) {
             return;
         }
 
@@ -416,7 +410,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function releaseQueryBindings(): void
     {
-        if ($this->mode !== Mode::ACTIVE) {
+        if ($this->mode() !== Mode::ACTIVE) {
             return;
         }
 
@@ -439,7 +433,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function captureLogs(): void
     {
-        if ($this->mode !== Mode::ACTIVE || ! $this->app->make(Configuration::class)->captureLogs) {
+        if ($this->mode() !== Mode::ACTIVE || ! $this->app->make(Configuration::class)->captureLogs) {
             return;
         }
 
@@ -453,7 +447,7 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function redactHeaders(): void
     {
-        if ($this->mode !== Mode::ACTIVE) {
+        if ($this->mode() !== Mode::ACTIVE) {
             return;
         }
 
@@ -474,36 +468,36 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function replaceNightwatchIngest(): void
     {
-        if ($this->mode === Mode::STEPPED_ASIDE) {
+        $install = $this->app->make(NightwatchInstall::class);
+
+        if ($install->mode === Mode::STEPPED_ASIDE) {
+            $install->keptIngest('Firewatch stepped aside');
+
             return;
         }
 
         if (! $this->app->bound(Core::class)) {
-            $this->notifyIngestNotReplaced(new RuntimeException('its core is not registered'));
+            $install->keptIngest('its core is not registered');
 
             return;
         }
 
         try {
-            (new IngestReplacer)->replace($this->app->make(Core::class), fn () => match ($this->mode) {
+            (new IngestReplacer)->replace($this->app->make(Core::class), fn () => match ($install->mode) {
                 Mode::ACTIVE => $this->app->make(Ingest::class),
                 Mode::OFF => new NullIngest,
             });
-        } catch (RuntimeException $exception) {
-            $this->notifyIngestNotReplaced($exception);
-        }
-    }
+        } catch (Throwable $exception) {
+            $install->keptIngest($exception->getMessage());
 
-    /**
-     * Write a notice once in a console process that Nightwatch's ingest stayed in place.
-     */
-    protected function notifyIngestNotReplaced(RuntimeException $reason): void
-    {
-        if (! $this->app->runningInConsole()) {
+            if (! $exception instanceof RuntimeException) {
+                throw $exception;
+            }
+
             return;
         }
 
-        $this->notify(static::INGEST_NOT_REPLACED.$reason->getMessage().'.');
+        $install->replacedIngest();
     }
 
     /**
@@ -532,8 +526,12 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         // Only Active registers the veto.
-        if ($this->mode === Mode::ACTIVE && ! $install->hasVetoEvent()) {
+        if ($install->mode === Mode::ACTIVE && ! $install->hasVetoEvent()) {
             $this->notify(sprintf(static::VETO_EVENT_MISSING, $install->vetoEvent(), $install->version));
+        }
+
+        if ($install->ingestKept() !== null) {
+            $this->notify(static::INGEST_NOT_REPLACED.$install->ingestKept().'.');
         }
     }
 

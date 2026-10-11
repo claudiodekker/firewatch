@@ -15,11 +15,17 @@ class NightwatchInstall
     public const VERIFIED_LINE = '1.30';
 
     /**
+     * Why Nightwatch's ingest is still in place, or null once Firewatch replaced it.
+     */
+    protected ?string $ingestKept = 'the swap did not finish';
+
+    /**
      * Create a new Nightwatch install instance.
      */
     public function __construct(
         public readonly string $version,
         public readonly bool $registeredFirst,
+        public readonly Mode $mode,
     ) {
         //
     }
@@ -53,5 +59,29 @@ class NightwatchInstall
     public function vetoEvent(): string
     {
         return IngestingEvents::class;
+    }
+
+    /**
+     * Record that Firewatch replaced Nightwatch's ingest.
+     */
+    public function replacedIngest(): void
+    {
+        $this->ingestKept = null;
+    }
+
+    /**
+     * Record why Firewatch left Nightwatch's ingest in place.
+     */
+    public function keptIngest(string $reason): void
+    {
+        $this->ingestKept = $reason;
+    }
+
+    /**
+     * Get why Nightwatch's ingest is still in place, or null when Firewatch replaced it.
+     */
+    public function ingestKept(): ?string
+    {
+        return $this->ingestKept;
     }
 }

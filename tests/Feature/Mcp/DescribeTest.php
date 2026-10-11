@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
 use ClaudioDekker\Firewatch\Mcp\Tools\Query;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
+use ClaudioDekker\Firewatch\Mode;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Availability;
@@ -296,7 +297,7 @@ it('lists what Nightwatch\'s output drifted from and the batches the store dropp
 
 it('lists the drift the store notes for itself, which no record type carries', function () {
     $clock = dscClock();
-    app()->instance(NightwatchInstall::class, new NightwatchInstall(version: 'v1.30.2', registeredFirst: true));
+    app()->instance(NightwatchInstall::class, new NightwatchInstall(version: 'v1.30.2', registeredFirst: true, mode: Mode::ACTIVE));
     app(Core::class)->ingest = app(Ingest::class);
     ingest([syntheticRecord(RecordType::REQUEST)->with(['timestamp' => 1790776000.0])]);
 

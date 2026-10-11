@@ -2,8 +2,11 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Console\Doctor\InstallChecks;
+use ClaudioDekker\Firewatch\Console\Doctor\ServerChecks;
 use ClaudioDekker\Firewatch\Console\Doctor\StoreChecks;
+use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
+use ClaudioDekker\Firewatch\Mode;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Availability;
@@ -18,12 +21,14 @@ use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Schema;
 use ClaudioDekker\Firewatch\Store\StoreFailure;
 use ClaudioDekker\Firewatch\Store\Writer;
+use ClaudioDekker\Firewatch\Tests\Support\FakeSqlRunner;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Lang;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
+use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Events\IngestingEvents;
 use Symfony\Component\Process\Process;
 
@@ -96,7 +101,10 @@ function doctorConfigure(array $settings): void
  */
 function doctorNightwatch(string $version, bool $registeredFirst = false): void
 {
-    app()->instance(NightwatchInstall::class, new NightwatchInstall(version: $version, registeredFirst: $registeredFirst));
+    $install = new NightwatchInstall(version: $version, registeredFirst: $registeredFirst, mode: Mode::OFF);
+    $install->replacedIngest();
+
+    app()->instance(NightwatchInstall::class, $install);
 }
 
 /**
@@ -270,28 +278,52 @@ describe('nightwatch', function () {
         ]);
     });
 
-    it('fails when the event the veto listens on is missing or has no records', function (string $event) {
-        app()->instance(NightwatchInstall::class, new class('1.30.2', false, $event) extends NightwatchInstall
+    it('fails when the event the veto listens on is missing', function () {
+        $install = new class('1.30.2', false, Mode::OFF) extends NightwatchInstall
         {
-            public function __construct(string $version, bool $registeredFirst, protected string $event)
-            {
-                parent::__construct($version, $registeredFirst);
-            }
-
             public function vetoEvent(): string
             {
-                return $this->event;
+                return 'Laravel\Nightwatch\Events\Missing';
             }
-        });
+        };
+        $install->replacedIngest();
+        app()->instance(NightwatchInstall::class, $install);
 
         expect(doctorCheck('nightwatch'))->toMatchArray([
             'status' => 'fail',
+            'message' => 'Nightwatch 1.30.2 lacks `Laravel\Nightwatch\Events\Missing`, so Firewatch can\'t veto its transmit',
             'fix' => __('firewatch::messages.doctor.nightwatch.api_fix', ['line' => '1.30']),
         ]);
+    });
+
+    it('fails with the reason when this process left Nightwatch\'s ingest in place', function (Closure $breakCore, string $reason) {
+        config()->set('firewatch.enabled', false);
+        $breakCore();
+        registerFirewatch();
+
+        $version = app(NightwatchInstall::class)->version;
+        expect(doctorCheck('nightwatch'))->toMatchArray([
+            'status' => 'fail',
+            'message' => "Firewatch left Nightwatch {$version}'s ingest in place: {$reason}",
+            'fix' => 'resolve the reason above, or install laravel/nightwatch 1.30.* if a Nightwatch upgrade caused it',
+        ]);
     })->with([
-        'an event that does not exist' => ['Laravel\Nightwatch\Events\Missing'],
-        'an event without records' => [stdClass::class],
+        'core not registered' => ['breakCore' => fn () => app()->offsetUnset(Core::class), 'reason' => 'its core is not registered'],
+        'core without an ingest property' => ['breakCore' => fn () => app()->instance(Core::class, new stdClass), 'reason' => 'its core has no assignable ingest property'],
     ]);
+
+    it('fails with the message of an unexpected error in the swap, and still reports it', function () {
+        Exceptions::fake();
+        app()->bind(Ingest::class, fn () => throw new LogicException('the store is unreachable'));
+        registerFirewatch();
+
+        $version = app(NightwatchInstall::class)->version;
+        expect(doctorCheck('nightwatch'))->toMatchArray([
+            'status' => 'fail',
+            'message' => "Firewatch left Nightwatch {$version}'s ingest in place: the store is unreachable",
+        ]);
+        Exceptions::assertReported(fn (LogicException $exception) => $exception->getMessage() === 'the store is unreachable');
+    });
 });
 
 describe('nightwatch-order', function () {
@@ -984,14 +1016,21 @@ describe('sql-access', function () {
 });
 
 describe('client', function () {
-    it('prints the absolute launch command', function () {
-        expect(doctorCheck('client'))->toBe([
-            'id' => 'client',
-            'status' => 'info',
-            'message' => __('firewatch::messages.doctor.client.launch', ['command' => PHP_BINARY.' '.base_path('artisan').' firewatch:server']),
-            'fix' => null,
-        ]);
-    });
+    it('prints the absolute launch command on the SQL child\'s binary, quoting a path only when the platform\'s shell needs it', function (string $osFamily, string $binary, string $base, string $php, string $artisan) {
+        if ($osFamily !== 'Windows' && DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('a POSIX shell is never paired with a backslash path separator');
+        }
+
+        $checks = new ServerChecks(tap(app(), fn ($app) => $app->setBasePath($base)), new FakeSqlRunner(binary: $binary), $osFamily);
+        $path = $base.DIRECTORY_SEPARATOR.'artisan';
+
+        expect($checks->client()->message)->toBe('launch command: '.$php.' '.str_replace('{path}', $path, $artisan).' firewatch:server (run from the project root)');
+    })->with([
+        'windows without spaces' => ['Windows', 'C:\php\php.exe', '/srv/app', 'C:\php\php.exe', '{path}'],
+        'windows with spaces' => ['Windows', 'C:\Program Files\php\php.exe', '/srv/my app', '"C:\Program Files\php\php.exe"', '"{path}"'],
+        'linux without spaces' => ['Linux', '/usr/bin/php', '/srv/app', '/usr/bin/php', '{path}'],
+        'linux with spaces' => ['Linux', '/opt/my php/php', '/srv/my app', "'/opt/my php/php'", "'{path}'"],
+    ]);
 });
 
 describe('the report', function () {
@@ -1064,7 +1103,7 @@ describe('the report', function () {
                 ['id' => 'capture-posture', 'status' => 'info', 'message' => __('firewatch::messages.doctor.capture-posture.posture', ['fields' => __('firewatch::messages.doctor.none'), 'headers' => __('firewatch::messages.doctor.none'), 'payload' => __('firewatch::messages.doctor.on'), 'logs' => __('firewatch::messages.doctor.on')]), 'fix' => null],
                 ['id' => 'server', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.server.ok', ['version' => $listing['server']['version'], 'count' => 12]), 'fix' => null],
                 ['id' => 'sql-access', 'status' => 'warn', 'message' => __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.php_binary')]), 'fix' => __('firewatch::messages.doctor.sql-access.php_binary_fix')],
-                ['id' => 'client', 'status' => 'info', 'message' => __('firewatch::messages.doctor.client.launch', ['command' => PHP_BINARY.' '.base_path('artisan').' firewatch:server']), 'fix' => null],
+                ['id' => 'client', 'status' => 'info', 'message' => __('firewatch::messages.doctor.client.launch', ['command' => $directory.'/no-php '.base_path('artisan').' firewatch:server']), 'fix' => null],
             ],
             'exit' => 0,
         ]);
@@ -1088,6 +1127,7 @@ it('runs as an Off process in a real application and creates nothing', function 
 
     expect($process->getExitCode())->toBe($report['status'] === 'fail' ? 1 : 0)
         ->and($results['mode']['status'])->toBe('ok')
+        ->and($results['nightwatch']['status'])->toBe('ok')
         ->and($results['store-identity']['status'])->toBe('info')
         ->and($this->storeDirectory)->not->toBeDirectory();
 })->group('process');
