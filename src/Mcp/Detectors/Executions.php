@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\ExecutionType;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 
 /**
  * @internal
@@ -51,7 +52,7 @@ class Executions
      */
     public static function label(mixed $label): mixed
     {
-        return $label === null ? null : (Stored::blank($label) ?? __('firewatch::messages.rank_no_route'));
+        return $label === null ? null : (Cell::blank($label) ?? __('firewatch::messages.rank_no_route'));
     }
 
     /**

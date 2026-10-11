@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use SQLite3;
 
 /**
@@ -105,7 +106,7 @@ class Memory implements Thresholded
 
         return [
             'group' => $row['group_hash'],
-            'name' => Stored::blank($row['label']) ?? __('firewatch::messages.rank_no_route'),
+            'name' => Cell::blank($row['label']) ?? __('firewatch::messages.rank_no_route'),
             'count' => $peak,
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],

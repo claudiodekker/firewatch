@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use ClaudioDekker\Firewatch\Configuration\DurationUnit;
+use ClaudioDekker\Firewatch\Store\Instant;
 
 /**
  * @internal

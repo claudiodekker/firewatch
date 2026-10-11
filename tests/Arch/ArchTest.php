@@ -118,3 +118,9 @@ test('the SQL child script references no framework or application code', functio
 test('no keyed array with several elements is written on one line', function () {
     expect(PackageSource::inlineKeyedArrays())->toBe([]);
 });
+
+foreach (['Store', 'Actions', 'Capture', 'Configuration', 'Ingest'] as $area) {
+    arch("{$area} never reaches the side that answers the assistant")
+        ->expect("ClaudioDekker\\Firewatch\\{$area}")
+        ->not->toUse('ClaudioDekker\\Firewatch\\Mcp');
+}

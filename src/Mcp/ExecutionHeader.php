@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Stage;
+use ClaudioDekker\Firewatch\Store\Cell;
 
 /**
  * @internal
@@ -30,9 +31,9 @@ class ExecutionHeader
             'duration_ms' => Stored::milliseconds($row['duration']),
             'stages' => self::stages($type, $row),
             'peak_memory_mb' => Stored::megabytes($row['peak_memory_usage'] ?? null),
-            'user_id' => Stored::blank($row['user_id']),
-            'deploy' => Stored::blank($row['deploy']),
-            'server' => Stored::blank($row['server']),
+            'user_id' => Cell::blank($row['user_id']),
+            'deploy' => Cell::blank($row['deploy']),
+            'server' => Cell::blank($row['server']),
         ];
     }
 
@@ -47,7 +48,7 @@ class ExecutionHeader
             return $row['name'] ?? null;
         }
 
-        return Stored::blank($row['route_path'] ?? null) ?? __('firewatch::messages.rank_no_route');
+        return Cell::blank($row['route_path'] ?? null) ?? __('firewatch::messages.rank_no_route');
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use Carbon\CarbonImmutable;
+use ClaudioDekker\Firewatch\Store\Instant;
 use Laravel\Mcp\Request;
 use SQLite3Stmt;
 

@@ -3,10 +3,10 @@
 namespace ClaudioDekker\Firewatch\Actions;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreState;

@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Outcome;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use SQLite3;
 
 /**
@@ -141,7 +142,7 @@ class FailingJobs implements Thresholded
     {
         return [
             'group' => $row['group_hash'],
-            'name' => Stored::blank($row['name']) ?? __('firewatch::messages.rank_no_route'),
+            'name' => Cell::blank($row['name']) ?? __('firewatch::messages.rank_no_route'),
             'count' => $row['failing_attempts'],
             'first_seen_at' => $row['first_seen'],
             'last_seen_at' => $row['last_seen'],

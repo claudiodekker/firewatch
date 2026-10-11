@@ -18,7 +18,6 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\ExceptionSection;
 use ClaudioDekker\Firewatch\Mcp\ExecutionHeader;
 use ClaudioDekker\Firewatch\Mcp\History;
-use ClaudioDekker\Firewatch\Mcp\Instant;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
@@ -28,6 +27,8 @@ use ClaudioDekker\Firewatch\Mcp\Timeline;
 use ClaudioDekker\Firewatch\Mcp\TruncationReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
+use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -234,8 +235,8 @@ class Execution extends Tool
     protected function request(array $row): array
     {
         return [
-            'headers' => Stored::json($row['headers']),
-            'payload' => Stored::json($row['payload']),
+            'headers' => Cell::json($row['headers']),
+            'payload' => Cell::json($row['payload']),
         ];
     }
 

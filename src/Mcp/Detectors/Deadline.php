@@ -2,7 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\Instant;
+use ClaudioDekker\Firewatch\Store\Instant;
 
 /**
  * @internal

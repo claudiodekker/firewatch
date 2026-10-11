@@ -8,6 +8,7 @@ use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Cell;
 use ClaudioDekker\Firewatch\Store\Markers;
 use SQLite3;
 
@@ -246,7 +247,7 @@ class DatabaseBound implements Thresholded
     {
         $share = $this->share($typical);
         $aggregate = round(Ranking::PERCENT * $group['query_micros'] / $group['duration_micros'], self::PERCENT_DECIMALS);
-        $route = Stored::blank($group['route_path']);
+        $route = Cell::blank($group['route_path']);
 
         return [
             'group' => $group['group_hash'],
