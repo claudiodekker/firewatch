@@ -13,8 +13,6 @@ const SLOW_ROUTE_MS = 150;
 /**
  * Let the scheduler run a task, then serve the given URIs, by default the slow route three times and the quick route once.
  *
- * The slow route takes SLOW_ROUTE_MS in its action.
- *
  * @param  list<string>|null  $uris
  */
 function slowRouteTraffic(?array $uris = null): void
