@@ -1017,6 +1017,10 @@ describe('sql-access', function () {
 
 describe('client', function () {
     it('prints the absolute launch command on the SQL child\'s binary, quoting a path only when the platform\'s shell needs it', function (string $osFamily, string $binary, string $base, string $php, string $artisan) {
+        if ($osFamily !== 'Windows' && DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('a POSIX shell is never paired with a backslash path separator');
+        }
+
         $checks = new ServerChecks(tap(app(), fn ($app) => $app->setBasePath($base)), new FakeSqlRunner(binary: $binary), $osFamily);
         $path = $base.DIRECTORY_SEPARATOR.'artisan';
 
