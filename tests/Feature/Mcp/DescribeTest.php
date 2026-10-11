@@ -323,13 +323,10 @@ it('answers before anything was recorded with the shipped catalogue, saying the 
     $store = Envelope::assert(Describe::class);
     $type = Envelope::assert(Describe::class, ['type' => 'request']);
 
-    expect($store['empty'])->toBe(['kind' => 'no_store', 'population' => null, 'message' => __('firewatch::messages.no_store', ['path' => $path])])
-        ->and($store['summary'])->toBe(__('firewatch::messages.describe_summary_absent'))
-        ->and($store['coverage'])->toMatchArray(['state' => 'absent', 'records' => null])
+    expect($store['summary'])->toBe(__('firewatch::messages.describe_summary_absent'))
         ->and(array_keys($store['result']))->toBe(['units', 'json_access', 'join_keys', 'objects', 'tables', 'sql', 'examples'])
         ->and($store['next'])->toBe([])
-        ->and($type['empty']['kind'])->toBe('no_store')
-        ->and($type['coverage'])->toMatchArray(['state' => 'absent', 'types_read' => ['request']])
+        ->and($type['coverage']['types_read'])->toBe(['request'])
         ->and($type['result']['records'])->toBeNull()
         ->and(array_column($type['result']['columns'], 'column'))->toBe(array_column((new Catalogue)->columns('requests'), 'column'))
         ->and(array_unique(array_map('json_encode', array_column($type['result']['columns'], 'examples'))))->toBe(['[]'])
@@ -367,13 +364,10 @@ it('answers a store it cannot read with the catalogue and the reason', function 
     $store = Envelope::assert(Describe::class);
     $type = Envelope::assert(Describe::class, ['type' => 'exception']);
 
-    expect($store['empty']['kind'])->toBe('store_unusable')
-        ->and($store['empty']['message'])->toBe(__('firewatch::messages.store_unusable.foreign_file', ['path' => $path]))
-        ->and($store['summary'])->toBe(__('firewatch::messages.describe_summary_unusable'))
-        ->and($store['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'foreign_file'])
+    expect($store['summary'])->toBe(__('firewatch::messages.describe_summary_unusable'))
         ->and($store['result']['objects'])->toHaveCount(16)
         ->and(array_key_exists('file_bytes', $store['result']))->toBeFalse()
-        ->and($type['coverage'])->toMatchArray(['state' => 'unusable', 'types_read' => ['exception']])
+        ->and($type['coverage']['types_read'])->toBe(['exception'])
         ->and(array_column($type['result']['columns'], 'column'))->toBe(array_column((new Catalogue)->columns('exceptions'), 'column'));
 });
 

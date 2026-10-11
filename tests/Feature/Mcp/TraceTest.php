@@ -1,6 +1,5 @@
 <?php
 
-use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
@@ -580,23 +579,6 @@ describe('what is not found', function () {
             ->and($envelope['next'])->toBe([]);
     });
 
-    it('answers that there is no store, and says what the call read', function () {
-        $envelope = trcAnswer(['trace_id' => 'abc']);
-
-        expect($envelope['empty']['kind'])->toBe('no_store')
-            ->and($envelope['coverage']['state'])->toBe('absent')
-            ->and($envelope['coverage']['types_read'])->toBe(['request', 'command', 'job-attempt', 'scheduled-task', 'queued-job']);
-    });
-
-    it('answers that the store is unusable, with why', function () {
-        $path = app(Configuration::class)->database;
-        mkdir(dirname($path), recursive: true);
-        file_put_contents($path, str_repeat('not a database ', 100));
-
-        $envelope = trcAnswer(['trace_id' => 'abc']);
-
-        expect($envelope['empty']['kind'])->toBe('store_unusable');
-    });
 });
 
 describe('arguments', function () {

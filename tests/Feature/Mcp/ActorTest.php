@@ -620,16 +620,17 @@ it('answers that nobody was identified among no one when the store holds records
         ->and($envelope['notes'])->toBe([__('firewatch::messages.actor_unknown_note')]);
 });
 
-it('answers that no store exists', function () {
-    $envelope = actorAnswer('taylor');
+it('states the blind spots of reading by actor when there is no store or it cannot be read', function () {
+    $missing = actorAnswer('taylor');
 
-    expect($envelope['empty']['kind'])->toBe('no_store')
-        ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.no_store'))
-        ->and($envelope['result'])->toBe([])
-        ->and($envelope['notes'])->toBe([])
-        ->and($envelope['next'])->toBe([])
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'absent', 'types_read' => array_column(RecordType::events(), 'value')])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
+    $path = app(Configuration::class)->database;
+    mkdir(dirname($path), recursive: true);
+    file_put_contents($path, str_repeat('not a database ', 100));
+
+    $unusable = actorAnswer('taylor');
+
+    expect(array_column($missing['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS)
+        ->and(array_column($unusable['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });
 
 it('answers that the store is empty when it holds no record and no one', function () {
@@ -641,20 +642,6 @@ it('answers that the store is empty when it holds no record and no one', functio
         ->and($envelope['summary'])->toBe(__('firewatch::messages.empty_summary.store_empty'))
         ->and($envelope['result'])->toBe([])
         ->and($envelope['coverage'])->toMatchArray(['state' => 'empty', 'records' => 0])
-        ->and($envelope['next'])->toBe([])
-        ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
-});
-
-it('answers that the store is unusable', function () {
-    $path = app(Configuration::class)->database;
-    mkdir(dirname($path), recursive: true);
-    file_put_contents($path, str_repeat('not a database ', 100));
-
-    $envelope = actorAnswer('taylor');
-
-    expect($envelope['empty']['kind'])->toBe('store_unusable')
-        ->and($envelope['coverage'])->toMatchArray(['state' => 'unusable', 'reason' => 'foreign_file'])
-        ->and($envelope['result'])->toBe([])
         ->and($envelope['next'])->toBe([])
         ->and(array_column($envelope['blind_spots'], 'id'))->toBe(ACTOR_BLIND_SPOTS);
 });

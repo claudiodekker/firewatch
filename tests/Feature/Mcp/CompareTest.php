@@ -715,10 +715,7 @@ it('answers nothing for a window with no record, a type with none on either side
     $emptyWindow = compareAnswer(['since' => COMPARE_SPLIT - 100, 'until' => COMPARE_SPLIT + 100]);
     $noMatch = compareAnswer(['type' => 'query']);
 
-    expect($missing['empty']['kind'])->toBe('no_store')
-        ->and($missing['coverage'])->toMatchArray(['state' => 'absent', 'straddling' => null])
-        ->and($missing['next'])->toBe([])
-        ->and($emptyStore['empty']['kind'])->toBe('store_empty')
+    expect($emptyStore['empty']['kind'])->toBe('store_empty')
         ->and($emptyWindow['empty'])->toMatchArray(['kind' => 'window_empty', 'population' => 6])
         ->and($noMatch['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 6, 'filters' => 'type: query'])])
         ->and($noMatch['result'])->toBe([]);

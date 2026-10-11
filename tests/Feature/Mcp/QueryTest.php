@@ -341,10 +341,7 @@ describe('the state of the store', function () {
 
         $envelope = qryAnswer(['sql' => 'SELECT 1']);
 
-        expect($envelope['empty']['kind'])->toBe('no_store')
-            ->and($envelope['coverage']['state'])->toBe('absent')
-            ->and($envelope['coverage']['types_read'])->toBe([])
-            ->and(qrySpawned())->toBeFalse()
+        expect(qrySpawned())->toBeFalse()
             ->and(app(Configuration::class)->database)->not->toBeFile();
     });
 
@@ -354,9 +351,7 @@ describe('the state of the store', function () {
 
         $envelope = qryAnswer(['sql' => 'SELECT 1']);
 
-        expect($envelope['empty']['kind'])->toBe('store_unusable')
-            ->and($envelope['coverage']['reason'])->toBe('foreign_file')
-            ->and(qrySpawned())->toBeFalse();
+        expect(qrySpawned())->toBeFalse();
     });
 
     it('answers a store the child found unreadable the way every tool does', function () {

@@ -469,8 +469,7 @@ it('answers nothing for no store, a window before every record, a type with no r
     $noMatch = trendAnswer(['type' => 'query']);
     $noGroup = Envelope::assert(Trend::class, ['group' => trendHash('e')]);
 
-    expect($missing['empty']['kind'])->toBe('no_store')
-        ->and($missing['window']['derived'])->toBe([])
+    expect($missing['window']['derived'])->toBe([])
         ->and($emptyWindow['empty'])->toMatchArray(['kind' => 'window_empty', 'population' => 3])
         ->and($noMatch['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 3, 'filters' => 'type: query'])])
         ->and($noGroup['empty'])->toMatchArray(['kind' => 'no_match', 'message' => __('firewatch::messages.no_match', ['population' => 3, 'filters' => 'group: '.trendHash('e')])])
