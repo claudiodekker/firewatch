@@ -237,6 +237,10 @@ class FirewatchServiceProvider extends ServiceProvider
      */
     protected function argv(): array
     {
+        if (! $this->app->runningInConsole()) {
+            return [];
+        }
+
         $argv = $_SERVER['argv'] ?? [];
 
         return is_array($argv) ? array_values(array_filter($argv, is_string(...))) : [];

@@ -91,6 +91,15 @@ it('resolves a firewatch: process Off by its first argument that is not an optio
     'only options' => ['argv' => ['artisan', '--version'], 'expected' => true],
 ]);
 
+it('reads the process arguments only in a console process', function () {
+    setArgv(['artisan', 'firewatch:server']);
+    (fn () => $this->isRunningInConsole = false)->call(app());
+
+    registerFirewatch();
+
+    expect(config('nightwatch.enabled'))->toBeTrue();
+});
+
 it('steps aside in a disallowed environment even in a firewatch: process', function () {
     setArgv(['artisan', 'firewatch:server']);
     config()->set('nightwatch.enabled', true);
