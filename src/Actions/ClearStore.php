@@ -11,9 +11,9 @@ use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\StoreState;
 use ClaudioDekker\Firewatch\Store\StoreUnusable;
+use ClaudioDekker\Firewatch\Store\UserDirectory;
 use ClaudioDekker\Firewatch\Store\Writer;
 use SQLite3;
-use SQLite3Stmt;
 
 /**
  * @internal
@@ -81,7 +81,7 @@ class ClearStore
         $users = 0;
 
         if ($type === null) {
-            $users = $this->deleteUsers($instant);
+            $users = $this->writer->transaction(fn (SQLite3 $connection) => UserDirectory::deleteSeenThrough($connection, $instant));
 
             $this->failures->clear();
         }
@@ -137,22 +137,6 @@ class ClearStore
     protected function newestId(): int
     {
         return Cell::integer($this->writer->transaction(fn (SQLite3 $connection) => $connection->querySingle('SELECT coalesce(max(id), 0) FROM records')));
-    }
-
-    /**
-     * Delete the users last seen up to the instant the clear started.
-     */
-    protected function deleteUsers(float $instant): int
-    {
-        return $this->writer->transaction(function (SQLite3 $connection) use ($instant) {
-            /** @var SQLite3Stmt $statement */
-            $statement = $connection->prepare('DELETE FROM users WHERE last_seen <= :instant');
-
-            $statement->bindValue(':instant', $instant, SQLITE3_FLOAT);
-            $statement->execute();
-
-            return $connection->changes();
-        });
     }
 
     /**

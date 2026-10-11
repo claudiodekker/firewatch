@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp;
 
+use ClaudioDekker\Firewatch\Store\UserDirectory;
 use SQLite3;
 
 /**
@@ -51,7 +52,7 @@ class Identification
     public static function of(SQLite3 $connection, string $who): self
     {
         foreach (self::STAGES as $stage) {
-            [$found, $count] = self::people($connection, self::condition($stage), ['who' => self::term($stage, $who)]);
+            [$found, $count] = UserDirectory::list($connection, Rows::fetch(self::LISTED), self::condition($stage), ['who' => self::term($stage, $who)]);
 
             if ($count > 0) {
                 return self::decidedBy($stage, $found, $count);
@@ -62,7 +63,7 @@ class Identification
             return self::decidedBy(MatchedBy::RECORDS, [self::withoutDirectoryRow($who)], 1);
         }
 
-        [$known, $count] = self::people($connection);
+        [$known, $count] = UserDirectory::list($connection, Rows::fetch(self::LISTED));
 
         return new self(null, Rows::bound([], self::LISTED), 0, Rows::bound($known, self::LISTED), $count);
     }
@@ -143,33 +144,5 @@ class Identification
             'first_seen' => null,
             'last_seen' => null,
         ];
-    }
-
-    /**
-     * Read the people of the user directory, or those a condition keeps, newest sighting first and one more than is listed, and count them all.
-     *
-     * @param  array<string, string>  $bindings
-     * @return array{list<array{id: string, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null}>, int}
-     */
-    protected static function people(SQLite3 $connection, ?string $condition = null, array $bindings = []): array
-    {
-        $where = $condition === null ? '' : "WHERE {$condition}";
-
-        /** @var list<array{id: string, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null, matched: int}> $rows */
-        $rows = Stored::rows($connection, "SELECT id, name, username, first_seen, last_seen, count(*) OVER () AS matched
-            FROM users {$where} ORDER BY last_seen DESC, id LIMIT :limit", [
-            ...$bindings,
-            'limit' => Rows::fetch(self::LISTED),
-        ]);
-
-        $people = array_map(fn (array $row) => [
-            'id' => $row['id'],
-            'name' => $row['name'],
-            'username' => $row['username'],
-            'first_seen' => $row['first_seen'],
-            'last_seen' => $row['last_seen'],
-        ], $rows);
-
-        return [$people, $rows[0]['matched'] ?? 0];
     }
 }

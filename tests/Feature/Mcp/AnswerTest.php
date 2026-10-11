@@ -6,12 +6,12 @@ use ClaudioDekker\Firewatch\Mcp\Coverage;
 use ClaudioDekker\Firewatch\Mcp\CoverageState;
 use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\EmptyKind;
-use ClaudioDekker\Firewatch\Mcp\History;
-use ClaudioDekker\Firewatch\Mcp\HistoryReason;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\UnusableReason;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\History;
+use ClaudioDekker\Firewatch\Store\HistoryReason;
 
 function answerWith(mixed ...$overrides): Answer
 {

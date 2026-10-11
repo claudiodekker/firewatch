@@ -6,12 +6,13 @@ use ClaudioDekker\Firewatch\Capture\Drift;
 use ClaudioDekker\Firewatch\Capture\DriftKind;
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\NightwatchInstall;
+use ClaudioDekker\Firewatch\Store\DriftLedger;
 use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Schema;
+use ClaudioDekker\Firewatch\Store\UserDirectory;
 use ClaudioDekker\Firewatch\Store\Writer;
 use SQLite3;
-use SQLite3Result;
 use SQLite3Stmt;
 
 /**
@@ -19,39 +20,6 @@ use SQLite3Stmt;
  */
 class AppendBatch
 {
-    /**
-     * The statement that adds a user to the directory, or refreshes one it holds.
-     */
-    protected const UPSERT_USER = <<<'SQL'
-        INSERT INTO users (id, name, username, first_seen, last_seen)
-        VALUES (:id, :name, :username, :seen_at, :seen_at)
-        ON CONFLICT (id) DO UPDATE SET
-            name = excluded.name,
-            username = excluded.username,
-            last_seen = max(coalesce(last_seen, excluded.last_seen), coalesce(excluded.last_seen, last_seen))
-        SQL;
-
-    /**
-     * The statement that adds a batch's count of one drift.
-     */
-    protected const UPSERT_DRIFT = <<<'SQL'
-        INSERT INTO drift (kind, type, v, detail, count, first_seen, last_seen)
-        VALUES (:kind, :type, :v, :detail, :count, :seen_at, :seen_at)
-        ON CONFLICT (kind, type, v, detail) DO UPDATE SET
-            count = count + excluded.count,
-            last_seen = excluded.last_seen
-        SQL;
-
-    /**
-     * The most drift rows kept apart.
-     */
-    protected const DRIFT_ROWS = 500;
-
-    /**
-     * The detail of the row a kind's drift beyond the cap is folded into.
-     */
-    protected const DRIFT_OVERFLOW = '... [overflow]';
-
     /**
      * Whether a batch has been stored since the process started.
      */
@@ -98,10 +66,8 @@ class AppendBatch
 
         $this->writer->transaction(function (SQLite3 $connection) use ($rows, $users, $drift, $receivedAt) {
             $this->execute($connection, $this->insert(), $rows);
-            $this->execute($connection, static::UPSERT_USER, $users);
-            $driftRows = $this->driftRows($connection, $drift, $receivedAt);
-
-            $this->execute($connection, static::UPSERT_DRIFT, $driftRows);
+            UserDirectory::upsert($connection, $users);
+            DriftLedger::record($connection, $drift, $receivedAt);
             Markers::recordNightwatch($connection, $this->install->version, $this->install->isVerified());
         });
 
@@ -134,83 +100,6 @@ class AppendBatch
         }
 
         return $drift;
-    }
-
-    /**
-     * Get the drift rows to add a batch's counts to, folding each new one beyond the cap into its kind's overflow row.
-     *
-     * @return list<array{kind: string, type: string, v: string, detail: string, count: int, seen_at: float}>
-     */
-    protected function driftRows(SQLite3 $connection, Drift $drift, float $receivedAt): array
-    {
-        $counted = $drift->all();
-
-        if ($counted === []) {
-            return [];
-        }
-
-        $kept = $this->keptDrift($connection);
-        $rows = [];
-
-        foreach ($counted as $occurrence) {
-            $key = $this->driftKey($occurrence);
-
-            if (! isset($kept[$key]) && count($kept) >= static::DRIFT_ROWS) {
-                $occurrence = [
-                    ...$occurrence,
-                    'type' => '',
-                    'v' => '',
-                    'detail' => static::DRIFT_OVERFLOW,
-                ];
-                $key = $this->driftKey($occurrence);
-            } else {
-                $kept[$key] = true;
-            }
-
-            $rows[$key] ??= [
-                ...$occurrence,
-                'count' => 0,
-                'seen_at' => $receivedAt,
-            ];
-            $rows[$key]['count'] += $occurrence['count'];
-        }
-
-        return array_values($rows);
-    }
-
-    /**
-     * Get the keys of the drift rows the store keeps apart, beside the overflow rows.
-     *
-     * @return array<string, true>
-     */
-    protected function keptDrift(SQLite3 $connection): array
-    {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare('SELECT kind, type, v, detail FROM drift WHERE detail <> :overflow');
-
-        $statement->bindValue(':overflow', static::DRIFT_OVERFLOW);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-        $kept = [];
-
-        while (($row = $result->fetchArray(SQLITE3_ASSOC)) !== false) {
-            $kept[$this->driftKey($row)] = true;
-        }
-
-        $statement->close();
-
-        return $kept;
-    }
-
-    /**
-     * Get the key a drift row is kept under.
-     *
-     * @param  array<string, mixed>  $drift
-     */
-    protected function driftKey(array $drift): string
-    {
-        return implode("\0", [$drift['kind'], $drift['type'], $drift['v'], $drift['detail']]);
     }
 
     /**

@@ -4,11 +4,15 @@ namespace ClaudioDekker\Firewatch\Console\Doctor;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Console\Concerns\FormatsFileSizes;
-use ClaudioDekker\Firewatch\Mcp\Holdings;
-use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\NightwatchInstall;
+use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\DriftLedger;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\Fetch;
+use ClaudioDekker\Firewatch\Store\History;
+use ClaudioDekker\Firewatch\Store\HistoryReason;
+use ClaudioDekker\Firewatch\Store\Holdings;
 use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
@@ -184,7 +188,7 @@ class StoreChecks
         }
 
         $fileBytes = (int) @filesize($this->configuration->database);
-        $coverage = $this->coverage($holdings, $markers);
+        $coverage = $this->coverage($markers);
 
         $facts = [
             'records' => $this->records($holdings->records),
@@ -248,7 +252,7 @@ class StoreChecks
     public function drift(): CheckResult
     {
         try {
-            $drift = $this->reader->snapshot(fn (SQLite3 $connection) => Holdings::read($connection)->drift);
+            $drift = $this->reader->snapshot(fn (SQLite3 $connection) => DriftLedger::summary($connection));
         } catch (StoreUnusable $unusable) {
             return $this->notRead($unusable);
         }
@@ -352,7 +356,7 @@ class StoreChecks
      */
     protected function quickCheck(SQLite3 $connection): array
     {
-        $rows = Stored::rows($connection, 'PRAGMA quick_check('.static::INTEGRITY_MESSAGES.')');
+        $rows = Fetch::rows($connection, 'PRAGMA quick_check('.static::INTEGRITY_MESSAGES.')');
 
         return array_map(fn (array $row) => (string) reset($row), $rows);
     }
@@ -360,19 +364,21 @@ class StoreChecks
     /**
      * Get the types whose history starts later than the store's creation, each with the instant and the reason.
      */
-    protected function coverage(Holdings $holdings, Markers $markers): string
+    protected function coverage(Markers $markers): string
     {
         $coverage = '';
 
-        foreach ($holdings->result($markers)['types'] as $row) {
-            if ($row['complete_reason'] === null || $row['complete_reason'] === 'created') {
+        foreach (RecordType::events() as $type) {
+            $history = History::of($markers, [$type]);
+
+            if ($history->reason === null || $history->reason === HistoryReason::CREATED) {
                 continue;
             }
 
             $coverage .= __('firewatch::messages.doctor.store-activity.coverage', [
-                'type' => $row['type'],
-                'from' => $this->moment($row['complete_from_at']),
-                'reason' => $row['complete_reason'],
+                'type' => $type->value,
+                'from' => $this->moment($history->from),
+                'reason' => $history->reason->value,
             ]);
         }
 

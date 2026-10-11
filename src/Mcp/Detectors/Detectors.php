@@ -2,8 +2,8 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
-use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
 use Illuminate\Contracts\Container\Container;
 use LogicException;

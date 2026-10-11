@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Sql\Child\Policy;
 use ClaudioDekker\Firewatch\Sql\Child\Unavailable;
 use ClaudioDekker\Firewatch\Sql\Limits;
 use ClaudioDekker\Firewatch\Sql\SqlFailure;
+use ClaudioDekker\Firewatch\Sql\SqlFailureKind;
 use ClaudioDekker\Firewatch\Store\Instant;
 use RuntimeException;
 
@@ -165,18 +166,29 @@ class Refusal extends RuntimeException
      */
     public static function sql(SqlFailure $failure, Limits $limits): self
     {
-        $text = match ($failure->error) {
-            ErrorCode::NOT_ALLOWED => self::notAllowed($failure->denied ?? Denied::ACTION, (string) $failure->name),
-            ErrorCode::INVALID_SQL => self::invalidSql((string) $failure->detail),
-            ErrorCode::ABORTED => self::aborted((string) $failure->detail),
-            ErrorCode::DEADLINE => __('firewatch::messages.deadline', ['seconds' => (int) ceil($limits->deadlineSeconds)]),
-            ErrorCode::MEMORY => __('firewatch::messages.memory', ['mebibytes' => Policy::HEAP_LIMIT_MEBIBYTES]),
-            ErrorCode::ROW_TOO_LARGE => __('firewatch::messages.row_too_large', ['bytes' => number_format(Policy::ROW_BUDGET_BYTES)]),
-            ErrorCode::UNAVAILABLE => self::unavailable($failure->unavailable),
+        $text = match ($failure->kind) {
+            SqlFailureKind::NOT_ALLOWED => self::notAllowed($failure->denied ?? Denied::ACTION, (string) $failure->name),
+            SqlFailureKind::INVALID_SQL => self::invalidSql((string) $failure->detail),
+            SqlFailureKind::ABORTED => self::aborted((string) $failure->detail),
+            SqlFailureKind::DEADLINE => __('firewatch::messages.deadline', ['seconds' => (int) ceil($limits->deadlineSeconds)]),
+            SqlFailureKind::MEMORY => __('firewatch::messages.memory', ['mebibytes' => Policy::HEAP_LIMIT_MEBIBYTES]),
+            SqlFailureKind::ROW_TOO_LARGE => __('firewatch::messages.row_too_large', ['bytes' => number_format(Policy::ROW_BUDGET_BYTES)]),
+            SqlFailureKind::UNAVAILABLE => self::unavailable($failure->unavailable),
             default => __('firewatch::messages.failed'),
         };
 
-        return new self($failure->error, $text);
+        $error = match ($failure->kind) {
+            SqlFailureKind::NOT_ALLOWED => ErrorCode::NOT_ALLOWED,
+            SqlFailureKind::INVALID_SQL => ErrorCode::INVALID_SQL,
+            SqlFailureKind::ABORTED => ErrorCode::ABORTED,
+            SqlFailureKind::ROW_TOO_LARGE => ErrorCode::ROW_TOO_LARGE,
+            SqlFailureKind::DEADLINE => ErrorCode::DEADLINE,
+            SqlFailureKind::MEMORY => ErrorCode::MEMORY,
+            SqlFailureKind::UNAVAILABLE => ErrorCode::UNAVAILABLE,
+            SqlFailureKind::FAILED => ErrorCode::FAILED,
+        };
+
+        return new self($error, $text);
     }
 
     /**

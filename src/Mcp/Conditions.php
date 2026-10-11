@@ -6,6 +6,8 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\FailureLog;
+use ClaudioDekker\Firewatch\Store\History;
+use ClaudioDekker\Firewatch\Store\HistoryReason;
 use ClaudioDekker\Firewatch\Store\Instant;
 
 /**

@@ -3,10 +3,9 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Fetch;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
-use SQLite3Result;
-use SQLite3Stmt;
 
 /**
  * @internal
@@ -37,24 +36,7 @@ class Stored
      */
     public static function rows(SQLite3 $connection, string $sql, array $bindings = [], ?Window $window = null): array
     {
-        /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare($sql);
-
-        foreach ($bindings as $name => $value) {
-            $statement->bindValue(":{$name}", $value);
-        }
-
-        $window?->bind($statement);
-
-        /** @var SQLite3Result $result */
-        $result = $statement->execute();
-        $rows = [];
-
-        while (is_array($row = $result->fetchArray(SQLITE3_ASSOC))) {
-            $rows[] = $row;
-        }
-
-        return $rows;
+        return Fetch::rows($connection, $sql, $bindings, $window === null ? null : $window->bind(...));
     }
 
     /**

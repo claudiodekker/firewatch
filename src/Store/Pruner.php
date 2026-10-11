@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use Closure;
 use SQLite3;
 use SQLite3Exception;
-use SQLite3Stmt;
 
 /**
  * @internal
@@ -129,18 +128,8 @@ class Pruner
     {
         $cutoff = $now - $this->configuration->retentionAgeSeconds;
 
-        $deleted = false;
-
-        foreach (['users', 'drift'] as $table) {
-            $deleted = $this->writer->transaction(function (SQLite3 $connection) use ($table, $cutoff) {
-                /** @var SQLite3Stmt $statement */
-                $statement = $connection->prepare("DELETE FROM {$table} WHERE last_seen < :cutoff");
-                $statement->bindValue(':cutoff', $cutoff, SQLITE3_FLOAT);
-                $statement->execute();
-
-                return $connection->changes() > 0;
-            }) || $deleted;
-        }
+        $deleted = $this->writer->transaction(fn (SQLite3 $connection) => UserDirectory::deleteSeenBefore($connection, $cutoff) > 0);
+        $deleted = $this->writer->transaction(fn (SQLite3 $connection) => DriftLedger::deleteSeenBefore($connection, $cutoff) > 0) || $deleted;
 
         $transactions = $this->passTransactions;
 

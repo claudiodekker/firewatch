@@ -1,9 +1,8 @@
 <?php
 
-namespace ClaudioDekker\Firewatch\Mcp;
+namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\RecordType;
-use ClaudioDekker\Firewatch\Store\Markers;
 
 /**
  * @internal

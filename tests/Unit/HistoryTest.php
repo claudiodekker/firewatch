@@ -1,7 +1,7 @@
 <?php
 
-use ClaudioDekker\Firewatch\Mcp\History;
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\PruneReason;
 
