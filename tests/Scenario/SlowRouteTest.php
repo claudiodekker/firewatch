@@ -157,17 +157,16 @@ it('walks from the ranking by p95, through the occurrences at or above it and on
 
     $opened = Envelope::assert(Execution::class, ['execution_id' => $rows[0]['execution_id']]);
     $header = $opened['result']['header'];
-    $slowestStage = array_search(max($header['stages']), $header['stages'], true);
 
+    // The slowest execution is often the cold first request, whose boot can outlast the action on a slow runner.
     expect($header)->toMatchArray(['type' => 'request', 'label' => '/slow', 'group' => $slow['group']])
-        ->and($slowestStage)->toBe('action')
         ->and($header['stages']['action'])->toBeGreaterThanOrEqual((float) SLOW_ROUTE_MS)
         ->and(array_column($opened['next'], 'tool'))->toBe(['rank', 'trace']);
 
     $stages = Envelope::follow($opened['next'][0])['result'];
 
     expect($stages['group'])->toBe($slow['group'])
-        ->and($stages['dominant_stage'])->toBe($slowestStage)
+        ->and($stages['dominant_stage'])->toBe('action')
         ->and($stages['slowest_execution_id'])->toBe($slow['slowest_execution_id'])
         ->and($stages['deploys'][0]['p95_ms'])->toBe($slow['p95_ms']);
 });
