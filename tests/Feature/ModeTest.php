@@ -6,9 +6,11 @@ use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\NullIngest;
 use Illuminate\Console\Application;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Ingest;
@@ -90,6 +92,17 @@ it('resolves a firewatch: process Off by its first argument that is not an optio
     'no command' => ['argv' => ['artisan'], 'expected' => true],
     'only options' => ['argv' => ['artisan', '--version'], 'expected' => true],
 ]);
+
+it('keeps serving requests when the container fails while it wires Nightwatch', function () {
+    Route::get('/served', fn () => 'served');
+    app()->offsetUnset(Core::class);
+    app()->singleton(Core::class, fn () => throw new BindingResolutionException('no core'));
+
+    registerFirewatch();
+
+    Exceptions::assertReported(BindingResolutionException::class);
+    $this->get('/served')->assertOk()->assertSee('served');
+});
 
 it('reads the process arguments only in a console process', function () {
     setArgv(['artisan', 'firewatch:server']);
