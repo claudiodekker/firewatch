@@ -186,7 +186,7 @@ class Occurrences extends Tool
     protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, OccurrenceFilters $filters, int $limit, string $selector, Continuation $continuation): array
     {
         $inWindow = $window->count($connection);
-        $held = $group === null ? [] : Listing::typesOf($connection, $group);
+        $held = $group === null ? [] : Stored::holders($connection, $group);
         $nothing = [
             'inWindow' => $inWindow,
             'groupHeld' => $group === null || $held !== [],

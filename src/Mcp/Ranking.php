@@ -174,19 +174,6 @@ class Ranking
     }
 
     /**
-     * Read the types that hold a group in the store, in the order of the types with groups.
-     *
-     * @return list<RecordType>
-     */
-    public static function holders(SQLite3 $connection, string $group): array
-    {
-        $rows = Stored::rows($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group', ['group' => $group]);
-        $held = array_map(fn (array $row) => is_string($row['type']) ? RecordType::tryFrom($row['type']) : null, $rows);
-
-        return array_values(array_filter(Measure::types(), fn (RecordType $type) => in_array($type, $held, true)));
-    }
-
-    /**
      * Pick the type of a group that no type was asked for: a job group is held by job attempts and dispatches, and the attempts carry the execution measures.
      *
      * @param  list<RecordType>  $held

@@ -35,18 +35,6 @@ class Listing
     }
 
     /**
-     * Read the record types a group is held by.
-     *
-     * @return list<RecordType>
-     */
-    public static function typesOf(SQLite3 $connection, string $group): array
-    {
-        $rows = Stored::rows($connection, 'SELECT DISTINCT type FROM records WHERE group_hash = :group ORDER BY type', ['group' => $group]);
-
-        return array_values(array_filter(array_map(fn (array $row) => RecordType::tryFrom($row['type']), $rows)));
-    }
-
-    /**
      * Read the baseline of the selection.
      *
      * @return array{samples: int, needed: int, threshold: int|float|null}

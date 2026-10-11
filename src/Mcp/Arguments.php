@@ -269,7 +269,7 @@ class Arguments
             return [$type, []];
         }
 
-        $held = Ranking::holders($connection, $group);
+        $held = Stored::holders($connection, $group);
 
         if ($type !== null && $held !== [] && ! in_array($type, $held, true)) {
             throw Refusal::conflicting(argument: 'type', with: 'group', accepted: __('firewatch::messages.argument_values.holding', ['types' => $this->listed($held)]), example: $example);
