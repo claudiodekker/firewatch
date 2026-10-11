@@ -209,8 +209,7 @@ class Rank extends Tool
         }
 
         $page = $ranked['page'];
-        $entry = $continuation->truncation($page, $page->rows, 'groups', 'firewatch::messages.rank_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now);
-        $truncated = $entry === null ? [] : [$entry];
+        $truncated = $continuation->truncated($page, $page->rows, 'groups', 'firewatch::messages.rank_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now);
 
         $rows = $ranked['rows'];
         $groupsRanked = $ranked['ranked'];

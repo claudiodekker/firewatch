@@ -286,8 +286,7 @@ class Occurrences extends Tool
             'count' => $count,
             'order' => $order->value,
         ]);
-        $entry = $continuation->truncation($rows, $listed['keys'], 'rows', 'firewatch::messages.occurrences_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now);
-        $truncated = $entry === null ? [] : [$entry];
+        $truncated = $continuation->truncated($rows, $listed['keys'], 'rows', 'firewatch::messages.occurrences_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now);
 
         return $frame->answer(
             summary: $summary,

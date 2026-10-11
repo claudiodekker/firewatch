@@ -31,14 +31,15 @@ class Continuation
      *
      * @template TRead of array<string, mixed>
      *
-     * @param  Closure(array<string, mixed>): (TRead|null)  $key  checks the key of the last row and returns it, or null when it is none
+     * @param  Closure(array<string, mixed>): (TRead|null)  $key
      * @return self<TRead>
      */
     public static function read(Request $request, string $tool, Closure $key): self
     {
         $value = $request->get('cursor');
+        $cursor = $value === null ? null : Cursor::read(value: $value, tool: $tool, arguments: $request->all(), key: $key);
 
-        return new self($request, $tool, $value === null ? null : Cursor::read(value: $value, tool: $tool, arguments: $request->all(), key: $key));
+        return new self($request, $tool, $cursor);
     }
 
     /**
@@ -72,22 +73,26 @@ class Continuation
     }
 
     /**
-     * Get the `truncated` entry of a list the limit cut, which carries the call that continues it, or null for a complete one.
+     * Get the `truncated` entries of a list the limit cut, the one entry carrying the call that continues it, or none for a complete one.
      *
      * @param  Rows<mixed>  $rows
-     * @param  list<TKey>  $keys  the key of every row of the page
-     * @param  string  $how  the message that tells how to continue, given the `call`
-     * @return array{section: string, shown: int, matched: int|null, reason: string, how: string}|null
+     * @param  list<TKey>  $keys
+     * @param  string  $how  the message key, given the `call`
+     * @return list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>
      */
-    public function truncation(Rows $rows, array $keys, string $section, string $how, ?float $createdAt, Window $window, float $epoch): ?array
+    public function truncated(Rows $rows, array $keys, string $section, string $how, ?float $createdAt, Window $window, float $epoch): array
     {
         if (! $rows->more) {
-            return null;
+            return [];
         }
 
+        $last = $keys[count($rows->rows) - 1];
+        $until = $window->until() ?? $epoch;
         $arguments = array_diff_key($this->request->all(), array_flip(['cursor', 'format']));
-        $arguments['cursor'] = Cursor::make(tool: $this->tool, arguments: $this->request->all(), createdAt: $createdAt, last: $keys[count($rows->rows) - 1], since: $window->since(), until: $window->until() ?? $epoch);
+        $arguments['cursor'] = Cursor::make(tool: $this->tool, arguments: $this->request->all(), createdAt: $createdAt, last: $last, since: $window->since(), until: $until);
+        $call = Call::written($this->tool, $arguments);
+        $entry = $rows->truncation(section: $section, how: __($how, ['call' => $call]));
 
-        return $rows->truncation(section: $section, how: __($how, ['call' => Call::written($this->tool, $arguments)]));
+        return $entry === null ? [] : [$entry];
     }
 }
