@@ -252,9 +252,11 @@ function attributedActivity(array $counts = []): array
 /**
  * Get the description of the since or until argument, for what an absent bound means for the kind of tool.
  */
-function windowArgument(string $bound, string $kind = 'unbounded'): string
+function windowArgument(string $bound, string $kind = 'unbounded', bool $listsForms = false): string
 {
-    return __("firewatch::messages.{$bound}_argument", ['absent' => __("firewatch::messages.window_absent.{$kind}.{$bound}")]);
+    $key = $bound === 'since' && ! $listsForms ? 'since_argument_short' : "{$bound}_argument";
+
+    return __("firewatch::messages.{$key}", ['absent' => __("firewatch::messages.window_absent.{$kind}.{$bound}")]);
 }
 
 /**

@@ -75,7 +75,7 @@ class Overview extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            ...$this->windowSchema($schema),
+            ...$this->windowSchema($schema, listsForms: true),
             'by_deploy' => $schema->boolean()->default(false)->description(__('firewatch::messages.overview_by_deploy_argument')),
             ...$this->formatSchema($schema),
         ];

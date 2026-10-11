@@ -44,10 +44,12 @@ trait AnswersInEnvelope
      *
      * @return array{since: StringType, until: StringType}
      */
-    protected function windowSchema(JsonSchema $schema, string $absent = 'unbounded'): array
+    protected function windowSchema(JsonSchema $schema, string $absent = 'unbounded', bool $listsForms = false): array
     {
+        $since = $listsForms ? 'since_argument' : 'since_argument_short';
+
         return [
-            'since' => $schema->string()->description(__('firewatch::messages.since_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.since")])),
+            'since' => $schema->string()->description(__("firewatch::messages.{$since}", ['absent' => __("firewatch::messages.window_absent.{$absent}.since")])),
             'until' => $schema->string()->description(__('firewatch::messages.until_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.until")])),
         ];
     }
