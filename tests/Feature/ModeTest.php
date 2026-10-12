@@ -103,7 +103,8 @@ it('keeps serving requests when the container fails while it wires Nightwatch', 
 
     registerFirewatch();
 
-    Exceptions::assertReported(BindingResolutionException::class);
+    expect(notices())->toContain('Firewatch could not wire Nightwatch: no core');
+    Exceptions::assertNothingReported();
     $this->get('/served')->assertOk()->assertSee('served');
 });
 
