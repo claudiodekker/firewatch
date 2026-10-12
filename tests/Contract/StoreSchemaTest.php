@@ -26,7 +26,7 @@ function viewColumns(string $view): array
 test('the store shape is pinned to its schema version', function () {
     $ddl = implode(";\n", (new Schema)->statements());
 
-    expect([Schema::VERSION, hash('sha256', $ddl)])->toBe([1, 'ea11cf8937e353cffaddc2d4322866767facb05ef608d3b1fc0a24383594fcda'], 'the store shape changed: bump the schema version');
+    expect([Schema::VERSION, hash('sha256', $ddl)])->toBe([2, 'b85727a8141dc0568dc516444e47a989fed1e41530a94f0fbb8c5a315471c371'], 'the store shape changed: bump the schema version');
 });
 
 test('each record view has the common columns of its type, then its contract fields and the fields Firewatch adds', function (string $view, array $columns) {

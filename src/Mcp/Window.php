@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use Carbon\CarbonImmutable;
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Instant;
 use Laravel\Mcp\Request;
 use SQLite3;
@@ -26,6 +27,7 @@ class Window
         protected readonly string $timezone,
         protected readonly string $reason,
         protected readonly ?array $derived = null,
+        protected readonly Scope $scope = Scope::ALL,
     ) {
         //
     }
@@ -76,7 +78,23 @@ class Window
             $derived[] = 'until';
         }
 
-        return new self(windowed: true, since: $this->since ?? $first, until: $this->until ?? $last, timezone: $this->timezone, reason: '', derived: $derived);
+        return new self(windowed: true, since: $this->since ?? $first, until: $this->until ?? $last, timezone: $this->timezone, reason: '', derived: $derived, scope: $this->scope);
+    }
+
+    /**
+     * Get the window narrowed to one side of a test run's store.
+     */
+    public function scoped(Scope $scope): self
+    {
+        return new self(windowed: $this->windowed, since: $this->since, until: $this->until, timezone: $this->timezone, reason: $this->reason, derived: $this->derived, scope: $scope);
+    }
+
+    /**
+     * Get the side of a test run's store the window reads.
+     */
+    public function scope(): Scope
+    {
+        return $this->scope;
     }
 
     /**
@@ -129,9 +147,21 @@ class Window
     }
 
     /**
-     * Get the SQL condition that holds for the records of the window: half-open, except that a derived until includes the record at it.
+     * Get the SQL condition that holds for the records of the window, read from the raw table or from the view of a type, on the side of its scope.
      */
-    public function condition(): string
+    public function condition(?RecordType $from = null): string
+    {
+        if ($this->scope === Scope::ALL) {
+            return $this->bounds();
+        }
+
+        return "{$this->bounds()} AND {$this->scope->condition($from)}";
+    }
+
+    /**
+     * Get the SQL condition that holds for the records between the bounds: half-open, except that a derived until includes the record at it.
+     */
+    protected function bounds(): string
     {
         $until = $this->derives('until') ? '<=' : '<';
 
@@ -148,12 +178,12 @@ class Window
     }
 
     /**
-     * Count the records of the window.
+     * Count the records between the bounds of the window, on either side.
      */
     public function count(SQLite3 $connection): int
     {
         /** @var SQLite3Stmt $statement */
-        $statement = $connection->prepare("SELECT count(*) FROM records WHERE {$this->condition()}");
+        $statement = $connection->prepare("SELECT count(*) FROM records WHERE {$this->bounds()}");
 
         $this->bind($statement);
 
@@ -189,20 +219,36 @@ class Window
             'description' => __($this->derives('until') ? 'firewatch::messages.window_description_derived' : 'firewatch::messages.window_description'),
         ];
 
-        if ($this->derived === null) {
-            return $window;
+        if ($this->derived !== null) {
+            $window['derived'] = $this->derived;
         }
 
-        return [
-            ...$window,
-            'derived' => $this->derived,
-        ];
+        if ($this->scope !== Scope::ALL) {
+            $window['scope'] = $this->scope->value;
+        }
+
+        return $window;
     }
 
     /**
      * Get the window line of a markdown answer.
      */
     public function line(): string
+    {
+        if ($this->scope === Scope::ALL) {
+            return $this->bounded();
+        }
+
+        return __('firewatch::messages.window_scoped', [
+            'window' => $this->bounded(),
+            'scope' => $this->scope->value,
+        ]);
+    }
+
+    /**
+     * Get the window line of a markdown answer, without its scope.
+     */
+    protected function bounded(): string
     {
         if (! $this->windowed) {
             return __('firewatch::messages.window_not_windowed', ['reason' => $this->reason]);

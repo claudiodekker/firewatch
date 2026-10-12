@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Capture\DriftKind;
+use ClaudioDekker\Firewatch\Capture\TestRecord;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Sql\Child\Policy;
 use ClaudioDekker\Firewatch\Store\Cell;
@@ -379,7 +380,10 @@ class Catalogue
     protected function values(string $object, string $column, ?string $accepts): ?array
     {
         $type = $this->described($object);
-        $sources = array_values(array_filter(array_map(fn (RecordType $type) => $type->source(), RecordType::events())));
+        $sources = [
+            ...array_values(array_filter(array_map(fn (RecordType $type) => $type->source(), RecordType::events()))),
+            TestRecord::BETWEEN_SOURCE,
+        ];
 
         return match (true) {
             $accepts === 'boolean' => [0, 1],

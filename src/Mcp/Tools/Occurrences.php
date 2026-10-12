@@ -20,6 +20,7 @@ use ClaudioDekker\Firewatch\Mcp\Outcome;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
+use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Mcp\WithheldReason;
@@ -109,6 +110,7 @@ class Occurrences extends Tool
             'at_or_above' => $schema->string()->enum(Percentile::class)->description(__('firewatch::messages.occurrences_at_or_above_argument')),
             'matching' => $this->matchingArgument($schema)->description(__('firewatch::messages.occurrences_matching_argument')),
             ...$this->windowSchema($schema),
+            ...$this->scopeSchema($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),
@@ -139,6 +141,7 @@ class Occurrences extends Tool
         }
 
         $order = $arguments->choiceOrDefault('order', Order::class, 'one of the orders', 'occurrences(type: "request", order: "slowest")');
+        $scope = $arguments->scope('occurrences(type: "query", scope: "between")');
         $limit = $arguments->limit(['type' => 'request']);
         $deploy = $arguments->deploy('occurrences(type: "request", deploy: "v1")');
         $selector = $group !== null ? 'group' : (array_key_first(array_filter($ids)) ?? 'type');
@@ -146,12 +149,13 @@ class Occurrences extends Tool
 
         if ($group === null || $type !== null) {
             $filters->refuseMisfits($order, $type, $selector);
+            $this->refuseScope($scope, $type);
         }
 
         $continuation = Continuation::read($request, $this->name(), $this->key(...));
 
         $frame = $this->frame($now);
-        $window = $continuation->window($now, $frame->timezone);
+        $window = $continuation->window($now, $frame->timezone)->scoped($scope);
 
         $frame->about($type === null ? RecordType::events() : [$type], $window, facts: $ids['user_id'] !== null ? [CallFact::ACTOR] : []);
 
@@ -168,7 +172,7 @@ class Occurrences extends Tool
         }
 
         $hasRows = $read['listed'] !== null && $read['listed']['rows'] !== [];
-        $empty = $read['selection']->vacancy($frame, $read['inWindow'], $hasRows, $this->given($ids, $filters));
+        $empty = $read['selection']->vacancy($frame, $read['inWindow'], $hasRows, $this->given($ids, $filters, $scope));
 
         if ($empty !== null) {
             return $frame->empty($empty);
@@ -207,6 +211,7 @@ class Occurrences extends Tool
         $resolved = $selection->listed();
 
         $filters->refuseMisfits($order, $resolved, $selector);
+        $this->refuseScope($window->scope(), $resolved);
 
         $listing = new Listing(
             window: $window,
@@ -328,14 +333,25 @@ class Occurrences extends Tool
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @return list<string>
      */
-    protected function given(array $ids, OccurrenceFilters $filters): array
+    protected function given(array $ids, OccurrenceFilters $filters, Scope $scope): array
     {
         $given = array_filter([
             ...$ids,
             ...$filters->given(),
+            'scope' => $scope === Scope::ALL ? null : $scope->value,
         ], fn (mixed $value) => $value !== null);
 
         return array_map(fn (string $name, mixed $value) => "{$name}: {$value}", array_keys($given), $given);
+    }
+
+    /**
+     * Refuse a scope that no record of the type can be in.
+     */
+    protected function refuseScope(Scope $scope, ?RecordType $type): void
+    {
+        if ($type !== null && ! $scope->holds($type)) {
+            throw Refusal::conflicting(argument: 'scope', with: $type->value, accepted: __('firewatch::messages.argument_values.scope_holding'), example: 'occurrences(type: "query", scope: "between")');
+        }
     }
 
     /**

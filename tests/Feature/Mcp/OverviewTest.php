@@ -170,9 +170,9 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
         fn (string $path) => ['path' => $path, 'found' => 0, 'expected' => Schema::VERSION],
     ],
     'a newer schema' => [
-        fn (string $path) => (new SQLite3($path))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)'),
+        fn (string $path) => (new SQLite3($path))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 3; CREATE TABLE records (id INTEGER)'),
         'newer_schema',
-        fn (string $path) => ['path' => $path, 'found' => 2, 'expected' => Schema::VERSION],
+        fn (string $path) => ['path' => $path, 'found' => 3, 'expected' => Schema::VERSION],
     ],
 ]);
 

@@ -141,6 +141,14 @@ class Arguments
     }
 
     /**
+     * Read the side of a test run's store the call keeps, or the declared default when none is given.
+     */
+    public function scope(string $example): Scope
+    {
+        return $this->choiceOrDefault('scope', Scope::class, __('firewatch::messages.argument_values.scope'), $example);
+    }
+
+    /**
      * Read one of the declared cases, or the declared default when none is given.
      *
      * @template TCase of BackedEnum

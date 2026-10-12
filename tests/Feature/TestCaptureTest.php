@@ -122,7 +122,7 @@ it('records no peak memory for a test\'s executions, which only the whole test p
     ]);
 });
 
-it('gives what a test runs outside its requests no source, stage or user', function () {
+it('marks what a test runs outside its requests as between, with no stage or user', function () {
     captureTests();
     Route::get('/orders', fn () => DB::select('select 1 as orders'));
 
@@ -132,9 +132,9 @@ it('gives what a test runs outside its requests no source, stage or user', funct
     Nightwatch::digest();
 
     expect(storeRows('SELECT sql, execution_source, execution_stage, user_id FROM queries ORDER BY started_at'))->toBe([
-        ['sql' => 'select 0 as before', 'execution_source' => null, 'execution_stage' => null, 'user_id' => null],
+        ['sql' => 'select 0 as before', 'execution_source' => 'between', 'execution_stage' => null, 'user_id' => null],
         ['sql' => 'select 1 as orders', 'execution_source' => 'request', 'execution_stage' => 'action', 'user_id' => '7'],
-        ['sql' => 'select 2 as after', 'execution_source' => null, 'execution_stage' => null, 'user_id' => null],
+        ['sql' => 'select 2 as after', 'execution_source' => 'between', 'execution_stage' => null, 'user_id' => null],
     ]);
 });
 
@@ -254,10 +254,10 @@ it('stores what each test runs after its last execution, once PHPUnit has torn i
             '/orders' => ['select 1 as orders'],
             'orders:prune' => ['select 2 as pruned'],
         ])->and(storeRows("SELECT sql, execution_id IN ({$executions}) AS in_execution, execution_source, user_id FROM queries WHERE sql LIKE '%after%' OR sql LIKE '%alone%' ORDER BY started_at"))->toBe([
-            ['sql' => 'select 1 as after_request', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
-            ['sql' => 'select 2 as after_command', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
-            ['sql' => 'select 3 as alone', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
-            ['sql' => 'select 4 as alone', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+            ['sql' => 'select 1 as after_request', 'in_execution' => 0, 'execution_source' => 'between', 'user_id' => null],
+            ['sql' => 'select 2 as after_command', 'in_execution' => 0, 'execution_source' => 'between', 'user_id' => null],
+            ['sql' => 'select 3 as alone', 'in_execution' => 0, 'execution_source' => 'between', 'user_id' => null],
+            ['sql' => 'select 4 as alone', 'in_execution' => 0, 'execution_source' => 'between', 'user_id' => null],
         ])->and(storeRows("SELECT count(DISTINCT execution_id) AS fragments FROM queries WHERE sql LIKE '%after%' OR sql LIKE '%alone%'"))->toBe([
             ['fragments' => 3],
         ]);

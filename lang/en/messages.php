@@ -143,6 +143,8 @@ return [
 
     'window_derived_until' => 'until derived from the last record and included',
 
+    'window_scoped' => ':window; scope: :scope',
+
     'store_line' => 'Store: :store',
 
     'store_history' => 'history complete from :from (:reason); retention :age, :records records',
@@ -420,6 +422,8 @@ return [
         'substring' => 'a substring of :minimum to :maximum characters',
         'grouped_type' => 'one of the types with groups',
         'holding' => 'a type that holds the group: :types',
+        'scope' => 'one of the sides of a test run\'s store',
+        'scope_holding' => 'a `type` other than request, command, job-attempt and scheduled-task, or `scope` executions or all',
     ],
 
     'unknown_argument' => "error: invalid_argument\n`:argument` is not an argument of :tool.\nargument: :argument\naccepted: :accepted\nexample: :example",
@@ -820,7 +824,7 @@ return [
     'column_meanings_in' => [
         'records' => [
             'type' => 'The record type, as sent: request, command, job-attempt and so on.',
-            'source' => 'For an execution its own kind, for a child the kind of execution it ran inside.',
+            'source' => 'An execution\'s own kind, or the kind a child ran inside; between for a test\'s own work.',
         ],
         'commands' => ['class' => 'The command class.', 'name' => 'The command name.'],
         'job_attempts' => ['name' => 'The job class.', 'connection' => 'The queue connection.', 'status' => 'The outcome of the attempt.', 'execution_id' => 'The attempt\'s own id: a fresh one for every attempt.'],
