@@ -371,6 +371,6 @@ test('the tool is listed with its description, arguments and annotations', funct
         ->and($tool['description'])->toContain(number_format(Bounds::CELL_CHARACTERS).' characters', 'substr(')
         ->and(str_word_count($tool['description']))->toBeLessThanOrEqual(150)
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['sql', 'limit', 'format'])
-        ->and($tool['annotations'])->toBe(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false])
+        ->and($tool['annotations'])->toBe(['title' => 'Query', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false])
         ->and(array_map(fn (array $property) => str_word_count($property['description'] ?? ''), $tool['inputSchema']['properties']))->each->toBeLessThanOrEqual(30);
 });

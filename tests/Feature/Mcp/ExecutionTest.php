@@ -368,7 +368,7 @@ test('the tool is listed with its description, arguments and annotations', funct
 
     expect($tool['description'])->toBe(__('firewatch::messages.tools.execution'))
         ->and(array_keys($tool['inputSchema']['properties']))->toBe(['execution_id', 'type', 'limit', 'format'])
-        ->and($tool['annotations'])->toBe(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false])
+        ->and($tool['annotations'])->toBe(['title' => 'Execution', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false])
         ->and(array_map(fn (array $property) => str_word_count($property['description'] ?? ''), $tool['inputSchema']['properties']))->each->toBeLessThanOrEqual(30);
 });
 
