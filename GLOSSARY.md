@@ -49,7 +49,7 @@ An application environment name on the allowlist in which Firewatch records tele
 _Avoid_: Enabled environment, dev mode
 
 **Test capture**:
-Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none and stamped with the source `between`, by holding Nightwatch in request mode and swapping in a command's state while it runs. Every record of the run is stamped with its test and worker. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
+Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none and stamped with the source `between`, by holding Nightwatch in request mode and swapping in a command's state while it runs. Every record of the run is stamped with its test and worker. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak. Nightwatch decides whether to sample a request once per application, so after a request that calls `Nightwatch::dontSample()` the later requests and between sections of that application are not recorded, until the test runs a command or the application calls `Nightwatch::sample()`.
 _Avoid_: Test mode, test recording
 
 **In-code opt-out**:
