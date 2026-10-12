@@ -32,14 +32,12 @@ it('resolves the package defaults when nothing is published or set', function ()
     putenv('FIREWATCH_RETENTION_AGE');
     unset($_SERVER['FIREWATCH_CAPTURE_TESTS'], $_ENV['FIREWATCH_CAPTURE_TESTS']);
     putenv('FIREWATCH_CAPTURE_TESTS');
-    unset($_SERVER['FIREWATCH_ENVIRONMENTS'], $_ENV['FIREWATCH_ENVIRONMENTS']);
-    putenv('FIREWATCH_ENVIRONMENTS');
 
     $configuration = registerFirewatch();
 
     expect($configuration)->toHaveProperties([
         'enabled' => true,
-        'environments' => ['local'],
+        'environments' => ['local', 'testing'],
         'database' => storage_path().'/firewatch/firewatch-testing.sqlite',
         'busyTimeoutMilliseconds' => 300,
         'retentionAge' => '7d',

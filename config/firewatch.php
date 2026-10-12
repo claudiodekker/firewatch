@@ -26,7 +26,7 @@ return [
     |
     */
 
-    'environments' => env('FIREWATCH_ENVIRONMENTS', 'local'),
+    'environments' => env('FIREWATCH_ENVIRONMENTS', 'local,testing'),
 
     /*
     |--------------------------------------------------------------------------

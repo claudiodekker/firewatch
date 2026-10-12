@@ -52,10 +52,6 @@ abstract class TestCase extends Orchestra
         $_SERVER['FIREWATCH_CAPTURE_TESTS'] = $_ENV['FIREWATCH_CAPTURE_TESTS'] = 'false';
         putenv('FIREWATCH_CAPTURE_TESTS=false');
 
-        // The suite runs as testing, which Firewatch leaves out of its default environments.
-        $_SERVER['FIREWATCH_ENVIRONMENTS'] = $_ENV['FIREWATCH_ENVIRONMENTS'] = 'local,testing';
-        putenv('FIREWATCH_ENVIRONMENTS=local,testing');
-
         parent::setUp();
     }
 
@@ -72,9 +68,6 @@ abstract class TestCase extends Orchestra
 
         unset($_SERVER['FIREWATCH_CAPTURE_TESTS'], $_ENV['FIREWATCH_CAPTURE_TESTS']);
         putenv('FIREWATCH_CAPTURE_TESTS');
-
-        unset($_SERVER['FIREWATCH_ENVIRONMENTS'], $_ENV['FIREWATCH_ENVIRONMENTS']);
-        putenv('FIREWATCH_ENVIRONMENTS');
 
         // A reported exception holds the store's connections in its trace until the next test resolves the facade again.
         Facade::clearResolvedInstances();

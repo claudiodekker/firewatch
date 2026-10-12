@@ -12,7 +12,7 @@ composer require --dev claudiodekker/firewatch
 claude mcp add firewatch -- php artisan firewatch:server
 ```
 
-Use the app in `local`, then ask the assistant what happened. Nothing exists to ask until the app has handled a request, command, job or task. Requests driven from a test suite are not recorded, so exercise the app over HTTP (serve, Herd, Sail, a browser).
+Use the app in `local`, then ask the assistant what happened. Nothing exists to ask until the app has handled a request, command, job or task, over HTTP (serve, Herd, Sail, a browser) or from a feature test.
 
 ## Ask your assistant
 
@@ -26,6 +26,8 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 | Did my change make it slower? | `compare` |
 | Is this job getting slower over the week? | `trend` |
 | Which queries run most often? | `query` |
+
+It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes.
 
 ## Requirements
 
@@ -93,7 +95,7 @@ The server must share a kernel and filesystem with the application. A server on 
 
 ## Local development only
 
-- Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local`). Elsewhere it registers nothing and Nightwatch is untouched. `testing` is left out because a test run records queries and exceptions without the request or command they ran in.
+- Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local,testing`). Elsewhere it registers nothing and Nightwatch is untouched.
 - `composer install --no-dev` leaves it absent.
 - Never list `production` or `prod`. If you do, `firewatch:doctor` flags it.
 - It vetoes every Nightwatch transmit, so no hosted reporting happens from a capture environment.
@@ -104,7 +106,7 @@ The server must share a kernel and filesystem with the application. A server on 
 - Nothing is transmitted. Every Nightwatch transmit is cancelled.
 - **Firewatch never redacts URL query strings, SQL, query bindings, log messages, context and extra, exception messages, the Laravel Context or outgoing-request query strings.** For redaction, use Nightwatch's `redact*` callbacks, which always apply, and the opt-in `capture.redact_payload_fields` and `capture.redact_headers`, which are empty by default.
 - A request's payload is recorded only for a 500 response by default (`capture.request_payload`). Request headers are recorded for every request. Response headers and bodies are never recorded.
-- The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
+- The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. A test run writes its own store, apart from your browsing. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
 - Do not commit, share or attach the store file.
 
 Locally, the value that redaction would hide is usually the answer the assistant needs.
@@ -151,7 +153,7 @@ Answers state these themselves, and `clean` means "none among what was captured"
 | Key | Env | Default | Meaning |
 |---|---|---|---|
 | `enabled` | `FIREWATCH_ENABLED` | `true` | the only on/off switch |
-| `environments` | `FIREWATCH_ENVIRONMENTS` | `local` | environments where Firewatch captures |
+| `environments` | `FIREWATCH_ENVIRONMENTS` | `local,testing` | environments where Firewatch captures |
 | `database` | `FIREWATCH_DATABASE` | unset | store path, not under `public/`; unset, `storage/firewatch/firewatch-{environment}.sqlite` |
 | `busy_timeout` | `FIREWATCH_BUSY_TIMEOUT` | `300` | milliseconds a write waits for a lock, 0 to 5000 |
 | `retention.age` | `FIREWATCH_RETENTION_AGE` | `7d` | maximum record age (`30m`, `12h`, `7d`, `2w`) |
