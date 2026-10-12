@@ -33,16 +33,6 @@ class Judgement
     }
 
     /**
-     * Determine if every judgement found something, so no claim of the answer rests on an absence.
-     *
-     * @param  list<self>  $judgements
-     */
-    public static function allFound(array $judgements): bool
-    {
-        return array_filter($judgements, fn (self $judgement) => $judgement->verdict !== Verdict::FINDINGS) === [];
-    }
-
-    /**
      * Get the judgement of what a detector examined.
      *
      * @param  array<string, mixed>|null  $threshold

@@ -151,7 +151,7 @@ class Compare extends Tool
             return $frame->empty($empty, $notes);
         }
 
-        return $frame->answer(
+        $answer = $frame->answer(
             summary: $this->summary($comparison),
             result: $comparison->result(),
             notes: [...$selection->notes(), ...$this->notes($request, $comparison, $frame->facts()->oldest)],
@@ -159,8 +159,9 @@ class Compare extends Tool
             next: $this->next($comparison, $window),
             cuttable: ['groups'],
             recount: $comparison->recounted(...),
-            found: $comparison->allFound(),
         );
+
+        return $comparison->statesAbsence() ? $answer : $answer->namingBlindSpots();
     }
 
     /**

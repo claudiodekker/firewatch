@@ -110,11 +110,11 @@ class Comparison
     }
 
     /**
-     * Determine if the comparison ran and says no group is gone, so no claim of the answer rests on an absence.
+     * Determine if the comparison states an absence: it could not run, or a group is gone.
      */
-    public function allFound(): bool
+    public function statesAbsence(): bool
     {
-        return $this->unevaluated === null && ($this->changes[Change::GONE->value] ?? 0) === 0;
+        return $this->unevaluated !== null || ($this->changes[Change::GONE->value] ?? 0) > 0;
     }
 
     /**

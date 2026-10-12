@@ -75,7 +75,7 @@ it('prints every sentence on a detector that came back clean, and by id on one w
 
     expect($found['result']['verdict'])->toBe('findings')
         ->and(array_values(array_unique(structuralPrinting($found))))->toBe([false])
-        ->and($clean['result']['verdict'])->not->toBe('findings')
+        ->and($clean['result']['verdict'])->toBe('not_evaluated')
         ->and(array_values(array_unique(structuralPrinting($clean))))->toBe([true]);
 });
 
