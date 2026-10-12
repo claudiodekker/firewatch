@@ -460,6 +460,47 @@ describe('the order', function () {
         expect(array_map(fn (array $finding) => $finding['group'], npoAnswer()['result']['findings']))->toBe([md5('/many'), md5('/slow'), md5('/few')]);
     });
 
+    it('lists a loop first, then a repeated read, then an unknown, whatever their runs', function () {
+        ingest([
+            ...npoRun('unknown', 9, '/unknown', fields: ['file' => 'vendor/laravel/pennant/src/Drivers/DatabaseDriver.php']),
+            npoExecution('repeated', '/repeated', fields: ['queries' => 5]),
+            ...array_map(fn (int $line) => npoQuery('repeated', fields: ['line' => $line]), range(1, 5)),
+            ...npoRun('loop', 3, '/loop'),
+        ]);
+
+        $findings = npoAnswer()['result']['findings'];
+
+        expect(array_map(fn (array $finding) => [$finding['group'], $finding['evidence']['pattern']], $findings))->toBe([
+            [md5('/loop'), 'loop'],
+            [md5('/repeated'), 'repeated'],
+            [md5('/unknown'), 'unknown'],
+        ]);
+    });
+
+    it('lists the most runs first among the findings of one pattern', function (?string $file) {
+        ingest([
+            ...npoRun('few', 3, '/few', fields: ['file' => $file]),
+            ...npoRun('many', 7, '/many', fields: ['file' => $file]),
+        ]);
+
+        expect(array_map(fn (array $finding) => $finding['group'], npoAnswer()['result']['findings']))->toBe([md5('/many'), md5('/few')]);
+    })->with([
+        'loops' => ['app/Orders.php'],
+        'unknowns' => ['vendor/laravel/pennant/src/Drivers/DatabaseDriver.php'],
+    ]);
+
+    it('drops an unknown before a loop when the limit cuts the list', function () {
+        ingest([
+            ...npoRun('unknown', 9, '/unknown', fields: ['file' => null]),
+            ...npoRun('loop', 3, '/loop'),
+        ]);
+
+        $answer = npoAnswer(['limit' => 1]);
+
+        expect($answer['result']['total'])->toBe(2)
+            ->and(array_column($answer['result']['findings'], 'group'))->toBe([md5('/loop')]);
+    });
+
     it('settles a tie by the group hash, then the query group hash', function () {
         $groups = [md5('/b'), md5('/a')];
         sort($groups);
