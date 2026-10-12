@@ -141,7 +141,7 @@ The test that created the application a record of a test run was captured in, st
 _Avoid_: Test id, test file
 
 **Worker**:
-The process of a parallel test run that ran a record's test, stored as the token the runner gives each of its processes in `TEST_TOKEN`. Null in a serial run and outside a test run.
+The process of a parallel test run that ran a record's test, stored as the token the runner gives each of its processes in `TEST_TOKEN`, on the record and on the user directory row of a user it saw. Null in a serial run and outside a test run.
 _Avoid_: Process id, runner, shard
 
 ### Queued work
@@ -215,11 +215,11 @@ A request whose response Laravel rendered from a validation exception. It is jud
 _Avoid_: Invalid request, validation error
 
 **User directory**:
-The small table of user id, name, username, first-seen and last-seen instants, never an event and never counted as a record, aged out with the records.
+The small table of user id, worker, name, username, first-seen and last-seen instants, never an event and never counted as a record, aged out with the records. It holds one row per user id and worker, so an id that two workers of a parallel test run each signed in is two rows, each with the name its own worker saw.
 _Avoid_: Actors table, users event
 
 **Actor**:
-The person behind a user id recorded on a request, job attempt or child event, named through the user directory when a row exists.
+The person behind a user id recorded on a request, job attempt or child event, named through the user directory when a row exists. An actor is the user id together with the worker: each worker of a parallel test run has its own application database, so the same id under two workers is two actors. Outside a parallel run the worker is null and the id alone is the actor.
 _Avoid_: Account, principal, customer
 
 ### Store
@@ -386,11 +386,11 @@ _Avoid_: Exception, failure answer
 ### Actors and attribution
 
 **Identification**:
-Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing. When no stage finds anyone, an id that no directory row holds is identified from a record that carries it.
+Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing. When no stage finds anyone, an id that no directory row holds is identified from a record that carries it. A call that names a worker reads only the people of that worker. Any other call reads the people of no worker first, through every stage and then the records, and reads across workers only when it finds no one there, so an id alone reaches the person outside a parallel run as it would in a store that holds no parallel run. An id that several workers hold is several candidates, each with its worker.
 _Avoid_: Lookup, search, matching
 
 **Attribution**:
-Assigning an execution or record to an actor by a recorded user or one of the attribution links, never by inference.
+Assigning an execution or record to an actor by a recorded user or one of the attribution links, never by inference. A recorded user is the actor only when the record's worker is the actor's too.
 _Avoid_: Ownership, blame, tracking
 
 **Attribution link**:
@@ -544,7 +544,7 @@ The parts of the overview that are read before any detector runs and that no dea
 _Avoid_: Header, statistics
 
 **Selector**:
-An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id.
+An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id. A worker beside the user id narrows it to one actor. Without one, a user id that several workers hold selects the records of all their actors, and the answer says how many workers hold it.
 _Avoid_: Filter (a filter narrows a selection, a selector defines it)
 
 **Scope**:
@@ -606,7 +606,7 @@ The one tunable value of a detector, with a stated unit, range and loose default
 _Avoid_: Limit, setting, budget
 
 **Reaches**:
-The pair of figures a finding states about people, the distinct signed-in actors among its records and the records with no actor, never added.
+The pair of figures a finding states about people, the distinct signed-in actors among its records, counted by user id and worker, and the records with no actor, never added.
 _Avoid_: Users affected, impact
 
 **Count mode**:
