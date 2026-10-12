@@ -827,6 +827,23 @@ describe('the next calls', function () {
             ->and($answers[2]['result']['header']['execution_id'])->toBe('the-request');
     });
 
+    it('writes the bounds of an offered call as the epoch strings its schema declares, fractional seconds included', function () {
+        $this->travelTo('2026-09-30 14:00:00.250000');
+        ingest([
+            syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'timestamp' => 1790769600.25]),
+            syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'timestamp' => 1790776800.0]),
+            syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'timestamp' => 1790776800.125]),
+        ]);
+
+        $answer = Answers::assert(Overview::class, ['since' => '-2h', 'until' => '2026-09-30 14:00:00.125']);
+        $this->travel(3)->hours();
+        $followed = ovwFollow($answer['next'][0]);
+
+        expect($answer['next'][0]['arguments'])->toBe(['shape' => 'failing-routes', 'since' => '1790769600.25', 'until' => '1790776800.125'])
+            ->and($followed['window'])->toMatchArray(['since' => 1790769600.25, 'until' => 1790776800.125])
+            ->and($followed['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 2]);
+    });
+
     it('offers one bound when the window has one', function () {
         $this->travelTo('2026-09-30 14:00:00');
         ingest([syntheticRecord(RecordType::REQUEST)->with(['duration' => 1000, 'status_code' => 500, 'timestamp' => 1790773200.0])]);
