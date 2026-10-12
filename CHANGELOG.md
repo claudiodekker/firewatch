@@ -30,5 +30,5 @@ The first release.
 - `query` runs one read-only SQL statement in a framework-free PHP child under a closed authorizer, with a deadline and limits on memory, output, rows and cell size. `describe` documents every object and column it can read.
 - Performance budgets per record type, judged in `execution`, `rank` and `overview`.
 - Every answer comes in markdown or JSON with its window, coverage, blind spots and closed error codes. Every next call it offers fits the tool's published input schema, which declares its allowed values, defaults and limits.
-- An empty or clean answer spells out each blind spot. Beside a result that lists what was found, a blind spot is named by id, and `describe` holds every sentence.
+- An empty or clean answer spells out each blind spot. A `rank`, `occurrences`, `detect` or `compare` answer that lists what it found can name a blind spot by id instead, and `describe` holds every sentence.
 - Runs on Linux, macOS and Windows, without the `intl` extension.
