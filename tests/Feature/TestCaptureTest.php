@@ -1,6 +1,8 @@
 <?php
 
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -215,6 +217,50 @@ it('starts the next request afresh after one threw out of the kernel', function 
 
     expect(executionQueries())->toBe([
         '/invoices' => ['select 2 as invoices'],
+    ]);
+});
+
+it('keeps what global middleware runs inside the request', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+    app(HttpKernel::class)->pushMiddleware(function (Request $request, Closure $next) {
+        DB::select('select 0 as middleware');
+
+        return $next($request);
+    });
+
+    $this->get('/orders')->assertOk();
+
+    expect(executionQueries())->toBe([
+        '/orders' => ['select 0 as middleware', 'select 1 as orders'],
+    ])->and(storeRows('SELECT route_path, queries FROM requests'))->toBe([
+        ['route_path' => '/orders', 'queries' => 2],
+    ]);
+});
+
+it('keeps a request another request dispatches inside the outer request', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 2 as orders'));
+    Route::get('/dashboard', function () {
+        DB::select('select 1 as before');
+        $orders = app(HttpKernel::class)->handle(Request::create('/orders'));
+        DB::select('select 3 as after');
+
+        return $orders->getContent();
+    });
+
+    $this->get('/dashboard')->assertOk();
+    DB::select('select 4 as assertion');
+
+    expect(executionQueries())->toBe([
+        '/dashboard' => ['select 1 as before', 'select 2 as orders', 'select 3 as after'],
+    ])->and(storeRows('SELECT route_path, queries FROM requests'))->toBe([
+        ['route_path' => '/dashboard', 'queries' => 3],
+    ])->and(storeRows('SELECT sql, execution_source FROM queries ORDER BY started_at'))->toBe([
+        ['sql' => 'select 1 as before', 'execution_source' => 'request'],
+        ['sql' => 'select 2 as orders', 'execution_source' => 'request'],
+        ['sql' => 'select 3 as after', 'execution_source' => 'request'],
+        ['sql' => 'select 4 as assertion', 'execution_source' => 'between'],
     ]);
 });
 

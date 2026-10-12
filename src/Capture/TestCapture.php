@@ -84,6 +84,11 @@ class TestCapture
     protected TestPhase|TestCommand $phase = TestPhase::BETWEEN;
 
     /**
+     * The outermost request of the execution that is open.
+     */
+    protected ?object $request = null;
+
+    /**
      * The console kernel whose events are rerouted, the only one whose commands become executions.
      */
     protected ?ConsoleKernel $console = null;
@@ -209,12 +214,18 @@ class TestCapture
     }
 
     /**
-     * Start a request's execution, unless a command is running.
+     * Start a request's execution, unless a command is running or the request belongs to the one whose execution is open.
      */
     protected function startRequest(): void
     {
-        // A request still open here threw out of the kernel before the handler that ends it ran, so this one starts afresh.
         if ($this->phase instanceof TestCommand) {
+            return;
+        }
+
+        $outermost = $this->outermostRequest() ?? $this->app->make('request');
+
+        // The kernel binds a request twice, and again for each request dispatched inside it.
+        if ($this->phase === TestPhase::REQUEST && $outermost === $this->request) {
             return;
         }
 
@@ -222,7 +233,25 @@ class TestCapture
         $this->core->finishExecution();
         $this->core->prepareForRequest($this->app->make('request'));
 
+        $this->request = $outermost;
         $this->phase = TestPhase::REQUEST;
+    }
+
+    /**
+     * Get the request of the first HTTP kernel on the call stack, which every request dispatched inside it is part of.
+     */
+    protected function outermostRequest(): ?object
+    {
+        // Only the stack tells a request dispatched inside another from one that follows a request that threw.
+        foreach (array_reverse(debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT)) as $frame) {
+            $request = $frame['args'][0] ?? null;
+
+            if (($frame['object'] ?? null) instanceof HttpKernel && $frame['function'] === 'handle' && is_object($request)) {
+                return $request;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -236,6 +265,7 @@ class TestCapture
 
         $this->core->prepareForRequest($this->app->make('request'));
 
+        $this->request = null;
         $this->phase = TestPhase::BETWEEN;
     }
 
