@@ -158,6 +158,7 @@ Answers state these themselves, and `clean` means "none among what was captured"
 | `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | maximum record count |
 | `deploy` | `FIREWATCH_DEPLOY` | unset | deploy label when Nightwatch has none; with neither, the commit git HEAD points to |
 | `capture.logs` | `FIREWATCH_CAPTURE_LOGS` | `true` | capture logs |
+| `capture.tests` | `FIREWATCH_CAPTURE_TESTS` | `true` | record each request and command a test runs as an execution |
 | `capture.request_payload` | `FIREWATCH_CAPTURE_REQUEST_PAYLOAD` | `true` | payload for 500 responses |
 | `capture.redact_payload_fields` | `FIREWATCH_REDACT_PAYLOAD_FIELDS` | empty | payload fields to redact |
 | `capture.redact_headers` | `FIREWATCH_REDACT_HEADERS` | empty | headers to redact |

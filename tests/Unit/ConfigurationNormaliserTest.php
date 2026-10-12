@@ -59,6 +59,7 @@ it('falls back to each boolean key\'s own default alone', function (string $grou
         ->and(configurationIssueLines($configuration))->toBe(["firewatch.{$group}.{$key}: \"maybe\" is not a boolean (true, false, 1, 0, yes, no, on, off); using true"]);
 })->with([
     'capture.logs' => ['group' => 'capture', 'key' => 'logs', 'property' => 'captureLogs'],
+    'capture.tests' => ['group' => 'capture', 'key' => 'tests', 'property' => 'captureTests'],
     'capture.request_payload' => ['group' => 'capture', 'key' => 'request_payload', 'property' => 'captureRequestPayload'],
 ]);
 

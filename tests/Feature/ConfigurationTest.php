@@ -19,6 +19,7 @@ it('reads each key from its environment variable', function (string $variable, s
     'retention.records' => ['variable' => 'FIREWATCH_RETENTION_RECORDS', 'value' => '5000', 'property' => 'retentionRecords', 'expected' => 5000],
     'deploy' => ['variable' => 'FIREWATCH_DEPLOY', 'value' => 'v2.0.1', 'property' => 'deploy', 'expected' => 'v2.0.1'],
     'capture.logs' => ['variable' => 'FIREWATCH_CAPTURE_LOGS', 'value' => 'false', 'property' => 'captureLogs', 'expected' => false],
+    'capture.tests' => ['variable' => 'FIREWATCH_CAPTURE_TESTS', 'value' => 'on', 'property' => 'captureTests', 'expected' => true],
     'capture.request_payload' => ['variable' => 'FIREWATCH_CAPTURE_REQUEST_PAYLOAD', 'value' => 'no', 'property' => 'captureRequestPayload', 'expected' => false],
     'capture.redact_payload_fields' => ['variable' => 'FIREWATCH_REDACT_PAYLOAD_FIELDS', 'value' => 'password, card_number', 'property' => 'redactPayloadFields', 'expected' => ['password', 'card_number']],
     'capture.redact_headers' => ['variable' => 'FIREWATCH_REDACT_HEADERS', 'value' => 'X-Api-Key', 'property' => 'redactHeaders', 'expected' => ['X-Api-Key']],
@@ -29,6 +30,8 @@ it('resolves the package defaults when nothing is published or set', function ()
     config()->set('firewatch', []);
     unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
     putenv('FIREWATCH_RETENTION_AGE');
+    unset($_SERVER['FIREWATCH_CAPTURE_TESTS'], $_ENV['FIREWATCH_CAPTURE_TESTS']);
+    putenv('FIREWATCH_CAPTURE_TESTS');
     unset($_SERVER['FIREWATCH_ENVIRONMENTS'], $_ENV['FIREWATCH_ENVIRONMENTS']);
     putenv('FIREWATCH_ENVIRONMENTS');
 
@@ -43,6 +46,7 @@ it('resolves the package defaults when nothing is published or set', function ()
         'retentionRecords' => 100000,
         'deploy' => null,
         'captureLogs' => true,
+        'captureTests' => true,
         'captureRequestPayload' => true,
         'redactPayloadFields' => [],
         'redactHeaders' => [],

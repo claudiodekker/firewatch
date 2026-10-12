@@ -48,6 +48,10 @@ abstract class TestCase extends Orchestra
         $_SERVER['FIREWATCH_RETENTION_AGE'] = $_ENV['FIREWATCH_RETENTION_AGE'] = '36500d';
         putenv('FIREWATCH_RETENTION_AGE=36500d');
 
+        // The suite drives Nightwatch's console and request modes itself, so it leaves test capture to the tests that turn it on.
+        $_SERVER['FIREWATCH_CAPTURE_TESTS'] = $_ENV['FIREWATCH_CAPTURE_TESTS'] = 'false';
+        putenv('FIREWATCH_CAPTURE_TESTS=false');
+
         // The suite runs as testing, which Firewatch leaves out of its default environments.
         $_SERVER['FIREWATCH_ENVIRONMENTS'] = $_ENV['FIREWATCH_ENVIRONMENTS'] = 'local,testing';
         putenv('FIREWATCH_ENVIRONMENTS=local,testing');
@@ -65,6 +69,9 @@ abstract class TestCase extends Orchestra
 
         unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
         putenv('FIREWATCH_RETENTION_AGE');
+
+        unset($_SERVER['FIREWATCH_CAPTURE_TESTS'], $_ENV['FIREWATCH_CAPTURE_TESTS']);
+        putenv('FIREWATCH_CAPTURE_TESTS');
 
         unset($_SERVER['FIREWATCH_ENVIRONMENTS'], $_ENV['FIREWATCH_ENVIRONMENTS']);
         putenv('FIREWATCH_ENVIRONMENTS');

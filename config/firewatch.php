@@ -89,14 +89,16 @@ return [
     | Capture
     |--------------------------------------------------------------------------
     |
-    | These options control whether logs and request payloads are captured.
-    | Redaction is relaxed, so payloads are stored as sent. List payload
-    | fields and request headers here to redact them on top of that.
+    | These options control whether logs, the requests and commands a test
+    | suite runs, and request payloads are captured. Redaction is relaxed,
+    | so payloads are stored as sent. List payload fields and request
+    | headers here to redact them on top of that.
     |
     */
 
     'capture' => [
         'logs' => env('FIREWATCH_CAPTURE_LOGS', true),
+        'tests' => env('FIREWATCH_CAPTURE_TESTS', true),
         'request_payload' => env('FIREWATCH_CAPTURE_REQUEST_PAYLOAD', true),
         'redact_payload_fields' => env('FIREWATCH_REDACT_PAYLOAD_FIELDS', ''),
         'redact_headers' => env('FIREWATCH_REDACT_HEADERS', ''),
