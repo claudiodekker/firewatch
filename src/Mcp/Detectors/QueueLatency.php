@@ -134,9 +134,9 @@ class QueueLatency implements Detector
     protected function dispatches(Window $window, ?string $group): Fragment
     {
         $selected = Fragment::selecting($window, $group, RecordType::QUEUED_JOB);
-        $inline = Lineage::inlineCondition('queued.connection');
+        $inline = Lineage::inlineCondition('queued');
         $sql = "WITH queued AS (
-            SELECT id, execution_id, started_at, coalesce(ended_at, started_at) AS queued_at, group_hash, user_id, worker, name, connection, queue, NULLIF(job_id, '') AS job
+            SELECT id, execution_id, started_at, coalesce(ended_at, started_at) AS queued_at, group_hash, user_id, worker, name, connection, driver, queue, NULLIF(job_id, '') AS job
             FROM queued_jobs WHERE {$selected->sql}
         ), firsts AS (
             SELECT job_id AS job, execution_id, started_at, attempt,

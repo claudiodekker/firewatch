@@ -372,8 +372,8 @@ it('records a failing job on a connection of the sync driver that has another na
     expect(fn () => ChargeCard::dispatch())->toThrow(RuntimeException::class);
     Nightwatch::digest();
 
-    expect(storeRows('SELECT name, connection, status, exceptions FROM job_attempts'))->toBe([
-        ['name' => ChargeCard::class, 'connection' => 'inline', 'status' => 'failed', 'exceptions' => 1],
+    expect(storeRows('SELECT name, connection, driver, status, exceptions FROM job_attempts'))->toBe([
+        ['name' => ChargeCard::class, 'connection' => 'inline', 'driver' => 'sync', 'status' => 'failed', 'exceptions' => 1],
     ]);
 });
 

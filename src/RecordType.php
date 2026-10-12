@@ -322,6 +322,7 @@ enum RecordType: string
     {
         return match ($this) {
             self::QUERY => ['bindings'],
+            self::JOB_ATTEMPT, self::QUEUED_JOB => ['driver'],
             default => [],
         };
     }

@@ -622,8 +622,12 @@ A queued job with no stored attempt, aged against the store clock.
 _Avoid_: Stuck job, lost job, waiting job
 
 **Inline connection**:
-A queue connection that runs work in the dispatching process (sync, deferred, background, null), so its dispatches have no wait. A job on one is part of the execution that dispatched it and has no attempt record. The one exception is a job a test dispatches itself on the sync connection, which test capture records as a job attempt with no dispatch.
+A queue connection whose driver runs work in the dispatching process (sync, deferred, background, null), whatever the connection is named, so its dispatches have no wait. The queue driver stored on the record decides, and a connection of an unknown driver is not inline. One name counts beside the driver: a connection named `sync` is inline whatever its driver, because Nightwatch records no attempt on a connection of that name. A job on a connection of an inline driver is part of the execution that dispatched it and has no attempt record. The one exception is a job a test dispatches itself on a connection of the sync driver, which test capture records as a job attempt with no dispatch.
 _Avoid_: Sync queue
+
+**Queue driver**:
+The driver the capturing application configures for the connection of a dispatch or a job attempt (`queue.connections.<connection>.driver`), stored on the record as `driver` when the record is stored, because the wire names only the connection and a reader cannot see the application's configuration. Null when the application configures no such connection.
+_Avoid_: Connection type, queue type
 
 **Terminal failure**:
 A job whose last stored attempt failed.

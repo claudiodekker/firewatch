@@ -392,6 +392,7 @@ describe('the lineage of a queued job', function () {
     });
 
     it('shows a dispatch on an inline connection as having no attempts and no outcome, never pending', function (string $connection) {
+        config()->set("queue.connections.{$connection}", ['driver' => $connection]);
         ingest([trcRequest(), trcDispatch('job', ['connection' => $connection])]);
 
         $answer = trcAnswer();
@@ -443,6 +444,7 @@ describe('the lineage of a queued job', function () {
     });
 
     it('does not call a dispatch on an inline connection a partial lineage', function (string $connection) {
+        config()->set("queue.connections.{$connection}", ['driver' => $connection]);
         ingest([trcRequest(), trcDispatch('job', ['connection' => $connection])]);
 
         $answer = trcAnswer();
@@ -451,6 +453,7 @@ describe('the lineage of a queued job', function () {
     })->with('trace inline connections');
 
     it('does not call an attempt on an inline connection a partial lineage, which records no dispatch', function (string $connection) {
+        config()->set("queue.connections.{$connection}", ['driver' => $connection]);
         ingest([trcAttempt('job', 'attempt', 1, ['connection' => $connection])]);
 
         $answer = trcAnswer();
@@ -458,6 +461,53 @@ describe('the lineage of a queued job', function () {
         expect(trcJob($answer, 'job'))->toMatchArray(['lineage' => 'no_dispatch', 'outcome' => 'processed', 'dispatch' => null])
             ->and($answer['notes'])->toBe([]);
     })->with('trace inline connections');
+
+    it('tells an inline connection by its driver, whatever the connection is named', function (string $driver) {
+        config()->set('queue.connections.inline', ['driver' => $driver]);
+        ingest([trcRequest(), trcDispatch('dispatched', ['connection' => 'inline']), trcAttempt('ran', 'attempt', 1, ['connection' => 'inline'])]);
+
+        $answer = trcAnswer();
+
+        expect(trcJob($answer, 'dispatched'))->toMatchArray(['lineage' => 'no_attempts', 'outcome' => null])
+            ->and(trcJob($answer, 'ran'))->toMatchArray(['lineage' => 'no_dispatch', 'outcome' => 'processed'])
+            ->and($answer['notes'])->toBe([]);
+    })->with('trace inline connections');
+
+    it('takes a connection of a worker driver for no inline connection, though it has the name of an inline driver', function (string $connection) {
+        config()->set("queue.connections.{$connection}", ['driver' => 'database']);
+        ingest([trcRequest(), trcDispatch('dispatched', ['connection' => $connection]), trcAttempt('ran', 'attempt', 1, ['connection' => $connection])]);
+
+        $answer = trcAnswer();
+
+        expect(trcJob($answer, 'dispatched'))->toMatchArray(['lineage' => 'no_attempts', 'outcome' => 'pending'])
+            ->and(trcJob($answer, 'ran'))->toMatchArray(['lineage' => 'no_dispatch', 'outcome' => 'processed'])
+            ->and($answer['notes'])->toBe([
+                __('firewatch::messages.trace_partial_no_attempts'),
+                __('firewatch::messages.trace_partial_no_dispatch'),
+            ]);
+    })->with(['deferred' => 'deferred', 'background' => 'background', 'null' => 'null']);
+
+    it('takes a connection named sync for inline whatever its driver, because Nightwatch records no attempt on it', function () {
+        config()->set('queue.connections.sync', ['driver' => 'database']);
+        ingest([trcRequest(), trcDispatch('dispatched', ['connection' => 'sync'])]);
+
+        $answer = trcAnswer();
+
+        expect(trcJob($answer, 'dispatched'))->toMatchArray(['lineage' => 'no_attempts', 'outcome' => null])
+            ->and($answer['notes'])->toBe([]);
+    });
+
+    it('takes a connection the application does not configure for no inline connection', function () {
+        ingest([trcRequest(), trcDispatch('dispatched', ['connection' => 'elsewhere']), trcAttempt('ran', 'attempt', 1, ['connection' => 'elsewhere'])]);
+
+        $answer = trcAnswer();
+
+        expect(trcJob($answer, 'dispatched'))->toMatchArray(['lineage' => 'no_attempts', 'outcome' => 'pending'])
+            ->and($answer['notes'])->toBe([
+                __('firewatch::messages.trace_partial_no_attempts'),
+                __('firewatch::messages.trace_partial_no_dispatch'),
+            ]);
+    });
 
     it('has no jobs for a trace that queued none', function () {
         ingest([trcRequest()]);

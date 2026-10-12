@@ -125,6 +125,46 @@ it('decodes the JSON-string fields of a record', function (Closure $traffic, str
     'log extra' => ['traffic' => fn () => Log::channel('nightwatch')->warning('The payment is slow.'), 'view' => 'logs', 'field' => 'extra', 'decoded' => 'object'],
 ]);
 
+it('stores the queue driver of the connection a job was dispatched on and ran on', function () {
+    config()->set('queue.default', 'database');
+    dispatch(fn () => Cache::get('in-the-job'));
+    Nightwatch::digest();
+
+    runArtisan(['command' => 'queue:work', '--once' => true]);
+
+    expect(storeRows('SELECT connection, driver FROM queued_jobs'))->toBe([['connection' => 'database', 'driver' => 'database']])
+        ->and(storeRows('SELECT connection, driver FROM job_attempts'))->toBe([['connection' => 'database', 'driver' => 'database']]);
+});
+
+it('stores the queue driver the application configures for a connection when the record is written', function () {
+    ingest([syntheticRecord(RecordType::QUEUED_JOB)->with(['connection' => 'reports'])]);
+
+    config()->set('queue.connections.reports', ['driver' => 'redis']);
+    ingest([syntheticRecord(RecordType::QUEUED_JOB)->with(['connection' => 'reports'])]);
+
+    expect(storeRows('SELECT connection, driver FROM queued_jobs ORDER BY id'))->toBe([
+        ['connection' => 'reports', 'driver' => null],
+        ['connection' => 'reports', 'driver' => 'redis'],
+    ]);
+});
+
+it('stores no queue driver for a connection whose configuration names none', function (mixed $connection, Closure $configure) {
+    $configure();
+
+    ingest([syntheticRecord(RecordType::JOB_ATTEMPT)->with(['connection' => $connection]), syntheticRecord(RecordType::QUEUED_JOB)->with(['connection' => $connection])]);
+
+    expect(storeRows('SELECT driver FROM job_attempts UNION ALL SELECT driver FROM queued_jobs'))->toBe([['driver' => null], ['driver' => null]])
+        ->and(notices())->toBe([]);
+})->with([
+    'a connection that is not configured' => ['reports', fn () => null],
+    'a connection that is not an array' => ['reports', fn () => config()->set('queue.connections.reports', 'redis')],
+    'a connection without a driver' => ['reports', fn () => config()->set('queue.connections.reports', ['queue' => 'default'])],
+    'a driver that is not a string' => ['reports', fn () => config()->set('queue.connections.reports', ['driver' => ['redis']])],
+    'no connections at all' => ['sync', fn () => config()->set('queue.connections', null)],
+    'an empty connection name' => ['', fn () => null],
+    'a connection name that is not a string' => [7, fn () => config()->set('queue.connections', [7 => ['driver' => 'sync']])],
+]);
+
 it('keeps a wire zero and an empty string as sent', function () {
     forceRequestTo('/');
 

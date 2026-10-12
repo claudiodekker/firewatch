@@ -94,11 +94,11 @@ it('traces a job a test dispatched itself on a sync connection of another name a
     ShipOrder::dispatch();
 
     $failure = Answers::assert(Detect::class, ['shape' => 'failing-jobs']);
-    [$attempt] = storeRows('SELECT trace_id, connection FROM job_attempts');
+    [$attempt] = storeRows('SELECT trace_id, connection, driver FROM job_attempts');
     $answer = Answers::assert(Trace::class, ['trace_id' => $attempt['trace_id']]);
 
     expect($failure['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1])
-        ->and($attempt)->toMatchArray(['connection' => 'inline'])
+        ->and($attempt)->toBe(['trace_id' => $attempt['trace_id'], 'connection' => 'inline', 'driver' => 'sync'])
         ->and($answer['result']['jobs'])->toHaveCount(1)
         ->and($answer['result']['jobs'][0])->toMatchArray(['name' => ShipOrder::class, 'lineage' => 'no_dispatch', 'outcome' => 'processed', 'dispatch' => null])
         ->and($answer['notes'])->toBe([]);

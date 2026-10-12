@@ -10,16 +10,21 @@ use ClaudioDekker\Firewatch\Store\Microseconds;
 class Lineage
 {
     /**
-     * The connections whose jobs run inside the dispatching execution, and so leave no attempt.
+     * The queue drivers whose jobs leave no attempt of their own.
      *
      * @var list<string>
      */
-    protected const INLINE_CONNECTIONS = [
+    protected const INLINE_DRIVERS = [
         'sync',
         'deferred',
         'background',
         'null',
     ];
+
+    /**
+     * The connection Nightwatch records no job attempt on, whatever its driver.
+     */
+    protected const UNRECORDED_CONNECTION = 'sync';
 
     /**
      * Get the lineage of each queued job, in the order the lineages began.
@@ -88,13 +93,17 @@ class Lineage
     }
 
     /**
-     * Determine if a dispatch or an attempt is on a connection that runs the job inside the dispatching execution.
+     * Determine if a dispatch or an attempt is on the unrecorded connection or on one of an inline driver.
      *
      * @param  array<string, mixed>|null  $record
      */
     protected static function isInline(?array $record): bool
     {
-        return in_array($record['connection'] ?? null, static::INLINE_CONNECTIONS, true);
+        if (($record['connection'] ?? null) === static::UNRECORDED_CONNECTION) {
+            return true;
+        }
+
+        return in_array($record['driver'] ?? null, static::INLINE_DRIVERS, true);
     }
 
     /**
@@ -114,13 +123,14 @@ class Lineage
     }
 
     /**
-     * Get the SQL condition that holds for a dispatch whose connection, as the given column, runs the job inside the dispatching execution.
+     * Get the SQL condition that holds for a dispatch on an inline connection, given the alias of the rows that hold its driver and connection.
      */
-    public static function inlineCondition(string $column): string
+    public static function inlineCondition(string $table): string
     {
-        $connections = implode(', ', array_map(fn (string $connection) => "'{$connection}'", static::INLINE_CONNECTIONS));
+        $drivers = implode(', ', array_map(fn (string $driver) => "'{$driver}'", static::INLINE_DRIVERS));
+        $unrecorded = static::UNRECORDED_CONNECTION;
 
-        return "{$column} IN ({$connections})";
+        return "({$table}.driver IN ({$drivers}) OR {$table}.connection = '{$unrecorded}')";
     }
 
     /**

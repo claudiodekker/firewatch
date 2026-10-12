@@ -138,7 +138,7 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - An outgoing HTTP call that received no response (timeout, connection failure) leaves no record.
 - A request's payload is stored only for a 500 response.
 - `lazy_loads`, `hydrated_models`, `files_read` and `files_written` are always 0, and mail and notification `failed` is always false. Zero does not mean none: use the `n-plus-one` detector.
-- Jobs on the sync connection have no attempt record, unless a test dispatched them itself.
+- Jobs on a connection of the `sync` driver have no attempt record, unless a test dispatched them itself.
 - Logs written straight to a named channel are not captured.
 - Work still running is absent. An execution is recorded when it finishes.
 - Anything the application opted out of (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.

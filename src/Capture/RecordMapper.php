@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Capture;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use ClaudioDekker\Firewatch\Store\Schema;
+use Illuminate\Contracts\Config\Repository;
 use JsonException;
 use stdClass;
 
@@ -43,7 +44,7 @@ class RecordMapper
     /**
      * Create a new record mapper instance.
      */
-    public function __construct(protected Truncator $truncator)
+    public function __construct(protected Truncator $truncator, protected Repository $config)
     {
         //
     }
@@ -127,6 +128,10 @@ class RecordMapper
             $data['bindings'] = $bindings;
         }
 
+        if (in_array('driver', $type?->addedFields() ?? [], strict: true)) {
+            $data['driver'] = $this->driver($data['connection'] ?? null);
+        }
+
         // A serialize_precision below 17 makes the round trip round a float, so the instant comes from the original array.
         $columns['started_at'] = $this->startedAt($type, timestamp: $timestamp, durationMicroseconds: $columns['duration']);
 
@@ -140,6 +145,23 @@ class RecordMapper
         $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $trace);
 
         return $columns;
+    }
+
+    /**
+     * Get the queue driver the application configures for a connection, or null when it configures none.
+     */
+    protected function driver(mixed $connection): ?string
+    {
+        // Read at every record, because a test can define a connection while it runs.
+        $connections = $this->config->get('queue.connections');
+
+        if (! is_string($connection) || ! is_array($connections) || ! is_array($connections[$connection] ?? null)) {
+            return null;
+        }
+
+        $driver = $connections[$connection]['driver'] ?? null;
+
+        return is_string($driver) ? $driver : null;
     }
 
     /**

@@ -206,6 +206,7 @@ describe('the verdict', function () {
     });
 
     it('is not evaluated for want of records when every dispatch ran inline, and says how many it set aside', function (string $connection) {
+        config()->set("queue.connections.{$connection}", ['driver' => $connection]);
         ingest([qltDispatch('a', fields: ['connection' => $connection]), qltDispatch('b', fields: ['connection' => $connection])]);
 
         $answer = qltAnswer();
@@ -379,6 +380,47 @@ describe('the pending dispatches', function () {
         expect($result)->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0])
             ->and($result['saw'])->toBe(['inline_excluded' => 1, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
             ->and($result['caveats'])->toBe([__('firewatch::messages.detect_caveat_wait')]);
+    });
+
+    it('does not take a dispatch for pending on a connection of an inline driver, whatever the connection is named', function () {
+        config()->set('queue.connections.inline', ['driver' => 'sync']);
+        ingest([qltPending('inline', 90_000, fields: ['connection' => 'inline']), ...qltWaited('worked', 10)]);
+
+        $result = qltAnswer()['result'];
+
+        expect($result)->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0])
+            ->and($result['saw'])->toBe(['inline_excluded' => 1, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0]);
+    });
+
+    it('takes a dispatch for pending on a connection of a worker driver, though it has the name of an inline driver', function (string $connection) {
+        config()->set("queue.connections.{$connection}", ['driver' => 'database']);
+        ingest([qltPending('waiting', 90_000, fields: ['connection' => $connection])]);
+
+        $result = qltAnswer()['result'];
+
+        expect($result)->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($result['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
+            ->and($result['findings'][0]['evidence'])->toMatchArray(['pending' => 1, 'oldest_pending_age_ms' => 90000.0, 'connections' => [$connection]]);
+    })->with(['deferred' => 'deferred', 'background' => 'background']);
+
+    it('does not take a dispatch for pending on a connection named sync, whatever its driver, because Nightwatch records no attempt on it', function () {
+        config()->set('queue.connections.sync', ['driver' => 'database']);
+        ingest([qltPending('unrecorded', 90_000, fields: ['connection' => 'sync']), ...qltWaited('worked', 10)]);
+
+        $result = qltAnswer()['result'];
+
+        expect($result)->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0])
+            ->and($result['saw'])->toBe(['inline_excluded' => 1, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0]);
+    });
+
+    it('takes a dispatch for pending on a connection the application does not configure', function () {
+        ingest([qltPending('waiting', 90_000, fields: ['connection' => 'elsewhere'])]);
+
+        $result = qltAnswer()['result'];
+
+        expect($result)->toMatchArray(['verdict' => 'findings', 'examined' => 1, 'total' => 1])
+            ->and($result['saw'])->toBe(['inline_excluded' => 0, 'attempts_without_dispatch' => 0, 'without_first_attempt' => 0])
+            ->and($result['findings'][0]['evidence'])->toMatchArray(['pending' => 1, 'connections' => ['elsewhere']]);
     });
 });
 
