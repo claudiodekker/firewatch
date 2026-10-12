@@ -12,7 +12,7 @@ composer require --dev claudiodekker/firewatch
 claude mcp add firewatch -- php artisan firewatch:server
 ```
 
-Use the app in `local`, then ask the assistant what happened. Nothing exists to ask until the app has handled a request, command, job or task, over HTTP (serve, Herd, Sail, a browser) or from a feature test.
+Use the app in `local`, then ask the assistant what happened. Nothing exists to ask until the app has handled a request, command, job or task, over HTTP (serve, Herd, Sail, a browser).
 
 ## Ask your assistant
 
@@ -26,10 +26,6 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 | Did my change make it slower? | `compare` |
 | Is this job getting slower over the week? | `trend` |
 | Which queries run most often? | `query` |
-
-It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes. Tests that expect a 4xx answer one, so give `failing-routes` a `threshold` of 500 to see only server errors. The migrations and seeders the tests run are left out. What a test runs itself, such as factories and assertions, is kept apart from its requests and commands: pass `scope: "executions"` or `scope: "between"` to read one side.
-
-Every record of a test run carries the test that wrote it, so `occurrences(order: "run")` and `execution` name the test to open. Pass that name as `test` to `rank` or `occurrences` to read one test alone. A parallel run gives each worker its own database, so one user id can be several people: answers that count or name actors then say the count is a lower bound.
 
 ## Requirements
 
@@ -108,7 +104,7 @@ The server must share a kernel and filesystem with the application. A server on 
 - Nothing is transmitted. Every Nightwatch transmit is cancelled.
 - **Firewatch never redacts URL query strings, SQL, query bindings, log messages, context and extra, exception messages, the Laravel Context or outgoing-request query strings.** For redaction, use Nightwatch's `redact*` callbacks, which always apply, and the opt-in `capture.redact_payload_fields` and `capture.redact_headers`, which are empty by default.
 - A request's payload is recorded only for a 500 response by default (`capture.request_payload`). Request headers are recorded for every request. Response headers and bodies are never recorded.
-- The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. A test run writes its own store, apart from your browsing. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
+- The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
 - Do not commit, share or attach the store file.
 
 Locally, the value that redaction would hide is usually the answer the assistant needs.
@@ -146,7 +142,7 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - A location in a compiled Blade view names its template beside it, but the line is the compiled file's. After `view:clear` the template reads null.
 - Exceptions the application does not report are absent, as are vendor commands and framework cache keys on Nightwatch's default exclusion lists.
 - Mail sent by a notification is recorded as a notification, not as mail.
-- A memory peak is the whole process's peak since the sensor last reset it. Requests, scheduled tasks and job attempts reset it, but a command reports its whole process, and a test run's executions record none, so compare executions to each other, not to an absolute number.
+- A memory peak is the whole process's peak since the sensor last reset it. Requests, scheduled tasks and job attempts reset it, but a command reports its whole process, so compare executions to each other, not to an absolute number.
 
 Answers state these themselves, and `clean` means "none among what was captured". An empty or clean answer spells each one out. A `rank`, `occurrences`, `detect` or `compare` answer that lists what it found can name a blind spot by id instead, and `describe` holds every sentence.
 
@@ -179,7 +175,7 @@ A specific budget beats a global one. Durations are in milliseconds and memory i
 ],
 ```
 
-Raise `busy_timeout` when the app and several workers write at once. A test run waits up to 5 seconds instead, as its parallel workers share the store. Dropped batches are recorded, and answers and the doctor state how many records were lost. The failure file keeps its newest 100 lines, so once it is full the count reads "at least". Each application instance also writes its first store failure to the PHP error log, so a test run can write one line per test. Two stores must not share a directory.
+Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded, and answers and the doctor state how many records were lost. The failure file keeps its newest 100 lines, so once it is full the count reads "at least". Each application instance also writes its first store failure to the PHP error log. Two stores must not share a directory.
 
 ## Retention and clearing
 
