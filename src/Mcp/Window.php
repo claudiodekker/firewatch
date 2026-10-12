@@ -157,6 +157,16 @@ class Window
     }
 
     /**
+     * Get the scope as the words of an empty answer name a filter, none for all.
+     *
+     * @return list<string>
+     */
+    public function filters(): array
+    {
+        return array_map(fn (string $scope) => "scope: {$scope}", array_values($this->scoping()));
+    }
+
+    /**
      * Get the SQL condition that holds for the records of the window, read from the raw table or from the view of a type, on the side of its scope.
      */
     public function condition(?RecordType $from = null): string

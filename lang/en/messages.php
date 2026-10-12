@@ -424,6 +424,9 @@ return [
         'holding' => 'a type that holds the group: :types',
         'scope' => 'one of the sides of a test run\'s store',
         'scope_holding' => 'a `type` other than request, command, job-attempt and scheduled-task, or `scope` executions or all',
+        'execution_group' => 'the group id of a request, command, job attempt or scheduled task',
+        'within_type' => 'a `type` of the records inside executions',
+        'within_scope' => '`scope` executions or all',
     ],
 
     'unknown_argument' => "error: invalid_argument\n`:argument` is not an argument of :tool.\nargument: :argument\naccepted: :accepted\nexample: :example",
@@ -497,6 +500,8 @@ return [
     'rank_untimed' => ':count record without duration is counted in occurrences and left out of the duration statistics.|:count records without duration are counted in occurrences and left out of the duration statistics.',
 
     'rank_group_argument' => 'Group id (32 hex): one row per deploy, first seen first. Excludes matching, deploy, cursor; refused with by=queries.',
+
+    'rank_within_argument' => 'An execution group id: rank the records its executions ran. Needs type.',
 
     'rank_matching_argument' => 'Case-insensitive substring of the group label. Excludes group.',
 

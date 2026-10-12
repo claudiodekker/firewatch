@@ -322,6 +322,7 @@ class Occurrences extends Tool
             'arguments' => [
                 'group' => $first,
                 ...$window->arguments(),
+                ...$window->scoping(),
             ],
             'why' => __('firewatch::messages.occurrences_next_group'),
         ]];

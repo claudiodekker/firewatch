@@ -73,10 +73,12 @@ it('lists the tools as JSON with the server name and version', function () {
                     'inputSchema' => ['properties' => [
                         'type' => ['description' => __('firewatch::messages.grouped_type_argument'), 'enum' => ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'], 'type' => 'string'],
                         'group' => ['description' => __('firewatch::messages.rank_group_argument'), 'type' => 'string'],
+                        'within' => ['description' => __('firewatch::messages.rank_within_argument'), 'type' => 'string'],
                         'matching' => ['description' => __('firewatch::messages.rank_matching_argument'), 'minLength' => 1, 'maxLength' => 200, 'type' => 'string'],
                         'by' => ['description' => __('firewatch::messages.rank_by_argument'), 'enum' => ['p95_duration', 'p50_duration', 'max_duration', 'total_duration', 'occurrences', 'p95_memory', 'max_memory', 'last_seen', 'queries'], 'type' => 'string'],
                         'since' => ['description' => windowArgument('since'), 'type' => 'string'],
                         'until' => ['description' => windowArgument('until'), 'type' => 'string'],
+                        'scope' => ['default' => 'all', 'enum' => ['executions', 'between', 'all'], 'type' => 'string'],
                         'deploy' => ['description' => __('firewatch::messages.deploy_argument'), 'type' => 'string'],
                         'limit' => ['description' => __('firewatch::messages.limit_argument.rank'), 'default' => 20, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],
                         'cursor' => ['description' => __('firewatch::messages.cursor_argument'), 'type' => 'string'],

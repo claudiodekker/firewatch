@@ -17,8 +17,10 @@ use ClaudioDekker\Firewatch\Mcp\Population;
 use ClaudioDekker\Firewatch\Mcp\Ranking;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
+use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\StageView;
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\Mcp\Within;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Reader;
 use Closure;
@@ -88,9 +90,11 @@ class Rank extends Tool
         return [
             'type' => $this->groupedTypeArgument($schema),
             'group' => $schema->string()->description(__('firewatch::messages.rank_group_argument')),
+            'within' => $schema->string()->description(__('firewatch::messages.rank_within_argument')),
             'matching' => $this->matchingArgument($schema)->description(__('firewatch::messages.rank_matching_argument')),
             'by' => $this->measureArgument($schema, Measure::for(...))->description(__('firewatch::messages.rank_by_argument')),
             ...$this->windowSchema($schema),
+            ...$this->scopeSchema($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),
@@ -113,6 +117,7 @@ class Rank extends Tool
     {
         $arguments = new Arguments($request, $this);
         $group = $arguments->group('rank(group: "<group id>")');
+        $within = $arguments->group(Within::EXAMPLE, argument: 'within');
         $matching = $arguments->matching('rank(type: "request", matching: "orders")');
         $explicit = $arguments->typeWithGroups($group, 'rank(type: "request", by: "p95_duration")');
         $limit = $arguments->limit($explicit === null ? ['group' => '<group id>'] : ['type' => $explicit->value]);
@@ -125,27 +130,38 @@ class Rank extends Tool
             $this->refuseWithGroup($request);
         }
 
+        $scope = $arguments->scope('rank(type: "query", scope: "between")');
+
+        $this->refuseScope($scope, $explicit);
+        $this->refuseWithin($within, $explicit, $scope);
+
         $by = $explicit === null ? null : $this->measure($arguments, $explicit, $group);
 
         $continuation = Continuation::read($request, $this->name(), $this->key(...));
 
         $frame = $this->frame($now);
-        $window = $continuation->window($now, $frame->timezone);
+        $window = $continuation->window($now, $frame->timezone)->scoped($scope);
 
         $frame->about($explicit === null ? [] : [$explicit], $window);
 
-        $read = $frame->read(function (SQLite3 $connection) use ($arguments, $window, $group, $explicit, $matching, $deploy, $limit, $by, $continuation) {
+        $read = $frame->read(function (SQLite3 $connection) use ($arguments, $window, $group, $within, $explicit, $matching, $deploy, $limit, $by, $continuation) {
             $inWindow = $window->count($connection);
             $selection = GroupSelection::resolve($connection, $group, $explicit, $deploy, "rank(group: \"{$group}\")");
             $type = $selection->measured();
-            $unranked = fn (Frame $frame) => $frame->empty($selection->vacancy($frame, $inWindow, hasRows: false, own: $matching === null ? [] : ["matching: {$matching}"]));
+            $container = $within === null ? null : Within::resolve($connection, $within);
+            $own = [
+                ...($within === null ? [] : ["within: {$within}"]),
+                ...($matching === null ? [] : ["matching: {$matching}"]),
+                ...$window->filters(),
+            ];
+            $unranked = fn (Frame $frame) => $frame->empty($selection->vacancy($frame, $inWindow, hasRows: false, own: $own));
 
-            if ($type === null || ! $selection->isHeld()) {
+            if ($type === null || ! $selection->isHeld() || ($within !== null && $container === null)) {
                 return [$type, $unranked];
             }
 
             $measure = $by ?? $this->measure($arguments, $type, $group);
-            $ranking = new Ranking(new Population($type, $window, $deploy, $group), $measure, $matching, $this->configuration);
+            $ranking = new Ranking(new Population($type, $window, $deploy, $group, within: $container), $measure, $matching, $this->configuration);
 
             if ($inWindow === 0) {
                 return [$type, $unranked];
@@ -184,7 +200,7 @@ class Rank extends Tool
      *
      * @param  Continuation<array{value: int|float|null, occurrences: int, hash: string}>  $continuation
      * @param  Closure(Frame): Answer  $unranked
-     * @param  array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}  $ranked
+     * @param  array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure, within: array{group: string, type: string, label: string, executions: int}|null}  $ranked
      */
     protected function ranking(Continuation $continuation, Frame $frame, Window $window, Closure $unranked, RecordType $type, Measure $by, array $ranked): Answer
     {
@@ -204,6 +220,7 @@ class Rank extends Tool
         ]);
         $notes = $this->notes($by, $ranked);
         $next = $rows === [] ? [] : [$this->breakdownCall($window, $rows[0]['group'], $type)];
+        $within = $ranked['within'] === null ? [] : ['within' => $ranked['within']];
 
         return $frame->answer(
             summary: $summary,
@@ -211,6 +228,7 @@ class Rank extends Tool
                 'type' => $type->value,
                 'by' => $by->value,
                 'failure_definition' => Failure::definition($type),
+                ...$within,
                 'records' => $ranked['records'],
                 'groups_ranked' => $groupsRanked,
                 'records_without_group' => $ranked['withoutGroup'],
@@ -275,7 +293,7 @@ class Rank extends Tool
 
         return [
             'tool' => $this->name(),
-            'arguments' => [...$arguments, ...$window->arguments()],
+            'arguments' => [...$arguments, ...$window->arguments(), ...$window->scoping()],
             'why' => __('firewatch::messages.rank_next_group'),
         ];
     }
@@ -342,11 +360,40 @@ class Rank extends Tool
     }
 
     /**
+     * Refuse a scope that no record of the type can be in.
+     */
+    protected function refuseScope(Scope $scope, ?RecordType $type): void
+    {
+        if ($type !== null && ! $scope->holds($type)) {
+            throw Refusal::conflicting(argument: 'scope', with: $type->value, accepted: __('firewatch::messages.argument_values.scope_holding'), example: 'rank(type: "query", scope: "between")');
+        }
+    }
+
+    /**
+     * Refuse a group to rank within that the type or the scope of the call does not fit.
+     */
+    protected function refuseWithin(?string $within, ?RecordType $type, Scope $scope): void
+    {
+        if ($within === null) {
+            return;
+        }
+
+        if ($type?->isExecution() ?? true) {
+            throw Refusal::conflicting(argument: 'within', with: $type === null ? 'group' : $type->value, accepted: __('firewatch::messages.argument_values.within_type'), example: Within::EXAMPLE);
+        }
+
+        if ($scope === Scope::BETWEEN) {
+            throw Refusal::conflicting(argument: 'scope', with: 'within', accepted: __('firewatch::messages.argument_values.within_scope'), example: Within::EXAMPLE);
+        }
+    }
+
+    /**
      * Refuse what a breakdown of one group has no use for.
      */
     protected function refuseWithGroup(Request $request): void
     {
         $accepting = [
+            'within' => 'a call with `type` and `within`',
             'matching' => 'a call with `type` and `matching`',
             'deploy' => 'a call without `deploy`',
             'cursor' => 'a call without `cursor`',

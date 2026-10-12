@@ -4,12 +4,16 @@ use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
+use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
+use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
 /**
@@ -320,4 +324,152 @@ it('judges a test\'s endpoints without its setup', function () {
         ->and($everywhere['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 5, 'total' => 1])
         ->and($nPlusOne['result'])->toBe(Answers::assert(Detect::class, ['shape' => 'n-plus-one'])['result'])
         ->and(array_column($cache['next'], 'arguments'))->toContain(['group' => $cache['result']['findings'][0]['group'], 'scope' => 'executions']);
+});
+
+/**
+ * Get the group id of the only group of an execution type.
+ */
+function auditExecutionGroup(string $type): string
+{
+    return Answers::assert(Rank::class, ['type' => $type])['result']['groups'][0]['group'];
+}
+
+/**
+ * Get the rows of a ranking by label, keeping the fields a ranking within an execution group adds.
+ *
+ * @param  array<string, mixed>  $answer
+ * @return array<string, array<string, mixed>>
+ */
+function auditWithinRows(array $answer): array
+{
+    $rows = [];
+
+    foreach ($answer['result']['groups'] as $row) {
+        $rows[$row['label']] = array_intersect_key($row, array_flip(['occurrences', 'per_execution', 'executions_affected', 'call_sites']));
+    }
+
+    return $rows;
+}
+
+it('ranks the queries and cache events one route ran, per request', function () {
+    auditTestSetupAndEndpoints();
+
+    $route = auditExecutionGroup('request');
+    $location = Answers::assert(Occurrences::class, ['type' => 'query', 'scope' => 'executions'])['result']['rows'][0]['location'];
+
+    $queries = Answers::assert(Rank::class, ['type' => 'query', 'within' => $route, 'by' => 'occurrences']);
+    $cache = Answers::assert(Rank::class, ['type' => 'cache-event', 'within' => $route]);
+
+    expect($queries['result']['within'])->toBe(['group' => $route, 'type' => 'request', 'label' => '/orders/{order}/items', 'executions' => 2])
+        ->and($queries['result']['records'])->toBe(6)
+        ->and(auditWithinRows($queries))->toEqual([
+            'select ? as member' => [
+                'occurrences' => 6,
+                'per_execution' => ['avg' => 3, 'max' => 4],
+                'executions_affected' => 2,
+                'call_sites' => [['location' => $location, 'count' => 6]],
+            ],
+        ])->and($cache['result']['within'])->toBe(['group' => $route, 'type' => 'request', 'label' => '/orders/{order}/items', 'executions' => 2])
+        ->and(auditWithinRows($cache))->toEqual([
+            'team:1:permissions' => [
+                'occurrences' => 3,
+                'per_execution' => ['avg' => 1.5, 'max' => 3],
+                'executions_affected' => 1,
+            ],
+        ]);
+});
+
+it('lists the three call sites that ran a query most inside a route, most frequent first', function () {
+    auditTestRoutes();
+
+    // Nightwatch reads the testbench skeleton as the application, so every call site would be a vendor line.
+    app(Core::class)->sensor->location->setBasePath(dirname(__DIR__, 2));
+    Route::get('/reports', function () {
+        DB::select('select ? as report', [1]);
+
+        foreach (range(1, 2) as $run) {
+            DB::select('select ? as report', [2]);
+        }
+
+        foreach (range(1, 3) as $run) {
+            DB::select('select ? as report', [3]);
+        }
+
+        foreach (range(1, 4) as $run) {
+            DB::select('select ? as report', [4]);
+        }
+    });
+
+    test()->get('/reports')->assertOk();
+    Nightwatch::digest();
+
+    $query = Answers::assert(Rank::class, ['type' => 'query', 'within' => auditExecutionGroup('request')])['result']['groups'][0];
+    $lines = array_map(fn (array $site) => (int) Str::afterLast($site['location'], ':'), $query['call_sites']);
+
+    expect($query['occurrences'])->toBe(10)
+        ->and(array_column($query['call_sites'], 'count'))->toBe([4, 3, 2])
+        ->and($lines)->toBe([$lines[0], $lines[0] - 4, $lines[0] - 8]);
+});
+
+it('ranks the queries a command ran apart from the same query in the test\'s setup', function () {
+    auditTestSetupAndEndpoints();
+
+    $command = auditExecutionGroup('command');
+
+    $within = Answers::assert(Rank::class, ['type' => 'query', 'within' => $command]);
+    $between = Answers::assert(Rank::class, ['type' => 'query', 'scope' => 'between']);
+    $all = Answers::assert(Rank::class, ['type' => 'query', 'by' => 'occurrences']);
+
+    expect($within['result']['within'])->toBe(['group' => $command, 'type' => 'command', 'label' => 'reports:build', 'executions' => 1])
+        ->and(auditWithinRows($within))->toEqual([
+            'select ? as country' => [
+                'occurrences' => 1,
+                'per_execution' => ['avg' => 1, 'max' => 1],
+                'executions_affected' => 1,
+                'call_sites' => $within['result']['groups'][0]['call_sites'],
+            ],
+        ])->and(array_column($between['result']['groups'], 'occurrences', 'label'))->toBe(['select ? as country' => 25])
+        ->and(array_column($all['result']['groups'], 'occurrences', 'label'))->toBe(['select ? as country' => 26, 'select ? as member' => 6])
+        ->and($all['result'])->not->toHaveKey('within');
+});
+
+it('answers that a route ran nothing in a window before its requests', function () {
+    auditTestSetupAndEndpoints();
+
+    $route = auditExecutionGroup('request');
+    $first = min(array_column(Answers::assert(Occurrences::class, ['type' => 'request'])['result']['rows'], 'started_at'));
+
+    $answer = Answers::assert(Rank::class, ['type' => 'query', 'within' => $route, 'until' => Instant::epoch($first)]);
+
+    expect($answer['result'])->toBe([])
+        ->and($answer['empty']['kind'])->toBe('no_match')
+        ->and($answer['empty']['message'])->toBe(__('firewatch::messages.no_match', [
+            'population' => $answer['empty']['population'],
+            'filters' => "type: query, within: {$route}",
+        ]))->and($answer['empty']['population'])->toBe(5);
+});
+
+it('refuses to rank within a group that is no execution\'s, or alongside what does not fit', function () {
+    auditTestSetupAndEndpoints();
+
+    $route = auditExecutionGroup('request');
+    $query = Answers::assert(Rank::class, ['type' => 'query'])['result']['groups'][0]['group'];
+    $executionGroup = __('firewatch::messages.argument_values.execution_group');
+    $example = 'rank(type: "query", within: "<group id>")';
+
+    FirewatchServer::tool(Rank::class, ['type' => 'query', 'within' => $query])->assertHasErrors([
+        __('firewatch::messages.invalid_argument', ['argument' => 'within', 'expected' => $executionGroup, 'value' => json_encode($query), 'accepted' => $executionGroup, 'example' => $example]),
+    ]);
+    FirewatchServer::tool(Rank::class, ['type' => 'request', 'within' => $route])->assertHasErrors([
+        __('firewatch::messages.conflicting_arguments', ['argument' => 'within', 'with' => 'request', 'accepted' => __('firewatch::messages.argument_values.within_type'), 'example' => $example]),
+    ]);
+    FirewatchServer::tool(Rank::class, ['type' => 'query', 'within' => $route, 'scope' => 'between'])->assertHasErrors([
+        __('firewatch::messages.conflicting_arguments', ['argument' => 'scope', 'with' => 'within', 'accepted' => __('firewatch::messages.argument_values.within_scope'), 'example' => $example]),
+    ]);
+    FirewatchServer::tool(Rank::class, ['group' => $route, 'within' => $route])->assertHasErrors([
+        __('firewatch::messages.conflicting_arguments', ['argument' => 'within', 'with' => 'group', 'accepted' => 'a call with `type` and `within`', 'example' => 'rank(group: "<group id>")']),
+    ]);
+    FirewatchServer::tool(Rank::class, ['type' => 'request', 'scope' => 'between'])->assertHasErrors([
+        __('firewatch::messages.conflicting_arguments', ['argument' => 'scope', 'with' => 'request', 'accepted' => __('firewatch::messages.argument_values.scope_holding'), 'example' => 'rank(type: "query", scope: "between")']),
+    ]);
 });

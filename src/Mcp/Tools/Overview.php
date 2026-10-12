@@ -119,7 +119,7 @@ class Overview extends Tool
 
         $empty = $inWindow === null
             ? $frame->vacancy(inWindow: $sections->records, groupHeld: true, hasRows: true, filters: [])
-            : $frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: $sections->records > 0, filters: ["scope: {$scope->value}"]);
+            : $frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: $sections->records > 0, filters: $window->filters());
 
         if ($empty !== null) {
             return $frame->empty($empty);
@@ -285,6 +285,7 @@ class Overview extends Tool
                     'type' => $slowest->value,
                     'by' => Measure::TOTAL_DURATION->value,
                     ...$bounds,
+                    ...$window->scoping(),
                 ],
                 'why' => __('firewatch::messages.overview_next_rank', ['type' => $slowest->value]),
             ];

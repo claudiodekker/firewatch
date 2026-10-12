@@ -277,6 +277,7 @@ class Detect extends Tool
                     'arguments' => [
                         'group' => $finding->group,
                         ...$bounds,
+                        ...$window->scoping(),
                     ],
                     'why' => __('firewatch::messages.detect_next_rank'),
                 ];
