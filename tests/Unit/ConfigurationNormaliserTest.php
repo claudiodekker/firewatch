@@ -212,19 +212,19 @@ it('drops an invalid environment name and keeps the rest', function (mixed $item
     'not a string' => [5, '5'],
 ]);
 
-it('uses local and testing when no environment name remains', function (mixed $value, array $lines) {
+it('uses local when no environment name remains', function (mixed $value, array $lines) {
     $configuration = configurationNormaliser()->resolve(['environments' => $value]);
 
-    expect($configuration->environments)->toBe(['local', 'testing'])
+    expect($configuration->environments)->toBe(['local'])
         ->and(configurationIssueLines($configuration))->toBe($lines);
 })->with([
-    'empty list' => [[], ['firewatch.environments: no valid environment names; using local,testing']],
-    'empty string' => ['', ['firewatch.environments: no valid environment names; using local,testing']],
+    'empty list' => [[], ['firewatch.environments: no valid environment names; using local']],
+    'empty string' => ['', ['firewatch.environments: no valid environment names; using local']],
     'every item invalid' => ['prod*', [
         'firewatch.environments: "prod*" is not an environment name (letters, digits, _ . -); dropped',
-        'firewatch.environments: no valid environment names; using local,testing',
+        'firewatch.environments: no valid environment names; using local',
     ]],
-    'not a list' => [true, ['firewatch.environments: true is not a list (an array or a comma-separated string); using local,testing']],
+    'not a list' => [true, ['firewatch.environments: true is not a list (an array or a comma-separated string); using local']],
 ]);
 
 it('resolves the store path', function (string $value, string $expected) {

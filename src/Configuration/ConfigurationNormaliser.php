@@ -51,7 +51,7 @@ class ConfigurationNormaliser
     /**
      * The environments used when no valid name remains.
      */
-    protected const DEFAULT_ENVIRONMENTS = ['local', 'testing'];
+    protected const DEFAULT_ENVIRONMENTS = ['local'];
 
     /**
      * The description of a valid environment name in an issue's reason.

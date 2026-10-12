@@ -7,9 +7,9 @@ The first release.
 ### Added
 
 - Install as a dev dependency with nothing else to run. Firewatch registers Nightwatch itself, and the optional `config/firewatch.php` (publish tag `firewatch-config`) can be set from `FIREWATCH_*` environment variables. An invalid value falls back to its default.
-- Firewatch captures only in the `local` and `testing` environments by default and steps aside everywhere else. It is Off below SQLite 3.41.0 and refuses a store path under the public directory.
+- Firewatch captures only in the `local` environment by default and steps aside everywhere else. It is Off below SQLite 3.41.0 and refuses a store path under the public directory.
 - Every request, command, job attempt and scheduled task is captured with everything Nightwatch's sensors record about it, with sampling and filters overridden, and stored in a local SQLite file. Nothing is sent anywhere.
-- Each environment keeps its own store, `storage/firewatch/firewatch-{environment}.sqlite`, so a test run doesn't mix with local browsing.
+- Each environment keeps its own store, `storage/firewatch/firewatch-{environment}.sqlite`, so an environment added to `environments` doesn't mix with local browsing.
 - Redaction is off by default, with opt-in lists for payload fields and headers. Long values are cut with a truncation marker.
 - The store keeps every record type in one table with a view per type, a directory of signed-in users, and a `drift` table that counts differences from Nightwatch's record contract instead of dropping data.
 - Records are labelled with a deploy from `FIREWATCH_DEPLOY` or Nightwatch, else with the commit git HEAD points to, so two commits can be compared.
