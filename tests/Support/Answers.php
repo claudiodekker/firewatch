@@ -116,6 +116,7 @@ class Answers
 
         Assert::assertCount(1, $markdown);
         self::assertLayout($answer, explode("\n", $markdown[0]));
+        SuggestedCalls::assertFit($answer, $markdown[0]);
 
         return $answer;
     }

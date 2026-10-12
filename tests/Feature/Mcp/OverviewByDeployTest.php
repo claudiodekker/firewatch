@@ -133,7 +133,7 @@ it('offers the comparison of the two most recent deploys on the type of the slow
 
     expect($answer['next'][0])->toBe([
         'tool' => 'compare',
-        'arguments' => ['type' => 'request', 'deploy_before' => 'v2', 'deploy_after' => 'v3', 'since' => 1790690000],
+        'arguments' => ['type' => 'request', 'deploy_before' => 'v2', 'deploy_after' => 'v3', 'since' => '1790690000'],
         'why' => __('firewatch::messages.overview_next_compare', ['type' => 'request']),
     ])->and(Answers::follow($answer['next'][0])['tool'])->toBe('compare');
 });

@@ -281,8 +281,7 @@ class Trend extends Tool
                 'arguments' => [
                     ...$selector,
                     ...($deploy === null ? [] : ['deploy' => $deploy]),
-                    'since' => $peak['since'],
-                    'until' => $last ? $now : $peak['until'],
+                    ...Window::between(since: $peak['since'], until: $last ? $now : $peak['until'], timezone: $buckets->window->timezone())->arguments(),
                 ],
                 'why' => __('firewatch::messages.trend_next_occurrences'),
             ],
