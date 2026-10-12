@@ -48,6 +48,10 @@ _Avoid_: Inactive, bypassed, no-op mode
 An application environment name on the allowlist in which Firewatch records telemetry.
 _Avoid_: Enabled environment, dev mode
 
+**Test capture**:
+Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none, by holding Nightwatch in request mode and swapping in a command's state while it runs. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
+_Avoid_: Test mode, test recording
+
 **In-code opt-out**:
 A developer-written instruction in application code (ignore, pause, never sample, reject callback) that tells Nightwatch not to record something, and which Firewatch honors.
 _Avoid_: Filter, exclusion

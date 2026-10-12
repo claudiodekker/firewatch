@@ -4,10 +4,12 @@ namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Actions\AppendBatch;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
+use ClaudioDekker\Firewatch\Capture\TestRecord;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Pruner;
 use Closure;
+use JsonSerializable;
 use Laravel\Nightwatch\Contracts\Ingest as IngestContract;
 use Throwable;
 
@@ -34,6 +36,20 @@ class Ingest implements IngestContract
      * @var list<list<mixed>|null>
      */
     protected array $bindings = [];
+
+    /**
+     * Where each buffered record fell in a test run, or null outside a test run.
+     *
+     * @var list<TestRecord|null>
+     */
+    protected array $testRecords = [];
+
+    /**
+     * Tell where a record a test runs falls, while Firewatch records a test run.
+     *
+     * @var (Closure(): TestRecord)|null
+     */
+    protected ?Closure $testRecord = null;
 
     /**
      * Whether a full buffer is stored at once, rather than dropping its oldest record.
@@ -68,13 +84,22 @@ class Ingest implements IngestContract
             return;
         }
 
+        $testRecord = $this->testRecord?->__invoke();
+
+        // A test's last records are stored after its application is gone, so what runs between executions resolves its lazy fields now.
+        if ($testRecord === TestRecord::OUTSIDE_EXECUTIONS) {
+            $record = array_map(fn (mixed $value) => $value instanceof JsonSerializable ? $value->jsonSerialize() : $value, $record);
+        }
+
         if ($this->isBufferFull()) {
             array_shift($this->buffer);
             array_shift($this->bindings);
+            array_shift($this->testRecords);
         }
 
         $this->buffer[] = $record;
         $this->bindings[] = $this->queryBindings->pair($record);
+        $this->testRecords[] = $testRecord;
 
         if ($this->digestsWhenBufferIsFull && $this->isBufferFull()) {
             $this->digest();
@@ -92,7 +117,7 @@ class Ingest implements IngestContract
             return;
         }
 
-        $this->store([$record], []);
+        $this->store([$record], [], [$this->testRecord?->__invoke()]);
     }
 
     /**
@@ -130,10 +155,11 @@ class Ingest implements IngestContract
 
         $records = $this->buffer;
         $bindings = $this->bindings;
+        $testRecords = $this->testRecords;
 
         $this->flush();
 
-        $this->store($records, $bindings);
+        $this->store($records, $bindings, $testRecords);
     }
 
     /**
@@ -143,6 +169,17 @@ class Ingest implements IngestContract
     {
         $this->buffer = [];
         $this->bindings = [];
+        $this->testRecords = [];
+    }
+
+    /**
+     * Record a test run, asking where each record the test writes falls.
+     *
+     * @param  Closure(): TestRecord  $testRecord
+     */
+    public function recordTestRun(Closure $testRecord): void
+    {
+        $this->testRecord = $testRecord;
     }
 
     /**
@@ -158,14 +195,15 @@ class Ingest implements IngestContract
      *
      * @param  list<array<mixed>>  $records
      * @param  list<list<mixed>|null>  $bindings
+     * @param  list<TestRecord|null>  $testRecords
      */
-    protected function store(array $records, array $bindings): void
+    protected function store(array $records, array $bindings, array $testRecords): void
     {
         $this->storing = true;
 
         try {
             try {
-                $this->appendBatch->handle($records, $bindings);
+                $this->appendBatch->handle($records, $bindings, $testRecords);
             } catch (Throwable $exception) {
                 $this->failures->record($exception, dropped: count($records));
 

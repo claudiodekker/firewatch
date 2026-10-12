@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch;
 use ClaudioDekker\Firewatch\Capture\DefaultLogChannel;
 use ClaudioDekker\Firewatch\Capture\HeaderRedactor;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
+use ClaudioDekker\Firewatch\Capture\TestCapture;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationIssue;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
@@ -121,6 +122,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->releaseQueryBindings();
         $this->guarded($this->captureLogs(...));
         $this->guarded($this->replaceNightwatchIngest(...));
+        $this->guarded($this->captureTests(...));
         $this->guarded($this->redactHeaders(...));
     }
 
@@ -424,9 +426,39 @@ class FirewatchServiceProvider extends ServiceProvider
     protected function registerNightwatch(): void
     {
         // Nightwatch is in dont-discover, so this is its only registration.
-        $this->app->register(NightwatchServiceProvider::class);
+        $register = function () {
+            $this->app->register(NightwatchServiceProvider::class);
+        };
+
+        if ($this->capturesTests()) {
+            TestCapture::registerInRequestMode($register);
+        } else {
+            $register();
+        }
 
         AliasLoader::getInstance()->alias('Nightwatch', Nightwatch::class);
+    }
+
+    /**
+     * Determine if this process runs a test suite whose requests and commands Firewatch records as executions.
+     */
+    protected function capturesTests(): bool
+    {
+        return $this->mode() === Mode::ACTIVE
+            && $this->app->runningUnitTests()
+            && $this->app->make(Configuration::class)->captureTests;
+    }
+
+    /**
+     * Record each request and command a test runs as an execution of its own.
+     */
+    protected function captureTests(): void
+    {
+        if (! $this->capturesTests() || ! $this->app->bound(Core::class)) {
+            return;
+        }
+
+        (new TestCapture($this->app, $this->app->make(Core::class)))->listen();
     }
 
     /**

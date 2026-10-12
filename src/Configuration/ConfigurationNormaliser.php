@@ -51,7 +51,7 @@ class ConfigurationNormaliser
     /**
      * The environments used when no valid name remains.
      */
-    protected const DEFAULT_ENVIRONMENTS = ['local'];
+    protected const DEFAULT_ENVIRONMENTS = ['local', 'testing'];
 
     /**
      * The description of a valid environment name in an issue's reason.
@@ -112,6 +112,7 @@ class ConfigurationNormaliser
         $retentionRecords = $this->integer($retention, 'records', key: 'retention.records', minimum: 1, maximum: static::MAXIMUM_RETENTION_RECORDS, default: static::DEFAULT_RETENTION_RECORDS);
         $deploy = $this->deploy($raw);
         $captureLogs = $this->boolean($capture, 'logs', key: 'capture.logs', default: true);
+        $captureTests = $this->boolean($capture, 'tests', key: 'capture.tests', default: true);
         $captureRequestPayload = $this->boolean($capture, 'request_payload', key: 'capture.request_payload', default: true);
         $redactPayloadFields = $this->redactList($capture, 'redact_payload_fields', key: 'capture.redact_payload_fields');
         $redactHeaders = $this->redactList($capture, 'redact_headers', key: 'capture.redact_headers');
@@ -128,6 +129,7 @@ class ConfigurationNormaliser
             retentionRecords: $retentionRecords,
             deploy: $deploy,
             captureLogs: $captureLogs,
+            captureTests: $captureTests,
             captureRequestPayload: $captureRequestPayload,
             redactPayloadFields: $redactPayloadFields,
             redactHeaders: $redactHeaders,

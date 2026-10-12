@@ -54,7 +54,7 @@ class RecordMapper
      * @param  array<mixed>  $record
      * @param  list<mixed>|null  $bindings
      */
-    public function map(array $record, Drift $drift, ?array $bindings = null): MappedRecord
+    public function map(array $record, Drift $drift, ?array $bindings = null, ?TestRecord $testRecord = null): MappedRecord
     {
         try {
             $wire = $this->normalise($record);
@@ -87,7 +87,7 @@ class RecordMapper
             return new MappedRecord(user: $user);
         }
 
-        $columns = $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings);
+        $columns = $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings, testRecord: $testRecord);
 
         return new MappedRecord(record: $columns);
     }
@@ -99,9 +99,23 @@ class RecordMapper
      * @param  list<mixed>|null  $bindings
      * @return array<string, mixed>
      */
-    protected function columns(?RecordType $type, array $wire, mixed $timestamp, ?array $bindings): array
+    protected function columns(?RecordType $type, array $wire, mixed $timestamp, ?array $bindings, ?TestRecord $testRecord): array
     {
         [$columns, $data, $jsonFields] = $this->split($wire, $type);
+
+        // A test process's peak holds the runner and every earlier test, so no execution of it has a peak of its own.
+        if ($testRecord !== null && array_key_exists('peak_memory_usage', $data)) {
+            $data['peak_memory_usage'] = null;
+        }
+
+        // Nightwatch stamps what a test runs between its executions as request work of whoever signs in later.
+        if ($testRecord === TestRecord::OUTSIDE_EXECUTIONS) {
+            $columns['source'] = $columns['user_id'] = null;
+
+            if (array_key_exists('execution_stage', $data)) {
+                $data['execution_stage'] = null;
+            }
+        }
 
         if ($type === RecordType::QUERY) {
             $data['bindings'] = $bindings;

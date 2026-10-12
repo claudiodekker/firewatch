@@ -1,0 +1,264 @@
+<?php
+
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
+use Laravel\Nightwatch\Facades\Nightwatch;
+use Symfony\Component\Process\Process;
+use Workbench\App\Members;
+
+function captureTests(): void
+{
+    setEnvironmentVariable(name: 'FIREWATCH_CAPTURE_TESTS', value: 'true');
+
+    test()->refreshApplication();
+}
+
+/**
+ * Get each request's route and each command's name with the SQL of the queries it ran.
+ *
+ * @return array<string, list<string>>
+ */
+function executionQueries(): array
+{
+    Nightwatch::digest();
+
+    $executions = storeRows('SELECT route_path AS name, execution_id, started_at FROM requests UNION ALL SELECT name, execution_id, started_at FROM commands ORDER BY started_at');
+
+    return collect($executions)->mapWithKeys(fn (array $execution) => [
+        $execution['name'] => array_column(storeRows("SELECT sql FROM queries WHERE execution_id = '{$execution['execution_id']}' ORDER BY started_at"), 'sql'),
+    ])->all();
+}
+
+it('records each request and command a test runs as an execution of its own', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+    Route::get('/invoices', fn () => [DB::select('select 2 as invoices'), DB::select('select 3 as invoices')]);
+    Artisan::command('orders:prune', function () {
+        DB::select('select 4 as pruned');
+    });
+
+    DB::select('select 0 as before');
+    $this->get('/orders')->assertOk();
+    $this->get('/invoices')->assertOk();
+    $this->artisan('orders:prune')->assertSuccessful();
+    DB::select('select 5 as after');
+
+    expect(executionQueries())->toBe([
+        '/orders' => ['select 1 as orders'],
+        '/invoices' => ['select 2 as invoices', 'select 3 as invoices'],
+        'orders:prune' => ['select 4 as pruned'],
+    ])->and(storeRows('SELECT route_path, queries FROM requests ORDER BY started_at'))->toBe([
+        ['route_path' => '/orders', 'queries' => 1],
+        ['route_path' => '/invoices', 'queries' => 2],
+    ])->and(storeRows("SELECT count(DISTINCT execution_id) AS executions FROM queries WHERE sql IN ('select 0 as before', 'select 5 as after')"))->toBe([
+        ['executions' => 2],
+    ])->and(storeRows("SELECT count(*) AS inside FROM queries WHERE sql IN ('select 0 as before', 'select 5 as after') AND execution_id IN (SELECT execution_id FROM requests UNION SELECT execution_id FROM commands)"))->toBe([
+        ['inside' => 0],
+    ]);
+});
+
+it('keeps the logs and exceptions of a request and a command inside their executions', function () {
+    captureTests();
+    Route::get('/orders', function () {
+        Log::warning('The orders are slow.');
+
+        throw new RuntimeException('The orders could not be listed.');
+    });
+    Artisan::command('orders:prune', function () {
+        Log::warning('The prune is slow.');
+
+        report(new RuntimeException('The orders could not be pruned.'));
+    });
+
+    $this->get('/orders')->assertServerError();
+    $this->artisan('orders:prune')->assertSuccessful();
+    Nightwatch::digest();
+
+    $executions = 'SELECT route_path AS execution, execution_id FROM requests UNION ALL SELECT name, execution_id FROM commands';
+
+    expect(storeRows("SELECT x.execution, l.message FROM ({$executions}) x JOIN logs l USING (execution_id) ORDER BY l.started_at"))->toBe([
+        ['execution' => '/orders', 'message' => 'The orders are slow.'],
+        ['execution' => '/orders', 'message' => 'The orders could not be listed.'],
+        ['execution' => 'orders:prune', 'message' => 'The prune is slow.'],
+        ['execution' => 'orders:prune', 'message' => 'The orders could not be pruned.'],
+    ])->and(storeRows("SELECT x.execution, e.message FROM ({$executions}) x JOIN exceptions e USING (execution_id) ORDER BY e.started_at"))->toBe([
+        ['execution' => '/orders', 'message' => 'The orders could not be listed.'],
+        ['execution' => 'orders:prune', 'message' => 'The orders could not be pruned.'],
+    ])->and(storeRows('SELECT status_code FROM requests'))->toBe([['status_code' => 500]]);
+});
+
+it('leaves out the migrations and seeders a test harness runs, even inside a request', function () {
+    captureTests();
+    Route::get('/orders', function () {
+        Artisan::call('migrate:fresh');
+
+        return DB::select('select 1 as orders');
+    });
+
+    $this->artisan('migrate:fresh')->assertSuccessful();
+    $this->get('/orders')->assertOk();
+
+    expect(executionQueries())->toBe([
+        '/orders' => ['select 1 as orders'],
+    ])->and(storeRows('SELECT queries FROM requests'))->toBe([['queries' => 1]])
+        ->and(storeRows('SELECT count(*) AS queries FROM queries'))->toBe([['queries' => 1]]);
+});
+
+it('records no peak memory for a test\'s executions, which only the whole test process has', function () {
+    captureTests();
+    Route::get('/orders', fn () => 'ok');
+    Artisan::command('orders:prune', fn () => null);
+
+    $this->get('/orders')->assertOk();
+    $this->artisan('orders:prune')->assertSuccessful();
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT peak_memory_usage FROM requests UNION ALL SELECT peak_memory_usage FROM commands'))->toBe([
+        ['peak_memory_usage' => null],
+        ['peak_memory_usage' => null],
+    ]);
+});
+
+it('gives what a test runs outside its requests no source, stage or user', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+
+    DB::select('select 0 as before');
+    $this->actingAs(Members::find('7'))->get('/orders')->assertOk();
+    DB::select('select 2 as after');
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT sql, execution_source, execution_stage, user_id FROM queries ORDER BY started_at'))->toBe([
+        ['sql' => 'select 0 as before', 'execution_source' => null, 'execution_stage' => null, 'user_id' => null],
+        ['sql' => 'select 1 as orders', 'execution_source' => 'request', 'execution_stage' => 'action', 'user_id' => '7'],
+        ['sql' => 'select 2 as after', 'execution_source' => null, 'execution_stage' => null, 'user_id' => null],
+    ]);
+});
+
+it('keeps a command a request starts inside the request', function () {
+    captureTests();
+    Artisan::command('orders:prune', function () {
+        DB::select('select 4 as pruned');
+    });
+    Route::get('/orders', fn () => Artisan::call('orders:prune'));
+
+    $this->get('/orders')->assertOk();
+
+    expect(executionQueries())->toBe([
+        '/orders' => ['select 4 as pruned'],
+    ]);
+});
+
+it('keeps a command another command calls inside the outer command', function () {
+    captureTests();
+    Artisan::command('orders:archive', function () {
+        DB::select('select 4 as archived');
+    });
+    Artisan::command('orders:prune', function () {
+        DB::select('select 5 as pruned');
+        Artisan::call('orders:archive');
+    });
+
+    $this->artisan('orders:prune')->assertSuccessful();
+
+    expect(executionQueries())->toBe([
+        'orders:prune' => ['select 5 as pruned', 'select 4 as archived'],
+    ]);
+});
+
+it('records no request or command when test capture is off', function () {
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+    Artisan::command('orders:prune', function () {
+        DB::select('select 4 as pruned');
+    });
+
+    $this->get('/orders')->assertOk();
+    $this->artisan('orders:prune')->assertSuccessful();
+
+    expect(executionQueries())->toBe([])
+        ->and(storeRows("SELECT count(DISTINCT execution_id) AS executions FROM queries WHERE sql IN ('select 1 as orders', 'select 4 as pruned')"))->toBe([
+            ['executions' => 1],
+        ]);
+});
+
+it('records none of the commands Nightwatch leaves to its workers and schedulers', function () {
+    captureTests();
+    Artisan::command('inspire', function () {
+        DB::select('select 6 as quote');
+    });
+
+    $this->artisan('inspire')->assertSuccessful();
+
+    expect(executionQueries())->toBe([]);
+});
+
+it('leaves the application without the switch that forces Nightwatch into request mode', function () {
+    captureTests();
+
+    expect(env('NIGHTWATCH_FORCE_REQUEST'))->toBeNull();
+});
+
+it('starts the next request afresh after one threw out of the kernel', function () {
+    captureTests();
+    Route::get('/orders', function () {
+        DB::select('select 1 as orders');
+
+        throw new RuntimeException('The orders could not be listed.');
+    });
+    Route::get('/invoices', fn () => DB::select('select 2 as invoices'));
+
+    expect(fn () => $this->withoutExceptionHandling()->get('/orders'))->toThrow(RuntimeException::class);
+    $this->get('/invoices')->assertOk();
+
+    expect(executionQueries())->toBe([
+        '/invoices' => ['select 2 as invoices'],
+    ]);
+});
+
+it('records the command of a process that runs as testing, which Laravel raises no command events for', function () {
+    // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers.
+    $packagesCache = 'bootstrap/cache/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/testbench', 'members:audit', '7', '--env=testing'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite', 'APP_PACKAGES_CACHE' => $packagesCache],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    (new Filesystem)->delete(base_path($packagesCache));
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(storeRows('SELECT name, queries FROM commands'))->toBe([['name' => 'members:audit', 'queries' => 1]]);
+})->group('process');
+
+it('stores what each test runs after its last execution, once PHPUnit has torn its application down', function () {
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/phpunit', '--no-configuration', '--bootstrap', 'vendor/autoload.php', 'tests/Fixtures/TestRun/TrailingRecordsTest.php'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite'],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    $executions = 'SELECT execution_id FROM requests UNION SELECT execution_id FROM commands';
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(executionQueries())->toBe([
+            '/orders' => ['select 1 as orders'],
+            'orders:prune' => ['select 2 as pruned'],
+        ])->and(storeRows("SELECT sql, execution_id IN ({$executions}) AS in_execution, execution_source, user_id FROM queries WHERE sql LIKE '%after%' OR sql LIKE '%alone%' ORDER BY started_at"))->toBe([
+            ['sql' => 'select 1 as after_request', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+            ['sql' => 'select 2 as after_command', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+            ['sql' => 'select 3 as alone', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+            ['sql' => 'select 4 as alone', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+        ])->and(storeRows("SELECT count(DISTINCT execution_id) AS fragments FROM queries WHERE sql LIKE '%after%' OR sql LIKE '%alone%'"))->toBe([
+            ['fragments' => 3],
+        ]);
+})->group('process');

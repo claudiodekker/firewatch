@@ -48,9 +48,9 @@ abstract class TestCase extends Orchestra
         $_SERVER['FIREWATCH_RETENTION_AGE'] = $_ENV['FIREWATCH_RETENTION_AGE'] = '36500d';
         putenv('FIREWATCH_RETENTION_AGE=36500d');
 
-        // The suite runs as testing, which Firewatch leaves out of its default environments.
-        $_SERVER['FIREWATCH_ENVIRONMENTS'] = $_ENV['FIREWATCH_ENVIRONMENTS'] = 'local,testing';
-        putenv('FIREWATCH_ENVIRONMENTS=local,testing');
+        // The suite drives Nightwatch's console and request modes itself, so it leaves test capture to the tests that turn it on.
+        $_SERVER['FIREWATCH_CAPTURE_TESTS'] = $_ENV['FIREWATCH_CAPTURE_TESTS'] = 'false';
+        putenv('FIREWATCH_CAPTURE_TESTS=false');
 
         parent::setUp();
     }
@@ -66,8 +66,8 @@ abstract class TestCase extends Orchestra
         unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
         putenv('FIREWATCH_RETENTION_AGE');
 
-        unset($_SERVER['FIREWATCH_ENVIRONMENTS'], $_ENV['FIREWATCH_ENVIRONMENTS']);
-        putenv('FIREWATCH_ENVIRONMENTS');
+        unset($_SERVER['FIREWATCH_CAPTURE_TESTS'], $_ENV['FIREWATCH_CAPTURE_TESTS']);
+        putenv('FIREWATCH_CAPTURE_TESTS');
 
         // A reported exception holds the store's connections in its trace until the next test resolves the facade again.
         Facade::clearResolvedInstances();
@@ -101,6 +101,8 @@ abstract class TestCase extends Orchestra
         $core = $this->app?->resolved(Core::class) ? $this->app->make(Core::class) : null;
 
         if ($core instanceof Core && $core->ingest instanceof Ingest) {
+            // Test capture would store what is left after the test deleted its store.
+            $core->ingest->flush();
             $core->ingest = new NullIngest;
         }
 

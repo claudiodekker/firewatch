@@ -168,7 +168,7 @@ return [
     'truncated_unknown' => 'Truncated: :section shows :shown of more (:reason). :how',
 
     'blind_spots' => [
-        'console-requests' => 'Requests are recorded only while the application serves HTTP; test runs and console processes record none. An empty request answer may mean the app was never exercised over HTTP.',
+        'console-requests' => 'Requests are recorded only while the application serves HTTP or a feature test sends them; other console processes record none. An empty request answer may mean the app was never exercised over HTTP or by a test.',
         'unanswered-outgoing-requests' => 'An outgoing request that received no response (timeout, connection failure) leaves no record.',
         'payload-on-server-error-only' => 'A request\'s payload is stored only when the response status is 500.',
         'dead-counters' => 'lazy_loads, hydrated_models, files_read and files_written are always 0 because the sensors never fill them; 0 does not mean none. A lazy load shows as one query repeated in an `execution` timeline.',
@@ -178,7 +178,7 @@ return [
         'vendor-defaults-unrecorded' => 'Vendor commands and framework cache keys on Nightwatch\'s default exclusion lists are not recorded.',
         'exceptions-unreported' => 'Exceptions the application does not report are not recorded, nor are exceptions that a scheduled task running in the scheduler\'s own process reports without throwing.',
         'named-log-channels' => 'Logs written directly to a named channel are not captured; only the default channel is.',
-        'memory-is-process-peak' => 'Memory is the whole process\'s peak since the sensor last reset it: requests, scheduled tasks and job attempts reset it, a command reports its whole process; it is not attributable to code.',
+        'memory-is-process-peak' => 'Memory is the whole process\'s peak since the sensor last reset it: requests, scheduled tasks and job attempts reset it, a command reports its whole process, and a test run records none; it is not attributable to code.',
         'query-bindings-unpaired' => 'A query\'s bindings are null when they could not be paired with certainty; null means unknown, not none.',
         'uninstrumented-dispatcher' => 'A job dispatched where Nightwatch was not running has attempts but no dispatch, and may have a fresh trace per attempt; join on job id, not trace id.',
         'actor-partial' => 'Commands and scheduled tasks carry no actor; requests with no recorded user may be guests or users of a non-default guard; ids are keys, not people; names come from the application\'s user callback, and impersonation shows the impersonated user.',
@@ -302,7 +302,7 @@ return [
         ],
 
         'capture-posture' => [
-            'posture' => 'payload fields redacted: :fields; headers redacted: :headers; request payloads :payload; logs :logs',
+            'posture' => 'payload fields redacted: :fields; headers redacted: :headers; request payloads :payload; logs :logs; test executions :tests',
             'nightwatch_defaults' => 'Nightwatch\'s defaults are in effect, because Firewatch\'s capture settings were not applied',
         ],
 

@@ -59,6 +59,7 @@ it('falls back to each boolean key\'s own default alone', function (string $grou
         ->and(configurationIssueLines($configuration))->toBe(["firewatch.{$group}.{$key}: \"maybe\" is not a boolean (true, false, 1, 0, yes, no, on, off); using true"]);
 })->with([
     'capture.logs' => ['group' => 'capture', 'key' => 'logs', 'property' => 'captureLogs'],
+    'capture.tests' => ['group' => 'capture', 'key' => 'tests', 'property' => 'captureTests'],
     'capture.request_payload' => ['group' => 'capture', 'key' => 'request_payload', 'property' => 'captureRequestPayload'],
 ]);
 
@@ -212,19 +213,19 @@ it('drops an invalid environment name and keeps the rest', function (mixed $item
     'not a string' => [5, '5'],
 ]);
 
-it('uses local when no environment name remains', function (mixed $value, array $lines) {
+it('uses local and testing when no environment name remains', function (mixed $value, array $lines) {
     $configuration = configurationNormaliser()->resolve(['environments' => $value]);
 
-    expect($configuration->environments)->toBe(['local'])
+    expect($configuration->environments)->toBe(['local', 'testing'])
         ->and(configurationIssueLines($configuration))->toBe($lines);
 })->with([
-    'empty list' => [[], ['firewatch.environments: no valid environment names; using local']],
-    'empty string' => ['', ['firewatch.environments: no valid environment names; using local']],
+    'empty list' => [[], ['firewatch.environments: no valid environment names; using local,testing']],
+    'empty string' => ['', ['firewatch.environments: no valid environment names; using local,testing']],
     'every item invalid' => ['prod*', [
         'firewatch.environments: "prod*" is not an environment name (letters, digits, _ . -); dropped',
-        'firewatch.environments: no valid environment names; using local',
+        'firewatch.environments: no valid environment names; using local,testing',
     ]],
-    'not a list' => [true, ['firewatch.environments: true is not a list (an array or a comma-separated string); using local']],
+    'not a list' => [true, ['firewatch.environments: true is not a list (an array or a comma-separated string); using local,testing']],
 ]);
 
 it('resolves the store path', function (string $value, string $expected) {

@@ -25,6 +25,7 @@ readonly class Configuration
         public int $retentionRecords,
         public ?string $deploy,
         public bool $captureLogs,
+        public bool $captureTests,
         public bool $captureRequestPayload,
         public array $redactPayloadFields,
         public array $redactHeaders,
