@@ -900,14 +900,24 @@ describe('store-losses', function () {
             ->and($check['fix'])->toBe(__('firewatch::messages.doctor.store-losses.busy_fix', ['milliseconds' => 300, 'test_run' => 5000]));
     });
 
-    it('counts every dropped batch, however many were dropped', function () {
+    it('counts the dropped batches as a lower bound once the failure log holds 100 lines', function () {
         doctorStorePath();
 
         foreach (range(1, 150) as $batch) {
             app(FailureLog::class)->record(new StoreFailure(FailureKind::BUSY, 'database is locked'), dropped: 2);
         }
 
-        expect(doctorCheck('store-losses')['message'])->toStartWith('150 batches dropped, holding 300 records in all; the newest at ');
+        expect(doctorCheck('store-losses')['message'])->toStartWith('at least 100 batches dropped, holding at least 200 records in all, as the failure log is full and keeps only its newest lines; the newest at ');
+    });
+
+    it('counts the dropped batches exactly while the failure log holds fewer than 100 lines', function () {
+        doctorStorePath();
+
+        foreach (range(1, 99) as $batch) {
+            app(FailureLog::class)->record(new StoreFailure(FailureKind::BUSY, 'database is locked'), dropped: 2);
+        }
+
+        expect(doctorCheck('store-losses')['message'])->toStartWith('99 batches dropped, holding 198 records in all; the newest at ');
     });
 
     it('says what to do for each kind of loss', function (FailureKind $kind, string $fix) {
