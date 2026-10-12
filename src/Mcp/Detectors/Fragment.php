@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
 use ClaudioDekker\Firewatch\Mcp\Window;
+use ClaudioDekker\Firewatch\RecordType;
 
 /**
  * @internal
@@ -22,11 +23,11 @@ readonly class Fragment
     }
 
     /**
-     * Get the condition of the records that started in the window, of one group when the call names it.
+     * Get the condition of the records that started in the window, read from the raw table or the view of a type, of one group when the call names it.
      */
-    public static function selecting(Window $window, ?string $group): self
+    public static function selecting(Window $window, ?string $group, ?RecordType $from = null): self
     {
-        return new self($window->condition().' AND (:group IS NULL OR group_hash = :group)', ['group' => $group]);
+        return new self($window->condition($from).' AND (:group IS NULL OR group_hash = :group)', ['group' => $group]);
     }
 
     /**

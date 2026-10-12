@@ -146,6 +146,32 @@ class Refusal extends RuntimeException
     }
 
     /**
+     * Get the refusal of an execution id prefix that several executions share, naming the first of them.
+     *
+     * @param  list<string>  $ids
+     */
+    public static function ambiguousPrefix(string $prefix, array $ids, int $matched, string $example): self
+    {
+        return new self(ErrorCode::INVALID_ARGUMENT, __('firewatch::messages.execution_prefix_ambiguous', [
+            'prefix' => $prefix,
+            'matched' => $matched,
+            'ids' => implode(', ', $ids),
+            'example' => $example,
+        ]));
+    }
+
+    /**
+     * Get the refusal of an execution id that names the work a test ran between its executions.
+     */
+    public static function betweenSection(string $id, string $example): self
+    {
+        return new self(ErrorCode::NOT_FOUND, __('firewatch::messages.execution_between_section', [
+            'id' => $id,
+            'example' => $example,
+        ]));
+    }
+
+    /**
      * Get the refusal of a cursor that does not belong to the call it was passed to.
      */
     public static function badCursor(string $tool): self

@@ -7,6 +7,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\DetectorName;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Detectors;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Finding;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
+use ClaudioDekker\Firewatch\Mcp\Detectors\Subject;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Threshold;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -55,6 +56,11 @@ class FakeDetector implements Detector
     public function threshold(): ?Threshold
     {
         return null;
+    }
+
+    public function judges(): Subject
+    {
+        return Subject::RECORDS;
     }
 
     /**

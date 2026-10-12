@@ -20,6 +20,8 @@ return [
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Clean means nothing was found among the records captured, over the stated examined count; clean over few records is weak. A not_evaluated verdict is never a pass. Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used. Listed argument values are matched exactly, and a refusal names the accepted ones. Prefer `rank`, `occurrences` and `detect` to `query`: they convert units, it does not.
 
+        A test run's store marks what the test ran outside its requests and commands with source between: `scope` keeps one side, and `occurrences` order run lists the run.
+
         Did my change help? Note `now` from an answer, change the code, exercise the application, then call `compare` with `split_at` set to that value; on a later round also pass the previous split as `since`. Did it ever run? A search that finds nothing is no proof: `fingerprint` it first.
         TEXT,
 
@@ -142,6 +144,8 @@ return [
     'window_derived_since' => 'since derived from the first record',
 
     'window_derived_until' => 'until derived from the last record and included',
+
+    'window_scoped' => ':window; scope: :scope',
 
     'store_line' => 'Store: :store',
 
@@ -420,6 +424,11 @@ return [
         'substring' => 'a substring of :minimum to :maximum characters',
         'grouped_type' => 'one of the types with groups',
         'holding' => 'a type that holds the group: :types',
+        'scope' => 'one of the sides of a test run\'s store',
+        'scope_holding' => 'a `type` other than request, command, job-attempt and scheduled-task, or `scope` executions or all',
+        'execution_group' => 'the group id of a request, command, job attempt or scheduled task',
+        'within_type' => 'a `type` of the records inside executions',
+        'within_scope' => '`scope` executions or all',
     ],
 
     'unknown_argument' => "error: invalid_argument\n`:argument` is not an argument of :tool.\nargument: :argument\naccepted: :accepted\nexample: :example",
@@ -493,6 +502,8 @@ return [
     'rank_untimed' => ':count record without duration is counted in occurrences and left out of the duration statistics.|:count records without duration are counted in occurrences and left out of the duration statistics.',
 
     'rank_group_argument' => 'Group id (32 hex): one row per deploy, first seen first. Excludes matching, deploy, cursor; refused with by=queries.',
+
+    'rank_within_argument' => 'An execution group id: rank the records its executions ran. Needs type.',
 
     'rank_matching_argument' => 'Case-insensitive substring of the group label. Excludes group.',
 
@@ -735,7 +746,7 @@ return [
         'trace_id' => 'The causal chain it belongs to, shared by a request and the jobs it caused.',
         'execution_id' => 'The execution it belongs to; children join their execution on it.',
         'source' => 'The kind of execution: request, command, job or schedule.',
-        'execution_source' => 'The kind of execution it ran inside: request, command, job or schedule.',
+        'execution_source' => 'The kind of execution it ran inside: request, command, job or schedule; between for a test\'s own work.',
         'execution_stage' => 'The stage of its execution it was made in.',
         'job_id' => 'The queued job\'s id: a dispatch and its attempts join on it.',
         'user_id' => 'The signed-in user, an id into users; null when nobody was signed in.',
@@ -820,7 +831,7 @@ return [
     'column_meanings_in' => [
         'records' => [
             'type' => 'The record type, as sent: request, command, job-attempt and so on.',
-            'source' => 'For an execution its own kind, for a child the kind of execution it ran inside.',
+            'source' => 'An execution\'s own kind, or the kind a child ran inside; between for a test\'s own work.',
         ],
         'commands' => ['class' => 'The command class.', 'name' => 'The command name.'],
         'job_attempts' => ['name' => 'The job class.', 'connection' => 'The queue connection.', 'status' => 'The outcome of the attempt.', 'execution_id' => 'The attempt\'s own id: a fresh one for every attempt.'],
@@ -906,7 +917,7 @@ return [
         'user_span' => 'How long each person has been seen.',
     ],
 
-    'execution_id_argument' => 'A request\'s trace id is its execution id. Absent: the latest finished. Excludes type.',
+    'execution_id_argument' => 'A request\'s trace id is its execution id. Absent: the latest finished. Excludes type. Or a unique prefix.',
 
     'execution_type_argument' => 'The latest finished of that kind. Not with execution_id.',
 
@@ -921,6 +932,12 @@ return [
     'budget_ignored' => '; ignored_entries: :count',
 
     'execution_summary' => 'Showed the :type :id: outcome :outcome.',
+
+    'execution_prefix_matched' => '`:prefix` matched one execution by prefix: `:id`.',
+
+    'execution_prefix_ambiguous' => "error: invalid_argument\n`:prefix` starts :matched execution ids, not one: :ids.\nargument: execution_id\naccepted: a full execution id, or a prefix only one execution has\nexample: :example",
+
+    'execution_between_section' => "error: not_found\nNo execution `:id` exists in the store: that id is a between section, the work a test ran outside its executions; `occurrences(execution_id: \":id\")` lists it.\nargument: execution_id\naccepted: an execution id, not a between section's\nexample: :example",
 
     'execution_not_found_trace' => "error: not_found\nNo execution `:id` exists in the store, but that value is a trace id; `trace(trace_id: \":id\")` follows it.\nargument: :argument\naccepted: :accepted\nexample: :example",
 
@@ -1087,7 +1104,7 @@ return [
 
     'occurrences_user_id_argument' => 'Records carrying that user, as recorded.',
 
-    'occurrences_order_argument' => 'Records without the measure last; memory and queries need an execution type.',
+    'occurrences_order_argument' => 'run: one row per execution or between section, oldest first, no selector. Records without the measure last; memory and queries need an execution type.',
 
     'occurrences_method_argument' => 'HTTP method, any case. Only request and outgoing-request.',
 
@@ -1104,6 +1121,14 @@ return [
     'occurrences_matching_argument' => 'Substring, ASCII case ignored, in the type\'s fields. Needs type.',
 
     'occurrences_summary' => 'Listed :count record, ordered by :order.|Listed :count records, ordered by :order.',
+
+    'occurrences_run_summary' => 'Listed :count execution or between section of the run, oldest first.|Listed :count executions and between sections of the run, oldest first.',
+
+    'occurrences_run_accepted' => 'a call with `order` run and no selector or filter: since, until, scope, limit and cursor apply',
+
+    'occurrences_next_run_execution' => 'The first execution listed, in full.',
+
+    'occurrences_next_run_between' => 'The records of the first between section listed.',
 
     'occurrences_cursor_how' => 'Call occurrences again with this cursor to see the rest: :call',
 

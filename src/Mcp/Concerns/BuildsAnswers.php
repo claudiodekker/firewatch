@@ -10,6 +10,7 @@ use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Measure;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
+use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use Closure;
@@ -51,6 +52,18 @@ trait BuildsAnswers
         return [
             'since' => $schema->string()->description(__("firewatch::messages.{$since}", ['absent' => __("firewatch::messages.window_absent.{$absent}.since")])),
             'until' => $schema->string()->description(__('firewatch::messages.until_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.until")])),
+        ];
+    }
+
+    /**
+     * Get the scope argument, which keeps one side of a test run's store.
+     *
+     * @return array{scope: StringType}
+     */
+    protected function scopeSchema(JsonSchema $schema): array
+    {
+        return [
+            'scope' => $schema->string()->enum(Scope::class)->default(Scope::ALL->value),
         ];
     }
 

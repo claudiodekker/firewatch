@@ -41,6 +41,14 @@ class ErrorLogs implements Ungrouped
     }
 
     /**
+     * Get what the detector judges: message shapes by their log lines, whichever side of a test run wrote them.
+     */
+    public function judges(): Subject
+    {
+        return Subject::RECORDS;
+    }
+
+    /**
      * Judge the message shapes of the logs at error or worse that were written in the window, over the logs of every level.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
@@ -97,7 +105,7 @@ class ErrorLogs implements Ungrouped
      */
     protected function examined(SQLite3 $connection, Window $window): int
     {
-        [$row] = Stored::rows($connection, "SELECT count(*) AS examined FROM logs WHERE {$window->condition()}", [], $window);
+        [$row] = Stored::rows($connection, "SELECT count(*) AS examined FROM logs WHERE {$window->condition(RecordType::LOG)}", [], $window);
 
         return $row['examined'];
     }
@@ -116,7 +124,7 @@ class ErrorLogs implements Ungrouped
         return Stored::rows($connection, "WITH errors AS MATERIALIZED (
             SELECT id, started_at, lower(level) AS level, message_shape(message) AS shape,
                 NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id
-            FROM logs WHERE {$window->condition()} AND lower(level) IN (SELECT value FROM json_each(:levels))
+            FROM logs WHERE {$window->condition(RecordType::LOG)} AND lower(level) IN (SELECT value FROM json_each(:levels))
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY level, shape ORDER BY started_at DESC, id DESC) AS by_latest FROM errors
         ), shapes AS (

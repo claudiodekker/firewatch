@@ -110,7 +110,8 @@ class RecordMapper
 
         // Nightwatch stamps what a test runs between its executions as request work of whoever signs in later.
         if ($testRecord === TestRecord::OUTSIDE_EXECUTIONS) {
-            $columns['source'] = $columns['user_id'] = null;
+            $columns['source'] = TestRecord::BETWEEN_SOURCE;
+            $columns['user_id'] = null;
 
             if (array_key_exists('execution_stage', $data)) {
                 $data['execution_stage'] = null;

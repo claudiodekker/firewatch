@@ -25,6 +25,11 @@ interface Detector
     public function types(): array;
 
     /**
+     * Get what the detector judges, which decides whether it has anything to judge between a test's executions.
+     */
+    public function judges(): Subject;
+
+    /**
      * Get the threshold the detector takes, or null when it takes none.
      */
     public function threshold(): ?Threshold;

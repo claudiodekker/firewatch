@@ -49,7 +49,7 @@ An application environment name on the allowlist in which Firewatch records tele
 _Avoid_: Enabled environment, dev mode
 
 **Test capture**:
-Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none, by holding Nightwatch in request mode and swapping in a command's state while it runs. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
+Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none and stamped with the source `between`, by holding Nightwatch in request mode and swapping in a command's state while it runs. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
 _Avoid_: Test mode, test recording
 
 **In-code opt-out**:
@@ -105,8 +105,16 @@ The single identifier by which children join to their execution: the trace id fo
 _Avoid_: Run id, span id
 
 **Source**:
-The kind of execution (request, command, job, schedule), derived from the execution's record type.
+The kind of execution (request, command, job, schedule), derived from the execution's record type. A record a test wrote outside its executions has the source `between` instead, the one value that is no kind of execution.
 _Avoid_: Kind, origin
+
+**Between section**:
+The records a test body wrote between two of its executions, or before the first or after the last: factories, seeding and assertions. One section shares one execution id, which belongs to no execution, and its records have the source `between` and no stage or user.
+_Avoid_: Setup block, orphan records, test phase
+
+**Side**:
+One of the two parts of a test run's store: the executions with everything inside them, or the between sections. A store without test work has only the first.
+_Avoid_: Half, partition
 
 **Child event**:
 A record belonging to an execution: query, exception, log, cache event, mail, notification, outgoing request or queued job.
@@ -522,6 +530,18 @@ _Avoid_: Header, statistics
 **Selector**:
 An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id.
 _Avoid_: Filter (a filter narrows a selection, a selector defines it)
+
+**Scope**:
+The side an answer of `overview`, `rank`, `detect` or `occurrences` reads: `executions`, `between` or `all`, the default. It is part of the window, so every query of the answer keeps the same side, and an answer that is scoped names its scope on the window.
+_Avoid_: Side filter, mode
+
+**Within**:
+The execution group a ranking of queries or other child events is limited to. Its executions are selected by their own start in the window and their records are read whole, and each row adds the runs per execution, the executions it ran in and, for a query, its call sites.
+_Avoid_: Parent filter, per-route breakdown
+
+**Run view**:
+The listing `occurrences` gives with `order: "run"`: one row per execution or between section that starts in the window, oldest first, each with the queries, query time and other records its execution id holds. A between section starts at its first record.
+_Avoid_: Timeline (the child timeline of one execution), test log
 
 **Group selection**:
 The group a call names, with its type and deploy, resolved against the store: the types that hold the group, the one type a measure reads (job attempts for a job group), the one type a listing reads (none for a group two types hold, so both are listed), and whether the store holds the group at all. A type that does not hold the group is refused in one wording by `rank`, `compare`, `trend` and `occurrences`.

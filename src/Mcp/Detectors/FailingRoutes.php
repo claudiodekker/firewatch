@@ -42,6 +42,14 @@ class FailingRoutes implements Detector
     }
 
     /**
+     * Get what the detector judges: routes by their requests that failed.
+     */
+    public function judges(): Subject
+    {
+        return Subject::EXECUTIONS;
+    }
+
+    /**
      * Judge the requests of the window.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement

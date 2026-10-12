@@ -16,7 +16,10 @@ use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Core;
+use Laravel\Nightwatch\Facades\Nightwatch;
 
 /**
  * Get the clock the tests of this file read, which is also the instant the store is created.
@@ -472,4 +475,25 @@ it('is read-only and idempotent: asking twice gives the same answer', function (
     dscSeed();
 
     expect(Answers::assert(Describe::class))->toBe(Answers::assert(Describe::class));
+});
+
+it('lists between among the sources a record can carry, beside the four kinds of execution', function () {
+    setEnvironmentVariable(name: 'FIREWATCH_CAPTURE_TESTS', value: 'true');
+    test()->refreshApplication();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+
+    test()->get('/orders')->assertOk();
+    DB::select('select 2 as seeded');
+    Nightwatch::digest();
+
+    $query = dscColumn(Answers::assert(Describe::class, ['type' => 'query']), 'execution_source');
+    $request = dscColumn(Answers::assert(Describe::class, ['type' => 'request']), 'source');
+    $record = Arr::first(Answers::assert(Describe::class)['result']['tables'], fn (array $row) => $row['column'] === 'source');
+
+    expect($query['values'])->toBe(['request', 'command', 'job', 'schedule', 'between'])
+        ->and($query['examples'])->toBe(['between', 'request'])
+        ->and($query['meaning'])->toBe(__('firewatch::messages.column_meanings.execution_source'))
+        ->and($record['values'])->toBe(['request', 'command', 'job', 'schedule', 'between'])
+        ->and($record['meaning'])->toBe(__('firewatch::messages.column_meanings_in.records.source'))
+        ->and($request['values'])->toBe(['request']);
 });

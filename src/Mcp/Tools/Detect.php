@@ -93,6 +93,7 @@ class Detect extends Tool
             'threshold' => $schema->number()->description(__('firewatch::messages.detect_threshold_argument')),
             'group' => $schema->string()->description(__('firewatch::messages.detect_group_argument')),
             ...$this->windowSchema($schema),
+            ...$this->scopeSchema($schema),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
         ];
@@ -116,9 +117,10 @@ class Detect extends Tool
         $threshold = $this->threshold($request, $shape);
         $group = $this->group($arguments, $shape);
         $limit = $arguments->limit(['shape' => $this->detectors->names()[0]]);
+        $scope = $arguments->scope('detect(shape: "cache", scope: "between")');
 
         $frame = $this->frame($now);
-        $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
+        $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name())->scoped($scope);
 
         $detectors = $shape === null ? $this->detectors->all() : [$shape];
         $types = array_values(array_unique(array_merge(...array_map(fn (Detector $detector) => $detector->types(), $detectors)), SORT_REGULAR));
@@ -266,6 +268,7 @@ class Detect extends Tool
                     'arguments' => [
                         'group' => $finding->group,
                         ...$bounds,
+                        ...$window->scoping(),
                     ],
                     'why' => __('firewatch::messages.detect_next_occurrences'),
                 ];
@@ -274,6 +277,7 @@ class Detect extends Tool
                     'arguments' => [
                         'group' => $finding->group,
                         ...$bounds,
+                        ...$window->scoping(),
                     ],
                     'why' => __('firewatch::messages.detect_next_rank'),
                 ];
@@ -282,7 +286,7 @@ class Detect extends Tool
 
                 $calls[] = [
                     ...$listing,
-                    'arguments' => [...$listing['arguments'], ...$bounds],
+                    'arguments' => [...$listing['arguments'], ...$bounds, ...$window->scoping()],
                 ];
             }
         }
@@ -308,6 +312,7 @@ class Detect extends Tool
                     'arguments' => [
                         'shape' => $judgement->detector->value,
                         ...$bounds,
+                        ...$window->scoping(),
                     ],
                     'why' => __('firewatch::messages.detect_next_shape'),
                 ];

@@ -684,7 +684,7 @@ test('the tool is listed with its description, arguments and annotations', funct
     $tool = collect($listing['tools'])->firstWhere('name', 'detect');
 
     expect($tool['description'])->toBe(__('firewatch::messages.tools.detect'))
-        ->and(array_keys($tool['inputSchema']['properties']))->toBe(['shape', 'threshold', 'group', 'since', 'until', 'limit', 'format'])
+        ->and(array_keys($tool['inputSchema']['properties']))->toBe(['shape', 'threshold', 'group', 'since', 'until', 'scope', 'limit', 'format'])
         ->and($tool['inputSchema']['properties']['shape']['enum'])->toBe(['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'])
         ->and($tool['annotations'])->toMatchArray(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
 });

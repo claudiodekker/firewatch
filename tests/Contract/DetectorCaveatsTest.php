@@ -1,5 +1,7 @@
 <?php
 
+use ClaudioDekker\Firewatch\Mcp\Detectors\Reason;
+
 test('the detector caveats have their pinned wording', function (string $key, int $count, string $wording) {
     expect(trans_choice("firewatch::messages.{$key}", $count, ['count' => $count]))->toBe($wording);
 })->with([
@@ -15,3 +17,7 @@ test('the detector caveats have their pinned wording', function (string $key, in
     'unanswered' => ['detect_caveat_unanswered', 1, 'Clean means only that no captured call returned an error status; timeouts and connection failures leave no record.'],
     'cache keys' => ['detect_caveat_cache_keys', 1, 'Keys that embed ids fragment into one-off groups; read the per-store activity instead.'],
 ]);
+
+test('the reasons a detector gives for not evaluating are the six of the design', function () {
+    expect(array_column(Reason::cases(), 'value'))->toBe(['no_records', 'outside_coverage', 'prerequisite_missing', 'store_unavailable', 'deadline', 'no_executions_in_scope']);
+});

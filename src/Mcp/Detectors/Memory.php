@@ -42,6 +42,14 @@ class Memory implements Detector
     }
 
     /**
+     * Get what the detector judges: each execution by its peak memory.
+     */
+    public function judges(): Subject
+    {
+        return Subject::EXECUTIONS;
+    }
+
+    /**
      * Judge the executions that started in the window.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement

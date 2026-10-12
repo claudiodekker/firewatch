@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Store\History;
 use ClaudioDekker\Firewatch\Store\Markers;
@@ -77,11 +78,15 @@ class Detectors
     }
 
     /**
-     * Judge the records of the window with a detector, and say so when history removed what it would have judged.
+     * Judge the records of the window with a detector, and say so when history removed what it would have judged or the scope holds no executions to judge.
      */
     public function judge(SQLite3 $connection, Markers $meta, Detector $detector, Window $window, int|float|null $threshold, ?string $group, int $limit): Judgement
     {
         $default = $detector->threshold()?->default;
+
+        if ($window->scope() === Scope::BETWEEN && $detector->judges() === Subject::EXECUTIONS) {
+            return Judgement::notEvaluated($detector->name(), $detector->threshold()?->describe($threshold ?? $default), Reason::NO_EXECUTIONS_IN_SCOPE);
+        }
 
         $judgement = $detector->judge($connection, $meta, $window, $threshold ?? $default ?? 0, $group, $limit);
 

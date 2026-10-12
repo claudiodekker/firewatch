@@ -51,11 +51,11 @@ class Arguments
     }
 
     /**
-     * Read the group id, or null when none is given.
+     * Read the group id the argument gives, or null when none is given.
      */
-    public function group(string $example): ?string
+    public function group(string $example, string $argument = 'group'): ?string
     {
-        $value = $this->get('group');
+        $value = $this->get($argument);
 
         if ($value === null || (is_string($value) && preg_match('/^[0-9a-f]{32}$/', $value) === 1)) {
             return $value;
@@ -63,7 +63,7 @@ class Arguments
 
         $groupId = __('firewatch::messages.argument_values.group');
 
-        throw $this->invalid(argument: 'group', expected: $groupId, accepted: $groupId, example: $example);
+        throw $this->invalid(argument: $argument, expected: $groupId, accepted: $groupId, example: $example);
     }
 
     /**
@@ -138,6 +138,14 @@ class Arguments
         }
 
         return $this->type($expected, $example);
+    }
+
+    /**
+     * Read the side of a test run's store the call keeps, or the declared default when none is given.
+     */
+    public function scope(string $example): Scope
+    {
+        return $this->choiceOrDefault('scope', Scope::class, __('firewatch::messages.argument_values.scope'), $example);
     }
 
     /**

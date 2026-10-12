@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\ExecutionType;
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Stage;
 use SQLite3;
 
@@ -16,6 +17,11 @@ class Ranking
      * The key a record without a deploy has among the deploys of a breakdown, which no deploy string is.
      */
     protected const NO_DEPLOY = "\x01";
+
+    /**
+     * The most call sites a group lists when it is ranked within an execution group.
+     */
+    protected const CALL_SITES_WITHIN = 3;
 
     /**
      * Create a new ranking instance.
@@ -33,10 +39,12 @@ class Ranking
      * Read one page of the groups of the type in the window, worst first by the measure: at most the limit, after the key of the last row of the page before.
      *
      * @param  array{value: int|float|null, occurrences: int, hash: string}|null  $after
-     * @return array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure}
+     * @return array{page: Rows<array{value: int|float|null, occurrences: int, hash: string}>, rows: list<array<string, mixed>>, ranked: int, records: int, withoutGroup: int, untimed: int, orderedBy: Measure, within: array{group: string, type: string, label: string, executions: int}|null}
      */
     public function read(SQLite3 $connection, ?array $after, int $limit): array
     {
+        $within = $this->population->within?->read($connection, $this->population->window);
+
         [$records, $withoutGroup] = array_values($this->population->query($connection, 'SELECT count(*) AS records, count(*) FILTER (WHERE group_hash IS NULL) AS without FROM base')[0]);
 
         $measured = $this->population->measured($connection, $this->by);
@@ -56,7 +64,7 @@ class Ranking
         $following = array_filter($keys, fn (array $key) => $after === null || self::compare($key, $after) > 0);
         $fetched = array_slice(array_values($following), 0, Rows::fetch($limit));
         $page = Rows::bound($fetched, $limit);
-        $groups = $this->page($connection, array_column($page->rows, 'hash'));
+        $groups = $this->page($connection, array_column($page->rows, 'hash'), $within['executions'] ?? null);
 
         return [
             'page' => $page,
@@ -66,6 +74,7 @@ class Ranking
             'withoutGroup' => $withoutGroup,
             'untimed' => $untimed,
             'orderedBy' => $orderedBy,
+            'within' => $within,
         ];
     }
 
@@ -176,15 +185,20 @@ class Ranking
      * Read what the records of the groups of a page add up to, with when each was first seen in the store and its slowest execution, keyed by group hash.
      *
      * @param  list<string>  $hashes
+     * @param  int|null  $executions  the executions of the group the ranking is within, null when it is within none
      * @return array<string, array<string, mixed>>
      */
-    protected function page(SQLite3 $connection, array $hashes): array
+    protected function page(SQLite3 $connection, array $hashes, ?int $executions = null): array
     {
         $population = $this->population->only($hashes);
         $groups = $this->statistics($connection, $population);
 
         foreach ($population->firstSeen($connection) as $hash => $first) {
             $groups[$hash]['first'] = $first;
+        }
+
+        if ($executions !== null) {
+            $groups = $this->perExecution($connection, $population, $groups, $executions);
         }
 
         if (! $population->hasDuration()) {
@@ -195,6 +209,38 @@ class Ranking
 
         foreach ($slowest as $row) {
             $groups[$row['group_hash']]['slowest'] = $row['execution_id'];
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Add to each group what the executions of the group the ranking is within ran of it: the runs per execution, the executions it ran in and, for a query, its call sites.
+     *
+     * @param  array<string, array<string, mixed>>  $groups
+     * @return array<string, array<string, mixed>>
+     */
+    protected function perExecution(SQLite3 $connection, Population $population, array $groups, int $executions): array
+    {
+        $ran = $population->perExecution($connection);
+        $sites = $population->type === RecordType::QUERY ? $population->callSites($connection, self::CALL_SITES_WITHIN) : null;
+
+        foreach ($groups as $hash => $group) {
+            $groups[$hash]['within'] = [
+                'per_execution' => [
+                    'avg' => $executions === 0 ? null : round($group['occurrences'] / $executions, 2),
+                    'max' => $ran[$hash]['most'] ?? 0,
+                ],
+                'executions_affected' => $ran[$hash]['affected'] ?? 0,
+            ];
+
+            if ($sites !== null) {
+                $groups[$hash]['within']['call_sites'] = array_map(fn (array $site) => [
+                    'location' => Stored::location($site['file'], $site['line']),
+                    ...CompiledView::of($site['file']),
+                    'count' => $site['count'],
+                ], $sites[$hash] ?? []);
+            }
         }
 
         return $groups;
@@ -311,6 +357,10 @@ class Ranking
 
         if (isset($group['budget'])) {
             $row['budget'] = $group['budget'];
+        }
+
+        if (isset($group['within'])) {
+            $row += $group['within'];
         }
 
         return $row;

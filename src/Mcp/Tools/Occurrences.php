@@ -20,6 +20,8 @@ use ClaudioDekker\Firewatch\Mcp\Outcome;
 use ClaudioDekker\Firewatch\Mcp\Percentile;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
+use ClaudioDekker\Firewatch\Mcp\RunListing;
+use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Mcp\WithheldReason;
@@ -68,6 +70,11 @@ class Occurrences extends Tool
     protected const EXAMPLE = OccurrenceFilters::EXAMPLE;
 
     /**
+     * The arguments a run takes beside its order.
+     */
+    protected const RUN_ARGUMENTS = ['order', 'since', 'until', 'scope', 'limit', 'cursor', 'format'];
+
+    /**
      * Create a new tool instance.
      */
     public function __construct(
@@ -109,6 +116,7 @@ class Occurrences extends Tool
             'at_or_above' => $schema->string()->enum(Percentile::class)->description(__('firewatch::messages.occurrences_at_or_above_argument')),
             'matching' => $this->matchingArgument($schema)->description(__('firewatch::messages.occurrences_matching_argument')),
             ...$this->windowSchema($schema),
+            ...$this->scopeSchema($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),
@@ -130,6 +138,13 @@ class Occurrences extends Tool
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
         $arguments = new Arguments($request, $this);
+        $order = $arguments->choiceOrDefault('order', Order::class, 'one of the orders', 'occurrences(type: "request", order: "slowest")');
+        $scope = $arguments->scope('occurrences(type: "query", scope: "between")');
+
+        if ($order === Order::RUN) {
+            return $this->run($request, $arguments, $scope, $now);
+        }
+
         $group = $arguments->group('occurrences(group: "<group id>")');
         $type = $arguments->type('one of the record types', self::EXAMPLE);
         $ids = $this->ids($arguments);
@@ -138,7 +153,6 @@ class Occurrences extends Tool
             throw Refusal::missing(argument: 'selector', accepted: 'group, type, execution_id, trace_id, job_id or user_id', example: self::EXAMPLE);
         }
 
-        $order = $arguments->choiceOrDefault('order', Order::class, 'one of the orders', 'occurrences(type: "request", order: "slowest")');
         $limit = $arguments->limit(['type' => 'request']);
         $deploy = $arguments->deploy('occurrences(type: "request", deploy: "v1")');
         $selector = $group !== null ? 'group' : (array_key_first(array_filter($ids)) ?? 'type');
@@ -146,12 +160,13 @@ class Occurrences extends Tool
 
         if ($group === null || $type !== null) {
             $filters->refuseMisfits($order, $type, $selector);
+            $this->refuseScope($scope, $type);
         }
 
         $continuation = Continuation::read($request, $this->name(), $this->key(...));
 
         $frame = $this->frame($now);
-        $window = $continuation->window($now, $frame->timezone);
+        $window = $continuation->window($now, $frame->timezone)->scoped($scope);
 
         $frame->about($type === null ? RecordType::events() : [$type], $window, facts: $ids['user_id'] !== null ? [CallFact::ACTOR] : []);
 
@@ -168,13 +183,121 @@ class Occurrences extends Tool
         }
 
         $hasRows = $read['listed'] !== null && $read['listed']['rows'] !== [];
-        $empty = $read['selection']->vacancy($frame, $read['inWindow'], $hasRows, $this->given($ids, $filters));
+        $empty = $read['selection']->vacancy($frame, $read['inWindow'], $hasRows, [...$this->given($ids, $filters), ...$window->filters()]);
 
         if ($empty !== null) {
             return $frame->empty($empty);
         }
 
         return $this->listing($continuation, $frame, $window, $order, $group, $ids['user_id'], $limit, $read);
+    }
+
+    /**
+     * Answer with the run in order: one row per execution or between section that starts in the window, oldest first.
+     */
+    protected function run(Request $request, Arguments $arguments, Scope $scope, CarbonImmutable $now): Answer
+    {
+        $misfits = array_values(array_diff($arguments->names(), self::RUN_ARGUMENTS));
+
+        if ($misfits !== []) {
+            throw Refusal::conflicting(argument: $misfits[0], with: 'order', accepted: __('firewatch::messages.occurrences_run_accepted'), example: 'occurrences(order: "run")');
+        }
+
+        $limit = $arguments->limit(['order' => Order::RUN->value]);
+        $continuation = Continuation::read($request, $this->name(), $this->runKey(...));
+
+        $frame = $this->frame($now);
+        $window = $continuation->window($now, $frame->timezone)->scoped($scope);
+
+        $frame->about(RecordType::events(), $window);
+
+        $read = $frame->read(fn (SQLite3 $connection) => [
+            $window->count($connection),
+            (new RunListing($window))->rows($connection, $limit, $continuation->after()),
+        ]);
+
+        if ($read === null) {
+            return $frame->empty();
+        }
+
+        $continuation->belongsTo($frame->facts()->meta->createdAt);
+
+        if ($frame->isEmpty()) {
+            return $frame->empty();
+        }
+
+        [$inWindow, $listed] = $read;
+
+        $empty = $frame->vacancy($inWindow, groupHeld: true, hasRows: $listed['rows'] !== [], filters: ['order: '.Order::RUN->value, ...$window->filters()]);
+
+        if ($empty !== null) {
+            return $frame->empty($empty);
+        }
+
+        $rows = Rows::bound($listed['rows'], $limit);
+        $count = count($rows->rows);
+
+        return $frame->answer(
+            summary: trans_choice('firewatch::messages.occurrences_run_summary', $count, ['count' => $count]),
+            result: [
+                'order' => Order::RUN->value,
+                'rows' => $rows->rows,
+            ],
+            truncated: $continuation->truncated($rows, $listed['keys'], 'rows', 'firewatch::messages.occurrences_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now),
+            next: $this->runNext($rows->rows),
+        );
+    }
+
+    /**
+     * Get the calls that open the first execution and the first between section a run lists.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
+     */
+    protected function runNext(array $rows): array
+    {
+        $executions = array_values(array_filter($rows, fn (array $row) => $row['type'] !== null));
+        $between = array_values(array_filter($rows, fn (array $row) => $row['type'] === null));
+        $calls = [];
+
+        if ($executions !== []) {
+            $calls[] = [
+                'tool' => 'execution',
+                'arguments' => ['execution_id' => $executions[0]['execution_id']],
+                'why' => __('firewatch::messages.occurrences_next_run_execution'),
+            ];
+        }
+
+        if ($between !== []) {
+            $calls[] = [
+                'tool' => $this->name(),
+                'arguments' => ['execution_id' => $between[0]['execution_id']],
+                'why' => __('firewatch::messages.occurrences_next_run_between'),
+            ];
+        }
+
+        return $calls;
+    }
+
+    /**
+     * Read the key of the last row a cursor of a run continues after, or null when it is none.
+     *
+     * @param  array<string, mixed>  $last
+     * @return array{started_at: int|float, execution_id: string}|null
+     */
+    protected function runKey(array $last): ?array
+    {
+        $startedAt = $last['started_at'] ?? null;
+        $executionId = $last['execution_id'] ?? null;
+
+        if (! (is_int($startedAt) || is_float($startedAt)) || ! is_string($executionId)) {
+            return null;
+        }
+
+        return [
+            'started_at' => $startedAt,
+            'execution_id' => $executionId,
+        ];
     }
 
     /**
@@ -207,6 +330,7 @@ class Occurrences extends Tool
         $resolved = $selection->listed();
 
         $filters->refuseMisfits($order, $resolved, $selector);
+        $this->refuseScope($window->scope(), $resolved);
 
         $listing = new Listing(
             window: $window,
@@ -317,6 +441,7 @@ class Occurrences extends Tool
             'arguments' => [
                 'group' => $first,
                 ...$window->arguments(),
+                ...$window->scoping(),
             ],
             'why' => __('firewatch::messages.occurrences_next_group'),
         ]];
@@ -336,6 +461,16 @@ class Occurrences extends Tool
         ], fn (mixed $value) => $value !== null);
 
         return array_map(fn (string $name, mixed $value) => "{$name}: {$value}", array_keys($given), $given);
+    }
+
+    /**
+     * Refuse a scope that no record of the type can be in.
+     */
+    protected function refuseScope(Scope $scope, ?RecordType $type): void
+    {
+        if ($type !== null && ! $scope->holds($type)) {
+            throw Refusal::conflicting(argument: 'scope', with: $type->value, accepted: __('firewatch::messages.argument_values.scope_holding'), example: 'occurrences(type: "query", scope: "between")');
+        }
     }
 
     /**

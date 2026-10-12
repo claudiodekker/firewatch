@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Store;
 
+use ClaudioDekker\Firewatch\Capture\TestRecord;
 use ClaudioDekker\Firewatch\RecordType;
 
 /**
@@ -12,7 +13,7 @@ class Schema
     /**
      * The schema version the store is stamped with; an earlier value is rebuilt, never migrated, and a later one is left alone.
      */
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     /**
      * The application id that marks a file as a Firewatch store ("FWTC").
@@ -67,6 +68,7 @@ class Schema
         'CREATE INDEX records_trace ON records (trace_id) WHERE trace_id IS NOT NULL',
         'CREATE INDEX records_job ON records (job_id) WHERE job_id IS NOT NULL',
         'CREATE INDEX records_user ON records (user_id) WHERE user_id IS NOT NULL',
+        "CREATE INDEX records_between ON records (started_at, execution_id) WHERE source = '".TestRecord::BETWEEN_SOURCE."'",
         <<<'SQL'
             CREATE TABLE users (
                 id TEXT PRIMARY KEY,

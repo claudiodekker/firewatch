@@ -68,6 +68,16 @@ test('every general error code has pinned text', function (Closure $refusal, Err
         ErrorCode::NOT_FOUND,
         "error: not_found\nNo execution `abc` exists in the store, but that value is a trace id; `trace(trace_id: \"abc\")` follows it.\nargument: execution_id\naccepted: an execution id, not a trace id\nexample: execution(execution_id: \"<execution id>\")",
     ],
+    'an execution id prefix that several executions share' => [
+        fn () => Refusal::ambiguousPrefix('ab', ['abc', 'abd'], 2, 'execution(execution_id: "<execution id>")'),
+        ErrorCode::INVALID_ARGUMENT,
+        "error: invalid_argument\n`ab` starts 2 execution ids, not one: abc, abd.\nargument: execution_id\naccepted: a full execution id, or a prefix only one execution has\nexample: execution(execution_id: \"<execution id>\")",
+    ],
+    'an execution id that is a between section' => [
+        fn () => Refusal::betweenSection('abc', 'execution(execution_id: "<execution id>")'),
+        ErrorCode::NOT_FOUND,
+        "error: not_found\nNo execution `abc` exists in the store: that id is a between section, the work a test ran outside its executions; `occurrences(execution_id: \"abc\")` lists it.\nargument: execution_id\naccepted: an execution id, not a between section's\nexample: execution(execution_id: \"<execution id>\")",
+    ],
     'bad_cursor' => [
         fn () => Refusal::badCursor('rank'),
         ErrorCode::BAD_CURSOR,

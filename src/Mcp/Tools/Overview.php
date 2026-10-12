@@ -16,6 +16,7 @@ use ClaudioDekker\Firewatch\Mcp\Detectors\Judgement;
 use ClaudioDekker\Firewatch\Mcp\Detectors\Verdict;
 use ClaudioDekker\Firewatch\Mcp\FixedSections;
 use ClaudioDekker\Firewatch\Mcp\Measure;
+use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
@@ -76,6 +77,7 @@ class Overview extends Tool
     {
         return [
             ...$this->windowSchema($schema, listsForms: true),
+            ...$this->scopeSchema($schema),
             'by_deploy' => $schema->boolean()->default(false)->description(__('firewatch::messages.overview_by_deploy_argument')),
             ...$this->formatSchema($schema),
         ];
@@ -94,9 +96,11 @@ class Overview extends Tool
      */
     protected function read(Request $request, CarbonImmutable $now): Answer
     {
+        $arguments = new Arguments($request, $this);
         $frame = $this->frame($now);
-        $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
-        $byDeploy = (new Arguments($request, $this))->boolean('by_deploy', 'overview(by_deploy: true)');
+        $byDeploy = $arguments->boolean('by_deploy', 'overview(by_deploy: true)');
+        $scope = $arguments->scope('overview(scope: "between")');
+        $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name())->scoped($scope);
 
         $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR, CallFact::STORE_LEVEL]);
 
@@ -104,15 +108,18 @@ class Overview extends Tool
             $byDeploy ? FixedSections::readByDeploy($connection, $window) : FixedSections::read($connection, $window),
             BudgetSection::read($connection, $window, $this->configuration),
             $this->detectors->judgeAll($connection, $facts->meta, $window, new Deadline($frame->now)),
+            $scope === Scope::ALL ? null : $window->count($connection),
         ]);
 
         if ($read === null || $frame->isEmpty()) {
             return $frame->empty();
         }
 
-        [$sections, $budgets, $judgements] = $read;
+        [$sections, $budgets, $judgements, $inWindow] = $read;
 
-        $empty = $frame->vacancy(inWindow: $sections->records, groupHeld: true, hasRows: true, filters: []);
+        $empty = $inWindow === null
+            ? $frame->vacancy(inWindow: $sections->records, groupHeld: true, hasRows: true, filters: [])
+            : $frame->vacancy(inWindow: $inWindow, groupHeld: true, hasRows: $sections->records > 0, filters: $window->filters());
 
         if ($empty !== null) {
             return $frame->empty($empty);
@@ -262,6 +269,7 @@ class Overview extends Tool
                     'arguments' => [
                         'shape' => $judgement->detector->value,
                         ...$bounds,
+                        ...$window->scoping(),
                     ],
                     'why' => __('firewatch::messages.detect_next_shape'),
                 ];
@@ -277,6 +285,7 @@ class Overview extends Tool
                     'type' => $slowest->value,
                     'by' => Measure::TOTAL_DURATION->value,
                     ...$bounds,
+                    ...$window->scoping(),
                 ],
                 'why' => __('firewatch::messages.overview_next_rank', ['type' => $slowest->value]),
             ];

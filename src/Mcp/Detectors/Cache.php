@@ -61,6 +61,14 @@ class Cache implements Detector
     }
 
     /**
+     * Get what the detector judges: cache keys by their events, whichever side of a test run read them.
+     */
+    public function judges(): Subject
+    {
+        return Subject::RECORDS;
+    }
+
+    /**
      * Judge the keys of the cache events that started in the window.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
@@ -89,7 +97,7 @@ class Cache implements Detector
      */
     protected function stores(SQLite3 $connection, Window $window, ?string $group): array
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::CACHE_EVENT);
 
         return Stored::rows($connection, "SELECT store, count(*) AS events,
                 count(*) FILTER (WHERE event = 'hit') AS hits,
@@ -109,7 +117,7 @@ class Cache implements Detector
      */
     protected function keys(SQLite3 $connection, Window $window, int|float $percent, ?string $group, int $limit): array
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::CACHE_EVENT);
         $whole = Percentile::PERCENT;
         $worstFirst = 'failures DESC, hit_rate IS NULL, hit_rate ASC, group_hash ASC';
 

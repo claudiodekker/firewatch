@@ -45,6 +45,14 @@ class QueueLatency implements Detector
     }
 
     /**
+     * Get what the detector judges: queues by how long a dispatch waited for its attempt, which is an execution.
+     */
+    public function judges(): Subject
+    {
+        return Subject::EXECUTIONS;
+    }
+
+    /**
      * Judge the dispatches that started in the window.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
@@ -125,7 +133,7 @@ class QueueLatency implements Detector
      */
     protected function dispatches(Window $window, ?string $group): Fragment
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::QUEUED_JOB);
         $inline = Lineage::inlineCondition('queued.connection');
         $sql = "WITH queued AS (
             SELECT id, execution_id, started_at, coalesce(ended_at, started_at) AS queued_at, group_hash, user_id, name, connection, queue, NULLIF(job_id, '') AS job
@@ -177,7 +185,7 @@ class QueueLatency implements Detector
      */
     protected function hasDispatches(SQLite3 $connection, Window $window): bool
     {
-        [$row] = Stored::rows($connection, "SELECT EXISTS (SELECT 1 FROM queued_jobs WHERE {$window->condition()}) AS dispatched", [], $window);
+        [$row] = Stored::rows($connection, "SELECT EXISTS (SELECT 1 FROM queued_jobs WHERE {$window->condition(RecordType::QUEUED_JOB)}) AS dispatched", [], $window);
 
         return (bool) $row['dispatched'];
     }

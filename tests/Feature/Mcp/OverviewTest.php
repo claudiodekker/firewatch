@@ -91,7 +91,7 @@ it('refuses a format that is none, matching it exactly', function (string $forma
 it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $key) {
     $response = FirewatchServer::tool(Overview::class, [$argument => 'request']);
 
-    $response->assertHasErrors([__("firewatch::messages.{$key}", ['argument' => $argument, 'tool' => 'overview', 'accepted' => 'since, until, by_deploy, format', 'example' => 'overview(format: "json")'])]);
+    $response->assertHasErrors([__("firewatch::messages.{$key}", ['argument' => $argument, 'tool' => 'overview', 'accepted' => 'since, until, scope, by_deploy, format', 'example' => 'overview(format: "json")'])]);
 })->with([
     'a misspelling' => ['sinse', 'unknown_argument'],
     'an argument of another tool' => ['type', 'inapplicable_argument'],
@@ -112,7 +112,7 @@ it('refuses the arguments before it reads the store', function () {
 
     $response = FirewatchServer::tool(Overview::class, ['sinse' => 'now']);
 
-    $response->assertHasErrors([__('firewatch::messages.unknown_argument', ['argument' => 'sinse', 'tool' => 'overview', 'accepted' => 'since, until, by_deploy, format', 'example' => 'overview(format: "json")'])]);
+    $response->assertHasErrors([__('firewatch::messages.unknown_argument', ['argument' => 'sinse', 'tool' => 'overview', 'accepted' => 'since, until, scope, by_deploy, format', 'example' => 'overview(format: "json")'])]);
     Exceptions::assertNothingReported();
 });
 
@@ -170,9 +170,9 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
         fn (string $path) => ['path' => $path, 'found' => 0, 'expected' => Schema::VERSION],
     ],
     'a newer schema' => [
-        fn (string $path) => (new SQLite3($path))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 2; CREATE TABLE records (id INTEGER)'),
+        fn (string $path) => (new SQLite3($path))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 3; CREATE TABLE records (id INTEGER)'),
         'newer_schema',
-        fn (string $path) => ['path' => $path, 'found' => 2, 'expected' => Schema::VERSION],
+        fn (string $path) => ['path' => $path, 'found' => 3, 'expected' => Schema::VERSION],
     ],
 ]);
 

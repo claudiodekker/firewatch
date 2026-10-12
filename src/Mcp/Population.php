@@ -17,6 +17,7 @@ class Population
      *
      * @param  string|null  $group  the one group whose records are keyed by their deploy instead of their group
      * @param  list<string>|null  $hashes  the groups the records are narrowed to, or null for every group
+     * @param  Within|null  $within  the execution group whose executions in the window ran the records, read whole, instead of the records of the window
      */
     public function __construct(
         public readonly RecordType $type,
@@ -24,6 +25,7 @@ class Population
         public readonly ?string $deploy = null,
         public readonly ?string $group = null,
         public readonly ?array $hashes = null,
+        public readonly ?Within $within = null,
     ) {
         //
     }
@@ -35,7 +37,7 @@ class Population
      */
     public function only(array $hashes): self
     {
-        return new self($this->type, $this->window, $this->deploy, $this->group, $hashes);
+        return new self($this->type, $this->window, $this->deploy, $this->group, $hashes, $this->within);
     }
 
     /**
@@ -337,7 +339,54 @@ class Population
     }
 
     /**
-     * Run a query over the records of the type that the window, the deploy and the group leave, as the table `base`.
+     * Read what the executions of the group the population is within ran of every group: the executions that ran it and the most runs in one, keyed by group hash.
+     *
+     * @return array<string, array{affected: int, most: int}>
+     */
+    public function perExecution(SQLite3 $connection): array
+    {
+        $rows = $this->query($connection, 'SELECT group_hash, count(*) AS affected, max(runs) AS most FROM (SELECT group_hash, execution_id, count(*) AS runs FROM base WHERE group_hash IS NOT NULL GROUP BY group_hash, execution_id) GROUP BY group_hash');
+        $executions = [];
+
+        foreach ($rows as $row) {
+            $executions[$row['group_hash']] = [
+                'affected' => $row['affected'],
+                'most' => $row['most'],
+            ];
+        }
+
+        return $executions;
+    }
+
+    /**
+     * Read the call sites that ran each group most, keyed by group hash: at most the limit for a group, most frequent first.
+     *
+     * @return array<string, list<array{file: mixed, line: mixed, count: int}>>
+     */
+    public function callSites(SQLite3 $connection, int $limit): array
+    {
+        $rows = $this->query($connection, "SELECT group_hash, file, line, count FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY count DESC, file, line) AS place FROM (
+                SELECT base.group_hash, json_extract(records.data, '$.file') AS file, json_extract(records.data, '$.line') AS line, count(*) AS count
+                FROM base JOIN records ON records.id = base.id WHERE base.group_hash IS NOT NULL AND json_type(records.data, '$.file') = 'text'
+                GROUP BY base.group_hash, file, line
+            )
+        ) WHERE place <= :sites ORDER BY group_hash, place", ['sites' => $limit]);
+        $sites = [];
+
+        foreach ($rows as $row) {
+            $sites[$row['group_hash']][] = [
+                'file' => $row['file'],
+                'line' => $row['line'],
+                'count' => $row['count'],
+            ];
+        }
+
+        return $sites;
+    }
+
+    /**
+     * Run a query over the records of the type that the window, or the executions of the group it is within, the deploy and the group leave, as the table `base`.
      *
      * @param  array<string, int|float>  $bindings  bound by name after the population's own filters
      * @return list<array<string, mixed>>
@@ -372,8 +421,14 @@ class Population
             'deploy' => $this->deploy,
             'group' => $this->group,
         ];
+        $selected = $this->window->condition($this->type);
 
-        $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->source().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
+        if ($this->within !== null) {
+            $filters['within'] = $this->within->group;
+            $selected = $this->within->condition($this->window);
+        }
+
+        $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->source().' WHERE '.$selected.' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
 
         return Stored::rows($connection, $sql, [...$filters, ...$this->narrowing(), ...$bindings], $this->window);
     }
