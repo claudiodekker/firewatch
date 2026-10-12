@@ -29,7 +29,7 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 
 It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes. Tests that expect a 4xx answer one, so give `failing-routes` a `threshold` of 500 to see only server errors. The migrations and seeders the tests run are left out. What a test runs itself, such as factories and assertions, is kept apart from its requests and commands: pass `scope: "executions"` or `scope: "between"` to read one side.
 
-A job a test dispatches itself on the `sync` queue is recorded as a job attempt, so `n-plus-one` and `failing-jobs` judge it. A job a test calls through `handle()` counts as the test's own work, and a job a request or command runs on the `sync` queue stays part of that request or command.
+A job a test dispatches itself on the `sync` queue is recorded as a job attempt, so `n-plus-one` and `failing-jobs` judge it. A job a test calls through `handle()` counts as the test's own work, and a job a request or command runs on the `sync` queue stays part of that request or command. Every record of a test run carries the test that wrote it, so `occurrences(order: "run")` and `execution` name the test to open. Pass that name as `test` to `rank` or `occurrences` to read one test alone.
 
 ## Requirements
 

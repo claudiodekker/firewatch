@@ -500,7 +500,7 @@ it('lists a test run in order, the work between its executions included', functi
             'request /orders/{order}/items 302 | 2 queries, 0 other',
             'command reports:build 0 | 1 queries, 0 other',
             'between | 2 queries, 0 other',
-        ])->and(array_keys($rows[0]))->toBe(['started_at', 'source', 'type', 'execution_id', 'label', 'outcome', 'duration_ms', 'queries', 'query_ms', 'other'])
+        ])->and(array_keys($rows[0]))->toBe(['started_at', 'source', 'type', 'execution_id', 'label', 'outcome', 'duration_ms', 'queries', 'query_ms', 'other', 'test', 'worker'])
         ->and(array_column($rows, 'type'))->toBe([null, 'request', null, 'request', 'command', null])
         ->and(array_map(fn (array $row) => $row['duration_ms'] === null, $rows))->toBe([true, false, true, false, false, true])
         ->and(array_unique(array_column($rows, 'execution_id')))->toHaveCount(6)

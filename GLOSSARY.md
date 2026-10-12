@@ -49,7 +49,7 @@ An application environment name on the allowlist in which Firewatch records tele
 _Avoid_: Enabled environment, dev mode
 
 **Test capture**:
-Recording each request and outermost command a feature test runs, and each job the test itself runs on the sync queue, as an execution of its own. What the test does between them is in none and stamped with the source `between`. Firewatch holds Nightwatch in request mode and swaps in a command state while a command or such a job runs. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. A job that a request, a command or another job runs on the sync queue is likewise part of that execution, so a chain is one attempt, named after its first job. A job the test calls directly through `handle()` raises no queue event, so it stays between the executions, as does a job a worker runs in a test. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
+Recording each request and outermost command a feature test runs, and each job the test itself runs on the sync queue, as an execution of its own. What the test does between them is in none and stamped with the source `between`. Every record of the run is stamped with its test and worker. Firewatch holds Nightwatch in request mode and swaps in a command state while a command or such a job runs. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. A job that a request, a command or another job runs on the sync queue is likewise part of that execution, so a chain is one attempt, named after its first job. A job the test calls directly through `handle()` raises no queue event, so it stays between the executions, as does a job a worker runs in a test. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
 _Avoid_: Test mode, test recording
 
 **In-code opt-out**:
@@ -109,7 +109,7 @@ The kind of execution (request, command, job, schedule), derived from the execut
 _Avoid_: Kind, origin
 
 **Between section**:
-The records a test body wrote between two of its executions, or before the first or after the last: factories, seeding and assertions. One section shares one execution id, which belongs to no execution, and its records have the source `between` and no stage or user.
+The records a test body wrote between two of its executions, or before the first or after the last: factories, seeding and assertions. One section shares one execution id, which belongs to no execution, and its records have the source `between`, the test that wrote them and no stage or user.
 _Avoid_: Setup block, orphan records, test phase
 
 **Side**:
@@ -135,6 +135,14 @@ _Avoid_: Timestamp, created at, received at
 **Deploy**:
 The identity of the deployed code a record was captured under, an unordered string, matched exactly, taken from the first source that has one: `FIREWATCH_DEPLOY`, Nightwatch's deployment setting and platform variables, then the full commit the git HEAD of the application's repository points to, read from the repository's files once per process; a record with an empty or no deploy belongs to none. A commit label keeps the HEAD commit through uncommitted edits, so records captured before a commit carry its parent, and a long-running worker keeps the commit it booted with.
 _Avoid_: Release, version, build
+
+**Test**:
+The test that created the application a record of a test run was captured in, stored as one string: the test case and the test as the runner prints them, joined by `::`. A Pest test keeps its description and its data set (`Tests\Feature\OrdersTest::it lists orders with dataset "admin"`), and any other PHPUnit test its class, its method and its data set. It is read once per application, from the test case on the call stack when test capture starts. Null outside a test run, and for an application created with no test case on the call stack.
+_Avoid_: Test id, test file
+
+**Worker**:
+The process of a parallel test run that ran a record's test, stored as the token the runner gives each of its processes in `TEST_TOKEN`. Null in a serial run and outside a test run.
+_Avoid_: Process id, runner, shard
 
 ### Queued work
 
@@ -540,7 +548,7 @@ An argument that says which records a listing is about: group, type, execution i
 _Avoid_: Filter (a filter narrows a selection, a selector defines it)
 
 **Scope**:
-The side an answer of `overview`, `rank`, `detect` or `occurrences` reads: `executions`, `between` or `all`, the default. It is part of the window, so every query of the answer keeps the same side, and an answer that is scoped names its scope on the window.
+The side an answer of `overview`, `rank`, `detect` or `occurrences` reads: `executions`, `between` or `all`, the default. It is part of the window, so every query of the answer keeps the same side, and an answer that is scoped names its scope on the window. The test `rank` and `occurrences` can be limited to travels on the window the same way.
 _Avoid_: Side filter, mode
 
 **Within**:
@@ -548,7 +556,7 @@ The execution group a ranking of queries or other child events is limited to. It
 _Avoid_: Parent filter, per-route breakdown
 
 **Run view**:
-The listing `occurrences` gives with `order: "run"`: one row per execution or between section that starts in the window, oldest first, each with the queries, query time and other records its execution id holds. A between section starts at its first record.
+The listing `occurrences` gives with `order: "run"`: one row per execution or between section that starts in the window, oldest first, each with the queries, query time and other records its execution id holds, and the test and worker that ran it. A between section starts at its first record. Limited to one test, it lists that test's executions and between sections only.
 _Avoid_: Timeline (the child timeline of one execution), test log
 
 **Group selection**:

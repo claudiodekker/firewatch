@@ -31,7 +31,7 @@ class Stored
      * Read the rows of a query in the snapshot of the connection.
      *
      * @param  array<string, int|float|string|null>  $bindings
-     * @param  Window|null  $window  bound as `:since` and `:until`, for a query that names its condition
+     * @param  Window|null  $window  bound as `:since`, `:until` and `:test`, for a query that names its condition
      * @return list<array<string, mixed>>
      */
     public static function rows(SQLite3 $connection, string $sql, array $bindings = [], ?Window $window = null): array

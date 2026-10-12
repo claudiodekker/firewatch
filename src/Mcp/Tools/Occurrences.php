@@ -70,7 +70,7 @@ class Occurrences extends Tool
     /**
      * The arguments a run takes beside its order.
      */
-    protected const RUN_ARGUMENTS = ['order', 'since', 'until', 'scope', 'limit', 'cursor', 'format'];
+    protected const RUN_ARGUMENTS = ['order', 'since', 'until', 'scope', 'test', 'limit', 'cursor', 'format'];
 
     /**
      * Create a new tool instance.
@@ -116,6 +116,7 @@ class Occurrences extends Tool
             'matching' => $this->matchingArgument($schema)->description(__('firewatch::messages.occurrences_matching_argument')),
             ...$this->windowSchema($schema),
             ...$this->scopeSchema($schema),
+            'test' => $schema->string(),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),
@@ -139,9 +140,10 @@ class Occurrences extends Tool
         $arguments = new Arguments($request, $this);
         $order = $arguments->choiceOrDefault('order', Order::class, 'one of the orders', 'occurrences(type: "request", order: "slowest")');
         $scope = $arguments->scope('occurrences(type: "query", scope: "between")');
+        $test = $arguments->test('occurrences(type: "query", test: "Tests\\\\Feature\\\\OrdersTest::it lists orders")');
 
         if ($order === Order::RUN) {
-            return $this->run($request, $arguments, $scope, $now);
+            return $this->run($request, $arguments, $scope, $test, $now);
         }
 
         $group = $arguments->group('occurrences(group: "<group id>")');
@@ -165,7 +167,7 @@ class Occurrences extends Tool
         $continuation = Continuation::read($request, $this->name(), $this->key(...));
 
         $frame = $this->frame($now);
-        $window = $continuation->window($now, $frame->timezone)->scoped($scope);
+        $window = $continuation->window($now, $frame->timezone)->scoped($scope)->limitedTo($test);
 
         $frame->about($type === null ? RecordType::events() : [$type], $window, facts: $ids['user_id'] !== null ? [CallFact::ACTOR] : []);
 
@@ -192,9 +194,9 @@ class Occurrences extends Tool
     }
 
     /**
-     * Answer with the run in order: one row per execution or between section that starts in the window, oldest first.
+     * Answer with the run in order: one row per execution or between section that starts in the window, oldest first, of one test when the call names one.
      */
-    protected function run(Request $request, Arguments $arguments, Scope $scope, CarbonImmutable $now): Answer
+    protected function run(Request $request, Arguments $arguments, Scope $scope, ?string $test, CarbonImmutable $now): Answer
     {
         $misfits = array_values(array_diff($arguments->names(), self::RUN_ARGUMENTS));
 
@@ -206,7 +208,7 @@ class Occurrences extends Tool
         $continuation = Continuation::read($request, $this->name(), $this->runKey(...));
 
         $frame = $this->frame($now);
-        $window = $continuation->window($now, $frame->timezone)->scoped($scope);
+        $window = $continuation->window($now, $frame->timezone)->scoped($scope)->limitedTo($test);
 
         $frame->about(RecordType::events(), $window);
 

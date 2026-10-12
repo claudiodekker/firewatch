@@ -28,6 +28,7 @@ class Window
         protected readonly string $reason,
         protected readonly ?array $derived = null,
         protected readonly Scope $scope = Scope::ALL,
+        protected readonly ?string $test = null,
     ) {
         //
     }
@@ -78,7 +79,7 @@ class Window
             $derived[] = 'until';
         }
 
-        return new self(windowed: true, since: $this->since ?? $first, until: $this->until ?? $last, timezone: $this->timezone, reason: '', derived: $derived, scope: $this->scope);
+        return new self(windowed: true, since: $this->since ?? $first, until: $this->until ?? $last, timezone: $this->timezone, reason: '', derived: $derived, scope: $this->scope, test: $this->test);
     }
 
     /**
@@ -86,7 +87,15 @@ class Window
      */
     public function scoped(Scope $scope): self
     {
-        return new self(windowed: $this->windowed, since: $this->since, until: $this->until, timezone: $this->timezone, reason: $this->reason, derived: $this->derived, scope: $scope);
+        return new self(windowed: $this->windowed, since: $this->since, until: $this->until, timezone: $this->timezone, reason: $this->reason, derived: $this->derived, scope: $scope, test: $this->test);
+    }
+
+    /**
+     * Get the window limited to the records of one test, or of every test for null.
+     */
+    public function limitedTo(?string $test): self
+    {
+        return new self(windowed: $this->windowed, since: $this->since, until: $this->until, timezone: $this->timezone, reason: $this->reason, derived: $this->derived, scope: $this->scope, test: $test);
     }
 
     /**
@@ -95,6 +104,14 @@ class Window
     public function scope(): Scope
     {
         return $this->scope;
+    }
+
+    /**
+     * Get the test the window is limited to, or null for every record.
+     */
+    public function test(): ?string
+    {
+        return $this->test;
     }
 
     /**
@@ -147,35 +164,46 @@ class Window
     }
 
     /**
-     * Get the scope as the argument of a later call to a tool that takes one, left out for all.
+     * Get the scope and the test as the arguments of a later call to a tool that takes them, the scope left out for all and the test for none.
      *
-     * @return array{scope?: string}
+     * @return array{scope?: string, test?: string}
      */
     public function scoping(): array
     {
-        return $this->scope === Scope::ALL ? [] : ['scope' => $this->scope->value];
+        $scope = $this->scope === Scope::ALL ? [] : ['scope' => $this->scope->value];
+        $test = $this->test === null ? [] : ['test' => $this->test];
+
+        return [...$scope, ...$test];
     }
 
     /**
-     * Get the scope as the words of an empty answer name a filter, none for all.
+     * Get the scope and the test as the filters an empty answer names, leaving out the scope for all and the test for none.
      *
      * @return list<string>
      */
     public function filters(): array
     {
-        return array_map(fn (string $scope) => "scope: {$scope}", array_values($this->scoping()));
+        $scoping = $this->scoping();
+
+        return array_map(fn (string $argument, string $value) => "{$argument}: {$value}", array_keys($scoping), $scoping);
     }
 
     /**
-     * Get the SQL condition that holds for the records of the window, read from the raw table or from the view of a type, on the side of its scope.
+     * Get the SQL condition that holds for the records of the window, read from the raw table or from the view of a type, limited to its scope and its test.
      */
     public function condition(?RecordType $from = null): string
     {
-        if ($this->scope === Scope::ALL) {
-            return $this->bounds();
+        $conditions = [$this->bounds()];
+
+        if ($this->scope !== Scope::ALL) {
+            $conditions[] = $this->scope->condition($from);
         }
 
-        return "{$this->bounds()} AND {$this->scope->condition($from)}";
+        if ($this->test !== null) {
+            $conditions[] = 'test = :test';
+        }
+
+        return implode(' AND ', $conditions);
     }
 
     /**
@@ -189,16 +217,20 @@ class Window
     }
 
     /**
-     * Bind the bounds the condition names.
+     * Bind the bounds and the test the condition names.
      */
     public function bind(SQLite3Stmt $statement): void
     {
         $statement->bindValue(':since', $this->since, $this->since === null ? SQLITE3_NULL : SQLITE3_FLOAT);
         $statement->bindValue(':until', $this->until, $this->until === null ? SQLITE3_NULL : SQLITE3_FLOAT);
+
+        if ($this->test !== null) {
+            $statement->bindValue(':test', $this->test, SQLITE3_TEXT);
+        }
     }
 
     /**
-     * Count the records between the bounds of the window, on either side.
+     * Count the records between the bounds of the window, on either side and of any test.
      */
     public function count(SQLite3 $connection): int
     {
@@ -257,6 +289,10 @@ class Window
             $window['scope'] = $this->scope->value;
         }
 
+        if ($this->test !== null) {
+            $window['test'] = $this->test;
+        }
+
         return $window;
     }
 
@@ -264,6 +300,21 @@ class Window
      * Get the window line of a markdown answer.
      */
     public function line(): string
+    {
+        if ($this->test === null) {
+            return $this->scopedLine();
+        }
+
+        return __('firewatch::messages.window_limited', [
+            'window' => $this->scopedLine(),
+            'test' => $this->test,
+        ]);
+    }
+
+    /**
+     * Get the window line of a markdown answer, without its test.
+     */
+    protected function scopedLine(): string
     {
         if ($this->scope === Scope::ALL) {
             return $this->bounded();
@@ -276,7 +327,7 @@ class Window
     }
 
     /**
-     * Get the window line of a markdown answer, without its scope.
+     * Get the window line of a markdown answer, without its scope and its test.
      */
     protected function bounded(): string
     {

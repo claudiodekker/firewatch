@@ -60,21 +60,21 @@ class RecordMapper
         try {
             $wire = $this->normalise($record);
         } catch (JsonException $exception) {
-            return $this->placeholder($record, $drift, detail: 'record: unencodable', error: $exception->getMessage());
+            return $this->placeholder($record, $drift, detail: 'record: unencodable', error: $exception->getMessage(), testRecord: $testRecord);
         }
 
         if (! $wire instanceof stdClass) {
-            return $this->placeholder($record, $drift, detail: 'record: not an object');
+            return $this->placeholder($record, $drift, detail: 'record: not an object', testRecord: $testRecord);
         }
 
         $wire = (array) $wire;
 
         if (! array_key_exists('t', $wire)) {
-            return $this->placeholder($wire, $drift, detail: 't: missing');
+            return $this->placeholder($wire, $drift, detail: 't: missing', testRecord: $testRecord);
         }
 
         if (! is_string($wire['t'])) {
-            return $this->placeholder($wire, $drift, detail: 't: expected string, got '.$this->jsonType($wire['t']));
+            return $this->placeholder($wire, $drift, detail: 't: expected string, got '.$this->jsonType($wire['t']), testRecord: $testRecord);
         }
 
         $type = RecordType::tryFrom($wire['t']);
@@ -110,8 +110,13 @@ class RecordMapper
             $data['peak_memory_usage'] = null;
         }
 
+        if ($testRecord !== null) {
+            $columns['test'] = $testRecord->test;
+            $columns['worker'] = $testRecord->worker;
+        }
+
         // Nightwatch stamps what a test runs between its executions as request work of whoever signs in later.
-        if ($testRecord === TestRecord::OUTSIDE_EXECUTIONS) {
+        if ($testRecord?->inExecution === false) {
             $columns['source'] = TestRecord::BETWEEN_SOURCE;
             $columns['user_id'] = null;
 
@@ -245,7 +250,7 @@ class RecordMapper
      *
      * @param  array<mixed>  $record
      */
-    protected function placeholder(array $record, Drift $drift, string $detail, ?string $error = null): MappedRecord
+    protected function placeholder(array $record, Drift $drift, string $detail, ?string $error = null, ?TestRecord $testRecord = null): MappedRecord
     {
         $type = is_string($record['t'] ?? null) ? $record['t'] : null;
 
@@ -254,6 +259,8 @@ class RecordMapper
         $columns = array_fill_keys(Schema::COLUMNS, null);
 
         $columns['type'] = $type;
+        $columns['test'] = $testRecord?->test;
+        $columns['worker'] = $testRecord?->worker;
         $columns['data'] = json_encode(['error' => $error ?? $detail], self::JSON_FLAGS);
 
         return new MappedRecord(record: $columns);

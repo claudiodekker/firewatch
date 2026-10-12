@@ -63,7 +63,7 @@ it('stores each record type the sensors write with its common columns and its fi
 
     $rows = storeRows("SELECT * FROM {$view}");
     $types = storeRows("SELECT DISTINCT r.type FROM {$view} v JOIN records r USING (id)");
-    $contractFields = array_values(array_diff(array_keys($rows[0]), ['id', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'execution_source', 'job_id', 'user_id', 'deploy', 'server', 'data']));
+    $contractFields = array_values(array_diff(array_keys($rows[0]), ['id', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'execution_source', 'job_id', 'user_id', 'deploy', 'server', 'test', 'worker', 'data']));
     $data = json_decode($rows[0]['data'], associative: true);
 
     expect($rows[0])->v->not->toBeNull()

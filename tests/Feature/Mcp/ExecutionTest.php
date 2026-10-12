@@ -405,6 +405,8 @@ it('states who, where and when, with the memory in megabytes and blank fields as
         'user_id' => '7',
         'deploy' => 'v2',
         'server' => 'web-3',
+        'test' => null,
+        'worker' => null,
         'budget' => [
             'state' => 'not_evaluated',
             'reason' => 'no_budget_configured',

@@ -20,7 +20,7 @@ return [
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see; `describe` spells out a bare id). Clean means nothing was found among the captured records, over the stated examined count; clean over few records is weak. A not_evaluated verdict is never a pass. Null means unknown, not zero. Truncated means only the worst rows show: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times use the application timezone; identifiers print in full and go straight back into tools. No default window: without since and until, everything stored is used. Listed argument values match exactly; a refusal names the accepted ones. Prefer `rank`, `occurrences` and `detect` to `query`: they convert units, it does not.
 
-        What one route runs, per execution: `rank` with `within`. A test run's store marks what test bodies ran around their requests and commands (factories, seeding, assertions) as between: `scope` keeps one side; `occurrences` with `order` run lists the run in order.
+        What one route runs, per execution: `rank` with `within`. A test run names each record's `test`, limiting `rank` and `occurrences`, and marks what tests ran around their executions as between: `scope` keeps one side; `occurrences` with `order` run lists the run.
 
         Did my change help? Note `now` from an answer, change the code, exercise the application, then call `compare` with `split_at` set to that value; on a later round also pass the previous split as `since`. Did it ever run? A search that finds nothing is no proof: `fingerprint` it first.
         TEXT,
@@ -146,6 +146,8 @@ return [
     'window_derived_until' => 'until derived from the last record and included',
 
     'window_scoped' => ':window; scope: :scope',
+
+    'window_limited' => ':window; test: :test',
 
     'store_line' => 'Store: :store',
 
@@ -428,6 +430,7 @@ return [
         'grouped_type' => 'one of the types with groups',
         'holding' => 'a type that holds the group: :types',
         'scope' => 'one of the sides of a test run\'s store',
+        'test' => 'the test of a record, of at least one character',
         'scope_holding' => 'a `type` other than request, command, job-attempt and scheduled-task, or `scope` executions or all',
         'execution_group' => 'the group id of a request, command, job attempt or scheduled task',
         'within_type' => 'a `type` of the records inside executions',
@@ -753,6 +756,8 @@ return [
         'user_id' => 'The signed-in user, an id into users; null when nobody was signed in.',
         'deploy' => 'The deploy string the application reported.',
         'server' => 'The server name the application reported.',
+        'test' => 'The test that wrote it, the case and the test as the runner prints them; null outside a test run.',
+        'worker' => 'The token of the parallel worker that ran its test; null in a serial run and outside a test run.',
         'data' => 'Every field of the record as JSON, including fields the contract does not know.',
         'queue' => 'The queue name.',
         'context' => 'The context the application attached, as JSON.',
@@ -1127,7 +1132,7 @@ return [
 
     'occurrences_run_summary' => 'Listed :count execution or between section of the run, oldest first.|Listed :count executions and between sections of the run, oldest first.',
 
-    'occurrences_run_accepted' => 'a call with `order` run and no selector or filter: since, until, scope, limit and cursor apply',
+    'occurrences_run_accepted' => 'a call with `order` run and no selector or filter: since, until, scope, test, limit and cursor apply',
 
     'occurrences_next_run_execution' => 'The first execution listed, in full.',
 
@@ -1175,7 +1180,7 @@ return [
         'occurrences' => 'As overview. between excludes execution types.',
     ],
 
-    'deploy_argument' => 'Exact deploy string: only its records count.',
+    'deploy_argument' => 'Exact deploy: only its records count.',
 
     'cursor_argument' => 'From a cut answer, same arguments.',
 

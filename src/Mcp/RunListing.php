@@ -39,7 +39,7 @@ class RunListing
 
         $units = Stored::rows($connection, "WITH anchors AS ({$this->anchors($executions)}),
             page AS (SELECT * FROM anchors WHERE {$continued} ORDER BY started_at, execution_id LIMIT :fetch)
-            SELECT page.id, page.execution_id, page.started_at, executions.type, executions.duration, executions.data,
+            SELECT page.id, page.execution_id, page.started_at, page.test, page.worker, executions.type, executions.duration, executions.data,
                 count(*) FILTER (WHERE records.type = '{$query}') AS queries,
                 sum(records.duration) FILTER (WHERE records.type = '{$query}') AS query_duration,
                 count(*) FILTER (WHERE records.type IS NULL OR records.type NOT IN ('{$query}', {$executions})) AS other
@@ -62,7 +62,7 @@ class RunListing
     }
 
     /**
-     * Get the SQL of where each execution and each between section on the window's side starts, the first by its own record and the second by its first.
+     * Get the SQL of where each execution and each between section of the window's scope and test starts: an execution by its own record, a between section by its earliest.
      *
      * @param  string  $executions  the execution types, quoted and separated by commas
      */
@@ -73,11 +73,11 @@ class RunListing
         $branches = [];
 
         if ($this->window->scope() !== Scope::BETWEEN) {
-            $branches[] = "SELECT id, execution_id, started_at FROM records WHERE type IN ({$executions}) AND execution_id IS NOT NULL AND {$bounds}";
+            $branches[] = "SELECT id, execution_id, started_at, test, worker FROM records WHERE type IN ({$executions}) AND execution_id IS NOT NULL AND {$bounds}";
         }
 
         if ($this->window->scope() !== Scope::EXECUTIONS) {
-            $branches[] = "SELECT NULL AS id, execution_id, started_at FROM (SELECT execution_id, min(started_at) AS started_at FROM records WHERE {$between} AND execution_id IS NOT NULL GROUP BY execution_id) WHERE {$bounds}";
+            $branches[] = "SELECT NULL AS id, execution_id, started_at, test, worker FROM (SELECT execution_id, min(started_at) AS started_at, min(test) AS test, min(worker) AS worker FROM records WHERE {$between} AND execution_id IS NOT NULL GROUP BY execution_id) WHERE {$bounds}";
         }
 
         return implode(' UNION ALL ', $branches);
@@ -107,6 +107,8 @@ class RunListing
             'queries' => $unit['queries'],
             'query_ms' => Stored::milliseconds($unit['query_duration']),
             'other' => $unit['other'],
+            'test' => $unit['test'],
+            'worker' => $unit['worker'],
         ];
     }
 }

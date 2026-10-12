@@ -149,6 +149,22 @@ class Arguments
     }
 
     /**
+     * Read the test the call is limited to, or null when none is given.
+     */
+    public function test(string $example): ?string
+    {
+        $value = $this->get('test');
+
+        if ($value === null || (is_string($value) && $value !== '')) {
+            return $value;
+        }
+
+        $test = __('firewatch::messages.argument_values.test');
+
+        throw $this->invalid(argument: 'test', expected: $test, accepted: $test, example: $example);
+    }
+
+    /**
      * Read one of the declared cases, or the declared default when none is given.
      *
      * @template TCase of BackedEnum

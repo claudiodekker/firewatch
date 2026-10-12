@@ -93,6 +93,7 @@ class Rank extends Tool
             'by' => $this->measureArgument($schema, Measure::for(...))->description(__('firewatch::messages.rank_by_argument')),
             ...$this->windowSchema($schema),
             ...$this->scopeSchema($schema),
+            'test' => $schema->string(),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),
@@ -129,6 +130,7 @@ class Rank extends Tool
         }
 
         $scope = $arguments->scope('rank(type: "query", scope: "between")');
+        $test = $arguments->test('rank(type: "query", test: "Tests\\\\Feature\\\\OrdersTest::it lists orders")');
 
         $this->refuseScope($scope, $explicit);
         $this->refuseWithin($within, $explicit, $scope);
@@ -138,7 +140,7 @@ class Rank extends Tool
         $continuation = Continuation::read($request, $this->name(), $this->key(...));
 
         $frame = $this->frame($now);
-        $window = $continuation->window($now, $frame->timezone)->scoped($scope);
+        $window = $continuation->window($now, $frame->timezone)->scoped($scope)->limitedTo($test);
 
         $frame->about($explicit === null ? [] : [$explicit], $window);
 

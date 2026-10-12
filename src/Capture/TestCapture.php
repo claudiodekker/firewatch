@@ -100,6 +100,11 @@ class TestCapture
     protected ?object $request = null;
 
     /**
+     * The test that created the application and the worker that runs it, or null when they could not be read.
+     */
+    protected ?RunningTest $runningTest = null;
+
+    /**
      * The console kernel whose events are rerouted, the only one whose commands become executions.
      */
     protected ?ConsoleKernel $console = null;
@@ -174,6 +179,10 @@ class TestCapture
 
         $this->whenResolved(HttpKernelContract::class, $this->endRequestsOn(...));
         $this->whenResolved(ConsoleKernelContract::class, $this->startCommandsOn(...));
+
+        $this->guarded(function () {
+            $this->runningTest = RunningTest::find();
+        });
 
         if ($this->core->ingest instanceof Ingest) {
             $this->ingest = $this->core->ingest;
@@ -488,7 +497,7 @@ class TestCapture
      */
     protected function testRecord(): TestRecord
     {
-        return $this->phase === TestPhase::BETWEEN ? TestRecord::OUTSIDE_EXECUTIONS : TestRecord::IN_EXECUTION;
+        return new TestRecord(inExecution: $this->phase !== TestPhase::BETWEEN, test: $this->runningTest?->test, worker: $this->runningTest?->worker);
     }
 
     /**
