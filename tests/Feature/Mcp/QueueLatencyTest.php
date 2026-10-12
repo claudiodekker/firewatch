@@ -701,19 +701,19 @@ describe('one group', function () {
 });
 
 describe('the blind spots', function () {
-    it('states that an uninstrumented dispatcher leaves no dispatch and that sync jobs have no attempt, also when nothing was examined', function (Closure $records) {
+    it('states that an uninstrumented dispatcher leaves no dispatch and that sync jobs have no attempt, also when nothing was examined', function (Closure $records, bool $full) {
         ingest([...$records(), syntheticRecord(RecordType::QUERY)]);
 
-        $blindSpots = array_column(qltAnswer()['blind_spots'], 'message', 'id');
+        $blindSpots = array_column(qltAnswer()['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKeys(['sync-jobs-unrecorded', 'uninstrumented-dispatcher'])
-            ->and($blindSpots['sync-jobs-unrecorded'])->toBe(__('firewatch::messages.blind_spots.sync-jobs-unrecorded'))
-            ->and($blindSpots['uninstrumented-dispatcher'])->toBe(__('firewatch::messages.blind_spots.uninstrumented-dispatcher'));
+            ->and($blindSpots['sync-jobs-unrecorded']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.sync-jobs-unrecorded') : null)
+            ->and($blindSpots['uninstrumented-dispatcher']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.uninstrumented-dispatcher') : null);
     })->with([
-        'with findings' => [fn () => qltWaited('a', 9000)],
-        'when clean' => [fn () => qltWaited('a', 10)],
-        'without its prerequisite' => [fn () => [qltAttempt('a', 10)]],
-        'with nothing examined' => [fn () => []],
+        'with findings' => [fn () => qltWaited('a', 9000), false],
+        'when clean' => [fn () => qltWaited('a', 10), true],
+        'without its prerequisite' => [fn () => [qltAttempt('a', 10)], true],
+        'with nothing examined' => [fn () => [], true],
     ]);
 });
 

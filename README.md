@@ -146,7 +146,7 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - Mail sent by a notification is recorded as a notification, not as mail.
 - A memory peak is the whole process's peak since the sensor last reset it. Requests, scheduled tasks and job attempts reset it, but a command reports its whole process, and a test run's executions record none, so compare executions to each other, not to an absolute number.
 
-Answers state these themselves, and `clean` means "none among what was captured".
+Answers state these themselves, and `clean` means "none among what was captured". An empty or clean answer spells each one out. Beside a result that lists what was found, a blind spot is named by id, and `describe` holds every sentence.
 
 ## Configuration
 

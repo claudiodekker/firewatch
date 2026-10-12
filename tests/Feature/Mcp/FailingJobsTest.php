@@ -666,20 +666,20 @@ describe('one group', function () {
 });
 
 describe('the blind spots', function () {
-    it('states that sync jobs have no attempt and that an uninstrumented dispatcher leaves no dispatch, also when nothing was examined', function (array $statuses) {
+    it('states that sync jobs have no attempt and that an uninstrumented dispatcher leaves no dispatch, also when nothing was examined', function (array $statuses, bool $full) {
         ingest([...fjbJob('a', $statuses), syntheticRecord(RecordType::QUERY)]);
 
         $answer = fjbAnswer();
-        $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
+        $blindSpots = array_column($answer['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKeys(['sync-jobs-unrecorded', 'uninstrumented-dispatcher'])
-            ->and($blindSpots['sync-jobs-unrecorded'])->toBe(__('firewatch::messages.blind_spots.sync-jobs-unrecorded'))
-            ->and($blindSpots['uninstrumented-dispatcher'])->toBe(__('firewatch::messages.blind_spots.uninstrumented-dispatcher'))
+            ->and($blindSpots['sync-jobs-unrecorded']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.sync-jobs-unrecorded') : null)
+            ->and($blindSpots['uninstrumented-dispatcher']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.uninstrumented-dispatcher') : null)
             ->and($answer['result']['caveats'])->toBe([]);
     })->with([
-        'with findings' => [['failed']],
-        'when clean' => [['processed']],
-        'with nothing examined' => [[]],
+        'with findings' => [['failed'], false],
+        'when clean' => [['processed'], true],
+        'with nothing examined' => [[], true],
     ]);
 });
 

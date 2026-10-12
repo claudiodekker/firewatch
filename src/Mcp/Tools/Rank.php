@@ -235,6 +235,7 @@ class Rank extends Tool
             notes: $notes,
             truncated: $truncated,
             next: $next,
+            found: true,
         );
     }
 
@@ -273,6 +274,7 @@ class Rank extends Tool
             ],
             notes: [...$selection->notes(), ...$stageNotes],
             truncated: $truncated,
+            found: true,
         );
     }
 

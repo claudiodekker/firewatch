@@ -181,6 +181,7 @@ class Query extends Tool
             next: $rows->stop === QueryStop::LIMIT && $limit < self::MAXIMUM_LIMIT ? [$this->more($sql)] : [],
             cuttable: ['rows'],
             capHow: __('firewatch::messages.query_cap_how'),
+            found: true,
         );
     }
 

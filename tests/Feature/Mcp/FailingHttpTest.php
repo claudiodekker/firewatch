@@ -587,18 +587,18 @@ describe('the caveats', function () {
 });
 
 describe('the blind spots', function () {
-    it('states that an unanswered outgoing request leaves no record, also when nothing was examined', function (array $statuses) {
+    it('states that an unanswered outgoing request leaves no record, also when nothing was examined', function (array $statuses, bool $full) {
         ingest([...fhpCalls('api.example.test', $statuses), syntheticRecord(RecordType::QUERY)]);
 
-        $blindSpots = array_column(fhpAnswer()['blind_spots'], 'message', 'id');
+        $blindSpots = array_column(fhpAnswer()['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKeys(['unanswered-outgoing-requests', 'actor-partial'])
-            ->and($blindSpots['unanswered-outgoing-requests'])->toBe(__('firewatch::messages.blind_spots.unanswered-outgoing-requests'))
-            ->and($blindSpots['actor-partial'])->toBe(__('firewatch::messages.blind_spots.actor-partial'));
+            ->and($blindSpots['unanswered-outgoing-requests']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.unanswered-outgoing-requests') : null)
+            ->and($blindSpots['actor-partial']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.actor-partial') : null);
     })->with([
-        'with findings' => [[500]],
-        'when clean' => [[200]],
-        'with nothing examined' => [[]],
+        'with findings' => [[500], false],
+        'when clean' => [[200], true],
+        'with nothing examined' => [[], true],
     ]);
 });
 

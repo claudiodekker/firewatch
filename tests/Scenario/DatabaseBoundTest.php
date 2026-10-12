@@ -74,8 +74,8 @@ it('states that query bindings may be unpaired on the real request', function ()
     databaseBoundRequest();
 
     $answer = Answers::assert(Detect::class, ['shape' => 'database-bound', 'threshold' => 1]);
-    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
+    $blindSpots = array_column($answer['blind_spots'], null, 'id');
 
     expect($blindSpots)->toHaveKey('query-bindings-unpaired')
-        ->and($blindSpots['query-bindings-unpaired'])->toBe(__('firewatch::messages.blind_spots.query-bindings-unpaired'));
+        ->and($blindSpots['query-bindings-unpaired'])->toBe(['id' => 'query-bindings-unpaired', 'kind' => 'structural']);
 });

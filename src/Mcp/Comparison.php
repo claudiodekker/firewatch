@@ -110,6 +110,14 @@ class Comparison
     }
 
     /**
+     * Determine if the comparison ran and says no group is gone, so no claim of the answer rests on an absence.
+     */
+    public function allFound(): bool
+    {
+        return $this->unevaluated === null && ($this->changes[Change::GONE->value] ?? 0) === 0;
+    }
+
+    /**
      * Determine if nothing matched: the window of the sides holds no record of the type, or the one group asked for has none in a window whose sides both hold the type.
      */
     public function isEmpty(): bool

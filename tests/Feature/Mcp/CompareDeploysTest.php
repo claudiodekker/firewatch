@@ -106,16 +106,16 @@ function pairCoverage(int $records, float $oldest, float $newest): array
 }
 
 /**
- * Get the blind spots of a pair answer over request records, then the drift of the request records stored with no deploy field.
+ * Get the blind spots of a pair answer over request records, by id alone when the pair was compared, then the drift of the request records stored with no deploy field.
  *
  * @return list<array<string, mixed>>
  */
-function pairBlindSpots(int $withoutDeploy): array
+function pairBlindSpots(int $withoutDeploy, bool $found = false): array
 {
     $structural = array_map(fn (string $id) => [
         'id' => $id,
         'kind' => 'structural',
-        'message' => __("firewatch::messages.blind_spots.{$id}"),
+        ...($found ? [] : ['message' => __("firewatch::messages.blind_spots.{$id}")]),
     ], ['console-requests', 'payload-on-server-error-only', 'dead-counters', 'memory-is-process-peak', 'octane-bootstrap']);
 
     $drift = [
@@ -178,7 +178,7 @@ it('compares every record of each deploy in the window, interleaved in time, and
             'deploys' => null,
         ],
         'coverage' => pairCoverage(48, PAIR_START, PAIR_NOW + 1),
-        'blind_spots' => pairBlindSpots(withoutDeploy: 3),
+        'blind_spots' => pairBlindSpots(withoutDeploy: 3, found: true),
         'notes' => [__('firewatch::messages.compare_deploy_pair_note')],
         'truncated' => [],
         'next' => [

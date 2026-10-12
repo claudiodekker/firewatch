@@ -475,18 +475,18 @@ describe('the caveat', function () {
 });
 
 describe('the blind spots', function () {
-    it('states that a named channel is not captured, also when nothing was examined', function (Closure $records) {
+    it('states that a named channel is not captured, also when nothing was examined', function (Closure $records, bool $full) {
         ingest([...$records(), syntheticRecord(RecordType::QUERY)]);
 
-        $blindSpots = array_column(elogAnswer()['blind_spots'], 'message', 'id');
+        $blindSpots = array_column(elogAnswer()['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKeys(['named-log-channels', 'actor-partial'])
-            ->and($blindSpots['named-log-channels'])->toBe(__('firewatch::messages.blind_spots.named-log-channels'))
-            ->and($blindSpots['actor-partial'])->toBe(__('firewatch::messages.blind_spots.actor-partial'));
+            ->and($blindSpots['named-log-channels']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.named-log-channels') : null)
+            ->and($blindSpots['actor-partial']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.actor-partial') : null);
     })->with([
-        'with findings' => [fn () => [elogLine('The payment failed.')]],
-        'when clean' => [fn () => [elogLine('The payment is slow.', 'warning')]],
-        'with nothing examined' => [fn () => []],
+        'with findings' => [fn () => [elogLine('The payment failed.')], false],
+        'when clean' => [fn () => [elogLine('The payment is slow.', 'warning')], true],
+        'with nothing examined' => [fn () => [], true],
     ]);
 });
 

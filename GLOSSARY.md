@@ -316,7 +316,7 @@ The stated span, size and history of the store behind an answer, present on ever
 _Avoid_: Completeness, health
 
 **Structural blind spot**:
-A blind spot from the fixed catalogue, attached to every answer that examined the record types it applies to.
+A blind spot from the fixed catalogue, attached to every answer that examined the record types it applies to. It prints its sentence on an answer that is empty or states an absence (a clean or unevaluated verdict, a gone group), and by id alone beside a result that lists what was found; `describe` holds every sentence.
 _Avoid_: Limitation, caveat
 
 **Condition blind spot**:

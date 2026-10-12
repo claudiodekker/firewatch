@@ -78,11 +78,11 @@ it('states what it cannot see of scheduled tasks, on the real runs', function ()
     failingTasksRan(['prune-carts']);
 
     $answer = Answers::assert(Detect::class, ['shape' => 'failing-tasks']);
-    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
+    $blindSpots = array_column($answer['blind_spots'], null, 'id');
 
     expect($blindSpots)->toHaveKeys(['dead-counters', 'memory-is-process-peak'])
-        ->and($blindSpots['dead-counters'])->toBe(__('firewatch::messages.blind_spots.dead-counters'))
-        ->and($blindSpots['memory-is-process-peak'])->toBe(__('firewatch::messages.blind_spots.memory-is-process-peak'));
+        ->and($blindSpots['dead-counters'])->toBe(['id' => 'dead-counters', 'kind' => 'structural'])
+        ->and($blindSpots['memory-is-process-peak'])->toBe(['id' => 'memory-is-process-peak', 'kind' => 'structural']);
 });
 
 it('opens what a finding points at', function () {

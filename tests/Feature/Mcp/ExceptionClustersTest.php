@@ -662,18 +662,18 @@ describe('one group', function () {
 });
 
 describe('the blind spots', function () {
-    it('states what exceptions and executions do not carry, also when nothing was examined', function (Closure $records) {
+    it('states what exceptions and executions do not carry, also when nothing was examined', function (Closure $records, bool $full) {
         ingest([...$records(), syntheticRecord(RecordType::QUERY)]);
 
-        $blindSpots = array_column(excAnswer()['blind_spots'], 'message', 'id');
+        $blindSpots = array_column(excAnswer()['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKeys(['exceptions-unreported', 'console-requests', 'dead-counters', 'sync-jobs-unrecorded', 'vendor-defaults-unrecorded', 'memory-is-process-peak', 'actor-partial'])
-            ->and($blindSpots['exceptions-unreported'])->toBe(__('firewatch::messages.blind_spots.exceptions-unreported'))
-            ->and($blindSpots['actor-partial'])->toBe(__('firewatch::messages.blind_spots.actor-partial'));
+            ->and($blindSpots['exceptions-unreported']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.exceptions-unreported') : null)
+            ->and($blindSpots['actor-partial']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.actor-partial') : null);
     })->with([
-        'with findings' => [fn () => [excExecution('a'), excException('a')]],
-        'when clean' => [fn () => [excExecution('a')]],
-        'with nothing examined' => [fn () => []],
+        'with findings' => [fn () => [excExecution('a'), excException('a')], false],
+        'when clean' => [fn () => [excExecution('a')], true],
+        'with nothing examined' => [fn () => [], true],
     ]);
 });
 

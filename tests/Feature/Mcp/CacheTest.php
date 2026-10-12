@@ -563,18 +563,18 @@ describe('the caveats', function () {
 });
 
 describe('the blind spots', function () {
-    it('states that the keys of the framework and its packages are not recorded, also when nothing was examined', function (array $events) {
+    it('states that the keys of the framework and its packages are not recorded, also when nothing was examined', function (array $events, bool $full) {
         ingest([...cchEvents('prices', $events), syntheticRecord(RecordType::QUERY)]);
 
-        $blindSpots = array_column(cchAnswer()['blind_spots'], 'message', 'id');
+        $blindSpots = array_column(cchAnswer()['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKeys(['vendor-defaults-unrecorded', 'actor-partial'])
-            ->and($blindSpots['vendor-defaults-unrecorded'])->toBe(__('firewatch::messages.blind_spots.vendor-defaults-unrecorded'))
-            ->and($blindSpots['actor-partial'])->toBe(__('firewatch::messages.blind_spots.actor-partial'));
+            ->and($blindSpots['vendor-defaults-unrecorded']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.vendor-defaults-unrecorded') : null)
+            ->and($blindSpots['actor-partial']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.actor-partial') : null);
     })->with([
-        'with findings' => [['write-failure']],
-        'when clean' => [['hit']],
-        'with nothing examined' => [[]],
+        'with findings' => [['write-failure'], false],
+        'when clean' => [['hit'], true],
+        'with nothing examined' => [[], true],
     ]);
 });
 

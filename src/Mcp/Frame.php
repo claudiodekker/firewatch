@@ -197,10 +197,11 @@ class Frame
      * @param  list<array{tool: string, arguments: array<string, mixed>, why: string}>  $next
      * @param  list<string>|null  $cuttable
      * @param  (Closure(array<string, mixed>): array<string, mixed>)|null  $recount
+     * @param  bool  $found  true when the result lists what was found and no claim in it rests on an absence
      */
-    public function answer(string $summary, array $result, ?Emptiness $empty = null, array $notes = [], array $truncated = [], array $next = [], ?array $cuttable = null, ?Closure $recount = null, ?string $capHow = null): Answer
+    public function answer(string $summary, array $result, ?Emptiness $empty = null, array $notes = [], array $truncated = [], array $next = [], ?array $cuttable = null, ?Closure $recount = null, ?string $capHow = null, bool $found = false): Answer
     {
-        $found = CompiledView::appearsIn($result) ? [CallFact::COMPILED_VIEW] : [];
+        $shown = CompiledView::appearsIn($result) ? [CallFact::COMPILED_VIEW] : [];
 
         return new Answer(
             tool: $this->tool,
@@ -211,13 +212,14 @@ class Frame
             empty: $empty,
             result: $result,
             coverage: $this->coverage(),
-            blindSpots: $this->blindSpots($found),
+            blindSpots: $this->blindSpots($shown),
             notes: $notes,
             truncated: $truncated,
             next: $next,
             cuttable: $cuttable,
             recount: $recount,
             capHow: $capHow,
+            found: $found,
         );
     }
 

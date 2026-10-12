@@ -221,6 +221,7 @@ class Execution extends Tool
             truncated: $truncated,
             next: $next,
             notes: [$budget->line(), ...$matched],
+            found: true,
         );
     }
 
