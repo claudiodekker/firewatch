@@ -177,7 +177,7 @@ A specific budget beats a global one. Durations are in milliseconds and memory i
 ],
 ```
 
-Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded and the doctor reports them. Two stores must not share a directory.
+Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded and the doctor reports them. Each process also writes its first store failure to the PHP error log. Two stores must not share a directory.
 
 ## Retention and clearing
 

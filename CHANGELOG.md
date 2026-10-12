@@ -16,7 +16,7 @@ The first release.
 - Redaction is off by default, with opt-in lists for payload fields and headers. Long values are cut with a truncation marker.
 - The store keeps every record type in one table with a view per type, a directory of signed-in users, and a `drift` table that counts differences from Nightwatch's record contract instead of dropping data.
 - Records are labelled with a deploy from `FIREWATCH_DEPLOY` or Nightwatch, else with the commit git HEAD points to, so two commits can be compared.
-- A failed batch is dropped, never retried, and logged to `failures.jsonl`. The writer recovers from forks, replaced or deleted files, schema mismatches and damaged stores.
+- A failed batch is dropped, never retried, and logged to `failures.jsonl`. Firewatch's own failures go to the PHP error log, never to the exception handler, so they never appear as the application's exceptions. The writer recovers from forks, replaced or deleted files, schema mismatches and damaged stores.
 - Retention by age and record count, with a size backstop. Coverage markers let every answer state how far its history reaches.
 - `php artisan firewatch:server` runs the MCP server over stdio, and `--list` prints its tools.
 - `php artisan firewatch:doctor` runs read-only checks on PHP, SQLite, Nightwatch, the configuration, the store and the server, with a fix for every warning and failure. `--json` prints the report as JSON.

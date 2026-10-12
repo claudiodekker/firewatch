@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
+use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
@@ -57,7 +58,7 @@ function replaceStore(string $key): void
     $replacement = $path.'.replacement';
     $normaliser = new ConfigurationNormaliser(basePath: base_path(), publicPath: public_path(), storagePath: storage_path(), environment: 'testing');
     $configuration = $normaliser->resolve(['database' => $replacement]);
-    $writer = new Writer($configuration, new FailureLog($configuration), sqliteVersion: '3.51.3');
+    $writer = new Writer($configuration, new FailureLog($configuration, app(Notices::class)), sqliteVersion: '3.51.3');
 
     $connection = $writer->transaction(function (SQLite3 $connection) use ($key) {
         $connection->exec("INSERT INTO records (type, data) VALUES ('cache-event', json_object('key', '{$key}'))");
