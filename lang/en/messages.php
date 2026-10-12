@@ -302,7 +302,7 @@ return [
         ],
 
         'capture-posture' => [
-            'posture' => 'payload fields redacted: :fields; headers redacted: :headers; request payloads :payload; logs :logs',
+            'posture' => 'payload fields redacted: :fields; headers redacted: :headers; request payloads :payload; logs :logs; test executions :tests',
             'nightwatch_defaults' => 'Nightwatch\'s defaults are in effect, because Firewatch\'s capture settings were not applied',
         ],
 

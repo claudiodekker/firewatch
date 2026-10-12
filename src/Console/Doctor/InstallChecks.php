@@ -341,6 +341,7 @@ class InstallChecks
             'headers' => $this->listed($this->configuration->redactHeaders),
             'payload' => $this->switched($this->configuration->captureRequestPayload),
             'logs' => $this->switched($this->configuration->captureLogs),
+            'tests' => $this->switched($this->configuration->captureTests),
         ]));
     }
 

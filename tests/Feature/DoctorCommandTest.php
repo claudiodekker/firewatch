@@ -507,12 +507,12 @@ describe('store-path', function () {
 
 describe('capture-posture', function () {
     it('informs about the posture in effect', function () {
-        doctorConfigure(['capture' => ['redact_payload_fields' => ['password'], 'request_payload' => false]]);
+        doctorConfigure(['capture' => ['redact_payload_fields' => ['password'], 'request_payload' => false, 'tests' => true]]);
 
         expect(doctorCheck('capture-posture'))->toBe([
             'id' => 'capture-posture',
             'status' => 'info',
-            'message' => __('firewatch::messages.doctor.capture-posture.posture', ['fields' => 'password', 'headers' => __('firewatch::messages.doctor.none'), 'payload' => __('firewatch::messages.doctor.off'), 'logs' => __('firewatch::messages.doctor.on')]),
+            'message' => __('firewatch::messages.doctor.capture-posture.posture', ['fields' => 'password', 'headers' => __('firewatch::messages.doctor.none'), 'payload' => __('firewatch::messages.doctor.off'), 'logs' => __('firewatch::messages.doctor.on'), 'tests' => __('firewatch::messages.doctor.on')]),
             'fix' => null,
         ]);
     });
@@ -1143,7 +1143,7 @@ describe('the report', function () {
                 ['id' => 'store-activity', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store.absent'), 'fix' => null],
                 ['id' => 'store-losses', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.store-losses.ok'), 'fix' => null],
                 ['id' => 'store-drift', 'status' => 'info', 'message' => __('firewatch::messages.doctor.store.absent'), 'fix' => null],
-                ['id' => 'capture-posture', 'status' => 'info', 'message' => __('firewatch::messages.doctor.capture-posture.posture', ['fields' => __('firewatch::messages.doctor.none'), 'headers' => __('firewatch::messages.doctor.none'), 'payload' => __('firewatch::messages.doctor.on'), 'logs' => __('firewatch::messages.doctor.on')]), 'fix' => null],
+                ['id' => 'capture-posture', 'status' => 'info', 'message' => __('firewatch::messages.doctor.capture-posture.posture', ['fields' => __('firewatch::messages.doctor.none'), 'headers' => __('firewatch::messages.doctor.none'), 'payload' => __('firewatch::messages.doctor.on'), 'logs' => __('firewatch::messages.doctor.on'), 'tests' => __('firewatch::messages.doctor.off')]), 'fix' => null],
                 ['id' => 'server', 'status' => 'ok', 'message' => __('firewatch::messages.doctor.server.ok', ['version' => $listing['server']['version'], 'count' => 12]), 'fix' => null],
                 ['id' => 'sql-access', 'status' => 'warn', 'message' => __('firewatch::messages.doctor.sql-access.unavailable', ['reason' => __('firewatch::messages.sql_unavailable.php_binary')]), 'fix' => __('firewatch::messages.doctor.sql-access.php_binary_fix')],
                 ['id' => 'client', 'status' => 'info', 'message' => __('firewatch::messages.doctor.client.launch', ['command' => $directory.'/no-php '.base_path('artisan').' firewatch:server']), 'fix' => null],
