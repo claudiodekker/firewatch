@@ -2,12 +2,12 @@
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
-use Illuminate\Contracts\Debug\ExceptionHandler;
-use Illuminate\Foundation\Exceptions\Handler;
+use ClaudioDekker\Firewatch\Notices;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
+use Symfony\Component\Process\Process;
 
 /**
  * @return list<array<string, mixed>>
@@ -89,7 +89,8 @@ it('drops a batch when another process holds the write lock past the busy timeou
         'message' => 'database is locked',
         'dropped' => 2,
     ]])->and(storedCacheKeys())->toBe(['kept']);
-    Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Firewatch could not store a batch of 2 records: database is locked');
+    expect(notices())->toBe(['Firewatch could not store a batch of 2 records: database is locked']);
+    Exceptions::assertNothingReported();
 })->with([
     'failing fast at 0' => 0,
     'at a budget of 50 ms' => 50,
@@ -146,17 +147,37 @@ it('keeps the latest 100 failure lines', function (int $earlier, int $kept) {
     'over the cap' => ['earlier' => 100, 'kept' => 100],
 ]);
 
-it('reports once per process however many batches it drops', function () {
+it('writes one notice however many batches it drops', function () {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
+    $database = app(Configuration::class)->database;
 
     Cache::get('first');
     Nightwatch::digest();
     Cache::get('second');
     Nightwatch::digest();
 
-    expect(failureLines())->toHaveCount(2);
-    Exceptions::assertReportedCount(1);
+    expect(failureLines())->toHaveCount(2)
+        ->and(notices())->toBe(["Firewatch could not store a batch of 1 records: The file at [{$database}] is not a Firewatch store."]);
+    Exceptions::assertNothingReported();
 });
+
+it('keeps a batch a test run dropped out of the records of the next test', function () {
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/phpunit', '--no-configuration', '--bootstrap', 'vendor/autoload.php', 'tests/Fixtures/TestRun/DroppedBatchTest.php'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_BUSY_TIMEOUT' => '0', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite'],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(array_column(failureLines(), 'dropped'))->toBe([1])
+        ->and(storeRows("SELECT sql FROM queries WHERE sql LIKE '%dropped' OR sql LIKE '%kept'"))->toBe([['sql' => 'select 2 as kept']])
+        ->and(storeRows('SELECT message FROM exceptions'))->toBe([])
+        ->and(storeRows('SELECT message FROM logs'))->toBe([])
+        ->and($process->getErrorOutput())->toContain('Firewatch could not store a batch of 1 records: database is locked');
+})->group('process');
 
 it('creates the failure file private to its owner', function () {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
@@ -167,7 +188,7 @@ it('creates the failure file private to its owner', function () {
     expect(fileperms(dirname(app(Configuration::class)->database).'/failures.jsonl') & 0777)->toBe(0600);
 })->group('posix');
 
-it('still reports a dropped batch when its failure line can\'t be written', function (Closure $break) {
+it('still writes a notice about a dropped batch when its failure line can\'t be written', function (Closure $break) {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
     $failures = dirname(app(Configuration::class)->database).'/failures.jsonl';
     $break($failures);
@@ -176,8 +197,9 @@ it('still reports a dropped batch when its failure line can\'t be written', func
     Cache::get('dropped');
     app(Core::class)->ingest->digest();
 
-    Exceptions::assertReportedCount(1);
-    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Firewatch could not store a batch of 1 records: The file at ['));
+    expect(notices())->toHaveCount(1)
+        ->and(notices()[0])->toStartWith('Firewatch could not store a batch of 1 records: The file at [');
+    Exceptions::assertNothingReported();
 })->with([
     'a failure file that is a directory' => [fn (string $failures) => mkdir($failures)],
 ]);
@@ -192,19 +214,21 @@ it('loses a failure line rather than wait for a lock held elsewhere', function (
     Nightwatch::digest();
     fclose($handle);
 
-    expect(file_get_contents($failures))->toBe('');
-    Exceptions::assertReportedCount(1);
+    expect(file_get_contents($failures))->toBe('')
+        ->and(notices())->toHaveCount(1);
+    Exceptions::assertNothingReported();
 });
 
-it('keeps recording dropped batches when the report throws', function () {
+it('keeps recording dropped batches when the notice can\'t be written', function () {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
-    app()->instance(ExceptionHandler::class, new class(app()) extends Handler
+    app()->bind(Notices::class, fn () => new class implements Notices
     {
-        public function report(Throwable $e): void
+        public function write(string $notice): void
         {
-            throw new RuntimeException('The handler failed.');
+            throw new RuntimeException('The error log failed.');
         }
     });
+    registerFirewatch();
 
     // Digest through the ingest itself, as Nightwatch would swallow what escapes it.
     Cache::get('dropped');

@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Capture;
 
 use ClaudioDekker\Firewatch\Ingest;
+use ClaudioDekker\Firewatch\Notices;
 use Closure;
 use Illuminate\Console\Application as Artisan;
 use Illuminate\Console\Events\CommandFinished;
@@ -113,7 +114,7 @@ class TestCapture
      *
      * @param  Core<RequestState|CommandState>  $core
      */
-    public function __construct(protected Application $app, protected Core $core)
+    public function __construct(protected Application $app, protected Core $core, protected Notices $notices)
     {
         //
     }
@@ -399,7 +400,7 @@ class TestCapture
     }
 
     /**
-     * Report a failure to follow the test's executions instead of throwing it into the test.
+     * Write a notice about a failure to follow the test's executions instead of throwing it into the test.
      *
      * @param  Closure(): void  $step
      */
@@ -408,7 +409,7 @@ class TestCapture
         try {
             $step();
         } catch (Throwable $exception) {
-            report($exception);
+            $this->notices->write("Firewatch could not follow a test's executions: {$exception->getMessage()}");
         }
     }
 }

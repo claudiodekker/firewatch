@@ -5,7 +5,6 @@ use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Sleep;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
@@ -133,7 +132,7 @@ it('polls the lock every 5 ms within the busy timeout', function (int $busyTimeo
     Nightwatch::digest();
 
     Sleep::assertSequence(array_map(fn (int $microseconds) => Sleep::usleep($microseconds), $sleeps));
-    Exceptions::assertReported(fn (RuntimeException $exception) => str_ends_with($exception->getMessage(), "within {$busyTimeout} ms."));
+    expect(notices())->toBe(['Firewatch could not store a batch of 1 records: Firewatch could not lock ['.lockPath()."] within {$busyTimeout} ms."]);
 })->with([
     'failing fast at 0' => [0, []],
     'a budget shorter than one poll' => [3, [3_000]],

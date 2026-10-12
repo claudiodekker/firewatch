@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Store;
 
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Notices;
 use RuntimeException;
 use SQLite3Exception;
 use Throwable;
@@ -29,9 +30,9 @@ class FailureLog
     protected const FILE_MODE = 0600;
 
     /**
-     * Whether this process has reported a failure.
+     * Whether a notice about a failure has been written.
      */
-    protected bool $reported = false;
+    protected bool $notified = false;
 
     /**
      * The path of the failure file.
@@ -41,13 +42,13 @@ class FailureLog
     /**
      * Create a new failure log instance.
      */
-    public function __construct(Configuration $configuration)
+    public function __construct(Configuration $configuration, protected Notices $notices)
     {
         $this->path = dirname($configuration->database).'/'.static::FILE;
     }
 
     /**
-     * Record a dropped batch beside the store and report the first failure of the process.
+     * Record a dropped batch beside the store and write a notice about the first failure.
      */
     public function record(Throwable $exception, int $dropped): void
     {
@@ -55,7 +56,7 @@ class FailureLog
     }
 
     /**
-     * Record a failed pruning pass beside the store and report the first failure of the process.
+     * Record a failed pruning pass beside the store and write a notice about the first failure.
      */
     public function pruneFailed(Throwable $exception): void
     {
@@ -129,7 +130,7 @@ class FailureLog
     }
 
     /**
-     * Record a failure beside the store and report the first of the process.
+     * Record a failure beside the store and write a notice about the first one.
      */
     protected function log(FailureEntry $entry, Throwable $exception, string $failed, ?int $dropped = null): void
     {
@@ -140,7 +141,7 @@ class FailureLog
         }
 
         try {
-            $this->report($exception, $failed);
+            $this->notify($exception, $failed);
         } catch (Throwable) {
             //
         }
@@ -227,16 +228,16 @@ class FailureLog
     }
 
     /**
-     * Report the process's first failure through the exception handler.
+     * Write a notice about the first failure.
      */
-    protected function report(Throwable $exception, string $failed): void
+    protected function notify(Throwable $exception, string $failed): void
     {
-        if ($this->reported) {
+        if ($this->notified) {
             return;
         }
 
-        $this->reported = true;
+        $this->notified = true;
 
-        report(new RuntimeException("Firewatch {$failed}: {$exception->getMessage()}", previous: $exception));
+        $this->notices->write("Firewatch {$failed}: {$exception->getMessage()}");
     }
 }

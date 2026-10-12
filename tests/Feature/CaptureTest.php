@@ -1,9 +1,9 @@
 <?php
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Markers;
 use ClaudioDekker\Firewatch\Store\Reader;
-use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -162,7 +162,7 @@ it('stores nothing when Off', function () {
     expect(app(Reader::class)->exists())->toBeFalse();
 });
 
-it('reports a batch it could not store without failing the application', function () {
+it('writes a notice about a batch it could not store without failing the application', function () {
     $blocked = app(Configuration::class)->database;
     mkdir(dirname($blocked), recursive: true);
     touch($blocked.'.parent');
@@ -172,31 +172,25 @@ it('reports a batch it could not store without failing the application', functio
     Cache::get('first');
     Nightwatch::digest();
 
-    Exceptions::assertReported(RuntimeException::class);
+    expect(notices())->toHaveCount(1)
+        ->and(notices()[0])->toStartWith('Firewatch could not store a batch of 1 records: ');
+    Exceptions::assertNothingReported();
 });
 
 it('ignores what the sensors record while it stores a batch', function () {
-    $blocked = app(Configuration::class)->database;
-    mkdir(dirname($blocked), recursive: true);
-    touch($blocked.'.parent');
-    config()->set(['firewatch.database' => $blocked.'.parent/firewatch.sqlite', 'logging.default' => 'null']);
-    registerFirewatch();
-    app()->instance(ExceptionHandler::class, Exceptions::getFacadeRoot()->handler());
-    $failures = 0;
-    app(ExceptionHandler::class)->reportable(function (Throwable $exception) use (&$failures) {
-        if (++$failures === 1) {
-            Nightwatch::report($exception, handled: false);
-        }
-    });
-    Cache::get('first');
-    Nightwatch::digest();
-    unlink($blocked.'.parent');
+    $key = new class implements JsonSerializable
+    {
+        public function jsonSerialize(): string
+        {
+            Cache::get('while storing');
 
+            return 'first';
+        }
+    };
+
+    ingest([syntheticRecord(RecordType::CACHE_EVENT)->with(['key' => $key])]);
     Cache::get('second');
     Nightwatch::digest();
 
-    $records = storedRecords("type, json_extract(data, '$.key') AS key");
-
-    expect($records)->toBe([['type' => 'cache-event', 'key' => 'second']])
-        ->and($failures)->toBe(1);
+    expect(array_column(storeRows('SELECT key FROM cache_events ORDER BY id'), 'key'))->toBe(['first', 'second']);
 });

@@ -312,7 +312,7 @@ describe('nightwatch', function () {
         'core without an ingest property' => ['breakCore' => fn () => app()->instance(Core::class, new stdClass), 'reason' => 'its core has no assignable ingest property'],
     ]);
 
-    it('fails with the message of an unexpected error in the swap, and still reports it', function () {
+    it('fails with the message of an unexpected error in the swap, and still writes a notice about it', function () {
         Exceptions::fake();
         app()->bind(Ingest::class, fn () => throw new LogicException('the store is unreachable'));
         registerFirewatch();
@@ -322,7 +322,8 @@ describe('nightwatch', function () {
             'status' => 'fail',
             'message' => "Firewatch left Nightwatch {$version}'s ingest in place: the store is unreachable",
         ]);
-        Exceptions::assertReported(fn (LogicException $exception) => $exception->getMessage() === 'the store is unreachable');
+        expect(notices())->toContain('Firewatch could not wire Nightwatch: the store is unreachable');
+        Exceptions::assertNothingReported();
     });
 });
 
@@ -935,7 +936,8 @@ describe('store-losses', function () {
             ->and($check['message'])->toStartWith('1 prune failed; the newest at ')
             ->and($check['message'])->toEndWith('(other): the pass broke');
 
-        Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getMessage() === 'Firewatch could not prune the store: the pass broke');
+        expect(notices())->toBe(['Firewatch could not prune the store: the pass broke']);
+        Exceptions::assertNothingReported();
     });
 
     it('quotes both a dropped batch and a failed prune and fixes the newest', function () {

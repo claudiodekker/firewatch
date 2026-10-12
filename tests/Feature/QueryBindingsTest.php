@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\RecordType;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\Records\Query as QueryRecord;
@@ -144,7 +145,10 @@ it('stores no bindings for a query whose bindings can\'t be read, and still reco
     event(new QueryExecuted('select ? as probe', [$value], 0.1, DB::connection()));
     Nightwatch::digest();
 
-    expect(storedBindings())->toBe([['sql' => 'select ? as probe', 'bindings' => null]]);
+    expect(storedBindings())->toBe([['sql' => 'select ? as probe', 'bindings' => null]])
+        ->and(notices())->toBe(['Firewatch could not read the bindings of a query: The value can\'t be read.'])
+        ->and(storeRows('SELECT message FROM exceptions'))->toBe([]);
+    Exceptions::assertNothingReported();
 });
 
 it('pairs each query with its own bindings after Firewatch registers again', function () {

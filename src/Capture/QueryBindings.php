@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Capture;
 
+use ClaudioDekker\Firewatch\Notices;
 use Illuminate\Database\Events\QueryExecuted;
 use Stringable;
 use Throwable;
@@ -31,7 +32,7 @@ class QueryBindings
     /**
      * Create a new query bindings instance.
      */
-    public function __construct(protected Truncator $truncator)
+    public function __construct(protected Truncator $truncator, protected Notices $notices)
     {
         //
     }
@@ -92,7 +93,7 @@ class QueryBindings
 
             return $this->fit(array_map($this->value(...), $values));
         } catch (Throwable $exception) {
-            report($exception);
+            $this->notices->write("Firewatch could not read the bindings of a query: {$exception->getMessage()}");
 
             return null;
         }

@@ -203,6 +203,22 @@ it('leaves the application without the switch that forces Nightwatch into reques
     expect(env('NIGHTWATCH_FORCE_REQUEST'))->toBeNull();
 });
 
+it('writes a notice when it can\'t record a command, and keeps the failure out of the store', function () {
+    captureTests();
+    Route::get('/orders', fn () => 'orders');
+    Artisan::command('orders:prune', function () {
+        DB::select('select 1 as pruned');
+    });
+    Nightwatch::redactCommands(fn () => throw new RuntimeException('The command could not be redacted.'));
+
+    $this->artisan('orders:prune')->assertSuccessful();
+    $this->get('/orders')->assertOk();
+
+    expect(notices())->toBe(['Firewatch could not follow a test\'s executions: The command could not be redacted.'])
+        ->and(storeRows('SELECT route_path FROM requests'))->toBe([['route_path' => '/orders']])
+        ->and(storeRows('SELECT message FROM exceptions'))->toBe([]);
+});
+
 it('starts the next request afresh after one threw out of the kernel', function () {
     captureTests();
     Route::get('/orders', function () {

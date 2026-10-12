@@ -240,7 +240,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Report a failure of the Nightwatch wiring instead of throwing it into the host application.
+     * Write a notice about a failure of the Nightwatch wiring instead of throwing it into the host application.
      *
      * @param  Closure(): void  $wiring
      */
@@ -249,7 +249,7 @@ class FirewatchServiceProvider extends ServiceProvider
         try {
             $wiring();
         } catch (Throwable $exception) {
-            report($exception);
+            $this->notify("Firewatch could not wire Nightwatch: {$exception->getMessage()}");
         }
     }
 
@@ -458,7 +458,7 @@ class FirewatchServiceProvider extends ServiceProvider
             return;
         }
 
-        (new TestCapture($this->app, $this->app->make(Core::class)))->listen();
+        (new TestCapture($this->app, $this->app->make(Core::class), $this->app->make(Notices::class)))->listen();
     }
 
     /**

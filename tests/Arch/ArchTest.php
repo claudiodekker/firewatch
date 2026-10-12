@@ -177,6 +177,11 @@ arch('Console reaches the side that answers the assistant only to start and list
     ->not->toUse('ClaudioDekker\\Firewatch\\Mcp')
     ->ignoring(FirewatchServer::class);
 
+arch('only the side that answers the assistant reports to the exception handler, which a capturing application records')
+    ->expect('ClaudioDekker\\Firewatch')
+    ->not->toUse('report')
+    ->ignoring('ClaudioDekker\\Firewatch\\Mcp');
+
 arch('the git HEAD reader starts no process, because it runs at every boot')
     ->expect(GitHead::class)
     ->not->toUse(['proc_open', 'popen', 'exec', 'shell_exec', 'system', 'passthru', 'pcntl_exec', 'Symfony\\Component\\Process', 'Illuminate\\Support\\Facades\\Process', 'Illuminate\\Process']);
