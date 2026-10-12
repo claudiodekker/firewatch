@@ -132,7 +132,7 @@ it('answers what the store holds, then the schema and the SQL tool, in full', fu
         ->and(array_column($result['objects'], 'object'))->toBe(['requests', 'commands', 'job_attempts', 'scheduled_tasks', 'queries', 'exceptions', 'logs', 'cache_events', 'mail', 'notifications', 'outgoing_requests', 'queued_jobs', 'records', 'users', 'drift', 'meta'])
         ->and($result['objects'][0])->toBe(['object' => 'requests', 'type' => 'request', 'holds' => __('firewatch::messages.objects.requests')])
         ->and($result['objects'][12])->toBe(['object' => 'records', 'type' => null, 'holds' => __('firewatch::messages.objects.records')])
-        ->and(array_column($result['tables'], 'column'))->toBe(['id', 'type', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'job_id', 'user_id', 'deploy', 'server', 'data', 'kind', 'type', 'v', 'detail', 'count', 'first_seen', 'last_seen', 'key', 'value'])
+        ->and(array_column($result['tables'], 'column'))->toBe(['id', 'type', 'v', 'started_at', 'duration', 'ended_at', 'group_hash', 'trace_id', 'execution_id', 'source', 'job_id', 'user_id', 'deploy', 'server', 'test', 'worker', 'data', 'kind', 'type', 'v', 'detail', 'count', 'first_seen', 'last_seen', 'key', 'value'])
         ->and($result['sql'])->toBe([
             'available' => true,
             'reason' => null,
@@ -355,7 +355,7 @@ it('answers an empty store with the catalogue and the store facts, saying it hol
         ->and($store['result']['objects'])->toHaveCount(16)
         ->and($store['next'])->toBe([])
         ->and($type['empty']['kind'])->toBe('store_empty')
-        ->and($type['summary'])->toBe(__('firewatch::messages.describe_type_summary_empty', ['object' => 'requests', 'columns' => 49]))
+        ->and($type['summary'])->toBe(__('firewatch::messages.describe_type_summary_empty', ['object' => 'requests', 'columns' => 51]))
         ->and($type['result']['records'])->toBe(0)
         ->and(array_unique(array_map('json_encode', array_column($type['result']['columns'], 'examples'))))->toBe(['[]']);
 });

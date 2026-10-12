@@ -38,6 +38,28 @@ function executionQueries(): array
     ])->all();
 }
 
+/**
+ * Run the test as the worker of a parallel run with the token, or as a serial run with none, and restore the token afterwards.
+ */
+function runAsWorker(?string $token): void
+{
+    $previous = $_SERVER['TEST_TOKEN'] ?? null;
+
+    $_SERVER['TEST_TOKEN'] = $token;
+
+    if ($token === null) {
+        unset($_SERVER['TEST_TOKEN']);
+    }
+
+    test()->beforeApplicationDestroyed(function () use ($previous) {
+        $_SERVER['TEST_TOKEN'] = $previous;
+
+        if ($previous === null) {
+            unset($_SERVER['TEST_TOKEN']);
+        }
+    });
+}
+
 it('records each request and command a test runs as an execution of its own', function () {
     captureTests();
     Route::get('/orders', fn () => DB::select('select 1 as orders'));
@@ -503,3 +525,114 @@ it('stores what each test runs after its last execution, once PHPUnit has torn i
             ['fragments' => 3],
         ]);
 })->group('process');
+
+it('stores the test on every record it writes, inside a request, inside a command and between them', function () {
+    runAsWorker(null);
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+    Artisan::command('orders:prune', function () {
+        DB::select('select 2 as pruned');
+    });
+
+    DB::select('select 0 as before');
+    $this->get('/orders')->assertOk();
+    $this->artisan('orders:prune')->assertSuccessful();
+    DB::select('select 3 as after');
+    Nightwatch::digest();
+
+    $test = 'Tests\\Feature\\TestCaptureTest::it stores the test on every record it writes, inside a request, inside a command and between them';
+
+    expect(storeRows('SELECT type, source, test, worker FROM records ORDER BY started_at, id'))->toBe([
+        ['type' => 'query', 'source' => 'between', 'test' => $test, 'worker' => null],
+        ['type' => 'request', 'source' => 'request', 'test' => $test, 'worker' => null],
+        ['type' => 'query', 'source' => 'request', 'test' => $test, 'worker' => null],
+        ['type' => 'command', 'source' => 'command', 'test' => $test, 'worker' => null],
+        ['type' => 'query', 'source' => 'command', 'test' => $test, 'worker' => null],
+        ['type' => 'query', 'source' => 'between', 'test' => $test, 'worker' => null],
+    ])->and(storeRows('SELECT DISTINCT test, worker FROM queries UNION SELECT DISTINCT test, worker FROM requests UNION SELECT DISTINCT test, worker FROM commands'))->toBe([
+        ['test' => $test, 'worker' => null],
+    ]);
+});
+
+it('keeps the data set in the test it stores', function (string $status) {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select ? as status', [$status]));
+
+    $this->get('/orders')->assertOk();
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT DISTINCT test FROM records'))->toBe([
+        ['test' => "Tests\\Feature\\TestCaptureTest::it keeps the data set in the test it stores with dataset \"{$status} orders\""],
+    ]);
+})->with([
+    'open orders' => ['open'],
+    'paid orders' => ['paid'],
+]);
+
+it('stores the worker of a parallel run on every record a test writes', function () {
+    runAsWorker('3');
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+
+    DB::select('select 0 as before');
+    $this->get('/orders')->assertOk();
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT type, source, worker FROM records ORDER BY started_at, id'))->toBe([
+        ['type' => 'query', 'source' => 'between', 'worker' => '3'],
+        ['type' => 'request', 'source' => 'request', 'worker' => '3'],
+        ['type' => 'query', 'source' => 'request', 'worker' => '3'],
+    ]);
+});
+
+it('stores no test and no worker outside a test run', function () {
+    // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers.
+    $packagesCache = 'bootstrap/cache/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/testbench', 'members:audit', '7', '--env=testing'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite', 'APP_PACKAGES_CACHE' => $packagesCache, 'TEST_TOKEN' => false],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    (new Filesystem)->delete(base_path($packagesCache));
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(storeRows('SELECT type, test, worker FROM records ORDER BY started_at, id'))->toBe([
+            ['type' => 'command', 'test' => null, 'worker' => null],
+            ['type' => 'query', 'test' => null, 'worker' => null],
+        ]);
+})->group('process');
+
+it('stores a PHPUnit test by its class and method, with its data set, and the worker of its process', function () {
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/phpunit', '--no-configuration', '--bootstrap', 'vendor/autoload.php', 'tests/Fixtures/TestRun/OrdersTest.php'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite', 'TEST_TOKEN' => '2'],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    $class = 'ClaudioDekker\\Firewatch\\Tests\\Fixtures\\TestRun\\OrdersTest';
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(storeRows('SELECT test, worker, count(*) AS records, count(DISTINCT source) AS sources FROM records GROUP BY test, worker ORDER BY min(started_at)'))->toBe([
+            ['test' => "{$class}::test_lists_orders with data set \"open\"", 'worker' => '2', 'records' => 4, 'sources' => 2],
+            ['test' => "{$class}::test_lists_orders with data set \"paid\"", 'worker' => '2', 'records' => 4, 'sources' => 2],
+            ['test' => "{$class}::test_prunes_orders", 'worker' => '2', 'records' => 3, 'sources' => 2],
+        ]);
+})->group('process');
+
+it('stores the test on a record it cannot read, written during a test', function () {
+    captureTests();
+
+    ingest([['cache-event', 1]]);
+
+    expect(storeRows('SELECT type, test FROM records'))->toBe([
+        ['type' => null, 'test' => 'Tests\Feature\TestCaptureTest::it stores the test on a record it cannot read, written during a test'],
+    ]);
+});

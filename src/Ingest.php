@@ -96,7 +96,7 @@ class Ingest implements IngestContract
         $testRecord = $this->testRecord?->__invoke();
 
         // A test's last records are stored after its application is gone, so what runs between executions resolves its lazy fields now.
-        if ($testRecord === TestRecord::OUTSIDE_EXECUTIONS) {
+        if ($testRecord?->inExecution === false) {
             $record = array_map(fn (mixed $value) => $value instanceof JsonSerializable ? $value->jsonSerialize() : $value, $record);
         }
 

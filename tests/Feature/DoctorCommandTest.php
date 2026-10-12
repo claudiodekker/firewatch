@@ -724,7 +724,7 @@ describe('store-identity', function () {
         ]);
     })->with([
         'an older schema' => [0, 'older'],
-        'a newer schema' => [4, 'newer'],
+        'a newer schema' => [Schema::VERSION + 1, 'newer'],
     ]);
 
     it('leaves the failure of a damaged store to store-integrity', function () {

@@ -753,6 +753,8 @@ return [
         'user_id' => 'The signed-in user, an id into users; null when nobody was signed in.',
         'deploy' => 'The deploy string the application reported.',
         'server' => 'The server name the application reported.',
+        'test' => 'The test that wrote it, the case and the test as the runner prints them; null outside a test run.',
+        'worker' => 'The token of the parallel worker that ran its test; null in a serial run and outside a test run.',
         'data' => 'Every field of the record as JSON, including fields the contract does not know.',
         'queue' => 'The queue name.',
         'context' => 'The context the application attached, as JSON.',
