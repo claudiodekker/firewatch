@@ -114,18 +114,18 @@ class Window
     }
 
     /**
-     * Get the bounds as the arguments of a later call that reads the same window: the instants they resolved to, a side with no bound left out.
+     * Get the bounds as the arguments of a later call that reads the same window: the instants they resolved to, as the epoch strings the schema declares, a side with no bound left out.
      *
-     * @return array{since?: float, until?: float}
+     * @return array{since?: string, until?: string}
      */
     public function arguments(): array
     {
-        $bounds = [
+        $bounds = array_filter([
             'since' => $this->since,
             'until' => $this->until,
-        ];
+        ], fn (?float $bound) => $bound !== null);
 
-        return array_filter($bounds, fn (?float $bound) => $bound !== null);
+        return array_map(Instant::epoch(...), $bounds);
     }
 
     /**

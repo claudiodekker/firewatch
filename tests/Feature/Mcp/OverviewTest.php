@@ -815,9 +815,9 @@ describe('the next calls', function () {
         $this->travel(3)->hours();
         $answers = array_map(ovwFollow(...), $answer['next']);
 
-        expect($answer['next'])->toEqual([
-            ['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes', 'since' => 1790769600.0, 'until' => 1790776800.0], 'why' => __('firewatch::messages.detect_next_shape')],
-            ['tool' => 'rank', 'arguments' => ['type' => 'request', 'by' => 'total_duration', 'since' => 1790769600.0, 'until' => 1790776800.0], 'why' => __('firewatch::messages.overview_next_rank', ['type' => 'request'])],
+        expect($answer['next'])->toBe([
+            ['tool' => 'detect', 'arguments' => ['shape' => 'failing-routes', 'since' => '1790769600', 'until' => '1790776800'], 'why' => __('firewatch::messages.detect_next_shape')],
+            ['tool' => 'rank', 'arguments' => ['type' => 'request', 'by' => 'total_duration', 'since' => '1790769600', 'until' => '1790776800'], 'why' => __('firewatch::messages.overview_next_rank', ['type' => 'request'])],
             ['tool' => 'execution', 'arguments' => ['execution_id' => 'the-request'], 'why' => __('firewatch::messages.overview_next_execution')],
         ])
             ->and(array_column($answers, 'empty'))->toBe([null, null, null])

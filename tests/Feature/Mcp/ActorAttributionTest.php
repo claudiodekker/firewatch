@@ -519,7 +519,7 @@ it('offers the person\'s own records when no execution is attributed to them', f
 
     expect($answer['empty']['kind'])->toBe('no_match')
         ->and($answer['result']['activity'])->toBe(attributedActivity(['queued-job' => [1, 0]]))
-        ->and($answer['next'])->toBe([['tool' => 'occurrences', 'arguments' => ['user_id' => '7', 'since' => ATTRIBUTED_AT - 1], 'why' => __('firewatch::messages.actor_next_user')]])
+        ->and($answer['next'])->toBe([['tool' => 'occurrences', 'arguments' => ['user_id' => '7', 'since' => '1790775999.5'], 'why' => __('firewatch::messages.actor_next_user')]])
         ->and(array_column($listed['result']['rows'], 'type'))->toBe(['queued-job']);
 });
 
@@ -572,8 +572,8 @@ it('offers calls that read the same window after the clock moves on', function (
 
     expect($answer['next'])->toBe([
         ['tool' => 'execution', 'arguments' => ['execution_id' => 'mine'], 'why' => __('firewatch::messages.actor_next_execution')],
-        ['tool' => 'occurrences', 'arguments' => ['group' => ATTRIBUTED_GROUP, 'since' => ATTRIBUTED_AT], 'why' => __('firewatch::messages.actor_next_group')],
-        ['tool' => 'occurrences', 'arguments' => ['user_id' => '7', 'since' => ATTRIBUTED_AT], 'why' => __('firewatch::messages.actor_next_user')],
+        ['tool' => 'occurrences', 'arguments' => ['group' => ATTRIBUTED_GROUP, 'since' => '1790776000.5'], 'why' => __('firewatch::messages.actor_next_group')],
+        ['tool' => 'occurrences', 'arguments' => ['user_id' => '7', 'since' => '1790776000.5'], 'why' => __('firewatch::messages.actor_next_user')],
     ])
         ->and(array_column($answers, 'empty'))->toBe([null, null, null])
         ->and($answers[0]['result']['header'])->toMatchArray(['execution_id' => 'mine', 'user_id' => '7'])
