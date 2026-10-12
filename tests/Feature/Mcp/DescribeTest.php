@@ -89,7 +89,7 @@ it('answers what the store holds, then the schema and the SQL tool, in full', fu
     $result = $answer['result'];
     $created = ['complete_from_at' => $clock, 'complete_reason' => 'created'];
 
-    expect(array_keys($result))->toBe(['sqlite_version', 'file_bytes', 'live_bytes', 'wal_mitigation', 'source_capture', 'last_prune_at', 'dropped_records', 'types', 'deploys', 'drift', 'dropped_batches', 'blind_spots', 'units', 'json_access', 'join_keys', 'objects', 'tables', 'sql', 'examples'])
+    expect(array_keys($result))->toBe(['sqlite_version', 'file_bytes', 'live_bytes', 'wal_mitigation', 'source_capture', 'last_prune_at', 'dropped_records', 'dropped_records_at_least', 'types', 'deploys', 'drift', 'dropped_batches', 'blind_spots', 'units', 'json_access', 'join_keys', 'objects', 'tables', 'sql', 'examples'])
         ->and($answer['tool'])->toBe('describe')
         ->and($answer['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.describe_window_reason')])
         ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.describe_summary', 4, ['records' => 4, 'types' => 3, 'sql' => __('firewatch::messages.describe_sql_available')]))
@@ -278,6 +278,20 @@ it('lists the deploys newest first, twenty at most, and says when it cut them', 
 })->with([
     'twenty deploys' => [20, false],
     'twenty-one deploys' => [21, true],
+]);
+
+it('states the dropped records as a lower bound once the failure log holds 100 lines', function (int $lines, int $records, bool $atLeast) {
+    ingest([syntheticRecord(RecordType::REQUEST)]);
+    $lines = array_map(fn (int $index) => json_encode(['at' => 1790776000.5 + $index, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 2]), range(1, $lines));
+    file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', implode("\n", $lines)."\n");
+
+    $result = Answers::assert(Describe::class)['result'];
+
+    expect($result['dropped_records'])->toBe($records)
+        ->and($result['dropped_records_at_least'])->toBe($atLeast);
+})->with([
+    'a file below its cap' => [99, 198, false],
+    'a file at its cap' => [100, 200, true],
 ]);
 
 it('lists what Nightwatch\'s output drifted from and the batches the store dropped', function () {

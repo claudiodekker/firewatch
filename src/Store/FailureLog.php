@@ -74,16 +74,16 @@ class FailureLog
     public function recovered(Throwable $exception): void
     {
         try {
-            $this->append($this->line(FailureEntry::RECOVERY, $exception, FailureKind::CORRUPT));
+            $this->append(FailureEntry::RECOVERY, $exception, FailureKind::CORRUPT);
         } catch (Throwable) {
             //
         }
     }
 
     /**
-     * Read the dropped batches the file holds, oldest first, each line counting one batch or the batches folded into it.
+     * Read the dropped batches the file still holds, oldest first.
      *
-     * @return list<array{at: float, until: float, kind: string, dropped: int, batches: int, message: string}>
+     * @return list<array{at: float, kind: string, dropped: int, message: string}>
      */
     public function dropped(): array
     {
@@ -93,16 +93,30 @@ class FailureLog
             if ($entry['dropped'] > 0) {
                 $dropped[] = [
                     'at' => $entry['at'],
-                    'until' => $entry['until'],
                     'kind' => $entry['kind'],
                     'dropped' => $entry['dropped'],
-                    'batches' => $entry['batches'],
                     'message' => $entry['message'],
                 ];
             }
         }
 
         return $dropped;
+    }
+
+    /**
+     * Get the instant of the oldest line once the file holds its most lines, or null while it holds every failure.
+     */
+    public function completeFrom(): ?float
+    {
+        $lines = $this->lines();
+
+        if (count($lines) < self::LINES) {
+            return null;
+        }
+
+        $readable = array_filter(array_map($this->parse(...), $lines));
+
+        return min([INF, ...array_column($readable, 'at')]);
     }
 
     /**
@@ -142,7 +156,7 @@ class FailureLog
     protected function log(FailureEntry $entry, Throwable $exception, string $failed, ?int $dropped = null): void
     {
         try {
-            $this->append($this->line($entry, $exception, FailureKind::of($exception), $dropped));
+            $this->append($entry, $exception, FailureKind::of($exception), $dropped);
         } catch (Throwable) {
             //
         }
@@ -157,20 +171,29 @@ class FailureLog
     /**
      * Read the well-formed lines of the given entry the file still holds, oldest first.
      *
-     * @return list<array{at: float, until: float, entry: string, kind: string, code: int|null, message: string, dropped: int, batches: int}>
+     * @return list<array{at: float, entry: string, kind: string, message: string, dropped: int}>
      */
     protected function entries(FailureEntry $entry): array
     {
-        $lines = @file($this->path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $parsed = array_map($this->parse(...), $lines ?: []);
+        $parsed = array_map($this->parse(...), $this->lines());
 
         return array_values(array_filter($parsed, fn (?array $fields) => $fields !== null && $fields['entry'] === $entry->value));
     }
 
     /**
+     * Read the lines the file holds, oldest first.
+     *
+     * @return list<string>
+     */
+    protected function lines(): array
+    {
+        return @file($this->path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    }
+
+    /**
      * Read a line of the file, or null when it is not well formed.
      *
-     * @return array{at: float, until: float, entry: string, kind: string, code: int|null, message: string, dropped: int, batches: int}|null
+     * @return array{at: float, entry: string, kind: string, message: string, dropped: int}|null
      */
     protected function parse(string $line): ?array
     {
@@ -182,13 +205,10 @@ class FailureLog
 
         return [
             'at' => (float) $fields['at'],
-            'until' => (float) (is_numeric($fields['until'] ?? null) ? $fields['until'] : $fields['at']),
             'entry' => $fields['entry'],
             'kind' => $fields['kind'],
-            'code' => is_int($fields['code'] ?? null) ? $fields['code'] : null,
             'message' => is_string($fields['message'] ?? null) ? $fields['message'] : '',
             'dropped' => is_int($fields['dropped'] ?? null) ? $fields['dropped'] : 0,
-            'batches' => is_int($fields['batches'] ?? null) ? $fields['batches'] : 1,
         ];
     }
 
@@ -208,9 +228,9 @@ class FailureLog
     }
 
     /**
-     * Append a line to the failure file under an exclusive lock, keeping the file to its most lines.
+     * Append a failure's line to the failure file under an exclusive lock, keeping only its newest lines.
      */
-    protected function append(string $line): void
+    protected function append(FailureEntry $entry, Throwable $exception, FailureKind $kind, ?int $dropped = null): void
     {
         $created = ! file_exists($this->path);
         $handle = @fopen($this->path, 'c+');
@@ -226,92 +246,30 @@ class FailureLog
 
             FileLock::acquire($handle, $this->path, static::BUSY_TIMEOUT_MILLISECONDS);
 
-            $lines = array_values(array_filter(explode("\n", (string) stream_get_contents($handle)), fn (string $held) => $held !== ''));
+            $held = (string) stream_get_contents($handle);
+            $lines = array_values(array_filter(explode("\n", $held), fn (string $line) => $line !== ''));
+
+            // The line takes its instant under the lock, so the lines stay in the order of their instants.
+            $line = $this->line($entry, $exception, $kind, $dropped);
 
             // Below the cap the line is appended, so a failed write never loses the earlier lines.
             if (count($lines) < self::LINES) {
-                fwrite($handle, $line."\n");
+                // A last line that a failed write cut short ends here, so it can't run into this one.
+                $ending = $held === '' || str_ends_with($held, "\n") ? '' : "\n";
+
+                fwrite($handle, $ending.$line."\n");
             } else {
+                $newest = array_slice($lines, 1 - self::LINES);
+
                 ftruncate($handle, 0);
                 rewind($handle);
-                fwrite($handle, implode("\n", [...$this->makeRoom($lines), $line])."\n");
+                fwrite($handle, implode("\n", [...$newest, $line])."\n");
             }
 
             fflush($handle);
         } finally {
             fclose($handle);
         }
-    }
-
-    /**
-     * Free one line without losing a count: drop a line that can't be read, else fold two dropped batches of one kind, else drop the oldest other line.
-     *
-     * @param  list<string>  $lines
-     * @return list<string>
-     */
-    protected function makeRoom(array $lines): array
-    {
-        $parsed = array_map($this->parse(...), $lines);
-        $readable = array_filter($parsed);
-
-        foreach (array_keys($lines) as $index) {
-            if (! isset($readable[$index])) {
-                return $this->without($lines, $index);
-            }
-        }
-
-        $firstOfKind = [];
-
-        foreach ($readable as $index => $fields) {
-            if ($fields['entry'] !== FailureEntry::BATCH->value) {
-                continue;
-            }
-
-            if (isset($firstOfKind[$fields['kind']])) {
-                $lines[$index] = $this->fold($readable[$firstOfKind[$fields['kind']]], $fields);
-
-                return $this->without($lines, $firstOfKind[$fields['kind']]);
-            }
-
-            $firstOfKind[$fields['kind']] = $index;
-        }
-
-        foreach ($readable as $index => $fields) {
-            if ($fields['entry'] !== FailureEntry::BATCH->value) {
-                return $this->without($lines, $index);
-            }
-        }
-
-        return $this->without($lines, 0);
-    }
-
-    /**
-     * Get the line that counts the dropped batches of two lines of one kind, from the first of the older to the last of the newer.
-     *
-     * @param  array{at: float, until: float, entry: string, kind: string, code: int|null, message: string, dropped: int, batches: int}  $older
-     * @param  array{at: float, until: float, entry: string, kind: string, code: int|null, message: string, dropped: int, batches: int}  $newer
-     */
-    protected function fold(array $older, array $newer): string
-    {
-        return json_encode([
-            ...$newer,
-            'at' => $older['at'],
-            'dropped' => $older['dropped'] + $newer['dropped'],
-            'batches' => $older['batches'] + $newer['batches'],
-        ], RecordMapper::JSON_FLAGS);
-    }
-
-    /**
-     * Get the lines without the one at the given position.
-     *
-     * @param  array<int, string>  $lines
-     * @return list<string>
-     */
-    protected function without(array $lines, int $index): array
-    {
-        unset($lines[$index]);
-
-        return array_values($lines);
     }
 
     /**

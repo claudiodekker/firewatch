@@ -179,7 +179,7 @@ A specific budget beats a global one. Durations are in milliseconds and memory i
 ],
 ```
 
-Raise `busy_timeout` when the app and several workers write at once. A test run waits up to 5 seconds instead, as its parallel workers share the store. Dropped batches are recorded, and answers and the doctor state how many records were lost. Each application instance also writes its first store failure to the PHP error log, so a test run can write one line per test. Two stores must not share a directory.
+Raise `busy_timeout` when the app and several workers write at once. A test run waits up to 5 seconds instead, as its parallel workers share the store. Dropped batches are recorded, and answers and the doctor state how many records were lost. The failure file keeps its newest 100 lines, so once it is full the count reads "at least". Each application instance also writes its first store failure to the PHP error log, so a test run can write one line per test. Two stores must not share a directory.
 
 ## Retention and clearing
 

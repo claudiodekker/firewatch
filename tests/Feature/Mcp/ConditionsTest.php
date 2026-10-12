@@ -199,6 +199,7 @@ describe('dropped records', function () {
             'kind' => 'condition',
             'message' => __('firewatch::messages.conditions.records-dropped', ['n' => 7, 'from' => '2026-09-30 14:00:00.000000', 'to' => '2026-09-30 14:00:10.000000', 'reason' => 'full']),
             'records' => 7,
+            'at_least' => false,
             'from_at' => 1790776800.0,
             'to_at' => 1790776810.0,
             'reason' => 'full',
@@ -220,26 +221,109 @@ describe('dropped records', function () {
         'between them' => [['since' => '2026-09-30 14:00:01', 'until' => '2026-09-30 14:00:09'], 0],
     ]);
 
-    it('counts every dropped record, however many batches were dropped', function () {
+    it('states the count as a lower bound once the failure log holds 100 lines, as it keeps only its newest', function () {
         foreach (range(1, 150) as $second) {
             dropBatch(CarbonImmutable::parse('2026-09-30 14:00:00')->addSeconds($second)->toDateTimeString(), FailureKind::BUSY, 3);
         }
 
-        expect(array_column(conditionsOf(), 'records'))->toBe([450]);
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([[
+            'id' => 'records-dropped',
+            'kind' => 'condition',
+            'message' => __('firewatch::messages.conditions.records-dropped-at-least', ['n' => 300, 'from' => '2026-09-30 14:00:51.000000', 'to' => '2026-09-30 14:02:30.000000', 'reason' => 'busy']),
+            'records' => 300,
+            'at_least' => true,
+            'from_at' => 1790776851.0,
+            'to_at' => 1790776950.0,
+            'reason' => 'busy',
+        ]]);
     });
 
-    it('counts the batches folded into one line whole when the window cuts them, and never leaves them out', function (array $arguments, int $records) {
+    it('gives the exact count while the failure log holds fewer than 100 lines', function () {
+        foreach (range(1, 99) as $second) {
+            dropBatch(CarbonImmutable::parse('2026-09-30 14:00:00')->addSeconds($second)->toDateTimeString(), FailureKind::BUSY, 3);
+        }
+
+        $conditions = conditionsOf();
+
+        expect($conditions)->toHaveCount(1)
+            ->and($conditions[0]['records'])->toBe(297)
+            ->and($conditions[0]['at_least'])->toBeFalse()
+            ->and($conditions[0]['message'])->toBe(__('firewatch::messages.conditions.records-dropped', ['n' => 297, 'from' => '2026-09-30 14:00:01.000000', 'to' => '2026-09-30 14:01:39.000000', 'reason' => 'busy']));
+    });
+
+    it('states a lower bound only for a window that reaches the oldest line a full failure log holds', function (array $arguments, int $records, bool $atLeast) {
         foreach (range(1, 150) as $second) {
             dropBatch(CarbonImmutable::parse('2026-09-30 14:00:00')->addSeconds($second)->toDateTimeString(), FailureKind::BUSY, 3);
         }
 
-        expect(array_sum(array_column(conditionsOf($arguments), 'records')))->toBe($records);
+        $conditions = conditionsOf($arguments);
+
+        expect(array_column($conditions, 'records'))->toBe([$records])
+            ->and(array_column($conditions, 'at_least'))->toBe([$atLeast]);
     })->with([
-        'a window inside the folded batches' => [['since' => '2026-09-30 14:00:10', 'until' => '2026-09-30 14:00:20'], 153],
-        'a window that ends before the first drop' => [['until' => '2026-09-30 14:00:01'], 0],
-        'a window after the folded batches' => [['since' => '2026-09-30 14:00:52'], 297],
-        'a window after the last drop' => [['since' => '2026-09-30 14:02:31'], 0],
+        'a window that starts before the oldest line' => [['since' => '2026-09-30 14:00:10', 'until' => '2026-09-30 14:01:00'], 27, true],
+        'a window that starts at the oldest line' => [['since' => '2026-09-30 14:00:51'], 300, true],
+        'a window that starts after the oldest line' => [['since' => '2026-09-30 14:00:52'], 297, false],
     ]);
+
+    it('says a full failure log no longer holds the losses of a window that ends before its oldest line', function () {
+        foreach (range(1, 150) as $second) {
+            dropBatch(CarbonImmutable::parse('2026-09-30 14:00:00')->addSeconds($second)->toDateTimeString(), FailureKind::BUSY, 3);
+        }
+
+        $conditions = conditionsOf(['until' => '2026-09-30 14:00:20']);
+
+        expect($conditions)->toEqual([[
+            'id' => 'records-dropped',
+            'kind' => 'condition',
+            'message' => __('firewatch::messages.conditions.records-dropped-uncounted'),
+            'records' => null,
+            'at_least' => true,
+            'from_at' => null,
+            'to_at' => null,
+            'reason' => null,
+        ]]);
+    });
+
+    it('says nothing of dropped records in a window after the last drop of a full failure log', function () {
+        foreach (range(1, 150) as $second) {
+            dropBatch(CarbonImmutable::parse('2026-09-30 14:00:00')->addSeconds($second)->toDateTimeString(), FailureKind::BUSY, 3);
+        }
+
+        $conditions = conditionsOf(['since' => '2026-09-30 14:02:31']);
+
+        expect($conditions)->toEqual([]);
+    });
+
+    it('says a full failure log it can\'t read no longer holds the losses of any window', function () {
+        is_dir(dirname(app(Configuration::class)->database)) || mkdir(dirname(app(Configuration::class)->database), recursive: true);
+        file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', str_repeat("not a line\n", 100));
+
+        $conditions = conditionsOf(['since' => '2026-09-30 14:00:00']);
+
+        expect(array_column($conditions, 'message'))->toBe([__('firewatch::messages.conditions.records-dropped-uncounted')]);
+    });
+
+    it('reads a line that counts several batches as one batch', function () {
+        is_dir(dirname(app(Configuration::class)->database)) || mkdir(dirname(app(Configuration::class)->database), recursive: true);
+        file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', json_encode(['at' => 1790776802.0, 'until' => 1790776804.0, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 6, 'batches' => 3])."\n");
+        $this->travelTo('2026-09-30 14:01:00');
+
+        $conditions = conditionsOf();
+
+        expect($conditions)->toEqual([[
+            'id' => 'records-dropped',
+            'kind' => 'condition',
+            'message' => __('firewatch::messages.conditions.records-dropped', ['n' => 6, 'from' => '2026-09-30 14:00:02.000000', 'to' => '2026-09-30 14:00:02.000000', 'reason' => 'busy']),
+            'records' => 6,
+            'at_least' => false,
+            'from_at' => 1790776802.0,
+            'to_at' => 1790776802.0,
+            'reason' => 'busy',
+        ]]);
+    });
 
     it('says nothing of a recovery that dropped nothing, or of a store that dropped nothing', function () {
         dropBatch('2026-09-30 14:00:00', FailureKind::BUSY, 0);

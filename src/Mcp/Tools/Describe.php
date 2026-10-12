@@ -177,7 +177,7 @@ class Describe extends Tool
         $version = (string) Sqlite::version();
         $dropped = $this->failures->dropped();
         $batches = array_map(fn (array $batch) => [
-            'dropped_at' => $batch['until'],
+            'dropped_at' => $batch['at'],
             'kind' => $batch['kind'],
             'dropped' => $batch['dropped'],
         ], array_slice(array_reverse($dropped), 0, self::DROPPED_BATCHES));
@@ -190,6 +190,7 @@ class Describe extends Tool
             'source_capture' => true,
             'last_prune_at' => $facts->meta->pruneClaimedAt,
             'dropped_records' => array_sum(array_column($dropped, 'dropped')),
+            'dropped_records_at_least' => $this->failures->completeFrom() !== null,
             'types' => HoldingsSection::types($holdings, $facts->meta),
             'deploys' => array_slice($holdings->deploys, 0, Holdings::DEPLOYS),
             'drift' => $holdings->drift,
