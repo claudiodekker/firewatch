@@ -450,15 +450,6 @@ describe('the lineage of a queued job', function () {
         expect($answer['notes'])->toBe([]);
     })->with('trace inline connections');
 
-    it('does not call an attempt on an inline connection a partial lineage, which records no dispatch', function (string $connection) {
-        ingest([trcAttempt('job', 'attempt', 1, ['connection' => $connection])]);
-
-        $answer = trcAnswer();
-
-        expect(trcJob($answer, 'job'))->toMatchArray(['lineage' => 'no_dispatch', 'outcome' => 'processed', 'dispatch' => null])
-            ->and($answer['notes'])->toBe([]);
-    })->with('trace inline connections');
-
     it('has no jobs for a trace that queued none', function () {
         ingest([trcRequest()]);
 

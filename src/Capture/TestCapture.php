@@ -13,12 +13,6 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
-use Illuminate\Queue\Events\JobExceptionOccurred;
-use Illuminate\Queue\Events\JobFailed;
-use Illuminate\Queue\Events\JobProcessed;
-use Illuminate\Queue\Events\JobProcessing;
-use Illuminate\Queue\Jobs\SyncJob;
-use Illuminate\Support\Testing\Fakes\EventFake;
 use Laravel\Nightwatch\Compatibility;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\ExecutionStage;
@@ -71,11 +65,6 @@ class TestCapture
     ];
 
     /**
-     * The connection name on the event handed to Nightwatch's sensor, which drops one that names the sync connection and reads the attempt's own from the job.
-     */
-    protected const UNNAMED_CONNECTION = '';
-
-    /**
      * The capture of the last application a test created, whose trailing records wait for the next application or the end of the run.
      */
     protected static ?self $last = null;
@@ -91,9 +80,9 @@ class TestCapture
     protected ?Ingest $ingest = null;
 
     /**
-     * Whether the test is between executions, in a request, in a command, or in a job.
+     * Whether the test is between executions, in a request, or in a command.
      */
-    protected TestPhase|TestCommand|TestJob $phase = TestPhase::BETWEEN;
+    protected TestPhase|TestCommand $phase = TestPhase::BETWEEN;
 
     /**
      * The outermost request of the execution that is open.
@@ -111,17 +100,17 @@ class TestCapture
     protected ?ConsoleKernel $console = null;
 
     /**
-     * The state Nightwatch resets for each request, set aside while a command or a job runs.
+     * The state Nightwatch resets for each request, set aside while a command runs.
      */
     protected RequestState $requestState;
 
     /**
-     * The sensors that record into the request state, set aside while a command or a job runs.
+     * The sensors that record into the request state, set aside while a command runs.
      */
     protected SensorManager $requestSensors;
 
     /**
-     * The sensor manager's hold on the execution state, which the sensors of a command or a job point at its own state.
+     * The sensor manager's hold on the execution state, which a command's sensors point at its own state.
      */
     protected ReflectionProperty $sensorState;
 
@@ -160,7 +149,7 @@ class TestCapture
     }
 
     /**
-     * Start an execution for each request and outermost command the test runs, and each job it runs on the sync queue itself.
+     * Start an execution for each request and outermost command the test runs.
      *
      * @throws RuntimeException when Nightwatch's state is not what Firewatch was built against
      */
@@ -195,9 +184,6 @@ class TestCapture
         $events = $this->app->make('events');
         $events->listen(CommandStarting::class, fn (CommandStarting $event) => $this->guarded(fn () => $this->startCommand($event)));
         $events->listen(CommandFinished::class, fn (CommandFinished $event) => $this->guarded(fn () => $this->finishCommand($event)));
-        $events->listen(JobProcessing::class, fn (JobProcessing $event) => $this->guarded(fn () => $this->startJob($event)));
-        $events->listen(JobProcessed::class, fn (JobProcessed $event) => $this->guarded(fn () => $this->finishJob($event)));
-        $events->listen(JobExceptionOccurred::class, fn (JobExceptionOccurred $event) => $this->guarded(fn () => $this->failJob($event)));
     }
 
     /**
@@ -238,11 +224,11 @@ class TestCapture
     }
 
     /**
-     * Start a request's execution, unless a command or a job is running or the request belongs to the one whose execution is open.
+     * Start a request's execution, unless a command is running or the request belongs to the one whose execution is open.
      */
     protected function startRequest(): void
     {
-        if ($this->phase instanceof TestCommand || $this->phase instanceof TestJob) {
+        if ($this->phase instanceof TestCommand) {
             return;
         }
 
@@ -304,10 +290,6 @@ class TestCapture
             return;
         }
 
-        if ($this->phase instanceof TestJob) {
-            return;
-        }
-
         $harness = in_array($event->command, static::HARNESS_COMMANDS, true);
 
         if (! $harness && ($this->phase === TestPhase::REQUEST || in_array($event->command, static::UNRECORDED_COMMANDS, true))) {
@@ -316,9 +298,26 @@ class TestCapture
 
         $this->core->finishExecution();
 
+        $timestamp = $this->core->clock->microtime();
         $id = $this->core->uuid->make();
-        $state = $this->switchToCommandState($id, trace: $id);
-        $state->artisan = $this->artisan();
+        $state = new CommandState(
+            timestamp: $timestamp,
+            trace: $id,
+            id: $id,
+            deploy: $this->requestState->deploy,
+            server: $this->requestState->server,
+            currentExecutionStageStartedAtMicrotime: $timestamp,
+            user: $this->requestState->user,
+            stage: ExecutionStage::Action,
+            artisan: $this->artisan(),
+        );
+
+        $sensor = clone $this->requestSensors;
+        $this->sensorState->setValue($sensor, $state);
+        $sensor->flush();
+
+        $this->core->executionState = $state;
+        $this->core->sensor = $sensor;
         $this->phase = new TestCommand(recorded: ! $harness, resumes: $this->phase);
 
         Compatibility::addTraceIdToContext($id);
@@ -351,138 +350,15 @@ class TestCapture
 
             $this->core->finishExecution();
         } finally {
-            $this->resume($command->resumes);
-        }
-    }
+            $this->core->executionState = $this->requestState;
+            $this->core->sensor = $this->requestSensors;
+            $this->phase = $command->resumes;
 
-    /**
-     * Start an execution for a job the test itself runs on the sync queue, in a state and sensors of its own.
-     */
-    protected function startJob(JobProcessing $event): void
-    {
-        // Inside a request, a command or another job, a sync job is part of that execution (ADR 0016).
-        if ($this->phase !== TestPhase::BETWEEN || ! $event->job instanceof SyncJob) {
-            return;
-        }
+            $this->core->configureRequestSampling();
 
-        if ($this->fakesJobEnd()) {
-            return;
-        }
-
-        $this->core->finishExecution();
-
-        $id = $this->core->uuid->make();
-        $trace = Compatibility::getTraceIdFromContext($id);
-        $state = $this->switchToCommandState($id, is_string($trace) ? $trace : $id);
-        $state->source = 'job';
-        $this->phase = new TestJob($event->job);
-
-        $this->core->prepareForJob($event->job);
-
-        // Nightwatch samples a job by its dispatch, which a test's own dispatch leaves undecided.
-        $this->core->configureRequestSampling();
-    }
-
-    /**
-     * Determine if the test fakes an event that ends a job's attempt, which would leave the attempt open for the rest of the test.
-     */
-    protected function fakesJobEnd(): bool
-    {
-        $events = $this->app->get('events');
-
-        if (! $events instanceof EventFake) {
-            return false;
-        }
-
-        // The fake has no public way to ask which events it keeps from their listeners.
-        $fakes = new ReflectionMethod($events, 'shouldFakeEvent');
-
-        return $fakes->invoke($events, JobProcessed::class, []) || $fakes->invoke($events, JobExceptionOccurred::class, []);
-    }
-
-    /**
-     * Record the attempt of the test's job when the sync queue has run it.
-     */
-    protected function finishJob(JobProcessed $event): void
-    {
-        if (! $this->phase instanceof TestJob || $this->phase->job !== $event->job) {
-            return;
-        }
-
-        $this->recordJob(new JobProcessed(static::UNNAMED_CONNECTION, $event->job));
-    }
-
-    /**
-     * Record the failed attempt of the test's job, with the exception it threw.
-     */
-    protected function failJob(JobExceptionOccurred $event): void
-    {
-        if (! $this->phase instanceof TestJob || $this->phase->job !== $event->job) {
-            return;
-        }
-
-        // The sync queue throws the exception back at the test, where no exception handler reports it.
-        $this->core->report($event->exception, handled: false);
-
-        // It fails every job that throws once this event's listeners return, and raises no event for one already deleted.
-        $event->job->markAsFailed();
-
-        $this->recordJob(new JobFailed(static::UNNAMED_CONNECTION, $event->job, $event->exception));
-    }
-
-    /**
-     * Write the job's attempt and give the request its state and sensors back.
-     */
-    protected function recordJob(JobProcessed|JobFailed $attempt): void
-    {
-        try {
-            $this->core->jobAttempt($attempt);
-            $this->core->finishExecution();
-        } finally {
-            $this->resume(TestPhase::BETWEEN);
-        }
-    }
-
-    /**
-     * Switch Nightwatch to a command state and sensors of their own, setting the request's aside.
-     */
-    protected function switchToCommandState(string $id, string $trace): CommandState
-    {
-        $timestamp = $this->core->clock->microtime();
-        $state = new CommandState(
-            timestamp: $timestamp,
-            trace: $trace,
-            id: $id,
-            deploy: $this->requestState->deploy,
-            server: $this->requestState->server,
-            currentExecutionStageStartedAtMicrotime: $timestamp,
-            user: $this->requestState->user,
-            stage: ExecutionStage::Action,
-        );
-
-        $sensor = clone $this->requestSensors;
-        $this->sensorState->setValue($sensor, $state);
-        $sensor->flush();
-
-        $this->core->executionState = $state;
-        $this->core->sensor = $sensor;
-
-        return $state;
-    }
-
-    /**
-     * Give the request its state and sensors back, and return to where the command or the job started.
-     */
-    protected function resume(TestPhase $phase): void
-    {
-        $this->core->executionState = $this->requestState;
-        $this->core->sensor = $this->requestSensors;
-        $this->phase = $phase;
-
-        $this->core->configureRequestSampling();
-
-        if ($phase === TestPhase::BETWEEN) {
-            $this->core->prepareForRequest($this->app->make('request'));
+            if ($command->resumes === TestPhase::BETWEEN) {
+                $this->core->prepareForRequest($this->app->make('request'));
+            }
         }
     }
 

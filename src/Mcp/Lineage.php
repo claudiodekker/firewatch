@@ -88,29 +88,13 @@ class Lineage
     }
 
     /**
-     * Determine if a dispatch or an attempt is on a connection that runs the job inside the dispatching execution.
+     * Determine if a dispatch is on a connection that runs the job inside the dispatching execution.
      *
-     * @param  array<string, mixed>|null  $record
+     * @param  array<string, mixed>|null  $dispatch
      */
-    protected static function isInline(?array $record): bool
+    protected static function isInline(?array $dispatch): bool
     {
-        return in_array($record['connection'] ?? null, static::INLINE_CONNECTIONS, true);
-    }
-
-    /**
-     * Determine if a job ran on a connection that records its dispatch, yet has none.
-     */
-    public static function lacksDispatch(TraceRecords $records): bool
-    {
-        $dispatched = array_column($records->dispatches, 'job_id');
-
-        foreach ($records->attempts as $attempt) {
-            if (! static::isInline($attempt) && ! in_array($attempt['job_id'], $dispatched, true)) {
-                return true;
-            }
-        }
-
-        return false;
+        return in_array($dispatch['connection'] ?? null, static::INLINE_CONNECTIONS, true);
     }
 
     /**

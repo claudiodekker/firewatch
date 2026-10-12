@@ -1,13 +1,11 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
-use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Workbench\App\Jobs\ChargeCard;
 use Workbench\App\Jobs\RestockProducts;
-use Workbench\App\Jobs\ShipOrder;
 
 function captureTestSuite(): void
 {
@@ -56,40 +54,14 @@ it('leaves out an N+1 the test ran itself, outside the requests it sent', functi
         ->and(storeRows("SELECT count(*) AS runs FROM queries WHERE sql = 'select ? as product'"))->toBe([['runs' => 25]]);
 });
 
-it('finds the N+1 and the failure in the jobs a test dispatched itself on the sync queue', function () {
-    captureTestSuite();
-
-    RestockProducts::dispatch();
-    ShipOrder::dispatch();
-    expect(fn () => ChargeCard::dispatch())->toThrow(RuntimeException::class);
-
-    $loop = Answers::assert(Detect::class, ['shape' => 'n-plus-one']);
-    $failure = Answers::assert(Detect::class, ['shape' => 'failing-jobs']);
-    $ranking = Answers::assert(Rank::class, ['type' => 'job-attempt']);
-
-    expect($loop['result'])->toMatchArray(['verdict' => 'findings', 'total' => 1])
-        ->and($loop['result']['findings'][0]['name'])->toBe(RestockProducts::class.': select ? as stock')
-        ->and($loop['result']['findings'][0]['evidence'])->toMatchArray(['worst_runs' => 25, 'executions_affected' => 1, 'unit' => ['source' => 'job', 'label' => RestockProducts::class]])
-        ->and(array_column($ranking['result']['groups'], 'label'))->toEqualCanonicalizing([RestockProducts::class, ShipOrder::class, ChargeCard::class])
-        ->and($failure['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 3, 'total' => 1])
-        ->and($failure['result']['findings'][0]['name'])->toBe(ChargeCard::class)
-        ->and($failure['result']['findings'][0]['evidence'])->toMatchArray(['failed_attempts' => 1, 'jobs_failed' => 1, 'jobs' => 1])
-        ->and($failure['result']['findings'][0]['evidence']['last_exception'])->toMatchArray(['class' => RuntimeException::class, 'message' => 'The card was declined.']);
-});
-
-it('finds nothing in a job a test dispatched itself that ran no query twice and did not fail', function () {
-    captureTestSuite();
-
-    ShipOrder::dispatch();
-
-    expect(Answers::assert(Detect::class, ['shape' => 'failing-jobs'])['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0]);
-});
-
-it('has nothing to judge in a job a test called directly, and says a sync job inside an execution has no attempt', function () {
+it('has no job attempt to judge for the jobs a test ran on the sync connection, and keeps their queries with whatever ran them', function () {
     captureTestSuite();
     Route::get('/restock', fn () => RestockProducts::dispatch() ? 'ok' : 'ok');
 
+    RestockProducts::dispatch();
+    RestockProducts::dispatchSync();
     (new RestockProducts)->handle();
+    expect(fn () => ChargeCard::dispatch())->toThrow(RuntimeException::class);
     $this->get('/restock')->assertOk();
 
     $answer = Answers::assert(Detect::class, ['shape' => 'failing-jobs']);
@@ -97,8 +69,9 @@ it('has nothing to judge in a job a test called directly, and says a sync job in
 
     expect($answer['result'])->toMatchArray(['verdict' => 'not_evaluated', 'examined' => 0])
         ->and($blindSpots['sync-jobs-unrecorded'])->toBe(__('firewatch::messages.blind_spots.sync-jobs-unrecorded'))
+        ->and(storeRows('SELECT count(*) AS attempts FROM job_attempts'))->toBe([['attempts' => 0]])
         ->and(storeRows('SELECT execution_source, count(*) AS runs FROM queries GROUP BY execution_source ORDER BY min(started_at)'))->toBe([
-            ['execution_source' => 'between', 'runs' => 25],
+            ['execution_source' => 'between', 'runs' => 75],
             ['execution_source' => 'request', 'runs' => 25],
         ]);
 });

@@ -69,7 +69,7 @@ readonly class TraceRecords
             held: $held,
             executions: $executions,
             dispatches: Stored::rows($connection, "SELECT id, started_at, duration, ended_at, execution_id, job_id, name, connection, queue FROM queued_jobs WHERE {$condition} ORDER BY started_at, id", $bindings),
-            attempts: Stored::rows($connection, "SELECT id, started_at, duration, ended_at, trace_id, execution_id, job_id, attempt, name, connection, status FROM job_attempts WHERE {$condition} ORDER BY started_at, attempt, id", $bindings),
+            attempts: Stored::rows($connection, "SELECT id, started_at, duration, ended_at, trace_id, execution_id, job_id, attempt, name, status FROM job_attempts WHERE {$condition} ORDER BY started_at, attempt, id", $bindings),
             carrying: $executions === [] && $trace !== null ? static::carrying($connection, $trace) : [],
         );
     }
