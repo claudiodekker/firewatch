@@ -45,6 +45,14 @@ class QueueLatency implements Detector
     }
 
     /**
+     * Get what the detector judges: queues by how long a dispatch waited for its attempt, which is an execution.
+     */
+    public function judges(): Subject
+    {
+        return Subject::EXECUTIONS;
+    }
+
+    /**
      * Judge the dispatches that started in the window.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement

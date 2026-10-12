@@ -147,6 +147,16 @@ class Window
     }
 
     /**
+     * Get the scope as the argument of a later call to a tool that takes one, left out for all.
+     *
+     * @return array{scope?: string}
+     */
+    public function scoping(): array
+    {
+        return $this->scope === Scope::ALL ? [] : ['scope' => $this->scope->value];
+    }
+
+    /**
      * Get the SQL condition that holds for the records of the window, read from the raw table or from the view of a type, on the side of its scope.
      */
     public function condition(?RecordType $from = null): string

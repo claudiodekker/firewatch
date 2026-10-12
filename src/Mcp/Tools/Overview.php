@@ -269,6 +269,7 @@ class Overview extends Tool
                     'arguments' => [
                         'shape' => $judgement->detector->value,
                         ...$bounds,
+                        ...$window->scoping(),
                     ],
                     'why' => __('firewatch::messages.detect_next_shape'),
                 ];

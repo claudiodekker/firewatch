@@ -1,6 +1,7 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
+use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
@@ -261,4 +262,62 @@ it('answers an overview without sides when the test ran nothing of its own', fun
             'population' => 13,
             'message' => __('firewatch::messages.no_match', ['population' => 13, 'filters' => 'scope: between']),
         ]);
+});
+
+/**
+ * Get the verdict of each shape of a detect answer, with its reason when it has one.
+ *
+ * @param  array<string, mixed>  $answer
+ * @return array<string, string>
+ */
+function auditVerdicts(array $answer): array
+{
+    return array_column(array_map(fn (array $judgement) => [
+        'detector' => $judgement['detector'],
+        'verdict' => trim("{$judgement['verdict']} ".($judgement['reason'] ?? '')),
+    ], $answer['result']['detectors']), 'verdict', 'detector');
+}
+
+it('judges a test\'s setup only with the shapes that read records wherever they ran', function () {
+    auditTestSetupAndEndpoints();
+
+    $between = Answers::assert(Detect::class, ['scope' => 'between']);
+    $cache = Answers::assert(Detect::class, ['shape' => 'cache', 'scope' => 'between']);
+    $nPlusOne = Answers::assert(Detect::class, ['shape' => 'n-plus-one', 'scope' => 'between']);
+
+    expect(auditVerdicts($between))->toBe([
+        'n-plus-one' => 'not_evaluated no_executions_in_scope',
+        'database-bound' => 'not_evaluated no_executions_in_scope',
+        'failing-routes' => 'not_evaluated no_executions_in_scope',
+        'failing-jobs' => 'not_evaluated no_executions_in_scope',
+        'queue-latency' => 'not_evaluated no_executions_in_scope',
+        'failing-tasks' => 'not_evaluated no_executions_in_scope',
+        'exception-clusters' => 'not_evaluated no_executions_in_scope',
+        'error-logs' => 'not_evaluated no_records',
+        'failing-http' => 'not_evaluated no_records',
+        'cache' => 'clean',
+        'memory' => 'not_evaluated no_executions_in_scope',
+    ])->and($cache['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 2, 'total' => 0])
+        ->and($nPlusOne['result'])->toMatchArray(['verdict' => 'not_evaluated', 'reason' => 'no_executions_in_scope', 'examined' => 0, 'total' => 0, 'findings' => []])
+        ->and($nPlusOne['summary'])->toBe(__('firewatch::messages.detect_not_evaluated_summary', [
+            'detector' => 'n-plus-one',
+            'total' => 0,
+            'examined' => 0,
+            'input' => __('firewatch::messages.detect_input.n-plus-one'),
+            'reason' => 'no_executions_in_scope',
+        ]));
+});
+
+it('judges a test\'s endpoints without its setup', function () {
+    auditTestSetupAndEndpoints();
+
+    $cache = Answers::assert(Detect::class, ['shape' => 'cache', 'scope' => 'executions']);
+    $everywhere = Answers::assert(Detect::class, ['shape' => 'cache']);
+    $nPlusOne = Answers::assert(Detect::class, ['shape' => 'n-plus-one', 'scope' => 'executions']);
+
+    expect($cache['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 3, 'total' => 1])
+        ->and($cache['result']['findings'][0]['name'])->toBe('team:1:permissions')
+        ->and($everywhere['result'])->toMatchArray(['verdict' => 'findings', 'examined' => 5, 'total' => 1])
+        ->and($nPlusOne['result'])->toBe(Answers::assert(Detect::class, ['shape' => 'n-plus-one'])['result'])
+        ->and(array_column($cache['next'], 'arguments'))->toContain(['group' => $cache['result']['findings'][0]['group'], 'scope' => 'executions']);
 });

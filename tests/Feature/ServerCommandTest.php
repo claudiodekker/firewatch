@@ -93,6 +93,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'group' => ['description' => __('firewatch::messages.detect_group_argument'), 'type' => 'string'],
                         'since' => ['description' => windowArgument('since'), 'type' => 'string'],
                         'until' => ['description' => windowArgument('until'), 'type' => 'string'],
+                        'scope' => ['default' => 'all', 'enum' => ['executions', 'between', 'all'], 'type' => 'string'],
                         'limit' => ['description' => __('firewatch::messages.limit_argument.detect'), 'default' => 20, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],

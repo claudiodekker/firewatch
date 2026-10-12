@@ -47,6 +47,14 @@ class ExceptionClusters implements Detector
     }
 
     /**
+     * Get what the detector judges: exception groups over the executions that started in the window.
+     */
+    public function judges(): Subject
+    {
+        return Subject::EXECUTIONS;
+    }
+
+    /**
      * Judge the exception groups that occurred in the window, over the executions that started in it.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement

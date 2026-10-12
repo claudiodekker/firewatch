@@ -61,6 +61,14 @@ class Cache implements Detector
     }
 
     /**
+     * Get what the detector judges: cache keys by their events, whichever side of a test run read them.
+     */
+    public function judges(): Subject
+    {
+        return Subject::RECORDS;
+    }
+
+    /**
      * Judge the keys of the cache events that started in the window.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement

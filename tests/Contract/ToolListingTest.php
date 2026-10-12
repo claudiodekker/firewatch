@@ -83,6 +83,7 @@ test('every closed argument declares exactly the values it accepts as its schema
         'occurrences.at_or_above' => ['median', 'p95'],
         'occurrences.scope' => ['executions', 'between', 'all'],
         'overview.scope' => ['executions', 'between', 'all'],
+        'detect.scope' => ['executions', 'between', 'all'],
         'fingerprint.repeat_seconds' => [0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30],
         'detect.shape' => ['n-plus-one', 'database-bound', 'failing-routes', 'failing-jobs', 'queue-latency', 'failing-tasks', 'exception-clusters', 'error-logs', 'failing-http', 'cache', 'memory'],
     ];

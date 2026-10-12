@@ -12,4 +12,5 @@ enum Reason: string
     case PREREQUISITE_MISSING = 'prerequisite_missing';
     case STORE_UNAVAILABLE = 'store_unavailable';
     case DEADLINE = 'deadline';
+    case NO_EXECUTIONS_IN_SCOPE = 'no_executions_in_scope';
 }

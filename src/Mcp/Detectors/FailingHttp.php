@@ -47,6 +47,14 @@ class FailingHttp implements Detector
     }
 
     /**
+     * Get what the detector judges: hosts by their outgoing requests, whichever side of a test run sent them.
+     */
+    public function judges(): Subject
+    {
+        return Subject::RECORDS;
+    }
+
+    /**
      * Judge the hosts of the outgoing requests that started in the window.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement

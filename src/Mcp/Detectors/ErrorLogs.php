@@ -41,6 +41,14 @@ class ErrorLogs implements Ungrouped
     }
 
     /**
+     * Get what the detector judges: message shapes by their log lines, whichever side of a test run wrote them.
+     */
+    public function judges(): Subject
+    {
+        return Subject::RECORDS;
+    }
+
+    /**
      * Judge the message shapes of the logs at error or worse that were written in the window, over the logs of every level.
      */
     public function judge(SQLite3 $connection, Markers $meta, Window $window, int|float $threshold, ?string $group, int $limit): Judgement
