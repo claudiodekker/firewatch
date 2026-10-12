@@ -19,7 +19,7 @@ The first release.
 - Records are labelled with a deploy from `FIREWATCH_DEPLOY` or Nightwatch, else with the commit git HEAD points to, so two commits can be compared.
 - A failed batch is dropped, never retried, and logged to `failures.jsonl`. Firewatch's own failures go to the PHP error log, never to the exception handler, so they never appear as the application's exceptions. The writer recovers from forks, replaced or deleted files, schema mismatches and damaged stores.
 - A test run waits up to 5 seconds for a busy store, so the workers of a parallel run lose no records, whether or not the suite fakes `Sleep`.
-- `failures.jsonl` counts every dropped batch and record, however many it has dropped, so answers and the doctor state the whole loss.
+- `failures.jsonl` keeps its newest 100 lines. Answers and the doctor state how many records were lost, as "at least" that many once the file is full.
 - Retention by age and record count, with a size backstop. Coverage markers let every answer state how far its history reaches.
 - `php artisan firewatch:server` runs the MCP server over stdio, and `--list` prints its tools.
 - `php artisan firewatch:doctor` runs read-only checks on PHP, SQLite, Nightwatch, the configuration, the store and the server, with a fix for every warning and failure. `--json` prints the report as JSON.

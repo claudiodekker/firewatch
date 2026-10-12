@@ -104,7 +104,7 @@ class Conditions
     }
 
     /**
-     * Get `records-dropped` for batches the store failed to keep inside the window, counting a line of folded batches whole when the window cuts it.
+     * Get `records-dropped` for batches the store failed to keep inside the window, as a lower bound when the window starts no later than the oldest line of a full failure file.
      *
      * @return list<array<string, mixed>>
      */
@@ -112,16 +112,19 @@ class Conditions
     {
         $lines = array_values(array_filter(
             $this->failures->dropped(),
-            fn (array $line) => ($window->since() === null || $line['until'] >= $window->since()) && ($window->until() === null || $line['at'] < $window->until()),
+            fn (array $line) => ($window->since() === null || $line['at'] >= $window->since()) && ($window->until() === null || $line['at'] < $window->until()),
         ));
 
+        $completeFrom = $this->failures->completeFrom();
+        $atLeast = $completeFrom !== null && ($window->since() === null || $window->since() <= $completeFrom);
+
         if ($lines === []) {
-            return [];
+            return $atLeast ? [$this->uncounted()] : [];
         }
 
         $records = array_sum(array_column($lines, 'dropped'));
         $from = min(array_column($lines, 'at'));
-        $to = max(array_column($lines, 'until'));
+        $to = max(array_column($lines, 'at'));
         $reason = $lines[array_key_last($lines)]['kind'];
 
         return [$this->condition(
@@ -134,11 +137,29 @@ class Conditions
             ],
             [
                 'records' => $records,
+                'at_least' => $atLeast,
                 'from_at' => $from,
                 'to_at' => $to,
                 'reason' => $reason,
             ],
+            $atLeast ? 'records-dropped-at-least' : 'records-dropped',
         )];
+    }
+
+    /**
+     * Get `records-dropped` for a window whose failures a full failure file no longer holds.
+     *
+     * @return array<string, mixed>
+     */
+    protected function uncounted(): array
+    {
+        return $this->condition('records-dropped', [], [
+            'records' => null,
+            'at_least' => true,
+            'from_at' => null,
+            'to_at' => null,
+            'reason' => null,
+        ], 'records-dropped-uncounted');
     }
 
     /**
@@ -252,14 +273,17 @@ class Conditions
      *
      * @param  array<string, string>  $replace
      * @param  array<string, mixed>  $facts
+     * @param  string|null  $sentence  the key of the sentence, for a condition that has more than one
      * @return array<string, mixed>
      */
-    protected function condition(string $id, array $replace, array $facts): array
+    protected function condition(string $id, array $replace, array $facts, ?string $sentence = null): array
     {
+        $sentence ??= $id;
+
         return [
             'id' => $id,
             'kind' => BlindSpotKind::CONDITION->value,
-            'message' => __("firewatch::messages.conditions.{$id}", $replace),
+            'message' => __("firewatch::messages.conditions.{$sentence}", $replace),
             ...$facts,
         ];
     }

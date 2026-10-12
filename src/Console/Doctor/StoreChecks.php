@@ -213,18 +213,19 @@ class StoreChecks
     }
 
     /**
-     * Report the dropped batches and failed prunes the failure file holds, quoting the newest of each.
+     * Report the dropped batches and failed prunes the failure file holds, quoting the newest of each, as lower bounds when the file is full.
      */
     public function losses(): CheckResult
     {
         $dropped = $this->failures->dropped();
         $prunes = $this->failures->prunes();
+        $full = $this->failures->completeFrom() !== null;
 
-        if ($dropped === [] && $prunes === []) {
+        if ($dropped === [] && $prunes === [] && ! $full) {
             return CheckResult::ok(__('firewatch::messages.doctor.store-losses.ok'));
         }
 
-        $findings = [];
+        $findings = $full ? [__('firewatch::messages.doctor.store-losses.full')] : [];
 
         if ($dropped !== []) {
             $findings[] = $this->droppedMessage($dropped);
@@ -235,10 +236,10 @@ class StoreChecks
         }
 
         $failures = [...$dropped, ...$prunes];
-        usort($failures, fn (array $a, array $b) => ($a['until'] ?? $a['at']) <=> ($b['until'] ?? $b['at']));
-        $newest = $failures[count($failures) - 1];
+        usort($failures, fn (array $a, array $b) => $a['at'] <=> $b['at']);
+        $newest = $failures[count($failures) - 1] ?? null;
 
-        $fix = match (FailureKind::tryFrom($newest['kind'])) {
+        $fix = match (FailureKind::tryFrom($newest['kind'] ?? '')) {
             FailureKind::BUSY => __('firewatch::messages.doctor.store-losses.busy_fix', [
                 'milliseconds' => $this->configuration->busyTimeoutMilliseconds,
                 'test_run' => Ingest::TEST_RUN_BUSY_TIMEOUT_MILLISECONDS,
@@ -412,17 +413,16 @@ class StoreChecks
     /**
      * Get the message that counts the dropped batches and quotes the newest.
      *
-     * @param  non-empty-list<array{at: float, until: float, kind: string, dropped: int, batches: int, message: string}>  $dropped
+     * @param  non-empty-list<array{at: float, kind: string, dropped: int, message: string}>  $dropped
      */
     protected function droppedMessage(array $dropped): string
     {
         $newest = $dropped[count($dropped) - 1];
-        $batches = array_sum(array_column($dropped, 'batches'));
 
         return __('firewatch::messages.doctor.store-losses.dropped', [
-            'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', $batches, ['count' => $batches]),
+            'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', count($dropped), ['count' => count($dropped)]),
             'records' => $this->records(array_sum(array_column($dropped, 'dropped'))),
-            'at' => $this->moment($newest['until']),
+            'at' => $this->moment($newest['at']),
             'kind' => $newest['kind'],
             'message' => $newest['message'],
         ]);

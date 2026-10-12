@@ -245,7 +245,7 @@ A batch of wire records Firewatch could not store and discarded without retry, r
 _Avoid_: Lost event, failed write
 
 **Store failure**:
-One line recorded beside the store when a write or a prune failed or a damaged store was replaced, naming which as its entry, kept apart from the store so it survives the store's own failure. The file keeps 100 lines; past that, its oldest dropped batches of one kind are folded into one line that counts their batches and records from the first to the last, so the totals stay complete.
+One line recorded beside the store when a write or a prune failed or a damaged store was replaced, naming which as its entry, kept apart from the store so it survives the store's own failure. The file keeps its newest 100 lines. Once it holds 100, older failures may have left it, so a count of dropped records is stated as a lower bound for any window that reaches its oldest line.
 _Avoid_: Error log, exception
 
 **Foreign file**:

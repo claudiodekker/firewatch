@@ -200,6 +200,8 @@ return [
         'history-cleared' => 'History before :from was cleared; this window starts before it.',
         'store-rebuilt' => 'The store was rebuilt at :at (:why); earlier data is gone.',
         'records-dropped' => ':n records were not stored between :from and :to (last reason: :reason); results may be incomplete.',
+        'records-dropped-at-least' => 'At least :n records were not stored between :from and :to (last reason: :reason); the failure log is full and no longer holds earlier losses, so results may be incomplete.',
+        'records-dropped-uncounted' => 'The failure log is full and no longer holds the losses of this window, so records may not have been stored and results may be incomplete.',
         'drift' => ':count :kind drift on :type, last :last; fields may be null or missing.',
         'nightwatch-unverified' => 'Nightwatch :version is newer than the verified line :line; records may be partly interpreted.',
         'user-ids-per-worker' => 'The store holds test runs of :workers workers; one user id may be a different person in each, so a count of actors is a lower bound.',
@@ -361,6 +363,7 @@ return [
         'store-losses' => [
             'ok' => 'no dropped batches or failed prunes',
             'dropped' => ':batches dropped, holding :records in all; the newest at :at (:kind): :message',
+            'full' => 'the failure log is full and keeps only its newest lines, so each count is at least what was lost',
             'batches' => '{1} :count batch|[2,*] :count batches',
             'pruned' => ':prunes failed; the newest at :at (:kind): :message',
             'prunes' => '{1} :count prune|[2,*] :count prunes',

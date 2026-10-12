@@ -207,7 +207,7 @@ it('stamps a failure line when it writes it, so the lines stay in the order of t
     Nightwatch::digest();
     fclose($handle);
 
-    expect(array_column(failureLines(), 'at'))->toBe([1790776801]);
+    expect(array_column(failureLines(), 'at'))->toBe([1790776801.0]);
 });
 
 it('keeps a line whose message holds a character outside ASCII when it rewrites the file', function () {

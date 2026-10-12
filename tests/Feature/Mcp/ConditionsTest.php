@@ -231,7 +231,7 @@ describe('dropped records', function () {
         expect($conditions)->toEqual([[
             'id' => 'records-dropped',
             'kind' => 'condition',
-            'message' => 'At least 300 records were not stored between 2026-09-30 14:00:51.000000 and 2026-09-30 14:02:30.000000 (last reason: busy); the failure log is full and no longer holds earlier losses, so results may be incomplete.',
+            'message' => __('firewatch::messages.conditions.records-dropped-at-least', ['n' => 300, 'from' => '2026-09-30 14:00:51.000000', 'to' => '2026-09-30 14:02:30.000000', 'reason' => 'busy']),
             'records' => 300,
             'at_least' => true,
             'from_at' => 1790776851.0,
@@ -250,7 +250,7 @@ describe('dropped records', function () {
         expect($conditions)->toHaveCount(1)
             ->and($conditions[0]['records'])->toBe(297)
             ->and($conditions[0]['at_least'])->toBeFalse()
-            ->and($conditions[0]['message'])->toStartWith('297 records were not stored between ');
+            ->and($conditions[0]['message'])->toBe(__('firewatch::messages.conditions.records-dropped', ['n' => 297, 'from' => '2026-09-30 14:00:01.000000', 'to' => '2026-09-30 14:01:39.000000', 'reason' => 'busy']));
     });
 
     it('states a lower bound only for a window that reaches the oldest line a full failure log holds', function (array $arguments, int $records, bool $atLeast) {
@@ -278,8 +278,8 @@ describe('dropped records', function () {
         expect($conditions)->toEqual([[
             'id' => 'records-dropped',
             'kind' => 'condition',
-            'message' => 'The failure log is full and no longer holds the losses of this window, so records may not have been stored and results may be incomplete.',
-            'records' => 0,
+            'message' => __('firewatch::messages.conditions.records-dropped-uncounted'),
+            'records' => null,
             'at_least' => true,
             'from_at' => null,
             'to_at' => null,
@@ -295,6 +295,15 @@ describe('dropped records', function () {
         $conditions = conditionsOf(['since' => '2026-09-30 14:02:31']);
 
         expect($conditions)->toEqual([]);
+    });
+
+    it('says a full failure log it can\'t read no longer holds the losses of any window', function () {
+        is_dir(dirname(app(Configuration::class)->database)) || mkdir(dirname(app(Configuration::class)->database), recursive: true);
+        file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', str_repeat("not a line\n", 100));
+
+        $conditions = conditionsOf(['since' => '2026-09-30 14:00:00']);
+
+        expect(array_column($conditions, 'message'))->toBe([__('firewatch::messages.conditions.records-dropped-uncounted')]);
     });
 
     it('reads a line that counts several batches as one batch', function () {
