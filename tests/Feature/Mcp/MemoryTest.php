@@ -370,16 +370,16 @@ describe('the caveat and the blind spots', function () {
         'when not evaluated' => [[], 'not_evaluated'],
     ]);
 
-    it('states that memory is the peak of the whole process, also when nothing was examined', function (array $megabytes) {
+    it('states that memory is the peak of the whole process, also when nothing was examined', function (array $megabytes, bool $full) {
         ingest([...memPeaks($megabytes), syntheticRecord(RecordType::QUERY)]);
 
-        $blindSpots = array_column(memAnswer()['blind_spots'], 'message', 'id');
+        $blindSpots = array_column(memAnswer()['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKey('memory-is-process-peak')
-            ->and($blindSpots['memory-is-process-peak'])->toBe(__('firewatch::messages.blind_spots.memory-is-process-peak'));
+            ->and($blindSpots['memory-is-process-peak']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.memory-is-process-peak') : null);
     })->with([
-        'with findings' => [[80]],
-        'with nothing examined' => [[]],
+        'with findings' => [[80], false],
+        'with nothing examined' => [[], true],
     ]);
 });
 

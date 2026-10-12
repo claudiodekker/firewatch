@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\Arguments;
+use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Catalogue;
 use ClaudioDekker\Firewatch\Mcp\Concerns\BuildsAnswers;
@@ -161,6 +162,7 @@ class Describe extends Tool
             truncated: $type === null ? array_filter([HoldingsSection::truncation($holdings)]) : [],
             next: $this->next($type, $holdings, $catalogue),
             cuttable: ['drift', 'dropped_batches', 'deploys'],
+            found: $type === null,
         );
     }
 
@@ -191,9 +193,29 @@ class Describe extends Tool
             'deploys' => array_slice($holdings->deploys, 0, Holdings::DEPLOYS),
             'drift' => $holdings->drift,
             'dropped_batches' => $batches,
+            'blind_spots' => $this->blindSpotSection(),
             ...$this->schemaSections($catalogue),
             ...$this->sqlSection($catalogue),
         ];
+    }
+
+    /**
+     * Get the sentence of every structural blind spot, which an answer beside a found result names by id alone.
+     *
+     * @return list<array{id: string, sentence: string}>
+     */
+    protected function blindSpotSection(): array
+    {
+        $rows = [];
+
+        foreach (BlindSpots::catalogue() as $id => $sentence) {
+            $rows[] = [
+                'id' => $id,
+                'sentence' => $sentence,
+            ];
+        }
+
+        return $rows;
     }
 
     /**

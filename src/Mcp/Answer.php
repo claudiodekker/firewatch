@@ -49,6 +49,7 @@ class Answer
      * @param  list<string>|null  $cuttable  the result lists the budget may shorten, the first named first; null for every list, the last first
      * @param  (Closure(array<string, mixed>): array<string, mixed>)|null  $recount  restates what a result says of its own lists once the budget has shortened them
      * @param  string|null  $capHow  what the cap entry tells the reader, when it is not that no tool shows the rest of a value
+     * @param  bool  $found  true when the result lists what was found and no claim in it rests on an absence, so a structural blind spot prints by id alone; every other answer prints each sentence
      */
     public function __construct(
         public readonly string $tool,
@@ -66,6 +67,7 @@ class Answer
         public readonly ?array $cuttable = null,
         protected ?Closure $recount = null,
         protected ?string $capHow = null,
+        public readonly bool $found = false,
     ) {
         if (count($notes) > self::LISTED || count($next) > self::LISTED) {
             throw new InvalidArgumentException('An answer carries at most '.self::LISTED.' notes and '.self::LISTED.' next calls.');
@@ -181,7 +183,7 @@ class Answer
             ],
             'result' => $result === [] ? new stdClass : $result,
             'coverage' => $this->coverage->toArray(),
-            'blind_spots' => $this->blindSpots,
+            'blind_spots' => $this->listedBlindSpots(),
             'notes' => $this->notes,
             'truncated' => $truncated,
             'next' => $this->next,
@@ -230,11 +232,21 @@ class Answer
             $lines[] = '> '.Markdown::cell($note);
         }
 
-        foreach ($this->blindSpots as $blindSpot) {
-            $lines[] = __('firewatch::messages.blind_spot', [
-                'id' => $blindSpot['id'],
-                'message' => $blindSpot['message'],
-            ]);
+        $listed = $this->listedBlindSpots();
+
+        foreach ($listed as $blindSpot) {
+            if (isset($blindSpot['message'])) {
+                $lines[] = __('firewatch::messages.blind_spot', [
+                    'id' => $blindSpot['id'],
+                    'message' => $blindSpot['message'],
+                ]);
+            }
+        }
+
+        $brief = array_column(array_filter($listed, fn (array $blindSpot) => ! isset($blindSpot['message'])), 'id');
+
+        if ($brief !== []) {
+            $lines[] = __('firewatch::messages.blind_spots_brief', ['ids' => implode(', ', $brief)]);
         }
 
         if ($this->next !== []) {
@@ -246,6 +258,29 @@ class Answer
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Get the blind spots as the answer prints them: a structural one by its id alone only beside a found result, and every condition in full.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function listedBlindSpots(): array
+    {
+        if ($this->empty !== null || ! $this->found) {
+            return $this->blindSpots;
+        }
+
+        return array_map(function (array $blindSpot) {
+            if ($blindSpot['kind'] !== BlindSpotKind::STRUCTURAL->value) {
+                return $blindSpot;
+            }
+
+            return [
+                'id' => $blindSpot['id'],
+                'kind' => $blindSpot['kind'],
+            ];
+        }, $this->blindSpots);
     }
 
     /**

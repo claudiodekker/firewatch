@@ -73,9 +73,9 @@ it('states that the peak is the whole process\'s and not attributable to code, o
     memoryRequest();
 
     $answer = Answers::assert(Detect::class, ['shape' => 'memory', 'threshold' => 1]);
-    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
+    $blindSpots = array_column($answer['blind_spots'], null, 'id');
 
     expect($answer['result']['caveats'])->toBe([__('firewatch::messages.detect_caveat_memory')])
         ->and($blindSpots)->toHaveKey('memory-is-process-peak')
-        ->and($blindSpots['memory-is-process-peak'])->toBe(__('firewatch::messages.blind_spots.memory-is-process-peak'));
+        ->and($blindSpots['memory-is-process-peak'])->toBe(['id' => 'memory-is-process-peak', 'kind' => 'structural']);
 });

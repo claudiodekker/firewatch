@@ -159,6 +159,7 @@ class Compare extends Tool
             next: $this->next($comparison, $window),
             cuttable: ['groups'],
             recount: $comparison->recounted(...),
+            found: $comparison->allFound(),
         );
     }
 

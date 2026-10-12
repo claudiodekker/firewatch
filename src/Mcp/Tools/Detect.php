@@ -156,6 +156,7 @@ class Detect extends Tool
                 empty: $empty,
                 result: ['detectors' => array_map(fn (Judgement $judgement) => $judgement->toArray(), $judgements)],
                 next: $this->shapesNext($window, $judgements),
+                found: Judgement::allFound($judgements),
             );
         }
 
@@ -168,6 +169,7 @@ class Detect extends Tool
             result: $judgement->toArray(),
             truncated: $cut ? [$this->truncation($shape, $judgement)] : [],
             next: $judgement->reason === Reason::STORE_UNAVAILABLE ? [] : $this->next($window, $shape, $judgement),
+            found: Judgement::allFound([$judgement]),
         );
     }
 

@@ -74,12 +74,12 @@ it('states what it cannot see of queued jobs, on the real attempts', function ()
     failingJobsWorked([new ChargeCard], runs: 2);
 
     $answer = Answers::assert(Detect::class, ['shape' => 'failing-jobs']);
-    $blindSpots = array_column($answer['blind_spots'], 'message', 'id');
+    $blindSpots = array_column($answer['blind_spots'], null, 'id');
 
     expect($answer['result']['caveats'])->toBe([])
         ->and($blindSpots)->toHaveKeys(['sync-jobs-unrecorded', 'uninstrumented-dispatcher'])
-        ->and($blindSpots['sync-jobs-unrecorded'])->toBe(__('firewatch::messages.blind_spots.sync-jobs-unrecorded'))
-        ->and($blindSpots['uninstrumented-dispatcher'])->toBe(__('firewatch::messages.blind_spots.uninstrumented-dispatcher'));
+        ->and($blindSpots['sync-jobs-unrecorded'])->toBe(['id' => 'sync-jobs-unrecorded', 'kind' => 'structural'])
+        ->and($blindSpots['uninstrumented-dispatcher'])->toBe(['id' => 'uninstrumented-dispatcher', 'kind' => 'structural']);
 });
 
 it('opens what a finding points at', function () {

@@ -16,9 +16,9 @@ return [
     'instructions' => <<<'TEXT'
         Firewatch is a local, dev-only record of what a Laravel application did in development: requests, commands, queued jobs and scheduled tasks, and the queries, exceptions, logs, cache events, mail, notifications and outgoing requests inside them. It only reads, and sends nothing anywhere.
 
-        Start with `overview`, then drill down: `overview` (what is wrong), `rank` (worst routes, queries, jobs), `detect` (named problem shapes and their evidence), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a request and the jobs it caused), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over time), `query` (your own read-only SQL, last resort), `describe` (schema, deploys, store facts and example statements), `fingerprint` (the group id of something you just read in source, and whether it ran). Every answer ends with `next`: calls to run as written.
+        Start with `overview`, then drill down: `overview` (what is wrong), `rank` (the worst), `detect` (named problem shapes and their evidence), `occurrences` (individual records), `execution` (one request, command, job attempt or task in full), `trace` (a request and the jobs it caused), `actor` (one signed-in person), `compare` (before against after), `trend` (a measure over time), `query` (your own read-only SQL, last resort), `describe` (schema, deploys, store facts and example statements), `fingerprint` (the group id of something you just read in source, and whether it ran). Every answer ends with `next`: calls to run as written.
 
-        Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Clean means nothing was found among the captured records, over the stated examined count; clean over few records is weak. A not_evaluated verdict is never a pass. Null means unknown, not zero. Truncated means only the worst rows show: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times use the application timezone, named on the window; identifiers print in full and go straight back into tools. No default window: without since and until, everything stored is used. Listed argument values match exactly; a refusal names the accepted ones. Prefer `rank`, `occurrences` and `detect` to `query`: they convert units, it does not.
+        Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see; `describe` spells out a bare id). Clean means nothing was found among the captured records, over the stated examined count; clean over few records is weak. A not_evaluated verdict is never a pass. Null means unknown, not zero. Truncated means only the worst rows show: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times use the application timezone; identifiers print in full and go straight back into tools. No default window: without since and until, everything stored is used. Listed argument values match exactly; a refusal names the accepted ones. Prefer `rank`, `occurrences` and `detect` to `query`: they convert units, it does not.
 
         What one route runs, per execution: `rank` with `within`. A test run's store marks what test bodies ran around their requests and commands (factories, seeding, assertions) as between: `scope` keeps one side; `occurrences` with `order` run lists the run in order.
 
@@ -407,6 +407,8 @@ return [
     ],
 
     'blind_spot' => 'Blind spot (:id): :message',
+
+    'blind_spots_brief' => 'Also blind here, by id: :ids. `describe` holds each sentence.',
 
     'next' => 'Next:',
 

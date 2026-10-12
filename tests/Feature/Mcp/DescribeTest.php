@@ -88,7 +88,7 @@ it('answers what the store holds, then the schema and the SQL tool, in full', fu
     $result = $answer['result'];
     $created = ['complete_from_at' => $clock, 'complete_reason' => 'created'];
 
-    expect(array_keys($result))->toBe(['sqlite_version', 'file_bytes', 'live_bytes', 'wal_mitigation', 'source_capture', 'last_prune_at', 'dropped_records', 'types', 'deploys', 'drift', 'dropped_batches', 'units', 'json_access', 'join_keys', 'objects', 'tables', 'sql', 'examples'])
+    expect(array_keys($result))->toBe(['sqlite_version', 'file_bytes', 'live_bytes', 'wal_mitigation', 'source_capture', 'last_prune_at', 'dropped_records', 'types', 'deploys', 'drift', 'dropped_batches', 'blind_spots', 'units', 'json_access', 'join_keys', 'objects', 'tables', 'sql', 'examples'])
         ->and($answer['tool'])->toBe('describe')
         ->and($answer['window'])->toBe(['windowed' => false, 'reason' => __('firewatch::messages.describe_window_reason')])
         ->and($answer['summary'])->toBe(trans_choice('firewatch::messages.describe_summary', 4, ['records' => 4, 'types' => 3, 'sql' => __('firewatch::messages.describe_sql_available')]))

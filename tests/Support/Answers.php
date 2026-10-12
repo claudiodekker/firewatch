@@ -12,6 +12,26 @@ use PHPUnit\Framework\Assert;
 class Answers
 {
     /**
+     * Get blind spots as an answer beside a found result lists them: each structural one by its id and kind alone.
+     *
+     * @param  list<array<string, mixed>>  $blindSpots
+     * @return list<array<string, mixed>>
+     */
+    public static function briefly(array $blindSpots): array
+    {
+        return array_map(function (array $blindSpot) {
+            if ($blindSpot['kind'] !== 'structural') {
+                return $blindSpot;
+            }
+
+            return [
+                'id' => $blindSpot['id'],
+                'kind' => $blindSpot['kind'],
+            ];
+        }, $blindSpots);
+    }
+
+    /**
      * The keys of every answer, in order.
      */
     public const KEYS = ['tool', 'now', 'window', 'summary', 'empty', 'result', 'coverage', 'blind_spots', 'notes', 'truncated', 'next'];
@@ -148,6 +168,25 @@ class Answers
 
         foreach (array_keys($answer['result']) as $label) {
             Assert::assertNotEmpty(preg_grep('/^(### '.preg_quote($label, '/').'$|- \*\*'.preg_quote($label, '/').'\*\*: )/', $lines));
+        }
+
+        $brief = array_column(array_filter($answer['blind_spots'], fn (array $blindSpot) => ! isset($blindSpot['message'])), 'id');
+
+        foreach ($answer['blind_spots'] as $blindSpot) {
+            if (isset($blindSpot['message'])) {
+                Assert::assertContains(__('firewatch::messages.blind_spot', ['id' => $blindSpot['id'], 'message' => $blindSpot['message']]), $lines);
+            }
+        }
+
+        if ($brief !== []) {
+            Assert::assertContains(__('firewatch::messages.blind_spots_brief', ['ids' => implode(', ', $brief)]), $lines);
+        }
+
+        $firstBlind = array_key_first(preg_grep('/^(Blind spot \(|Also blind here)/', $lines));
+
+        if ($firstBlind !== null) {
+            $lastResult = max(array_keys(preg_grep('/^(### |- \*\*)/', $lines)) ?: [0]);
+            Assert::assertGreaterThan($lastResult, $firstBlind, 'the result prints before the blind spots');
         }
 
         Assert::assertNotEmpty(preg_grep('/^Store: '.preg_quote($answer['coverage']['state'], '/').'/', $lines));

@@ -348,19 +348,19 @@ describe('the caveats', function () {
 });
 
 describe('the blind spots', function () {
-    it('states what a scheduled task does not carry, also when nothing was examined', function (array $statuses) {
+    it('states what a scheduled task does not carry, also when nothing was examined', function (array $statuses, bool $full) {
         ingest([...ftkTasks('prune-orders', $statuses), syntheticRecord(RecordType::QUERY)]);
 
-        $blindSpots = array_column(ftkAnswer()['blind_spots'], 'message', 'id');
+        $blindSpots = array_column(ftkAnswer()['blind_spots'], null, 'id');
 
         expect($blindSpots)->toHaveKeys(['dead-counters', 'memory-is-process-peak', 'actor-partial'])
-            ->and($blindSpots['dead-counters'])->toBe(__('firewatch::messages.blind_spots.dead-counters'))
-            ->and($blindSpots['memory-is-process-peak'])->toBe(__('firewatch::messages.blind_spots.memory-is-process-peak'))
-            ->and($blindSpots['actor-partial'])->toBe(__('firewatch::messages.blind_spots.actor-partial'));
+            ->and($blindSpots['dead-counters']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.dead-counters') : null)
+            ->and($blindSpots['memory-is-process-peak']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.memory-is-process-peak') : null)
+            ->and($blindSpots['actor-partial']['message'] ?? null)->toBe($full ? __('firewatch::messages.blind_spots.actor-partial') : null);
     })->with([
-        'with findings' => [['failed']],
-        'when clean' => [['processed']],
-        'with nothing examined' => [[]],
+        'with findings' => [['failed'], false],
+        'when clean' => [['processed'], true],
+        'with nothing examined' => [[], true],
     ]);
 });
 
