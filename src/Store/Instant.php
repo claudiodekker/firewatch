@@ -36,6 +36,14 @@ class Instant
     }
 
     /**
+     * Round Unix seconds to the microsecond, the instant they read back as once formatted.
+     */
+    public static function rounded(float $epoch): float
+    {
+        return (float) self::epoch($epoch);
+    }
+
+    /**
      * Format Unix seconds with their microseconds.
      */
     public static function epoch(float $epoch): string

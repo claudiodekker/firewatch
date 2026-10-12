@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use ClaudioDekker\Firewatch\RecordType;
+use ClaudioDekker\Firewatch\Store\Instant;
 use ClaudioDekker\Firewatch\Store\Microseconds;
 use SQLite3;
 
@@ -69,8 +70,9 @@ class Buckets
         $count = $until > $since ? $count : 1;
         $width = ($until - $since) / $count;
 
-        $rows = $population->buckets($connection, $by, $since, $width, $count);
-        $buckets = array_map(fn (int $index) => self::bucket($by, $since, $until, $width, $count, $index, $rows[$index] ?? null, $coverageStart), range(0, $count - 1));
+        $edges = self::edges($since, $until, $width, $count);
+        $rows = $population->buckets($connection, $by, $edges);
+        $buckets = array_map(fn (int $index) => self::bucket($by, $edges[$index], $edges[$index + 1], $index, $rows[$index] ?? null, $coverageStart), range(0, $count - 1));
 
         $window = $given->derive($first, $last);
         $valued = self::valued($buckets);
@@ -85,15 +87,31 @@ class Buckets
     }
 
     /**
+     * Get the edges of the grid from the window's since to its until, each edge between two buckets rounded to the microsecond.
+     *
+     * @return list<float>
+     */
+    protected static function edges(float $since, float $until, float $width, int $count): array
+    {
+        $edges = [$since];
+
+        for ($index = 1; $index < $count; $index++) {
+            $edges[] = Instant::rounded($since + $index * $width);
+        }
+
+        $edges[] = $until;
+
+        return $edges;
+    }
+
+    /**
      * Get one bucket of the grid, an empty one 0 by occurrences and null by any other measure.
      *
      * @param  array{samples: int, value: int|float|null}|null  $row
      * @return Bucket
      */
-    protected static function bucket(Measure $by, float $since, float $until, float $width, int $count, int $index, ?array $row, ?float $coverageStart): array
+    protected static function bucket(Measure $by, float $start, float $end, int $index, ?array $row, ?float $coverageStart): array
     {
-        $start = $since + $index * $width;
-        $end = $index === $count - 1 ? $until : $since + ($index + 1) * $width;
         $empty = $by === Measure::OCCURRENCES ? 0 : null;
 
         return [

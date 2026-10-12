@@ -460,6 +460,32 @@ it('counts only the records of one deploy, alone or with a group, and the call i
     'with a group' => [['group' => trendHash('a')], ['group' => trendHash('a')]],
 ]);
 
+it('cuts buckets at whole microseconds, so a record on an edge is counted by the bucket whose call lists it', function () {
+    trendIngest(array_map(fn (float $at) => trendRecord(RecordType::REQUEST, 'a', $at), [
+        1790776000.0,
+        1790776001.42857,
+        1790776001.428571,
+        1790776002.857143,
+        1790776004.285713,
+        1790776004.285714,
+        1790776005.714286,
+        1790776007.142856,
+        1790776007.142857,
+        1790776008.571429,
+    ]));
+
+    $answer = trendAnswer(['since' => TREND_START, 'until' => TREND_START + 10, 'buckets' => 7]);
+    $buckets = $answer['result']['buckets'];
+    $listed = array_map(fn (array $bucket) => count(trendFollow(['tool' => 'occurrences', 'arguments' => ['type' => 'request', 'since' => $bucket['since_at'], 'until' => $bucket['until_at']], 'why' => ''])['result']['rows']), $buckets);
+
+    expect($listed)->toBe([2, 1, 2, 1, 2, 1, 1])
+        ->and(array_column($buckets, 'occurrences'))->toBe([2, 1, 2, 1, 2, 1, 1])
+        ->and(array_column($buckets, 'since_at'))->toEqual([1790776000.0, 1790776001.428571, 1790776002.857143, 1790776004.285714, 1790776005.714286, 1790776007.142857, 1790776008.571429])
+        ->and(array_column($buckets, 'until_at'))->toEqual([1790776001.428571, 1790776002.857143, 1790776004.285714, 1790776005.714286, 1790776007.142857, 1790776008.571429, 1790776010.0])
+        ->and($answer['next'][0]['arguments'])->toEqual(['type' => 'request', 'since' => 1790776000.0, 'until' => 1790776001.428571])
+        ->and(trendFollow($answer['next'][0])['result']['rows'])->toHaveCount(2);
+});
+
 it('answers nothing for no store, a window before every record, a type with no records and a group held by none', function () {
     $this->travelTo(Date::createFromTimestamp(TREND_CREATED));
     $missing = trendAnswer();
