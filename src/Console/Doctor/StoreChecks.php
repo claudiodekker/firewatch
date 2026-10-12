@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch\Console\Doctor;
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Console\Concerns\FormatsFileSizes;
+use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\DriftLedger;
@@ -234,11 +235,14 @@ class StoreChecks
         }
 
         $failures = [...$dropped, ...$prunes];
-        usort($failures, fn (array $a, array $b) => $a['at'] <=> $b['at']);
+        usort($failures, fn (array $a, array $b) => ($a['until'] ?? $a['at']) <=> ($b['until'] ?? $b['at']));
         $newest = $failures[count($failures) - 1];
 
         $fix = match (FailureKind::tryFrom($newest['kind'])) {
-            FailureKind::BUSY => __('firewatch::messages.doctor.store-losses.busy_fix', ['milliseconds' => $this->configuration->busyTimeoutMilliseconds]),
+            FailureKind::BUSY => __('firewatch::messages.doctor.store-losses.busy_fix', [
+                'milliseconds' => $this->configuration->busyTimeoutMilliseconds,
+                'test_run' => Ingest::TEST_RUN_BUSY_TIMEOUT_MILLISECONDS,
+            ]),
             FailureKind::FULL => __('firewatch::messages.doctor.store-losses.full_fix'),
             default => __('firewatch::messages.doctor.store-losses.other_fix'),
         };
@@ -408,16 +412,17 @@ class StoreChecks
     /**
      * Get the message that counts the dropped batches and quotes the newest.
      *
-     * @param  non-empty-list<array{at: float, kind: string, dropped: int, message: string}>  $dropped
+     * @param  non-empty-list<array{at: float, until: float, kind: string, dropped: int, batches: int, message: string}>  $dropped
      */
     protected function droppedMessage(array $dropped): string
     {
         $newest = $dropped[count($dropped) - 1];
+        $batches = array_sum(array_column($dropped, 'batches'));
 
         return __('firewatch::messages.doctor.store-losses.dropped', [
-            'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', count($dropped), ['count' => count($dropped)]),
+            'batches' => trans_choice('firewatch::messages.doctor.store-losses.batches', $batches, ['count' => $batches]),
             'records' => $this->records(array_sum(array_column($dropped, 'dropped'))),
-            'at' => $this->moment($newest['at']),
+            'at' => $this->moment($newest['until']),
             'kind' => $newest['kind'],
             'message' => $newest['message'],
         ]);

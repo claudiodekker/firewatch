@@ -7,10 +7,12 @@ use ClaudioDekker\Firewatch\GitHead;
 use ClaudioDekker\Firewatch\Ingest;
 use ClaudioDekker\Firewatch\Notices;
 use ClaudioDekker\Firewatch\NullIngest;
+use ClaudioDekker\Firewatch\Store\FileLock;
 use ClaudioDekker\Firewatch\Store\Writer;
 use ClaudioDekker\Firewatch\Tests\Support\FakeNotices;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Sleep;
 use Laravel\Mcp\Server\McpServiceProvider;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\NightwatchServiceProvider;
@@ -36,6 +38,9 @@ abstract class TestCase extends Orchestra
     protected function setUp(): void
     {
         $this->notices = new FakeNotices;
+
+        // The suite waits for a lock on Laravel's Sleep, which it fakes, so no test waits for real.
+        FileLock::sleepUsing(fn (int $microseconds) => Sleep::usleep($microseconds));
 
         $this->storeDirectory = sys_get_temp_dir().'/firewatch-tests/'.bin2hex(random_bytes(8));
 
@@ -75,6 +80,8 @@ abstract class TestCase extends Orchestra
         (new Filesystem)->deleteDirectory($this->storeDirectory);
 
         NightwatchServiceProvider::flushState();
+
+        FileLock::sleepUsing(null);
     }
 
     /**

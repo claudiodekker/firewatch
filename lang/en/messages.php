@@ -362,7 +362,7 @@ return [
             'batches' => '{1} :count batch|[2,*] :count batches',
             'pruned' => ':prunes failed; the newest at :at (:kind): :message',
             'prunes' => '{1} :count prune|[2,*] :count prunes',
-            'busy_fix' => 'raise FIREWATCH_BUSY_TIMEOUT above :milliseconds ms, or close what holds the store',
+            'busy_fix' => 'close what holds the store, or raise FIREWATCH_BUSY_TIMEOUT above :milliseconds ms; a test run already waits :test_run ms',
             'full_fix' => 'free disk space or lower FIREWATCH_RETENTION_RECORDS',
             'other_fix' => 'act on the message, then run `php artisan firewatch:clear` to empty the log',
         ],
