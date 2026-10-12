@@ -121,8 +121,8 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->registerNightwatch();
         $this->releaseQueryBindings();
         $this->guarded($this->captureLogs(...));
-        $this->guarded($this->captureTests(...));
         $this->guarded($this->replaceNightwatchIngest(...));
+        $this->guarded($this->captureTests(...));
         $this->guarded($this->redactHeaders(...));
     }
 

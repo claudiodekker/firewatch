@@ -5,6 +5,7 @@ namespace ClaudioDekker\Firewatch\Actions;
 use ClaudioDekker\Firewatch\Capture\Drift;
 use ClaudioDekker\Firewatch\Capture\DriftKind;
 use ClaudioDekker\Firewatch\Capture\RecordMapper;
+use ClaudioDekker\Firewatch\Capture\TestRecord;
 use ClaudioDekker\Firewatch\NightwatchInstall;
 use ClaudioDekker\Firewatch\Store\DriftLedger;
 use ClaudioDekker\Firewatch\Store\Instant;
@@ -41,8 +42,9 @@ class AppendBatch
      *
      * @param  list<array<mixed>>  $records
      * @param  array<int, list<mixed>|null>  $bindings  the bindings paired to each record, by its position in the batch
+     * @param  array<int, TestRecord|null>  $testRecords  where each record fell in a test run, by its position in the batch
      */
-    public function handle(array $records, array $bindings = []): void
+    public function handle(array $records, array $bindings = [], array $testRecords = []): void
     {
         if ($records === []) {
             return;
@@ -53,7 +55,7 @@ class AppendBatch
         $users = [];
 
         foreach ($records as $position => $record) {
-            $mapped = $this->mapper->map($record, $drift, bindings: $bindings[$position] ?? null);
+            $mapped = $this->mapper->map($record, $drift, bindings: $bindings[$position] ?? null, testRecord: $testRecords[$position] ?? null);
 
             if ($mapped->user !== null) {
                 $users[] = $mapped->user;

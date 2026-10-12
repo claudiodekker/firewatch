@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Capture;
 
+use ClaudioDekker\Firewatch\Ingest;
 use Closure;
 use Illuminate\Console\Application as Artisan;
 use Illuminate\Console\Events\CommandFinished;
@@ -47,6 +48,19 @@ class TestCapture
         'help',
         'inspire',
         'schedule:finish',
+    ];
+
+    /**
+     * The commands a test harness runs to migrate and seed the database, which are no work of the application's.
+     */
+    protected const HARNESS_COMMANDS = [
+        'migrate',
+        'migrate:fresh',
+        'migrate:refresh',
+        'migrate:reset',
+        'migrate:rollback',
+        'db:seed',
+        'db:wipe',
     ];
 
     /**
@@ -129,6 +143,10 @@ class TestCapture
 
         $this->whenResolved(HttpKernelContract::class, $this->endRequestsOn(...));
         $this->whenResolved(ConsoleKernelContract::class, $this->startCommandsOn(...));
+
+        if ($this->core->ingest instanceof Ingest) {
+            $this->core->ingest->recordTestRun($this->testRecord(...));
+        }
 
         $events = $this->app->make('events');
         $events->listen(CommandStarting::class, fn (CommandStarting $event) => $this->guarded(fn () => $this->startCommand($event)));
@@ -214,7 +232,9 @@ class TestCapture
             return;
         }
 
-        if ($this->phase === TestPhase::REQUEST || in_array($event->command, static::UNRECORDED_COMMANDS, true)) {
+        $harness = in_array($event->command, static::HARNESS_COMMANDS, true);
+
+        if (! $harness && ($this->phase === TestPhase::REQUEST || in_array($event->command, static::UNRECORDED_COMMANDS, true))) {
             return;
         }
 
@@ -240,12 +260,17 @@ class TestCapture
 
         $this->core->executionState = $state;
         $this->core->sensor = $sensor;
-        $this->phase = new TestCommand;
+        $this->phase = new TestCommand(recorded: ! $harness, resumes: $this->phase);
 
         Compatibility::addTraceIdToContext($id);
-        memory_reset_peak_usage();
-        $this->core->configureCommandSampling($event->command);
         $this->core->prepareForCommand($event->command);
+
+        // Dropped at the end, a harness command's records keep the request it interrupts and the store free of the database's setup.
+        if ($harness) {
+            $this->core->dontSample();
+        } else {
+            $this->core->configureCommandSampling($event->command);
+        }
     }
 
     /**
@@ -257,18 +282,34 @@ class TestCapture
             return;
         }
 
+        $command = $this->phase;
+
         try {
-            $this->core->stage(ExecutionStage::End);
-            $this->core->command($event->input, $event->exitCode);
+            if ($command->recorded) {
+                $this->core->stage(ExecutionStage::End);
+                $this->core->command($event->input, $event->exitCode);
+            }
+
             $this->core->finishExecution();
         } finally {
             $this->core->executionState = $this->requestState;
             $this->core->sensor = $this->requestSensors;
-            $this->phase = TestPhase::BETWEEN;
+            $this->phase = $command->resumes;
 
             $this->core->configureRequestSampling();
-            $this->core->prepareForRequest($this->app->make('request'));
+
+            if ($command->resumes === TestPhase::BETWEEN) {
+                $this->core->prepareForRequest($this->app->make('request'));
+            }
         }
+    }
+
+    /**
+     * Tell where a record the test writes now falls.
+     */
+    protected function testRecord(): TestRecord
+    {
+        return $this->phase === TestPhase::BETWEEN ? TestRecord::OUTSIDE_EXECUTIONS : TestRecord::IN_EXECUTION;
     }
 
     /**

@@ -27,7 +27,7 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 | Is this job getting slower over the week? | `trend` |
 | Which queries run most often? | `query` |
 
-It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes.
+It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes. Tests that expect a 4xx answer one, so give `failing-routes` a `threshold` of 500 to see only server errors. The migrations and seeders the tests run are left out.
 
 ## Requirements
 
@@ -144,7 +144,7 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - A location in a compiled Blade view names its template beside it, but the line is the compiled file's. After `view:clear` the template reads null.
 - Exceptions the application does not report are absent, as are vendor commands and framework cache keys on Nightwatch's default exclusion lists.
 - Mail sent by a notification is recorded as a notification, not as mail.
-- A memory peak is the whole process's peak since the sensor last reset it. Requests, scheduled tasks and job attempts reset it, but a command reports its whole process, so compare executions to each other, not to an absolute number.
+- A memory peak is the whole process's peak since the sensor last reset it. Requests, scheduled tasks and job attempts reset it, but a command reports its whole process, and a test run's executions record none, so compare executions to each other, not to an absolute number.
 
 Answers state these themselves, and `clean` means "none among what was captured".
 

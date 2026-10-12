@@ -49,7 +49,7 @@ An application environment name on the allowlist in which Firewatch records tele
 _Avoid_: Enabled environment, dev mode
 
 **Test capture**:
-Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none, by holding Nightwatch in request mode and swapping in a command's state while it runs.
+Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none, by holding Nightwatch in request mode and swapping in a command's state while it runs. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
 _Avoid_: Test mode, test recording
 
 **In-code opt-out**:

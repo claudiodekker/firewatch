@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Symfony\Component\Process\Process;
+use Workbench\App\Members;
 
 function captureTests(): void
 {
@@ -87,6 +88,54 @@ it('keeps the logs and exceptions of a request and a command inside their execut
         ['execution' => '/orders', 'message' => 'The orders could not be listed.'],
         ['execution' => 'orders:prune', 'message' => 'The orders could not be pruned.'],
     ])->and(storeRows('SELECT status_code FROM requests'))->toBe([['status_code' => 500]]);
+});
+
+it('leaves out the migrations and seeders a test harness runs, even inside a request', function () {
+    captureTests();
+    Route::get('/orders', function () {
+        Artisan::call('migrate:fresh');
+
+        return DB::select('select 1 as orders');
+    });
+
+    $this->artisan('migrate:fresh')->assertSuccessful();
+    $this->get('/orders')->assertOk();
+
+    expect(executionQueries())->toBe([
+        '/orders' => ['select 1 as orders'],
+    ])->and(storeRows('SELECT queries FROM requests'))->toBe([['queries' => 1]])
+        ->and(storeRows('SELECT count(*) AS queries FROM queries'))->toBe([['queries' => 1]]);
+});
+
+it('records no peak memory for a test\'s executions, which only the whole test process has', function () {
+    captureTests();
+    Route::get('/orders', fn () => 'ok');
+    Artisan::command('orders:prune', fn () => null);
+
+    $this->get('/orders')->assertOk();
+    $this->artisan('orders:prune')->assertSuccessful();
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT peak_memory_usage FROM requests UNION ALL SELECT peak_memory_usage FROM commands'))->toBe([
+        ['peak_memory_usage' => null],
+        ['peak_memory_usage' => null],
+    ]);
+});
+
+it('gives what a test runs outside its requests no source, stage or user', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+
+    DB::select('select 0 as before');
+    $this->actingAs(Members::find('7'))->get('/orders')->assertOk();
+    DB::select('select 2 as after');
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT sql, execution_source, execution_stage, user_id FROM queries ORDER BY started_at'))->toBe([
+        ['sql' => 'select 0 as before', 'execution_source' => null, 'execution_stage' => null, 'user_id' => null],
+        ['sql' => 'select 1 as orders', 'execution_source' => 'request', 'execution_stage' => 'action', 'user_id' => '7'],
+        ['sql' => 'select 2 as after', 'execution_source' => null, 'execution_stage' => null, 'user_id' => null],
+    ]);
 });
 
 it('keeps a command a request starts inside the request', function () {
