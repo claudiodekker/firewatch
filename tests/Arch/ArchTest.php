@@ -182,6 +182,10 @@ arch('only the side that answers the assistant reports to the exception handler,
     ->not->toUse('report')
     ->ignoring('ClaudioDekker\\Firewatch\\Mcp');
 
+arch('the store waits on the real clock, because an application\'s tests fake Sleep')
+    ->expect('ClaudioDekker\\Firewatch\\Store')
+    ->not->toUse('Illuminate\\Support\\Sleep');
+
 arch('the git HEAD reader starts no process, because it runs at every boot')
     ->expect(GitHead::class)
     ->not->toUse(['proc_open', 'popen', 'exec', 'shell_exec', 'system', 'passthru', 'pcntl_exec', 'Symfony\\Component\\Process', 'Illuminate\\Support\\Facades\\Process', 'Illuminate\\Process']);

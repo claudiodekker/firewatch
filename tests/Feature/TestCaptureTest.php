@@ -15,13 +15,6 @@ use Workbench\App\Jobs\ChargeCard;
 use Workbench\App\Jobs\RestockProducts;
 use Workbench\App\Members;
 
-function captureTests(): void
-{
-    setEnvironmentVariable(name: 'FIREWATCH_CAPTURE_TESTS', value: 'true');
-
-    test()->refreshApplication();
-}
-
 /**
  * Get each request's route and each command's name with the SQL of the queries it ran.
  *
