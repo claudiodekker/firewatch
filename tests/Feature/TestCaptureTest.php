@@ -3,6 +3,7 @@
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Symfony\Component\Process\Process;
@@ -56,6 +57,36 @@ it('records each request and command a test runs as an execution of its own', fu
     ])->and(storeRows("SELECT count(*) AS inside FROM queries WHERE sql IN ('select 0 as before', 'select 5 as after') AND execution_id IN (SELECT execution_id FROM requests UNION SELECT execution_id FROM commands)"))->toBe([
         ['inside' => 0],
     ]);
+});
+
+it('keeps the logs and exceptions of a request and a command inside their executions', function () {
+    captureTests();
+    Route::get('/orders', function () {
+        Log::warning('The orders are slow.');
+
+        throw new RuntimeException('The orders could not be listed.');
+    });
+    Artisan::command('orders:prune', function () {
+        Log::warning('The prune is slow.');
+
+        report(new RuntimeException('The orders could not be pruned.'));
+    });
+
+    $this->get('/orders')->assertServerError();
+    $this->artisan('orders:prune')->assertSuccessful();
+    Nightwatch::digest();
+
+    $executions = 'SELECT route_path AS execution, execution_id FROM requests UNION ALL SELECT name, execution_id FROM commands';
+
+    expect(storeRows("SELECT x.execution, l.message FROM ({$executions}) x JOIN logs l USING (execution_id) ORDER BY l.started_at"))->toBe([
+        ['execution' => '/orders', 'message' => 'The orders are slow.'],
+        ['execution' => '/orders', 'message' => 'The orders could not be listed.'],
+        ['execution' => 'orders:prune', 'message' => 'The prune is slow.'],
+        ['execution' => 'orders:prune', 'message' => 'The orders could not be pruned.'],
+    ])->and(storeRows("SELECT x.execution, e.message FROM ({$executions}) x JOIN exceptions e USING (execution_id) ORDER BY e.started_at"))->toBe([
+        ['execution' => '/orders', 'message' => 'The orders could not be listed.'],
+        ['execution' => 'orders:prune', 'message' => 'The orders could not be pruned.'],
+    ])->and(storeRows('SELECT status_code FROM requests'))->toBe([['status_code' => 500]]);
 });
 
 it('keeps a command a request starts inside the request', function () {
