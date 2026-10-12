@@ -62,6 +62,24 @@ it('records each request and command a test runs as an execution of its own', fu
     ]);
 });
 
+it('records the fields that failed validation on the request a test sent', function () {
+    captureTests();
+    Route::post('/signup', function (Request $request) {
+        $request->validate(['email' => ['required', 'email']]);
+
+        return redirect('/welcome');
+    });
+
+    $this->post('/signup', ['email' => 'not-an-address'])->assertRedirect();
+    $this->post('/signup', ['email' => 'taylor@example.com'])->assertRedirect('/welcome');
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT status_code, invalid_fields FROM requests ORDER BY started_at'))->toBe([
+        ['status_code' => 302, 'invalid_fields' => '["email"]'],
+        ['status_code' => 302, 'invalid_fields' => null],
+    ]);
+});
+
 it('keeps the logs and exceptions of a request and a command inside their executions', function () {
     captureTests();
     Route::get('/orders', function () {

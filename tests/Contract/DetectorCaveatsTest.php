@@ -15,6 +15,7 @@ test('the detector caveats have their pinned wording', function (string $key, in
     'not fired' => ['detect_caveat_not_fired', 1, 'A task that did not fire leaves no record.'],
     'log capture' => ['detect_caveat_log_capture', 1, 'Log records exist only while log capture is on.'],
     'unanswered' => ['detect_caveat_unanswered', 1, 'Clean means only that no captured call returned an error status; timeouts and connection failures leave no record.'],
+    'validation' => ['detect_caveat_validation', 1, 'A request that failed validation counts as answering at least 422, also when it was redirected back with a 302.'],
     'cache keys' => ['detect_caveat_cache_keys', 1, 'Keys that embed ids fragment into one-off groups; read the per-store activity instead.'],
 ]);
 

@@ -384,6 +384,7 @@ describe('the findings', function () {
                 'requests' => 5,
                 'failure_pct' => 75.0,
                 'server_errors' => 1,
+                'failed_validations' => 0,
                 'status_counts' => [422 => 2, 500 => 1],
                 'with_exception' => 0,
                 'unmatched' => false,

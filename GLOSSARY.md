@@ -198,6 +198,14 @@ _Avoid_: Coverage, completeness ratio
 The query parameter values captured from the framework's query events and paired to a query record, or absent when unpaired.
 _Avoid_: Parameters, params
 
+**Invalid fields**:
+The names of the fields a request failed validation on, read from the validation exception Laravel rendered into the response and paired to the request record, or absent when none was rendered. Never the values or the messages.
+_Avoid_: Validation errors, error bag
+
+**Failed validation**:
+A request whose response Laravel rendered from a validation exception. It is judged as answering at least 422, so a form redirected back with a 302 fails like a JSON request does.
+_Avoid_: Invalid request, validation error
+
 **User directory**:
 The small table of user id, name, username, first-seen and last-seen instants, never an event and never counted as a record, aged out with the records.
 _Avoid_: Actors table, users event

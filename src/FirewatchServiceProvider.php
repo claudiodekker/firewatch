@@ -4,6 +4,7 @@ namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Capture\DefaultLogChannel;
 use ClaudioDekker\Firewatch\Capture\HeaderRedactor;
+use ClaudioDekker\Firewatch\Capture\InvalidFields;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
 use ClaudioDekker\Firewatch\Capture\TestCapture;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
@@ -24,6 +25,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\AliasLoader;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -120,6 +122,7 @@ class FirewatchServiceProvider extends ServiceProvider
         $this->captureQueryBindings();
         $this->registerNightwatch();
         $this->releaseQueryBindings();
+        $this->captureInvalidFields();
         $this->guarded($this->captureLogs(...));
         $this->guarded($this->replaceNightwatchIngest(...));
         $this->guarded($this->captureTests(...));
@@ -418,6 +421,20 @@ class FirewatchServiceProvider extends ServiceProvider
         }
 
         $this->app->make('events')->listen(QueryExecuted::class, fn () => $this->app->make(QueryBindings::class)->release());
+    }
+
+    /**
+     * Hold the fields that failed validation in each request when Active, until Nightwatch records the request.
+     */
+    protected function captureInvalidFields(): void
+    {
+        if ($this->mode() !== Mode::ACTIVE) {
+            return;
+        }
+
+        $this->app->singleton(InvalidFields::class);
+
+        $this->app->make('events')->listen(RequestHandled::class, fn (RequestHandled $event) => $this->app->make(InvalidFields::class)->capture($event));
     }
 
     /**

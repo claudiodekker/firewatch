@@ -59,15 +59,17 @@ class FailingRoutes implements Detector
             ...$selected->bindings,
             'status' => $threshold,
         ];
-        $failed = "{$selected->sql} AND status_code >= :status";
-        $serverError = Failure::serverError('status_code');
+        $status = Failure::requestStatus();
+        $failed = "{$selected->sql} AND {$status} >= :status";
+        $serverError = Failure::serverError($status);
 
-        $reach = Fragment::reach('status_code >= :status');
+        $reach = Fragment::reach("{$status} >= :status");
 
-        $groups = Stored::rows($connection, "SELECT group_hash, count(*) AS requests, count(status_code) AS with_status,
-            count(*) FILTER (WHERE status_code >= :status) AS failed,
-            count(*) FILTER (WHERE status_code >= :status AND {$serverError}) AS server_errors,
-            count(*) FILTER (WHERE status_code >= :status AND EXISTS (SELECT 1 FROM exceptions WHERE exceptions.execution_id = requests.execution_id)) AS with_exception,
+        $groups = Stored::rows($connection, "SELECT group_hash, count(*) AS requests, count({$status}) AS with_status,
+            count(*) FILTER (WHERE {$status} >= :status) AS failed,
+            count(*) FILTER (WHERE {$status} >= :status AND {$serverError}) AS server_errors,
+            count(*) FILTER (WHERE {$status} >= :status AND invalid_fields IS NOT NULL) AS failed_validations,
+            count(*) FILTER (WHERE {$status} >= :status AND EXISTS (SELECT 1 FROM exceptions WHERE exceptions.execution_id = requests.execution_id)) AS with_exception,
             {$reach}
             FROM requests WHERE {$selected->sql} GROUP BY group_hash", $bindings, $window);
 
@@ -86,13 +88,14 @@ class FailingRoutes implements Detector
         $statuses = Stored::byGroup($statusRows);
 
         $shown = Judgement::worst($failing, fn (array $a, array $b) => [$b['server_errors'], $b['failed'], $this->failurePct($b), $a['group_hash']] <=> [$a['server_errors'], $a['failed'], $this->failurePct($a), $b['group_hash']], $limit);
+        $caveats = array_sum(array_column($failing, 'failed_validations')) > 0 ? [__('firewatch::messages.detect_caveat_validation')] : [];
         $findings = array_map(fn (array $row) => $this->finding(
             row: $row,
             latest: $latest[$row['group_hash']][0] ?? [],
             statuses: $statuses[$row['group_hash']] ?? [],
         ), $shown);
 
-        return Judgement::of($this->name(), $this->threshold()->describe($threshold), examined: $examined, total: count($failing), findings: $findings);
+        return Judgement::of($this->name(), $this->threshold()->describe($threshold), examined: $examined, total: count($failing), findings: $findings, caveats: $caveats);
     }
 
     /**
@@ -116,6 +119,7 @@ class FailingRoutes implements Detector
             'requests' => $row['requests'],
             'failure_pct' => $this->failurePct($row),
             'server_errors' => $row['server_errors'],
+            'failed_validations' => $row['failed_validations'],
             'status_counts' => array_column($statuses, 'requests', 'status_code'),
             'with_exception' => $row['with_exception'],
             'unmatched' => $route === '',

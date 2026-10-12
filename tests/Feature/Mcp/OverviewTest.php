@@ -170,9 +170,9 @@ it('answers that the store is unusable, with its reason', function (Closure $arr
         fn (string $path) => ['path' => $path, 'found' => 0, 'expected' => Schema::VERSION],
     ],
     'a newer schema' => [
-        fn (string $path) => (new SQLite3($path))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 3; CREATE TABLE records (id INTEGER)'),
+        fn (string $path) => (new SQLite3($path))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 4; CREATE TABLE records (id INTEGER)'),
         'newer_schema',
-        fn (string $path) => ['path' => $path, 'found' => 3, 'expected' => Schema::VERSION],
+        fn (string $path) => ['path' => $path, 'found' => 4, 'expected' => Schema::VERSION],
     ],
 ]);
 
@@ -329,7 +329,7 @@ describe('coverage and blind spots', function () {
 
     $types = ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'];
     $ids = [
-        'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification',
+        'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'unrendered-validation-failures', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification',
         'sync-jobs-unrecorded', 'vendor-defaults-unrecorded', 'exceptions-unreported', 'named-log-channels', 'memory-is-process-peak', 'query-bindings-unpaired',
         'uninstrumented-dispatcher', 'actor-partial', 'application-opt-outs', 'values-truncated', 'octane-bootstrap',
     ];

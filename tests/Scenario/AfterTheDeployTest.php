@@ -101,7 +101,7 @@ function afterTheDeployCoverage(float $created): array
  */
 function afterTheDeployBlindSpots(bool $split = false): array
 {
-    $ids = ['console-requests', 'payload-on-server-error-only', 'dead-counters', 'memory-is-process-peak', ...($split ? ['visible-at-completion'] : []), 'octane-bootstrap'];
+    $ids = ['console-requests', 'payload-on-server-error-only', 'unrendered-validation-failures', 'dead-counters', 'memory-is-process-peak', ...($split ? ['visible-at-completion'] : []), 'octane-bootstrap'];
 
     return array_map(fn (string $id) => [
         'id' => $id,

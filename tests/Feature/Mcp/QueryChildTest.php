@@ -257,7 +257,7 @@ describe('the protocol', function () {
     })->group('process');
 
     it('answers a store state the child reports alone the way every tool does', function () {
-        $text = qcEcho([['k' => 'state', 'state' => 'schema_mismatch', 'found' => 2]]);
+        $text = qcEcho([['k' => 'state', 'state' => 'schema_mismatch', 'found' => 4]]);
         $answer = json_decode($text, associative: true);
 
         expect($answer['empty']['kind'])->toBe('store_unusable')
