@@ -49,47 +49,37 @@ class Identification
     /**
      * Resolve who is meant by the first stage that finds anyone, in the snapshot of the connection.
      *
-     * A call that names a worker reads only the people of that worker. Any other call reads the people of no worker first, through every stage and then the records, as a store that holds no parallel run is read, and the people of every worker only when it finds no one there.
+     * A call that names a worker reads only the people of that worker. Any other call reads the people of no worker first at each stage, and the people of every worker only when the stage finds none there, so an exact id among the people of a worker still decides before a name that contains the text.
      */
     public static function of(SQLite3 $connection, string $who, ?string $worker = null): self
     {
         $workerConditions = $worker === null ? ['worker IS NULL', null] : ['worker = :worker'];
         $bindings = $worker === null ? [] : ['worker' => $worker];
 
-        foreach ($workerConditions as $workerCondition) {
-            $identification = self::among($connection, $who, $workerCondition, $bindings);
+        foreach (self::STAGES as $stage) {
+            foreach ($workerConditions as $workerCondition) {
+                [$found, $count] = UserDirectory::list($connection, Rows::fetch(self::LISTED), self::condition($stage, $workerCondition), [
+                    ...$bindings,
+                    'who' => self::term($stage, $who),
+                ]);
 
-            if ($identification !== null) {
-                return $identification;
+                if ($count > 0) {
+                    return self::decidedBy($stage, $found, $count);
+                }
+            }
+        }
+
+        foreach ($workerConditions as $workerCondition) {
+            [$found, $count] = self::recorded($connection, $who, $workerCondition, $bindings);
+
+            if ($count > 0) {
+                return self::decidedBy(MatchedBy::RECORDS, $found, $count);
             }
         }
 
         [$known, $count] = UserDirectory::list($connection, Rows::fetch(self::LISTED));
 
         return new self(null, Rows::bound([], self::LISTED), 0, Rows::bound($known, self::LISTED), $count);
-    }
-
-    /**
-     * Resolve who is meant among the people a condition on their worker keeps, or among everyone for none, or get null when no stage and no record finds anyone.
-     *
-     * @param  array<string, string>  $bindings
-     */
-    protected static function among(SQLite3 $connection, string $who, ?string $workerCondition, array $bindings): ?self
-    {
-        foreach (self::STAGES as $stage) {
-            [$found, $count] = UserDirectory::list($connection, Rows::fetch(self::LISTED), self::condition($stage, $workerCondition), [
-                ...$bindings,
-                'who' => self::term($stage, $who),
-            ]);
-
-            if ($count > 0) {
-                return self::decidedBy($stage, $found, $count);
-            }
-        }
-
-        [$found, $count] = self::recorded($connection, $who, $workerCondition, $bindings);
-
-        return $count > 0 ? self::decidedBy(MatchedBy::RECORDS, $found, $count) : null;
     }
 
     /**

@@ -81,23 +81,6 @@ it('decides on the records of no worker before it looks across workers', functio
         ->and($answer['result']['attribution']['commands'])->toBe(['total' => 2, 'this_actor' => 1, 'unattributable' => 1]);
 });
 
-it('decides on the records of no worker before the user directory row a worker holds under the id', function () {
-    runAsWorker('1');
-    captureTests();
-    $this->get('/members/7')->assertOk();
-    Nightwatch::digest();
-    actorWorkerAudit(null, member: '7');
-
-    $alone = Answers::assert(Actor::class, ['who' => '7']);
-    $inWorker = Answers::assert(Actor::class, ['who' => '7', 'worker' => '1']);
-
-    expect($alone['result']['identity'])->toBe(['id' => '7', 'name' => null, 'username' => null, 'first_seen_at' => null, 'last_seen_at' => null, 'matched_by' => 'records'])
-        ->and($alone['result']['attribution']['requests'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 1, 'guest' => 0])
-        ->and($alone['result']['attribution']['commands'])->toBe(['total' => 1, 'this_actor' => 1, 'unattributable' => 0])
-        ->and($inWorker['result']['identity'])->toMatchArray(['id' => '7', 'worker' => '1', 'name' => 'Taylor Otwell', 'matched_by' => 'id'])
-        ->and($inWorker['result']['attribution']['requests'])->toBe(['total' => 1, 'this_actor' => 1, 'other_actors' => 0, 'guest' => 0]);
-});
-
 it('counts the workers that hold a user id up to a hundred, and says when there are more', function (int $workers, string $key) {
     foreach (range(1, $workers) as $token) {
         runAsWorker((string) $token);

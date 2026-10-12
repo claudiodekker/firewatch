@@ -143,13 +143,6 @@ function forceRequests(): void
     test()->refreshApplication();
 }
 
-function captureTests(): void
-{
-    setEnvironmentVariable(name: 'FIREWATCH_CAPTURE_TESTS', value: 'true');
-
-    test()->refreshApplication();
-}
-
 /**
  * Run the test as the worker of a parallel run with the token, or as a serial run with none, and restore the token afterwards.
  */

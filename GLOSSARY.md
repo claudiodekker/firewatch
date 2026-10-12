@@ -386,7 +386,7 @@ _Avoid_: Exception, failure answer
 ### Actors and attribution
 
 **Identification**:
-Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing. When no stage finds anyone, an id that no directory row holds is identified from a record that carries it. A call that names a worker reads only the people of that worker. Any other call reads the people of no worker first, through every stage and then the records, and reads across workers only when it finds no one there, so an id alone reaches the person outside a parallel run as it would in a store that holds no parallel run. An id that several workers hold is several candidates, each with its worker.
+Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing. When no stage finds anyone, an id that no directory row holds is identified from a record that carries it. A call that names a worker reads only the people of that worker. Any other call reads the people of no worker first at each stage, and across workers only when the stage finds none there, so an id alone reaches the person the user directory holds outside a parallel run. An id that several workers hold is several candidates, each with its worker.
 _Avoid_: Lookup, search, matching
 
 **Attribution**:
