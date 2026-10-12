@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp;
 
 use Carbon\CarbonImmutable;
+use ClaudioDekker\Firewatch\Store\Instant;
 use Closure;
 use Laravel\Mcp\Request;
 
@@ -89,6 +90,11 @@ class Continuation
         $last = $keys[count($rows->rows) - 1];
         $until = $window->until() ?? $epoch;
         $arguments = array_diff_key($this->request->all(), array_flip(['cursor', 'format']));
+
+        foreach (array_intersect_key($arguments, array_flip(['since', 'until'])) as $bound => $value) {
+            $arguments[$bound] = is_int($value) || is_float($value) ? Instant::epoch($value) : $value;
+        }
+
         $arguments['cursor'] = Cursor::make(tool: $this->tool, arguments: $this->request->all(), createdAt: $createdAt, last: $last, since: $window->since(), until: $until);
         $call = Call::written($this->tool, $arguments);
         $entry = $rows->truncation(section: $section, how: __($how, ['call' => $call]));
