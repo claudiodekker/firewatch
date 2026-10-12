@@ -322,7 +322,6 @@ enum RecordType: string
     {
         return match ($this) {
             self::QUERY => ['bindings'],
-            self::REQUEST => ['invalid_fields'],
             default => [],
         };
     }

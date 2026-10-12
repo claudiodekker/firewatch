@@ -110,7 +110,6 @@ class Occurrences extends Tool
             'order' => $schema->string()->enum(Order::class)->default(Order::RECENT->value)->description(__('firewatch::messages.occurrences_order_argument')),
             'method' => $schema->string()->description(__('firewatch::messages.occurrences_method_argument')),
             'status' => $schema->string()->description(__('firewatch::messages.occurrences_status_argument')),
-            'failed_validation' => $schema->boolean(),
             'outcome' => $schema->string()->enum(Outcome::class)->description(__('firewatch::messages.occurrences_outcome_argument')),
             'level' => $schema->string()->enum(LogLevel::class)->description(__('firewatch::messages.occurrences_level_argument')),
             'slower_than_ms' => $schema->number()->description(__('firewatch::messages.occurrences_slower_than_ms_argument')),

@@ -20,21 +20,12 @@ class Failure
     protected const FIRST_SERVER_ERROR = 500;
 
     /**
-     * The lowest status a request that failed validation is judged by, which Laravel answers a client that asked for JSON.
+     * Determine if a record failed, by how its type says it ended.
      */
-    protected const FAILED_VALIDATION_STATUS = 422;
-
-    /**
-     * Determine if an execution failed, by how its type says it ended.
-     *
-     * @param  array<string, mixed>  $execution
-     */
-    public static function of(RecordType $type, array $execution): bool
+    public static function of(RecordType $type, mixed $outcome): bool
     {
-        $outcome = ExecutionHeader::outcome($type, $execution);
-
         return match ($type) {
-            RecordType::REQUEST => ($execution['invalid_fields'] ?? null) !== null || (is_int($outcome) && $outcome >= static::FIRST_FAILED_STATUS_CODE),
+            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => is_int($outcome) && $outcome >= static::FIRST_FAILED_STATUS_CODE,
             RecordType::COMMAND => is_int($outcome) && $outcome !== 0,
             RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK => in_array($outcome, static::statuses($type), true),
             default => false,
@@ -47,20 +38,11 @@ class Failure
     public static function expression(RecordType $type): ?string
     {
         return match ($type) {
-            RecordType::REQUEST => 'CASE WHEN '.static::requestStatus().' IS NULL THEN NULL WHEN '.static::requestStatus().' >= '.static::FIRST_FAILED_STATUS_CODE.' THEN 1 ELSE 0 END',
-            RecordType::OUTGOING_REQUEST => 'CASE WHEN status_code IS NULL THEN NULL WHEN status_code >= '.static::FIRST_FAILED_STATUS_CODE.' THEN 1 ELSE 0 END',
+            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'CASE WHEN status_code IS NULL THEN NULL WHEN status_code >= '.static::FIRST_FAILED_STATUS_CODE.' THEN 1 ELSE 0 END',
             RecordType::COMMAND => 'CASE WHEN exit_code IS NULL THEN NULL WHEN exit_code <> 0 THEN 1 ELSE 0 END',
             RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK => "CASE WHEN status IS NULL THEN NULL WHEN status IN ('".implode("', '", static::statuses($type))."') THEN 1 ELSE 0 END",
             default => null,
         };
-    }
-
-    /**
-     * Get the SQL expression of the status a request is judged by: at least that of a failed validation when it failed one, also when its form was redirected back.
-     */
-    public static function requestStatus(): string
-    {
-        return '(CASE WHEN invalid_fields IS NOT NULL AND COALESCE(status_code, 0) < '.static::FAILED_VALIDATION_STATUS.' THEN '.static::FAILED_VALIDATION_STATUS.' ELSE status_code END)';
     }
 
     /**
@@ -85,8 +67,7 @@ class Failure
     public static function definition(RecordType $type): ?string
     {
         return match ($type) {
-            RecordType::REQUEST => 'status >= '.static::FIRST_FAILED_STATUS_CODE.' or failed validation',
-            RecordType::OUTGOING_REQUEST => 'status >= '.static::FIRST_FAILED_STATUS_CODE,
+            RecordType::REQUEST, RecordType::OUTGOING_REQUEST => 'status >= '.static::FIRST_FAILED_STATUS_CODE,
             RecordType::COMMAND => 'exit_code <> 0',
             RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK => 'status is '.implode(' or ', static::statuses($type)),
             default => null,

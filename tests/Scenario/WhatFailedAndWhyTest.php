@@ -212,7 +212,7 @@ it('flags the route, the job, the task and the dependency that failed, with the 
             'count' => 3,
             'latest_execution_id' => $invoice['execution_id'],
             'reaches' => ['signed_in_actors' => 1, 'without_actor' => 1],
-            'evidence' => ['failed' => 3, 'requests' => 3, 'failure_pct' => 100, 'server_errors' => 3, 'failed_validations' => 0, 'status_counts' => [500 => 3], 'with_exception' => 3, 'unmatched' => false, 'method' => 'GET'],
+            'evidence' => ['failed' => 3, 'requests' => 3, 'failure_pct' => 100, 'server_errors' => 3, 'status_counts' => [500 => 3], 'with_exception' => 3, 'unmatched' => false, 'method' => 'GET'],
         ]],
         'saw' => [],
         'caveats' => [],

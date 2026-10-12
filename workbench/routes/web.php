@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -43,12 +42,6 @@ Route::get('/quotes', function () {
     Http::get('https://rates.example.com/quotes?currency=EUR');
 
     return 'ok';
-});
-
-Route::get('/subscriptions', function (Request $request) {
-    $request->validate(['email' => ['required', 'email']]);
-
-    return redirect('/');
 });
 
 Route::get('/catalog', fn () => Cache::remember('catalog', 60, fn () => 'spring'));

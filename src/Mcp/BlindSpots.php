@@ -23,7 +23,6 @@ class BlindSpots
             'console-requests' => [RecordType::REQUEST],
             'unanswered-outgoing-requests' => [RecordType::OUTGOING_REQUEST],
             'payload-on-server-error-only' => [RecordType::REQUEST],
-            'unrendered-validation-failures' => [RecordType::REQUEST],
             'dead-counters' => ExecutionType::records(),
             'failed-flag-unpopulated' => [RecordType::MAIL, RecordType::NOTIFICATION],
             'mail-by-notification' => [RecordType::MAIL],

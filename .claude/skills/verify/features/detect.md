@@ -5,7 +5,7 @@
 ## Sub-features
 
 - `detect-n-plus-one` finds the query one execution ran 3 or more times, the loops first.
-- `detect-failing-routes` finds the routes with a request at status 400 or above, or one that failed validation.
+- `detect-failing-routes` finds the routes with a request at status 400 or above.
 - `detect-failing-jobs` finds the jobs with a failed or released attempt.
 - `detect-queue-latency` finds the jobs that waited 5 seconds or more, or are pending that long.
 - `detect-memory` finds the executions peaking at 64 MB or more.
@@ -34,7 +34,6 @@ Preconditions:
 - **Run the queue.** `app.sh artisan <run> queue:work --stop-when-empty --no-interaction`.
 - **N+1.** `app.sh mcp <run> detect '{"shape":"n-plus-one","format":"json"}' | jq '.result | {verdict, total, name: .findings[0].name, runs: .findings[0].evidence.worst_runs}'` prints `findings`, `1`, `/products: select ? as product` and `25`. Its `evidence.pattern` is `unknown`, not `loop`, because the workbench's query locations are a vendor frame.
 - **Failing routes.** `app.sh mcp <run> detect '{"shape":"failing-routes"}'` lists `/invoices/{invoice}`.
-- **Failed validation.** After `app.sh get <run> '/subscriptions?email=nope'` the same call also lists `/subscriptions`, with `failed_validations` 1 and `status_counts` `{"302": 1}`. `app.sh mcp <run> occurrences '{"type":"request","failed_validation":true}'` lists that request with `invalid_fields` `["email"]`. With `"threshold":500` the route is gone.
 - **Failing jobs.** `app.sh mcp <run> detect '{"shape":"failing-jobs","format":"json"}' | jq -c '.result.findings[] | [.name, .evidence.jobs_failed, .evidence.jobs_recovered]'` prints `ChargeCard` with `1, 0` and `SyncInventory` with `0, 1`. `ShipOrder` is absent.
 - **Memory.** `app.sh mcp <run> detect '{"shape":"memory"}'` lists `/exports` and no other route.
 - **Exception clusters.** `app.sh mcp <run> detect '{"shape":"exception-clusters","format":"json"}' | jq -c '.result.findings[] | [.evidence.message, .count, .evidence.escaped, .evidence.fatal, .evidence.units[0].label]'` prints `The card was declined.` with `2, 2, false` and `Workbench\\App\\Jobs\\ChargeCard`, then `The warehouse timed out.` with `1, 1, false` and `Workbench\\App\\Jobs\\SyncInventory`, then `Invoice [42] could not be rendered.` with `1, 1, false` and `/invoices/{invoice}`. Its summary is `exception-clusters: 3 findings over 10 executions.`: five requests and five job attempts.

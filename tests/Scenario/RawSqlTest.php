@@ -89,7 +89,7 @@ it('describes the request view before anything was recorded, from the shipped ca
 
     expect($answer['coverage']['state'])->toBe('absent')
         ->and($answer['empty']['kind'])->toBe('no_store')
-        ->and(array_column($answer['result']['columns'], 'column'))->toHaveCount(51)
+        ->and(array_column($answer['result']['columns'], 'column'))->toHaveCount(50)
         ->and($answer['result']['columns'][0]['column'])->toBe('id')
         ->and(array_filter(array_column($answer['result']['columns'], 'examples')))->toBe([]);
 });

@@ -107,7 +107,7 @@ readonly class TraceRecords
         foreach (ExecutionType::cases() as $type) {
             $view = RecordType::from($type->value)->view();
             $fields = match ($type) {
-                ExecutionType::REQUEST => 'route_path, status_code, invalid_fields',
+                ExecutionType::REQUEST => 'route_path, status_code',
                 ExecutionType::COMMAND => 'name, exit_code',
                 ExecutionType::JOB_ATTEMPT, ExecutionType::SCHEDULED_TASK => 'name, status',
             };

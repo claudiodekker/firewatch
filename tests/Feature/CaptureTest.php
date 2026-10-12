@@ -127,7 +127,7 @@ it('stamps a new store with Firewatch\'s application id and schema version', fun
         $connection->querySingle('PRAGMA user_version'),
     ]);
 
-    expect($stamps)->toBe([0x46575443, 5]);
+    expect($stamps)->toBe([0x46575443, 6]);
 });
 
 it('records the release of Firewatch that created a new store', function () {

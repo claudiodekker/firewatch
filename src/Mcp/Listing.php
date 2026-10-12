@@ -244,7 +244,6 @@ class Listing
                 'method' => $data['method'] ?? null,
                 'url' => $data['url'] ?? null,
                 'status_code' => $data['status_code'] ?? null,
-                'invalid_fields' => $data['invalid_fields'] ?? null,
                 'queries' => $data['queries'] ?? null,
                 'memory_mb' => $memory,
             ],
