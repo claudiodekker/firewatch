@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
+use ClaudioDekker\Firewatch\Mcp\Tools\Trace;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -83,6 +84,24 @@ it('finds nothing in a job a test dispatched itself that ran no query twice and 
     ShipOrder::dispatch();
 
     expect(Answers::assert(Detect::class, ['shape' => 'failing-jobs'])['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1, 'total' => 0]);
+});
+
+it('traces a job a test dispatched itself on a sync connection of another name as a whole lineage', function () {
+    captureTestSuite();
+    config()->set('queue.connections.inline', ['driver' => 'sync']);
+    config()->set('queue.default', 'inline');
+
+    ShipOrder::dispatch();
+
+    $failure = Answers::assert(Detect::class, ['shape' => 'failing-jobs']);
+    [$attempt] = storeRows('SELECT trace_id, connection FROM job_attempts');
+    $answer = Answers::assert(Trace::class, ['trace_id' => $attempt['trace_id']]);
+
+    expect($failure['result'])->toMatchArray(['verdict' => 'clean', 'examined' => 1])
+        ->and($attempt)->toMatchArray(['connection' => 'inline'])
+        ->and($answer['result']['jobs'])->toHaveCount(1)
+        ->and($answer['result']['jobs'][0])->toMatchArray(['name' => ShipOrder::class, 'lineage' => 'no_dispatch', 'outcome' => 'processed', 'dispatch' => null])
+        ->and($answer['notes'])->toBe([]);
 });
 
 it('has nothing to judge in a job a test called directly, and says a sync job inside an execution has no attempt', function () {
