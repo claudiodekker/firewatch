@@ -18,6 +18,7 @@ use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Jobs\SyncJob;
+use Illuminate\Support\Testing\Fakes\EventFake;
 use Laravel\Nightwatch\Compatibility;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\ExecutionStage;
@@ -364,6 +365,10 @@ class TestCapture
             return;
         }
 
+        if ($this->fakesJobEnd()) {
+            return;
+        }
+
         $this->core->finishExecution();
 
         $id = $this->core->uuid->make();
@@ -376,6 +381,23 @@ class TestCapture
 
         // Nightwatch samples a job by its dispatch, which a test's own dispatch leaves undecided.
         $this->core->configureRequestSampling();
+    }
+
+    /**
+     * Determine if the test fakes an event that ends a job's attempt, which would leave the attempt open for the rest of the test.
+     */
+    protected function fakesJobEnd(): bool
+    {
+        $events = $this->app->get('events');
+
+        if (! $events instanceof EventFake) {
+            return false;
+        }
+
+        // The fake has no public way to ask which events it keeps from their listeners.
+        $fakes = new ReflectionMethod($events, 'shouldFakeEvent');
+
+        return $fakes->invoke($events, JobProcessed::class, []) || $fakes->invoke($events, JobExceptionOccurred::class, []);
     }
 
     /**

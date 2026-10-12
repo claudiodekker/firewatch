@@ -5,8 +5,13 @@ use ClaudioDekker\Firewatch\Tests\Fixtures\Jobs\FailsItself;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -403,6 +408,44 @@ it('ends the attempt of a job the sync queue raises no failed event for', functi
         ['name' => DeletesItselfAndThrows::class, 'status' => 'failed', 'exceptions' => 1],
     ])->and(executionQueries())->toBe([
         '/orders' => ['select 1 as orders'],
+    ]);
+});
+
+it('leaves a job between the executions when the test fakes an event that ends its attempt', function (Closure $fake, Closure $dispatch, int $jobQueries) {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 1 as orders'));
+    DB::select('select 0 as before');
+
+    $fake();
+    $dispatch();
+    DB::select('select 2 as after');
+    $this->get('/orders')->assertOk();
+
+    expect(storeRows('SELECT count(*) AS attempts FROM job_attempts'))->toBe([['attempts' => 0]])
+        ->and(storeRows('SELECT execution_source, count(*) AS queries FROM queries GROUP BY execution_source ORDER BY min(started_at)'))->toBe([
+            ['execution_source' => 'between', 'queries' => 1 + $jobQueries + 1],
+            ['execution_source' => 'request', 'queries' => 1],
+        ])->and(executionQueries())->toBe([
+            '/orders' => ['select 1 as orders'],
+        ])->and(notices())->toBe([]);
+})->with([
+    'the processed event' => [fn () => Event::fake([JobProcessed::class]), fn () => RestockProducts::dispatch(), 25],
+    'the exception event' => [fn () => Event::fake([JobExceptionOccurred::class]), fn () => expect(fn () => ChargeCard::dispatch())->toThrow(RuntimeException::class), 0],
+    'every event but the one that starts a job' => [fn () => Event::fakeExcept([JobProcessing::class]), fn () => RestockProducts::dispatch(), 25],
+]);
+
+it('records a job as an attempt when the test fakes other events', function () {
+    captureTests();
+
+    Event::fake([JobQueued::class]);
+    RestockProducts::dispatch();
+    DB::select('select 1 as after');
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT name, status, queries FROM job_attempts'))->toBe([
+        ['name' => RestockProducts::class, 'status' => 'processed', 'queries' => 25],
+    ])->and(storeRows('SELECT sql, execution_source FROM queries WHERE sql = \'select 1 as after\''))->toBe([
+        ['sql' => 'select 1 as after', 'execution_source' => 'between'],
     ]);
 });
 
