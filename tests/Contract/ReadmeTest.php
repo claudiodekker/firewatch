@@ -141,7 +141,7 @@ test('each default in the configuration table is the default of the shipped file
 });
 
 test('the normaliser falls back to the defaults of the shipped file', function () {
-    $normaliser = new ConfigurationNormaliser(basePath: base_path(), publicPath: public_path(), storagePath: storage_path());
+    $normaliser = new ConfigurationNormaliser(basePath: base_path(), publicPath: public_path(), storagePath: storage_path(), environment: 'testing');
 
     $resolved = fn (array $raw) => ['database' => str_replace('\\', '/', $normaliser->resolve($raw)->database)] + get_object_vars($normaliser->resolve($raw));
 

@@ -6,7 +6,7 @@ use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
 
 function configurationNormaliser(): ConfigurationNormaliser
 {
-    return new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage');
+    return new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage', environment: 'testing');
 }
 
 /**
@@ -244,8 +244,8 @@ it('resolves the store path', function (string $value, string $expected) {
 it('falls back to the default store path for a refused path', function (mixed $value, string $reason) {
     $configuration = configurationNormaliser()->resolve(['database' => $value]);
 
-    expect($configuration->database)->toBe('/app/storage/firewatch/firewatch.sqlite')
-        ->and(configurationIssueLines($configuration))->toBe(["firewatch.database: {$reason}; using /app/storage/firewatch/firewatch.sqlite"]);
+    expect($configuration->database)->toBe('/app/storage/firewatch/firewatch-testing.sqlite')
+        ->and(configurationIssueLines($configuration))->toBe(["firewatch.database: {$reason}; using /app/storage/firewatch/firewatch-testing.sqlite"]);
 })->with([
     'empty' => ['', '"" is not a file path'],
     'not a string' => [5, '5 is not a file path'],
@@ -259,11 +259,11 @@ it('falls back to the default store path for a refused path', function (mixed $v
 ]);
 
 it('refuses a Windows store path under the public directory whatever its case', function (string $path) {
-    $normaliser = new ConfigurationNormaliser(basePath: 'C:\\app', publicPath: 'C:\\app\\public', storagePath: 'C:\\app\\storage');
+    $normaliser = new ConfigurationNormaliser(basePath: 'C:\\app', publicPath: 'C:\\app\\public', storagePath: 'C:\\app\\storage', environment: 'testing');
 
     $configuration = $normaliser->resolve(['database' => $path]);
 
-    expect($configuration->database)->toBe('C:\\app\\storage/firewatch/firewatch.sqlite')
+    expect($configuration->database)->toBe('C:\\app\\storage/firewatch/firewatch-testing.sqlite')
         ->and(configurationIssueLines($configuration))->toHaveCount(1)
         ->and(configurationIssueLines($configuration)[0])->toContain('is under the public directory');
 })->with([

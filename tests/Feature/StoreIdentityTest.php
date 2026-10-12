@@ -55,7 +55,7 @@ function replaceStore(string $key): void
 {
     $path = identityStorePath();
     $replacement = $path.'.replacement';
-    $normaliser = new ConfigurationNormaliser(basePath: base_path(), publicPath: public_path(), storagePath: storage_path());
+    $normaliser = new ConfigurationNormaliser(basePath: base_path(), publicPath: public_path(), storagePath: storage_path(), environment: 'testing');
     $configuration = $normaliser->resolve(['database' => $replacement]);
     $writer = new Writer($configuration, new FailureLog($configuration), sqliteVersion: '3.51.3');
 

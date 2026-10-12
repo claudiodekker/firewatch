@@ -13,7 +13,7 @@ use Illuminate\Filesystem\Filesystem;
 function writerWith(?FileIdentity $identity = null, ?Closure $pid = null): Writer
 {
     $directory = sys_get_temp_dir().'/firewatch-writer-tests/'.bin2hex(random_bytes(8));
-    $normaliser = new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage');
+    $normaliser = new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage', environment: 'testing');
 
     test()->directories = [...test()->directories, $directory];
 
@@ -99,7 +99,7 @@ it('keeps its connection while the pid is unchanged and reopens it when the pid 
 it('sees a store file swapped in right after its connection opened', function () {
     $directory = sys_get_temp_dir().'/firewatch-writer-tests/'.bin2hex(random_bytes(8));
     $path = $directory.'/firewatch.sqlite';
-    $normaliser = new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage');
+    $normaliser = new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage', environment: 'testing');
     $writer = new class($normaliser->resolve(['database' => $path])) extends Writer
     {
         public function __construct(Configuration $configuration)

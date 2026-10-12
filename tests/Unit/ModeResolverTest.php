@@ -5,7 +5,7 @@ use ClaudioDekker\Firewatch\Mode;
 use ClaudioDekker\Firewatch\ModeResolver;
 
 it('resolves Off when SQLite is missing or below 3.41.0', function (?string $sqliteVersion, Mode $expected) {
-    $configuration = (new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage'))->resolve([]);
+    $configuration = (new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage', environment: 'testing'))->resolve([]);
 
     $mode = (new ModeResolver)->resolve($configuration, environment: 'local', argv: ['artisan'], sqliteVersion: $sqliteVersion);
 
@@ -18,7 +18,7 @@ it('resolves Off when SQLite is missing or below 3.41.0', function (?string $sql
 ]);
 
 it('steps aside in a disallowed environment even without a usable SQLite', function () {
-    $configuration = (new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage'))->resolve([]);
+    $configuration = (new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage', environment: 'testing'))->resolve([]);
 
     $mode = (new ModeResolver)->resolve($configuration, environment: 'production', argv: ['artisan'], sqliteVersion: null);
 
