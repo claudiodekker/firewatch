@@ -65,7 +65,8 @@ it('finds the query a request ran once for each of forty posts, with forty diffe
         ->and($finding['name'])->toBe('/posts: select ? as author')
         ->and($finding['evidence'])->toMatchArray(['worst_runs' => 40, 'executions_affected' => 1, 'total_runs' => 40, 'distinct_bindings' => 40, 'unit' => ['source' => 'request', 'label' => '/posts']])
         ->and($finding['evidence']['call_sites'])->toHaveCount(1)
-        ->and($finding['evidence']['call_sites'][0]['runs'])->toBe(40);
+        ->and($finding['evidence']['call_sites'][0]['runs'])->toBe(40)
+        ->and($answer['next'][0])->toMatchArray(['tool' => 'execution', 'why' => 'Open the latest execution behind this finding.']);
 });
 
 it('reads the same query three times with the same bindings as a redundant repeat', function () {

@@ -1054,7 +1054,7 @@ return [
     'detect_part_clean' => 'clean: :shapes',
     'detect_findings_how' => 'List more of the findings with a larger `limit`, up to 100, or narrow the call with `group`, `since` and `until`.',
     'detect_findings_how_ungrouped' => 'List more of the findings with a larger `limit`, up to 100, or narrow the call with `since` and `until`.',
-    'detect_next_execution' => 'Open the latest execution that failed.',
+    'detect_next_execution' => 'Open the latest execution behind this finding.',
     'detect_next_occurrences' => 'List the records of the group.',
     'detect_next_rank' => 'See how the group compares with the others, and whether it changed with a deploy.',
     'detect_next_log_lines' => 'List the lines at this level and worse that hold the fragment of the shape.',
