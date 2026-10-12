@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
 use ClaudioDekker\Firewatch\Store\Writer;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
 use Laravel\Nightwatch\Facades\Nightwatch;
 
@@ -13,7 +14,7 @@ use Laravel\Nightwatch\Facades\Nightwatch;
  */
 function registerFirewatchOnSqlite(string $version): void
 {
-    app()->bind(Writer::class, fn () => new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $version));
+    app()->singleton(Writer::class, fn () => new Writer(app(Configuration::class), app(FailureLog::class), sqliteVersion: $version));
 
     registerFirewatch();
 }
@@ -139,6 +140,18 @@ it('polls the lock every 5 ms within the busy timeout', function (int $busyTimeo
     'a budget of whole polls' => [10, [5_000, 5_000]],
     'a budget ending between polls' => [12, [5_000, 5_000, 2_000]],
 ]);
+
+it('waits up to 5 seconds for the lock while it records a test run', function () {
+    captureTests();
+    registerFirewatchOnSqlite('3.45.0');
+    holdLockFile();
+
+    DB::select('select 1 as orders');
+    Nightwatch::digest();
+
+    Sleep::assertSequence(array_fill(0, 1_000, Sleep::usleep(5_000)));
+    expect(notices())->toBe(['Firewatch could not store a batch of 1 records: Firewatch could not lock ['.lockPath().'] within 5000 ms.']);
+});
 
 it('writes once the lock is released within the busy timeout', function () {
     registerFirewatchOnSqlite('3.45.0');

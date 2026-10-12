@@ -45,6 +45,13 @@ pest()->group('contract')->in('Contract');
 pest()->group('unit')->in('Unit');
 pest()->group('arch')->in('Arch');
 
+function captureTests(): void
+{
+    setEnvironmentVariable(name: 'FIREWATCH_CAPTURE_TESTS', value: 'true');
+
+    test()->refreshApplication();
+}
+
 /**
  * Get the notices Firewatch wrote during the test.
  *

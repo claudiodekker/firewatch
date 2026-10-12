@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\Capture\TestRecord;
 use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Pruner;
+use ClaudioDekker\Firewatch\Store\Writer;
 use Closure;
 use JsonSerializable;
 use Laravel\Nightwatch\Contracts\Ingest as IngestContract;
@@ -23,6 +24,11 @@ class Ingest implements IngestContract
      * The number of records the buffer holds, as Nightwatch's own buffer does.
      */
     protected const BUFFER_LENGTH = 500;
+
+    /**
+     * The longest a test run waits for a busy store, in milliseconds, as its parallel workers share the store.
+     */
+    public const TEST_RUN_BUSY_TIMEOUT_MILLISECONDS = 5000;
 
     /**
      * The records waiting for the next digest, in the order the sensors wrote them.
@@ -78,6 +84,7 @@ class Ingest implements IngestContract
         protected InvalidFields $invalidFields,
         protected FailureLog $failures,
         protected Pruner $pruner,
+        protected Writer $writer,
     ) {
         //
     }
@@ -216,22 +223,41 @@ class Ingest implements IngestContract
         $this->storing = true;
 
         try {
-            try {
-                $this->appendBatch->handle($records, bindings: $bindings, testRecords: $testRecords, invalidFields: $invalidFields);
-            } catch (Throwable $exception) {
-                $this->failures->record($exception, dropped: count($records));
-
-                if (FailureKind::of($exception) === FailureKind::FULL) {
-                    $this->prune($this->pruner->runNow(...));
-                }
+            if ($this->testRecord === null) {
+                $this->append($records, $bindings, $testRecords, $invalidFields);
 
                 return;
             }
 
-            $this->prune($this->pruner->run(...));
+            $this->writer->waitingUpTo(static::TEST_RUN_BUSY_TIMEOUT_MILLISECONDS, fn () => $this->append($records, $bindings, $testRecords, $invalidFields));
         } finally {
             $this->storing = false;
         }
+    }
+
+    /**
+     * Append a batch and prune after it, recording the batch as dropped when it can't be written.
+     *
+     * @param  list<array<mixed>>  $records
+     * @param  list<list<mixed>|null>  $bindings
+     * @param  list<TestRecord|null>  $testRecords
+     * @param  list<list<string>|null>  $invalidFields
+     */
+    protected function append(array $records, array $bindings, array $testRecords, array $invalidFields): void
+    {
+        try {
+            $this->appendBatch->handle($records, bindings: $bindings, testRecords: $testRecords, invalidFields: $invalidFields);
+        } catch (Throwable $exception) {
+            $this->failures->record($exception, dropped: count($records));
+
+            if (FailureKind::of($exception) === FailureKind::FULL) {
+                $this->prune($this->pruner->runNow(...));
+            }
+
+            return;
+        }
+
+        $this->prune($this->pruner->run(...));
     }
 
     /**

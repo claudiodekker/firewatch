@@ -5,6 +5,7 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Notices;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Sleep;
 use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Symfony\Component\Process\Process;
@@ -129,23 +130,88 @@ it('records a file that is not a Firewatch store by its kind', function (Closure
     ],
 ]);
 
-it('keeps the latest 100 failure lines', function (int $earlier, int $kept) {
+/**
+ * Fill the failure file with the given lines, as earlier failures left them.
+ *
+ * @param  list<array<string, mixed>>  $lines
+ */
+function writeFailureLines(array $lines): void
+{
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
-    $lines = array_map(fn (int $index) => json_encode(['at' => $index, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 1]), range(1, $earlier));
-    file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', implode("\n", $lines)."\n");
+
+    file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', implode("\n", array_map(json_encode(...), $lines))."\n");
+}
+
+it('appends a failure line while the file holds fewer than 100', function () {
+    writeFailureLines(array_map(fn (int $at) => ['at' => $at, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 2], range(1, 99)));
 
     Cache::get('dropped');
     Nightwatch::digest();
 
     $failures = failureLines();
 
-    expect($failures)->toHaveCount($kept)
-        ->and($failures[0]['at'])->toBe($earlier - $kept + 2)
+    expect($failures)->toHaveCount(100)
+        ->and($failures[0])->toBe(['at' => 1, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 2])
         ->and(end($failures)['kind'])->toBe('foreign');
-})->with([
-    'up to the cap' => ['earlier' => 99, 'kept' => 100],
-    'over the cap' => ['earlier' => 100, 'kept' => 100],
-]);
+});
+
+it('keeps 100 failure lines by folding the oldest dropped batches of one kind into a line that counts them', function () {
+    writeFailureLines(array_map(fn (int $at) => ['at' => $at, 'entry' => 'batch', 'kind' => $at === 1 ? 'full' : 'busy', 'code' => 5, 'message' => "failure {$at}", 'dropped' => 2], range(1, 100)));
+
+    Cache::get('dropped');
+    Nightwatch::digest();
+    Cache::get('dropped again');
+    Nightwatch::digest();
+
+    $failures = failureLines();
+
+    expect($failures)->toHaveCount(100)
+        ->and($failures[0])->toBe(['at' => 1, 'entry' => 'batch', 'kind' => 'full', 'code' => 5, 'message' => 'failure 1', 'dropped' => 2])
+        ->and($failures[1])->toBe(['at' => 2.0, 'until' => 4.0, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'failure 4', 'dropped' => 6, 'batches' => 3])
+        ->and($failures[2]['at'])->toBe(5)
+        ->and(array_column(array_slice($failures, -2), 'kind'))->toBe(['foreign', 'foreign'])
+        ->and(array_sum(array_column($failures, 'dropped')))->toBe(202);
+});
+
+it('drops the oldest failed prune before a dropped batch that has no other of its kind to fold into', function () {
+    writeFailureLines([
+        ['at' => 1, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 7],
+        ...array_map(fn (int $at) => ['at' => $at, 'entry' => 'prune', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked'], range(2, 100)),
+    ]);
+
+    Cache::get('dropped');
+    Nightwatch::digest();
+
+    $failures = failureLines();
+
+    expect($failures)->toHaveCount(100)
+        ->and($failures[0]['dropped'])->toBe(7)
+        ->and($failures[1]['at'])->toBe(3)
+        ->and(end($failures)['dropped'])->toBe(1);
+});
+
+it('drops a line it can\'t read before it folds or drops one it can', function () {
+    writeFailureLines(array_map(fn (int $at) => ['at' => $at, 'entry' => 'batch', 'kind' => 'busy', 'code' => 5, 'message' => 'database is locked', 'dropped' => 2], range(1, 99)));
+    file_put_contents(dirname(app(Configuration::class)->database).'/failures.jsonl', "not a line\n", FILE_APPEND);
+
+    Cache::get('dropped');
+    Nightwatch::digest();
+
+    $failures = failureLines();
+
+    expect($failures)->toHaveCount(100)
+        ->and(array_sum(array_column($failures, 'dropped')))->toBe(199)
+        ->and(array_column($failures, 'batches'))->toBe([]);
+});
+
+it('keeps a line whose message holds a character outside ASCII when it rewrites the file', function () {
+    writeFailureLines(array_map(fn (int $at) => ['at' => $at, 'entry' => 'batch', 'kind' => "kind {$at}", 'code' => null, 'message' => 'The file at [/Users/Åsa/firewatch.sqlite] is not a Firewatch store.', 'dropped' => 2], range(1, 100)));
+
+    Cache::get('dropped');
+    Nightwatch::digest();
+
+    expect(array_sum(array_column(failureLines(), 'dropped')))->toBe(199);
+});
 
 it('writes one notice however many batches it drops', function () {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
@@ -204,7 +270,7 @@ it('still writes a notice about a dropped batch when its failure line can\'t be 
     'a failure file that is a directory' => [fn (string $failures) => mkdir($failures)],
 ]);
 
-it('loses a failure line rather than wait for a lock held elsewhere', function () {
+it('waits 50 ms for the failure file, then loses the line rather than hold up the request', function () {
     writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
     $failures = dirname(app(Configuration::class)->database).'/failures.jsonl';
     $handle = fopen($failures, 'c+');
@@ -216,7 +282,21 @@ it('loses a failure line rather than wait for a lock held elsewhere', function (
 
     expect(file_get_contents($failures))->toBe('')
         ->and(notices())->toHaveCount(1);
+    Sleep::assertSequence(array_fill(0, 10, Sleep::usleep(5_000)));
     Exceptions::assertNothingReported();
+});
+
+it('records the failure once the failure file is free again', function () {
+    writeStoreFile(fn (SQLite3 $connection) => $connection->exec('CREATE TABLE orders (id INTEGER)'));
+    $handle = fopen(dirname(app(Configuration::class)->database).'/failures.jsonl', 'c+');
+    flock($handle, LOCK_EX);
+    Sleep::whenFakingSleep(fn () => flock($handle, LOCK_UN));
+
+    Cache::get('dropped');
+    Nightwatch::digest();
+    fclose($handle);
+
+    expect(array_column(failureLines(), 'dropped'))->toBe([1]);
 });
 
 it('keeps recording dropped batches when the notice can\'t be written', function () {
@@ -238,3 +318,21 @@ it('keeps recording dropped batches when the notice can\'t be written', function
 
     expect(failureLines())->toHaveCount(2);
 });
+
+it('loses no records when the workers of a parallel test run share the store', function () {
+    $workers = array_map(fn () => new Process(
+        [PHP_BINARY, 'vendor/bin/phpunit', '--no-configuration', '--bootstrap', 'vendor/autoload.php', 'tests/Fixtures/TestRun/ParallelWorkerTest.php'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite'],
+        timeout: 120,
+    ), range(1, 4));
+
+    array_map(fn (Process $worker) => $worker->start(), $workers);
+    $exitCodes = array_map(fn (Process $worker) => $worker->wait(), $workers);
+
+    expect($exitCodes)->toBe([0, 0, 0, 0])
+        ->and(storeRows('SELECT type, count(*) AS records FROM records GROUP BY type ORDER BY type'))->toBe([
+            ['type' => 'query', 'records' => 320],
+            ['type' => 'request', 'records' => 160],
+        ])->and(file_exists(dirname(app(Configuration::class)->database).'/failures.jsonl'))->toBeFalse();
+})->group('process');

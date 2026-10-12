@@ -13,8 +13,14 @@ use SQLite3;
  */
 class DroppedBatchTest extends TestCase
 {
+    /**
+     * The connection of the other writer, which holds the store's write lock.
+     */
     protected static ?SQLite3 $lockHolder = null;
 
+    /**
+     * Get the package providers.
+     */
     protected function getPackageProviders($app): array
     {
         return [FirewatchServiceProvider::class];

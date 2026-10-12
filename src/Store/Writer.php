@@ -6,7 +6,6 @@ use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\FirewatchVersion;
 use Closure;
 use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Sleep;
 use SQLite3;
 use SQLite3Exception;
 use SQLite3Result;
@@ -51,11 +50,6 @@ class Writer
      * The share of the backstop's pages a burst between two passes may reach, as a multiple.
      */
     protected const BURST_HEADROOM = 1.25;
-
-    /**
-     * The interval the lock file is polled at, in milliseconds.
-     */
-    protected const LOCK_POLL_MILLISECONDS = 5;
 
     /**
      * The open connection, once a batch has been written on a SQLite release without the WAL-reset bug.
@@ -302,30 +296,12 @@ class Writer
     protected function locked(Closure $callback): mixed
     {
         $path = $this->configuration->database.'.lock';
-        $budget = $this->busyTimeout();
 
         $this->createDirectory(dirname($path));
         $handle = $this->openLockFile($path);
 
-        // The budget counts down by what was slept, so a frozen or faked clock in the host can't stretch it.
-        $remaining = $budget;
-
         try {
-            while (! flock($handle, LOCK_EX | LOCK_NB, $wouldBlock)) {
-                if (! $wouldBlock) {
-                    throw new StoreFailure(FailureKind::IO, "Firewatch could not lock [{$path}].");
-                }
-
-                if ($remaining <= 0) {
-                    throw new StoreFailure(FailureKind::BUSY, "Firewatch could not lock [{$path}] within {$budget} ms.");
-                }
-
-                $poll = min($remaining, static::LOCK_POLL_MILLISECONDS);
-
-                Sleep::usleep($poll * Microseconds::PER_MILLISECOND);
-
-                $remaining -= $poll;
-            }
+            $remaining = FileLock::acquire($handle, $path, $this->busyTimeout());
 
             return $callback($remaining);
         } finally {

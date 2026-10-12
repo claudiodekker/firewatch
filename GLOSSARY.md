@@ -245,7 +245,7 @@ A batch of wire records Firewatch could not store and discarded without retry, r
 _Avoid_: Lost event, failed write
 
 **Store failure**:
-One line recorded beside the store when a write or a prune failed or a damaged store was replaced, naming which as its entry, kept apart from the store so it survives the store's own failure.
+One line recorded beside the store when a write or a prune failed or a damaged store was replaced, naming which as its entry, kept apart from the store so it survives the store's own failure. The file keeps 100 lines; past that, its oldest dropped batches of one kind are folded into one line that counts their batches and records from the first to the last, so the totals stay complete.
 _Avoid_: Error log, exception
 
 **Foreign file**:
@@ -690,7 +690,7 @@ The default a key takes when its value is invalid, applied to that key alone.
 _Avoid_: Recovery, coercion
 
 **Busy timeout**:
-How long the capture side waits for a busy store before dropping the batch.
+How long the capture side waits for a busy store before dropping the batch: the configured time, or 5 seconds while a test run is recorded, whose parallel workers share the store.
 _Avoid_: Lock timeout, write timeout
 
 ### Budgets

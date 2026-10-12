@@ -1,5 +1,6 @@
 <?php
 
+use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
@@ -215,6 +216,27 @@ describe('dropped records', function () {
         'until the last drop' => [['until' => '2026-09-30 14:00:10'], 3],
         'until after it' => [['until' => '2026-09-30 14:00:11'], 7],
         'between them' => [['since' => '2026-09-30 14:00:01', 'until' => '2026-09-30 14:00:09'], 0],
+    ]);
+
+    it('counts every dropped record, however many batches were dropped', function () {
+        foreach (range(1, 150) as $second) {
+            dropBatch(CarbonImmutable::parse('2026-09-30 14:00:00')->addSeconds($second)->toDateTimeString(), FailureKind::BUSY, 3);
+        }
+
+        expect(array_column(conditionsOf(), 'records'))->toBe([450]);
+    });
+
+    it('counts the batches folded into one line whole when the window cuts them, and never leaves them out', function (array $arguments, int $records) {
+        foreach (range(1, 150) as $second) {
+            dropBatch(CarbonImmutable::parse('2026-09-30 14:00:00')->addSeconds($second)->toDateTimeString(), FailureKind::BUSY, 3);
+        }
+
+        expect(array_sum(array_column(conditionsOf($arguments), 'records')))->toBe($records);
+    })->with([
+        'a window inside the folded batches' => [['since' => '2026-09-30 14:00:10', 'until' => '2026-09-30 14:00:20'], 153],
+        'a window that ends before the first drop' => [['until' => '2026-09-30 14:00:01'], 0],
+        'a window after the folded batches' => [['since' => '2026-09-30 14:00:52'], 297],
+        'a window after the last drop' => [['since' => '2026-09-30 14:02:31'], 0],
     ]);
 
     it('says nothing of a recovery that dropped nothing, or of a store that dropped nothing', function () {

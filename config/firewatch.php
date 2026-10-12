@@ -48,8 +48,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | This value is how many milliseconds (0 to 5000) capture waits for a
-    | busy store. A batch that isn't written in time is dropped, rather
-    | than stalling the request. A value of 0 drops it straight away.
+    | busy store before it drops the batch, and 0 never waits. A test
+    | run waits 5 seconds, as its parallel workers share the store.
     |
     */
 

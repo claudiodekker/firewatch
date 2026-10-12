@@ -176,7 +176,7 @@ class Describe extends Tool
         $version = (string) Sqlite::version();
         $dropped = $this->failures->dropped();
         $batches = array_map(fn (array $batch) => [
-            'dropped_at' => $batch['at'],
+            'dropped_at' => $batch['until'],
             'kind' => $batch['kind'],
             'dropped' => $batch['dropped'],
         ], array_slice(array_reverse($dropped), 0, self::DROPPED_BATCHES));

@@ -102,7 +102,7 @@ class Conditions
     }
 
     /**
-     * Get `records-dropped` for batches the store failed to keep inside the window.
+     * Get `records-dropped` for batches the store failed to keep inside the window, counting a line of folded batches whole when the window cuts it.
      *
      * @return list<array<string, mixed>>
      */
@@ -110,7 +110,7 @@ class Conditions
     {
         $lines = array_values(array_filter(
             $this->failures->dropped(),
-            fn (array $line) => ($window->since() === null || $line['at'] >= $window->since()) && ($window->until() === null || $line['at'] < $window->until()),
+            fn (array $line) => ($window->since() === null || $line['until'] >= $window->since()) && ($window->until() === null || $line['at'] < $window->until()),
         ));
 
         if ($lines === []) {
@@ -119,7 +119,7 @@ class Conditions
 
         $records = array_sum(array_column($lines, 'dropped'));
         $from = min(array_column($lines, 'at'));
-        $to = max(array_column($lines, 'at'));
+        $to = max(array_column($lines, 'until'));
         $reason = $lines[array_key_last($lines)]['kind'];
 
         return [$this->condition(
