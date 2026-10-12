@@ -14,9 +14,9 @@ class UserDirectory
      * The statement that adds a user to the directory, or refreshes one it holds.
      */
     protected const UPSERT = <<<'SQL'
-        INSERT INTO users (id, name, username, first_seen, last_seen)
-        VALUES (:id, :name, :username, :seen_at, :seen_at)
-        ON CONFLICT (id) DO UPDATE SET
+        INSERT INTO users (id, worker, name, username, first_seen, last_seen)
+        VALUES (:id, :worker, :name, :username, :seen_at, :seen_at)
+        ON CONFLICT (id, coalesce(worker, '')) DO UPDATE SET
             name = excluded.name,
             username = excluded.username,
             last_seen = max(coalesce(last_seen, excluded.last_seen), coalesce(excluded.last_seen, last_seen))
@@ -25,7 +25,7 @@ class UserDirectory
     /**
      * Add the users to the directory, or refresh the ones it holds.
      *
-     * @param  list<array<string, mixed>>  $users  each with an id, name, username and seen_at
+     * @param  list<array<string, mixed>>  $users  each with an id, worker, name, username and seen_at
      */
     public static function upsert(SQLite3 $connection, array $users): void
     {

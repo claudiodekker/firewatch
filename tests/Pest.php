@@ -25,6 +25,7 @@ use Laravel\Nightwatch\Core;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Process\Process;
 
 pest()->extend(TestCase::class)
     ->use(LazilyRefreshDatabase::class)
@@ -140,6 +141,50 @@ function forceRequests(): void
     setEnvironmentVariable(name: 'NIGHTWATCH_FORCE_REQUEST', value: '1');
 
     test()->refreshApplication();
+}
+
+function captureTests(): void
+{
+    setEnvironmentVariable(name: 'FIREWATCH_CAPTURE_TESTS', value: 'true');
+
+    test()->refreshApplication();
+}
+
+/**
+ * Run the test as the worker of a parallel run with the token, or as a serial run with none, and restore the token afterwards.
+ */
+function runAsWorker(?string $token): void
+{
+    $previous = $_SERVER['TEST_TOKEN'] ?? null;
+
+    $_SERVER['TEST_TOKEN'] = $token;
+
+    if ($token === null) {
+        unset($_SERVER['TEST_TOKEN']);
+    }
+
+    test()->beforeApplicationDestroyed(function () use ($previous) {
+        $_SERVER['TEST_TOKEN'] = $previous;
+
+        if ($previous === null) {
+            unset($_SERVER['TEST_TOKEN']);
+        }
+    });
+}
+
+/**
+ * Run a suite of `tests/Fixtures/TestRun` with PHPUnit in a process of its own, as the worker of a parallel run with the token, capturing into the store of the test.
+ */
+function runFixtureSuite(string $suite, string $worker): void
+{
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/phpunit', '--no-configuration', '--bootstrap', 'vendor/autoload.php', "tests/Fixtures/TestRun/{$suite}.php"],
+        cwd: dirname(__DIR__),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $_SERVER['FIREWATCH_DATABASE'], 'TEST_TOKEN' => $worker],
+        timeout: 30,
+    );
+
+    $process->mustRun();
 }
 
 /**

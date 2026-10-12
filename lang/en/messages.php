@@ -851,7 +851,7 @@ return [
         'mail' => ['class' => 'The mailable class.'],
         'notifications' => ['class' => 'The notification class.'],
         'outgoing_requests' => ['url' => 'The URL that was called.', 'method' => 'The HTTP method of the call.', 'status_code' => 'The status code of the response received.'],
-        'users' => ['id' => 'The user id that user_id holds.', 'name' => 'The person\'s name.', 'first_seen' => 'When the person was first recorded.', 'last_seen' => 'When the person was last recorded.'],
+        'users' => ['id' => 'The user id that user_id holds.', 'worker' => 'The parallel worker whose database holds the person; null in a serial run and outside a test run.', 'name' => 'The person\'s name.', 'first_seen' => 'When the person was first recorded.', 'last_seen' => 'When the person was last recorded.'],
         'drift' => ['type' => 'The record type it was seen on; empty when not tied to one.', 'v' => 'The record version it was seen on, as text.', 'first_seen' => 'When it was first counted.', 'last_seen' => 'When it was last counted.'],
         'meta' => ['key' => 'The marker\'s name.'],
     ],
