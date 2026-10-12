@@ -108,7 +108,6 @@ The server must share a kernel and filesystem with the application. A server on 
 - Nothing is transmitted. Every Nightwatch transmit is cancelled.
 - **Firewatch never redacts URL query strings, SQL, query bindings, log messages, context and extra, exception messages, the Laravel Context or outgoing-request query strings.** For redaction, use Nightwatch's `redact*` callbacks, which always apply, and the opt-in `capture.redact_payload_fields` and `capture.redact_headers`, which are empty by default.
 - A request's payload is recorded only for a 500 response by default (`capture.request_payload`). Request headers are recorded for every request. Response headers and bodies are never recorded.
-- For a request that failed validation, the names of the invalid fields are recorded, never their values or the error messages. Such a request counts as failed, also when its form was redirected back with a 302.
 - The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. A test run writes its own store, apart from your browsing. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
 - Do not commit, share or attach the store file.
 
@@ -138,7 +137,6 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - Console processes other than a test suite record no request records.
 - An outgoing HTTP call that received no response (timeout, connection failure) leaves no record.
 - A request's payload is stored only for a 500 response.
-- A failed validation is recorded only when Laravel renders a `ValidationException`. Errors a controller returns by hand, or that Livewire handles, read as any other response.
 - `lazy_loads`, `hydrated_models`, `files_read` and `files_written` are always 0, and mail and notification `failed` is always false. Zero does not mean none: use the `n-plus-one` detector.
 - Jobs on the sync connection have no attempt record, unless a test dispatched them itself.
 - Logs written straight to a named channel are not captured.

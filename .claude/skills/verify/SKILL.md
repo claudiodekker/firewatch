@@ -57,7 +57,6 @@ Produce telemetry by exercising the workbench the way a user's application would
 | `GET /receipts/7` | renders `receipt.blade.php`, which throws a `RuntimeException`, status 500 | an exception whose first frame is the compiled view, with its `template` beside it |
 | `GET /exports` | builds an 80 MB string | a request peaking above 64 MB, a `memory` finding |
 | `GET /quotes` | calls a faked dependency that answers 503 | a request and an outgoing request, a `failing-http` finding |
-| `GET /subscriptions?email=nope` | fails validation and is redirected back, status 302; with a valid `email` it redirects to `/`, also 302 | a request whose `invalid_fields` is `["email"]`, a `failing-routes` finding; the valid one stores NULL |
 | `GET /catalog` | reads the key `catalog` through `Cache::remember()` | a request, a miss and a write, and from the third request a `cache` finding |
 | `GET /members/7` | signs in Taylor Otwell for the request; `8` is Taylor Swift and `9` is Nuno Maduro | a request that carries the user, and that user in the user directory |
 | `GET /members/7/orders` | dispatches `ShipOrder`, then signs in the member | a request and a `queued-job` record that carry the user; after `queue:work`, an attempt with no user of its own, which `actor` ties to the member by the dispatch |

@@ -43,9 +43,8 @@ class AppendBatch
      * @param  list<array<mixed>>  $records
      * @param  array<int, list<mixed>|null>  $bindings  the bindings paired to each record, by its position in the batch
      * @param  array<int, TestRecord|null>  $testRecords  where each record fell in a test run, by its position in the batch
-     * @param  array<int, list<string>|null>  $invalidFields  the fields that failed validation paired to each record, by its position in the batch
      */
-    public function handle(array $records, array $bindings = [], array $testRecords = [], array $invalidFields = []): void
+    public function handle(array $records, array $bindings = [], array $testRecords = []): void
     {
         if ($records === []) {
             return;
@@ -56,13 +55,7 @@ class AppendBatch
         $users = [];
 
         foreach ($records as $position => $record) {
-            $mapped = $this->mapper->map(
-                $record,
-                $drift,
-                bindings: $bindings[$position] ?? null,
-                testRecord: $testRecords[$position] ?? null,
-                invalidFields: $invalidFields[$position] ?? null,
-            );
+            $mapped = $this->mapper->map($record, $drift, bindings: $bindings[$position] ?? null, testRecord: $testRecords[$position] ?? null);
 
             if ($mapped->user !== null) {
                 $users[] = $mapped->user;

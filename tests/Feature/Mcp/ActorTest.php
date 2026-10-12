@@ -17,7 +17,7 @@ use Laravel\Mcp\Server\Transport\FakeTransporter;
 const ACTOR_AT = 1790776000.5;
 
 const ACTOR_BLIND_SPOTS = [
-    'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'unrendered-validation-failures', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification', 'sync-jobs-unrecorded', 'vendor-defaults-unrecorded',
+    'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification', 'sync-jobs-unrecorded', 'vendor-defaults-unrecorded',
     'exceptions-unreported', 'named-log-channels', 'memory-is-process-peak', 'query-bindings-unpaired', 'uninstrumented-dispatcher', 'actor-partial', 'octane-bootstrap',
 ];
 

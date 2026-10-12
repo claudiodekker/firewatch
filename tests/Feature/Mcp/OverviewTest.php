@@ -329,7 +329,7 @@ describe('coverage and blind spots', function () {
 
     $types = ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job'];
     $ids = [
-        'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'unrendered-validation-failures', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification',
+        'console-requests', 'unanswered-outgoing-requests', 'payload-on-server-error-only', 'dead-counters', 'failed-flag-unpopulated', 'mail-by-notification',
         'sync-jobs-unrecorded', 'vendor-defaults-unrecorded', 'exceptions-unreported', 'named-log-channels', 'memory-is-process-peak', 'query-bindings-unpaired',
         'uninstrumented-dispatcher', 'actor-partial', 'application-opt-outs', 'values-truncated', 'octane-bootstrap',
     ];

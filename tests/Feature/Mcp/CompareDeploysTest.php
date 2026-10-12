@@ -116,7 +116,7 @@ function pairBlindSpots(int $withoutDeploy): array
         'id' => $id,
         'kind' => 'structural',
         'message' => __("firewatch::messages.blind_spots.{$id}"),
-    ], ['console-requests', 'payload-on-server-error-only', 'unrendered-validation-failures', 'dead-counters', 'memory-is-process-peak', 'octane-bootstrap']);
+    ], ['console-requests', 'payload-on-server-error-only', 'dead-counters', 'memory-is-process-peak', 'octane-bootstrap']);
 
     $drift = [
         'id' => 'drift',

@@ -357,7 +357,7 @@ it('answers an empty store with the catalogue and the store facts, saying it hol
         ->and($store['result']['objects'])->toHaveCount(16)
         ->and($store['next'])->toBe([])
         ->and($type['empty']['kind'])->toBe('store_empty')
-        ->and($type['summary'])->toBe(__('firewatch::messages.describe_type_summary_empty', ['object' => 'requests', 'columns' => 51]))
+        ->and($type['summary'])->toBe(__('firewatch::messages.describe_type_summary_empty', ['object' => 'requests', 'columns' => 50]))
         ->and($type['result']['records'])->toBe(0)
         ->and(array_unique(array_map('json_encode', array_column($type['result']['columns'], 'examples'))))->toBe(['[]']);
 });

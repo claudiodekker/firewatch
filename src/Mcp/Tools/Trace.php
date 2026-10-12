@@ -216,7 +216,7 @@ class Trace extends Tool
 
             $type = RecordType::from($execution['type']);
             $links[$execution['execution_id']] = [
-                'failed' => Failure::of($type, $execution),
+                'failed' => Failure::of($type, ExecutionHeader::outcome($type, $execution)),
                 'duration' => $execution['duration'],
             ];
         }
@@ -227,7 +227,7 @@ class Trace extends Tool
             }
 
             $links[$attempt['execution_id']] ??= [
-                'failed' => Failure::of(RecordType::JOB_ATTEMPT, $attempt),
+                'failed' => Failure::of(RecordType::JOB_ATTEMPT, $attempt['status']),
                 'duration' => $attempt['duration'],
             ];
         }

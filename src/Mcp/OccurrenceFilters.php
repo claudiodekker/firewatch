@@ -31,7 +31,6 @@ class OccurrenceFilters
         public readonly int|float|null $slowerThanMilliseconds = null,
         public readonly ?Percentile $atOrAbove = null,
         public readonly ?string $matching = null,
-        public readonly ?bool $failedValidation = null,
     ) {
         //
     }
@@ -52,7 +51,6 @@ class OccurrenceFilters
             slowerThanMilliseconds: self::slowerThan($arguments),
             atOrAbove: self::choice($arguments, 'at_or_above', Percentile::class, 'median or p95', 'occurrences(type: "request", at_or_above: "p95")'),
             matching: $arguments->matching('occurrences(type: "log", matching: "timeout")'),
-            failedValidation: self::failedValidation($arguments),
         );
     }
 
@@ -71,11 +69,6 @@ class OccurrenceFilters
             'slower_than_ms' => $this->slowerThanMilliseconds,
             'at_or_above' => $this->atOrAbove?->value,
             'matching' => $this->matching,
-            'failed_validation' => match ($this->failedValidation) {
-                null => null,
-                true => 'true',
-                false => 'false',
-            },
         ];
     }
 
@@ -93,7 +86,6 @@ class OccurrenceFilters
         $rules = [
             ['method', $this->method !== null, $requests, true, 'a call with `type` request or outgoing-request'],
             ['status', $this->status !== null, $requests, true, 'a call with `type` request or outgoing-request'],
-            ['failed_validation', $this->failedValidation !== null, [RecordType::REQUEST], true, 'a call with `type` request'],
             ['outcome', $this->outcome !== null, [RecordType::JOB_ATTEMPT, RecordType::SCHEDULED_TASK], true, 'a call with `type` job-attempt or scheduled-task'],
             ['level', $this->level !== null, [RecordType::LOG], true, 'a call with `type` log'],
             ['slower_than_ms', $this->slowerThanMilliseconds !== null, $timed, false, 'a call with a timed `type`'],
@@ -134,10 +126,6 @@ class OccurrenceFilters
         if ($this->status !== null) {
             $conditions[] = "json_extract(data, '\$.status_code') BETWEEN :status_from AND :status_to";
             [$bindings['status_from'], $bindings['status_to']] = $this->status;
-        }
-
-        if ($this->failedValidation !== null) {
-            $conditions[] = "json_extract(data, '\$.invalid_fields') IS ".($this->failedValidation ? 'NOT NULL' : 'NULL');
         }
 
         if ($this->outcome !== null) {
@@ -273,20 +261,6 @@ class OccurrenceFilters
         }
 
         return $arguments->choice($argument, $enum, $expected, $example);
-    }
-
-    /**
-     * Read whether the requests kept failed validation, or null for all of them.
-     */
-    protected static function failedValidation(Arguments $arguments): ?bool
-    {
-        $value = $arguments->get('failed_validation');
-
-        if ($value === null || is_bool($value)) {
-            return $value;
-        }
-
-        throw $arguments->invalid(argument: 'failed_validation', expected: 'true or false', accepted: 'true or false', example: 'occurrences(type: "request", failed_validation: true)');
     }
 
     /**

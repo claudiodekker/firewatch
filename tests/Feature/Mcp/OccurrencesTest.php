@@ -199,7 +199,7 @@ test('each type has its own detail', function (RecordType $type, array $fields, 
 
     expect($row['detail'])->toEqual($detail);
 })->with([
-    'a request' => [RecordType::REQUEST, ['method' => 'POST', 'url' => 'http://localhost/x', 'status_code' => 201, 'queries' => 3, 'peak_memory_usage' => 2097152], ['method' => 'POST', 'url' => 'http://localhost/x', 'status_code' => 201, 'invalid_fields' => null, 'queries' => 3, 'memory_mb' => 2.0]],
+    'a request' => [RecordType::REQUEST, ['method' => 'POST', 'url' => 'http://localhost/x', 'status_code' => 201, 'queries' => 3, 'peak_memory_usage' => 2097152], ['method' => 'POST', 'url' => 'http://localhost/x', 'status_code' => 201, 'queries' => 3, 'memory_mb' => 2.0]],
     'a command' => [RecordType::COMMAND, ['command' => 'php artisan orders:sync', 'exit_code' => 1, 'queries' => 2, 'peak_memory_usage' => 1048576], ['command' => 'php artisan orders:sync', 'exit_code' => 1, 'queries' => 2, 'memory_mb' => 1.0]],
     'a job attempt' => [RecordType::JOB_ATTEMPT, ['job_id' => 'j', 'attempt' => 2, 'status' => 'failed', 'queue' => 'q', 'connection' => 'redis', 'queries' => 1, 'peak_memory_usage' => 1048576], ['job_id' => 'j', 'attempt' => 2, 'status' => 'failed', 'queue' => 'q', 'connection' => 'redis', 'queries' => 1, 'memory_mb' => 1.0]],
     'a scheduled task' => [RecordType::SCHEDULED_TASK, ['cron' => '0 * * * *', 'status' => 'skipped', 'queries' => 0, 'peak_memory_usage' => 1048576], ['cron' => '0 * * * *', 'status' => 'skipped', 'queries' => 0, 'memory_mb' => 1.0]],
@@ -399,7 +399,6 @@ it('refuses an argument of the wrong kind or value', function (array $arguments)
     'a slower_than_ms that is a boolean' => [['type' => 'request', 'slower_than_ms' => true]],
     'an empty matching' => [['type' => 'log', 'matching' => '']],
     'a matching of 201 characters' => [['type' => 'log', 'matching' => str_repeat('a', 201)]],
-    'a failed_validation that is text' => [['type' => 'request', 'failed_validation' => 'yes']],
 ]);
 
 it('accepts a matching of 200 characters', function () {
@@ -422,7 +421,6 @@ it('refuses a filter that does not fit the type, naming what it fits', function 
 })->with([
     'a method of a query' => [['type' => 'query', 'method' => 'GET'], 'method', 'a call with `type` request or outgoing-request'],
     'a status of a log' => [['type' => 'log', 'status' => '500'], 'status', 'a call with `type` request or outgoing-request'],
-    'a failed validation of an outgoing request' => [['type' => 'outgoing-request', 'failed_validation' => true], 'failed_validation', 'a call with `type` request'],
     'an outcome of a request' => [['type' => 'request', 'outcome' => 'failed'], 'outcome', 'a call with `type` job-attempt or scheduled-task'],
     'a level of a request' => [['type' => 'request', 'level' => 'error'], 'level', 'a call with `type` log'],
     'a duration of an exception' => [['type' => 'exception', 'slower_than_ms' => 5], 'slower_than_ms', 'a call with a timed `type`'],
@@ -438,7 +436,6 @@ it('refuses a filter that needs a type when no type is given or found', function
 })->with([
     'a method' => [['method' => 'GET']],
     'a status' => [['status' => '500']],
-    'a failed validation' => [['failed_validation' => false]],
     'an outcome' => [['outcome' => 'failed']],
     'a level' => [['level' => 'error']],
     'memory' => [['order' => 'memory']],
