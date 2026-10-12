@@ -577,6 +577,10 @@ _Avoid_: Summary run, dashboard
 The queries of one query group inside one execution.
 _Avoid_: Burst, repetition
 
+**Run pattern**:
+How an n-plus-one finding's runs were made: a loop when one application call site ran the query group at least the threshold times in one execution, unknown when only a vendor call site or one with no file did, since it may stand for several application callers, and repeated otherwise.
+_Avoid_: Loop type, N+1 kind
+
 **Typical share**:
 A request group's share of time spent in queries, the median of per-request shares from three requests, else the aggregate ratio, stated with its basis.
 _Avoid_: Average share, query time percentage

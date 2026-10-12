@@ -81,7 +81,7 @@ class NPlusOne implements Detector
 
         $shown = Judgement::worst($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']], $limit);
         $details = $this->details($connection, $window, $ranked);
-        $findings = array_map(fn (array $row) => $this->finding($row, $details), $shown);
+        $findings = array_map(fn (array $row) => $this->finding($row, $details, $threshold), $shown);
 
         return Judgement::of($this->name(), $described, examined: $examination->examined, total: count($groups), findings: $findings, caveats: $caveats);
     }
@@ -132,13 +132,14 @@ class NPlusOne implements Detector
     /**
      * Get the details of the findings, by the pair of groups.
      *
-     * @return array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>}
+     * @return array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>, patterns: array<string, array<string, mixed>>}
      */
     protected function details(SQLite3 $connection, Window $window, Fragment $ranked): array
     {
         $executions = [];
         $sites = [];
         $queries = [];
+        $patterns = [];
 
         foreach (Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, execution_id, runs, micros, duration, type, source, label, worst_position, latest_position FROM ranked WHERE worst_position = 1 OR latest_position = 1", $ranked->bindings, $window) as $row) {
             $executions[$this->key($row)][$row['worst_position'] === 1 ? 'worst' : 'latest'] = $row;
@@ -167,10 +168,20 @@ class NPlusOne implements Detector
             $queries[$this->key($row)] = $row;
         }
 
+        $file = "replace(coalesce(queries.file, ''), char(92), '/')";
+
+        foreach (Stored::rows($connection, "{$ranked->sql} SELECT eg, qg, coalesce(max(runs) FILTER (WHERE application), 0) AS application, coalesce(max(runs) FILTER (WHERE NOT application), 0) AS vendor FROM (
+            SELECT ranked.eg, ranked.qg, count(*) AS runs, ({$file} <> '' AND {$file} NOT LIKE 'vendor/%' AND {$file} NOT LIKE '%/vendor/%') AS application
+            FROM ranked JOIN queries ON queries.execution_id = ranked.execution_id AND queries.group_hash = ranked.qg
+            GROUP BY ranked.execution_id, ranked.qg, queries.file, queries.line) GROUP BY eg, qg", $ranked->bindings, $window) as $row) {
+            $patterns[$this->key($row)] = $row;
+        }
+
         return [
             'executions' => $executions,
             'sites' => $sites,
             'queries' => $queries,
+            'patterns' => $patterns,
         ];
     }
 
@@ -178,11 +189,12 @@ class NPlusOne implements Detector
      * Get the finding of one execution group and query group.
      *
      * @param  array<string, mixed>  $row
-     * @param  array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>}  $details
+     * @param  array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>, patterns: array<string, array<string, mixed>>}  $details
      */
-    protected function finding(array $row, array $details): Finding
+    protected function finding(array $row, array $details, int|float $threshold): Finding
     {
         $key = $this->key($row);
+        $pattern = RunPattern::of($details['patterns'][$key]['application'], $details['patterns'][$key]['vendor'], $threshold);
         $worst = $details['executions'][$key]['worst'];
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
@@ -206,6 +218,7 @@ class NPlusOne implements Detector
                 'total_ms' => Stored::milliseconds($row['total_micros']),
                 'worst_share_pct' => $share,
                 'distinct_bindings' => $query['unpaired'] > 0 ? null : $query['distinct_bindings'],
+                'pattern' => $pattern->value,
                 'unit' => [
                     'source' => $worst['source'],
                     'label' => $label,
