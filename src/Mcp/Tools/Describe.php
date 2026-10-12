@@ -154,7 +154,7 @@ class Describe extends Tool
             ? $this->storeSections($catalogue, $holdings, $frame->facts())
             : $this->columnsSection($catalogue, $type, records: $holdings->of($type), samples: $samples);
 
-        return $frame->answer(
+        $answer = $frame->answer(
             summary: $this->summary($type, $holdings, $result),
             empty: $frame->storeEmpty(),
             result: $result,
@@ -162,8 +162,9 @@ class Describe extends Tool
             truncated: $type === null ? array_filter([HoldingsSection::truncation($holdings)]) : [],
             next: $this->next($type, $holdings, $catalogue),
             cuttable: ['drift', 'dropped_batches', 'deploys'],
-            found: $type === null,
         );
+
+        return $type === null ? $answer->namingBlindSpots() : $answer;
     }
 
     /**
@@ -200,7 +201,7 @@ class Describe extends Tool
     }
 
     /**
-     * Get the sentence of every structural blind spot, which an answer beside a found result names by id alone.
+     * Get the sentence of every structural blind spot.
      *
      * @return list<array{id: string, sentence: string}>
      */

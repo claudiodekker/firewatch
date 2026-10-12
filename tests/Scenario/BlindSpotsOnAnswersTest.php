@@ -75,7 +75,7 @@ it('prints every sentence on a detector that came back clean, and by id on one w
 
     expect($found['result']['verdict'])->toBe('findings')
         ->and(array_values(array_unique(structuralPrinting($found))))->toBe([false])
-        ->and($clean['result']['verdict'])->not->toBe('findings')
+        ->and($clean['result']['verdict'])->toBe('not_evaluated')
         ->and(array_values(array_unique(structuralPrinting($clean))))->toBe([true]);
 });
 
@@ -92,9 +92,11 @@ it('holds every sentence in describe, so a blind spot named by id is never lost'
     blindSpotRequests();
 
     $rank = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'occurrences']);
-    $described = Answers::assert(Describe::class)['result']['blind_spots'];
+    $describe = Answers::assert(Describe::class);
+    $described = $describe['result']['blind_spots'];
 
-    expect($described)->toBe(array_map(fn (string $id, string $sentence) => ['id' => $id, 'sentence' => $sentence], array_keys(BlindSpots::catalogue()), BlindSpots::catalogue()))
+    expect(array_values(array_unique(structuralPrinting($describe))))->toBe([false])
+        ->and($described)->toBe(array_map(fn (string $id, string $sentence) => ['id' => $id, 'sentence' => $sentence], array_keys(BlindSpots::catalogue()), BlindSpots::catalogue()))
         ->and(array_diff(array_keys(structuralPrinting($rank)), array_column($described, 'id')))->toBe([]);
 });
 

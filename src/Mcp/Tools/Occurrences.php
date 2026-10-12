@@ -246,8 +246,7 @@ class Occurrences extends Tool
             ],
             truncated: $continuation->truncated($rows, $listed['keys'], 'rows', 'firewatch::messages.occurrences_cursor_how', $frame->facts()->meta->createdAt, $window, $frame->now),
             next: $this->runNext($rows->rows),
-            found: true,
-        );
+        )->namingBlindSpots();
     }
 
     /**
@@ -399,8 +398,7 @@ class Occurrences extends Tool
             notes: $this->notes($read['baseline'], $userId),
             truncated: $truncated,
             next: $this->next($window, $group, $listed['rows'][0]['group']),
-            found: true,
-        );
+        )->namingBlindSpots();
     }
 
     /**

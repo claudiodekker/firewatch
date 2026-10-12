@@ -38,6 +38,11 @@ class Answer
     protected ?array $bounded = null;
 
     /**
+     * Whether each structural blind spot prints by its id alone.
+     */
+    protected bool $namesBlindSpots = false;
+
+    /**
      * Create a new answer instance.
      *
      * @param  float  $now  the store clock: Unix seconds with microseconds
@@ -49,7 +54,6 @@ class Answer
      * @param  list<string>|null  $cuttable  the result lists the budget may shorten, the first named first; null for every list, the last first
      * @param  (Closure(array<string, mixed>): array<string, mixed>)|null  $recount  restates what a result says of its own lists once the budget has shortened them
      * @param  string|null  $capHow  what the cap entry tells the reader, when it is not that no tool shows the rest of a value
-     * @param  bool  $found  true when the result lists what was found and no claim in it rests on an absence, so a structural blind spot prints by id alone; every other answer prints each sentence
      */
     public function __construct(
         public readonly string $tool,
@@ -67,7 +71,6 @@ class Answer
         public readonly ?array $cuttable = null,
         protected ?Closure $recount = null,
         protected ?string $capHow = null,
-        public readonly bool $found = false,
     ) {
         if (count($notes) > self::LISTED || count($next) > self::LISTED) {
             throw new InvalidArgumentException('An answer carries at most '.self::LISTED.' notes and '.self::LISTED.' next calls.');
@@ -85,6 +88,17 @@ class Answer
     public static function empty(string $tool, float $now, string $timezone, Window $window, Emptiness $empty, Coverage $coverage, array $blindSpots, array $notes = []): self
     {
         return new self(tool: $tool, now: $now, timezone: $timezone, window: $window, summary: $empty->summary(), empty: $empty, result: [], coverage: $coverage, blindSpots: $blindSpots, notes: $notes);
+    }
+
+    /**
+     * Get the answer with each structural blind spot named by its id alone, for a result that lists what was found and rests no claim on an absence.
+     */
+    public function namingBlindSpots(): static
+    {
+        $answer = clone $this;
+        $answer->namesBlindSpots = true;
+
+        return $answer;
     }
 
     /**
@@ -232,21 +246,23 @@ class Answer
             $lines[] = '> '.Markdown::cell($note);
         }
 
-        $listed = $this->listedBlindSpots();
+        $named = [];
 
-        foreach ($listed as $blindSpot) {
-            if (isset($blindSpot['message'])) {
-                $lines[] = __('firewatch::messages.blind_spot', [
-                    'id' => $blindSpot['id'],
-                    'message' => $blindSpot['message'],
-                ]);
+        foreach ($this->listedBlindSpots() as $blindSpot) {
+            if (! isset($blindSpot['message'])) {
+                $named[] = $blindSpot['id'];
+
+                continue;
             }
+
+            $lines[] = __('firewatch::messages.blind_spot', [
+                'id' => $blindSpot['id'],
+                'message' => $blindSpot['message'],
+            ]);
         }
 
-        $brief = array_column(array_filter($listed, fn (array $blindSpot) => ! isset($blindSpot['message'])), 'id');
-
-        if ($brief !== []) {
-            $lines[] = __('firewatch::messages.blind_spots_brief', ['ids' => implode(', ', $brief)]);
+        if ($named !== []) {
+            $lines[] = __('firewatch::messages.blind_spots_named', ['ids' => implode(', ', $named)]);
         }
 
         if ($this->next !== []) {
@@ -261,13 +277,13 @@ class Answer
     }
 
     /**
-     * Get the blind spots as the answer prints them: a structural one by its id alone only beside a found result, and every condition in full.
+     * Get the blind spots as the answer prints them.
      *
      * @return list<array<string, mixed>>
      */
     protected function listedBlindSpots(): array
     {
-        if ($this->empty !== null || ! $this->found) {
+        if ($this->empty !== null || ! $this->namesBlindSpots) {
             return $this->blindSpots;
         }
 

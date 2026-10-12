@@ -12,26 +12,6 @@ use PHPUnit\Framework\Assert;
 class Answers
 {
     /**
-     * Get blind spots as an answer beside a found result lists them: each structural one by its id and kind alone.
-     *
-     * @param  list<array<string, mixed>>  $blindSpots
-     * @return list<array<string, mixed>>
-     */
-    public static function briefly(array $blindSpots): array
-    {
-        return array_map(function (array $blindSpot) {
-            if ($blindSpot['kind'] !== 'structural') {
-                return $blindSpot;
-            }
-
-            return [
-                'id' => $blindSpot['id'],
-                'kind' => $blindSpot['kind'],
-            ];
-        }, $blindSpots);
-    }
-
-    /**
      * The keys of every answer, in order.
      */
     public const KEYS = ['tool', 'now', 'window', 'summary', 'empty', 'result', 'coverage', 'blind_spots', 'notes', 'truncated', 'next'];
@@ -179,7 +159,7 @@ class Answers
         }
 
         if ($brief !== []) {
-            Assert::assertContains(__('firewatch::messages.blind_spots_brief', ['ids' => implode(', ', $brief)]), $lines);
+            Assert::assertContains(__('firewatch::messages.blind_spots_named', ['ids' => implode(', ', $brief)]), $lines);
         }
 
         $firstBlind = array_key_first(preg_grep('/^(Blind spot \(|Also blind here)/', $lines));

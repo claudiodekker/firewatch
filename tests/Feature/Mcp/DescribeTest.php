@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Ingest;
+use ClaudioDekker\Firewatch\Mcp\BlindSpots;
 use ClaudioDekker\Firewatch\Mcp\Catalogue;
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Describe;
@@ -358,6 +359,19 @@ it('answers an empty store with the catalogue and the store facts, saying it hol
         ->and($type['summary'])->toBe(__('firewatch::messages.describe_type_summary_empty', ['object' => 'requests', 'columns' => 51]))
         ->and($type['result']['records'])->toBe(0)
         ->and(array_unique(array_map('json_encode', array_column($type['result']['columns'], 'examples'))))->toBe(['[]']);
+});
+
+it('spells out every blind spot of an empty store, beside the sentences it holds', function () {
+    dscClock();
+    app(Writer::class)->transaction(fn () => null);
+
+    $answer = Answers::assert(Describe::class);
+    $structural = array_filter($answer['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'structural');
+
+    expect($answer['empty']['kind'])->toBe('store_empty')
+        ->and($answer['result']['blind_spots'])->toHaveCount(count(BlindSpots::catalogue()))
+        ->and($structural)->not->toBe([])
+        ->and($structural)->each->toHaveKey('message');
 });
 
 it('answers a store it cannot read with the catalogue and the reason', function () {
