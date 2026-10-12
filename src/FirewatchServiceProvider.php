@@ -430,7 +430,11 @@ class FirewatchServiceProvider extends ServiceProvider
             $this->app->register(NightwatchServiceProvider::class);
         };
 
-        $this->capturesTests() ? TestCapture::registerInRequestMode($register) : $register();
+        if ($this->capturesTests()) {
+            TestCapture::registerInRequestMode($register);
+        } else {
+            $register();
+        }
 
         AliasLoader::getInstance()->alias('Nightwatch', Nightwatch::class);
     }

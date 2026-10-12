@@ -67,7 +67,7 @@ class TestCapture
     /**
      * The sensors that record into the request state, set aside while a command runs.
      */
-    protected SensorManager $requestSensor;
+    protected SensorManager $requestSensors;
 
     /**
      * The sensor manager's hold on the execution state, which a command's sensors point at its own state.
@@ -122,7 +122,7 @@ class TestCapture
         }
 
         $this->requestState = $state;
-        $this->requestSensor = $this->core->sensor;
+        $this->requestSensors = $this->core->sensor;
         $this->sensorState = new ReflectionProperty(SensorManager::class, 'executionState');
 
         $this->app->rebinding('request', fn () => $this->guarded($this->startRequest(...)));
@@ -177,7 +177,7 @@ class TestCapture
      */
     protected function startRequest(): void
     {
-        // A request that threw out of the kernel never reached the handler that ends it, so a new one starts afresh.
+        // A request still open here threw out of the kernel before the handler that ends it ran, so this one starts afresh.
         if ($this->phase instanceof TestCommand) {
             return;
         }
@@ -234,7 +234,7 @@ class TestCapture
             artisan: $this->artisan(),
         );
 
-        $sensor = clone $this->requestSensor;
+        $sensor = clone $this->requestSensors;
         $this->sensorState->setValue($sensor, $state);
         $sensor->flush();
 
@@ -263,7 +263,7 @@ class TestCapture
             $this->core->finishExecution();
         } finally {
             $this->core->executionState = $this->requestState;
-            $this->core->sensor = $this->requestSensor;
+            $this->core->sensor = $this->requestSensors;
             $this->phase = TestPhase::BETWEEN;
 
             $this->core->configureRequestSampling();
