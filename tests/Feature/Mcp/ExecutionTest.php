@@ -483,7 +483,7 @@ it('shows the headers and the payload as stored', function () {
 
     $request = execAnswer()['result']['request'];
 
-    expect($request)->toBe(['headers' => ['host' => ['localhost'], 'accept' => ['*/*']], 'payload' => ['order' => ['id' => 5], 'note' => 'late']]);
+    expect($request)->toBe(['headers' => ['host' => ['localhost'], 'accept' => ['*/*']], 'payload' => ['order' => ['id' => 5], 'note' => 'late'], 'invalid_fields' => null]);
 });
 
 it('has no payload when none was stored', function () {

@@ -12,7 +12,7 @@ function blindSpotIds(array $types, array $facts = []): array
 it('attaches the blind spots of the types a call examined', function (RecordType $type, array $ids) {
     expect(blindSpotIds([$type]))->toBe($ids);
 })->with([
-    'request' => [RecordType::REQUEST, ['console-requests', 'payload-on-server-error-only', 'dead-counters', 'memory-is-process-peak', 'octane-bootstrap']],
+    'request' => [RecordType::REQUEST, ['console-requests', 'payload-on-server-error-only', 'unrendered-validation-failures', 'dead-counters', 'memory-is-process-peak', 'octane-bootstrap']],
     'command' => [RecordType::COMMAND, ['dead-counters', 'vendor-defaults-unrecorded', 'memory-is-process-peak']],
     'job attempt' => [RecordType::JOB_ATTEMPT, ['dead-counters', 'sync-jobs-unrecorded', 'memory-is-process-peak', 'uninstrumented-dispatcher']],
     'scheduled task' => [RecordType::SCHEDULED_TASK, ['dead-counters', 'memory-is-process-peak']],

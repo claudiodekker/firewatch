@@ -13,7 +13,7 @@ class Schema
     /**
      * The schema version the store is stamped with; an earlier value is rebuilt, never migrated, and a later one is left alone.
      */
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     /**
      * The application id that marks a file as a Firewatch store ("FWTC").

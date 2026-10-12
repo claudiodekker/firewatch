@@ -53,8 +53,9 @@ class RecordMapper
      *
      * @param  array<mixed>  $record
      * @param  list<mixed>|null  $bindings
+     * @param  list<string>|null  $invalidFields
      */
-    public function map(array $record, Drift $drift, ?array $bindings = null, ?TestRecord $testRecord = null): MappedRecord
+    public function map(array $record, Drift $drift, ?array $bindings = null, ?TestRecord $testRecord = null, ?array $invalidFields = null): MappedRecord
     {
         try {
             $wire = $this->normalise($record);
@@ -87,7 +88,7 @@ class RecordMapper
             return new MappedRecord(user: $user);
         }
 
-        $columns = $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings, testRecord: $testRecord);
+        $columns = $this->columns($type, $wire, timestamp: $record['timestamp'] ?? null, bindings: $bindings, testRecord: $testRecord, invalidFields: $invalidFields);
 
         return new MappedRecord(record: $columns);
     }
@@ -97,9 +98,10 @@ class RecordMapper
      *
      * @param  array<mixed>  $wire
      * @param  list<mixed>|null  $bindings
+     * @param  list<string>|null  $invalidFields
      * @return array<string, mixed>
      */
-    protected function columns(?RecordType $type, array $wire, mixed $timestamp, ?array $bindings, ?TestRecord $testRecord): array
+    protected function columns(?RecordType $type, array $wire, mixed $timestamp, ?array $bindings, ?TestRecord $testRecord, ?array $invalidFields): array
     {
         [$columns, $data, $jsonFields] = $this->split($wire, $type);
 
@@ -120,6 +122,10 @@ class RecordMapper
 
         if ($type === RecordType::QUERY) {
             $data['bindings'] = $bindings;
+        }
+
+        if ($type === RecordType::REQUEST) {
+            $data['invalid_fields'] = $invalidFields;
         }
 
         // A serialize_precision below 17 makes the round trip round a float, so the instant comes from the original array.

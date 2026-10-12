@@ -225,16 +225,17 @@ class Execution extends Tool
     }
 
     /**
-     * Get the headers and payload of a request as they were stored.
+     * Get the headers, the payload and the fields that failed validation of a request as they were stored.
      *
      * @param  array<string, mixed>  $row
-     * @return array{headers: mixed, payload: mixed}
+     * @return array{headers: mixed, payload: mixed, invalid_fields: mixed}
      */
     protected function request(array $row): array
     {
         return [
             'headers' => Cell::json($row['headers']),
             'payload' => Cell::json($row['payload']),
+            'invalid_fields' => Cell::json($row['invalid_fields'] ?? null),
         ];
     }
 

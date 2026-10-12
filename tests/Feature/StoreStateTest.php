@@ -60,7 +60,7 @@ it('reports the state of a store that cannot be read as usual', function (?Closu
     'a zero-byte file' => [fn () => touch(stateStore()), StoreState::ABSENT, null],
     'a SQLite file with nothing in it' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA journal_mode = WAL'), StoreState::ABSENT, null],
     'an older schema' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 0; CREATE TABLE records (id INTEGER)'), StoreState::SCHEMA_MISMATCH, 0],
-    'a newer schema' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 3; CREATE TABLE records (id INTEGER)'), StoreState::SCHEMA_MISMATCH, 3],
+    'a newer schema' => [fn () => (new SQLite3(stateStore()))->exec('PRAGMA application_id = '.Schema::APPLICATION_ID.'; PRAGMA user_version = 4; CREATE TABLE records (id INTEGER)'), StoreState::SCHEMA_MISMATCH, 4],
     'a foreign SQLite file' => [fn () => (new SQLite3(stateStore()))->exec('CREATE TABLE orders (id INTEGER)'), StoreState::FOREIGN, null],
     'a file that is not a database' => [fn () => file_put_contents(stateStore(), str_repeat('not a database ', 100)), StoreState::FOREIGN, null],
 ]);

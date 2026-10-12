@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch;
 
 use ClaudioDekker\Firewatch\Actions\AppendBatch;
+use ClaudioDekker\Firewatch\Capture\InvalidFields;
 use ClaudioDekker\Firewatch\Capture\QueryBindings;
 use ClaudioDekker\Firewatch\Capture\TestRecord;
 use ClaudioDekker\Firewatch\Store\FailureKind;
@@ -38,6 +39,13 @@ class Ingest implements IngestContract
     protected array $bindings = [];
 
     /**
+     * The fields that failed validation paired to each buffered record.
+     *
+     * @var list<list<string>|null>
+     */
+    protected array $pairedInvalidFields = [];
+
+    /**
      * Where each buffered record fell in a test run, or null outside a test run.
      *
      * @var list<TestRecord|null>
@@ -67,6 +75,7 @@ class Ingest implements IngestContract
     public function __construct(
         protected AppendBatch $appendBatch,
         protected QueryBindings $queryBindings,
+        protected InvalidFields $invalidFields,
         protected FailureLog $failures,
         protected Pruner $pruner,
     ) {
@@ -94,11 +103,13 @@ class Ingest implements IngestContract
         if ($this->isBufferFull()) {
             array_shift($this->buffer);
             array_shift($this->bindings);
+            array_shift($this->pairedInvalidFields);
             array_shift($this->testRecords);
         }
 
         $this->buffer[] = $record;
         $this->bindings[] = $this->queryBindings->pair($record);
+        $this->pairedInvalidFields[] = $this->invalidFields->pair($record);
         $this->testRecords[] = $testRecord;
 
         if ($this->digestsWhenBufferIsFull && $this->isBufferFull()) {
@@ -117,7 +128,7 @@ class Ingest implements IngestContract
             return;
         }
 
-        $this->store([$record], [], [$this->testRecord?->__invoke()]);
+        $this->store([$record], bindings: [], testRecords: [$this->testRecord?->__invoke()], invalidFields: [$this->invalidFields->pair($record)]);
     }
 
     /**
@@ -156,10 +167,11 @@ class Ingest implements IngestContract
         $records = $this->buffer;
         $bindings = $this->bindings;
         $testRecords = $this->testRecords;
+        $invalidFields = $this->pairedInvalidFields;
 
         $this->flush();
 
-        $this->store($records, $bindings, $testRecords);
+        $this->store($records, bindings: $bindings, testRecords: $testRecords, invalidFields: $invalidFields);
     }
 
     /**
@@ -170,6 +182,7 @@ class Ingest implements IngestContract
         $this->buffer = [];
         $this->bindings = [];
         $this->testRecords = [];
+        $this->pairedInvalidFields = [];
     }
 
     /**
@@ -196,14 +209,15 @@ class Ingest implements IngestContract
      * @param  list<array<mixed>>  $records
      * @param  list<list<mixed>|null>  $bindings
      * @param  list<TestRecord|null>  $testRecords
+     * @param  list<list<string>|null>  $invalidFields
      */
-    protected function store(array $records, array $bindings, array $testRecords): void
+    protected function store(array $records, array $bindings, array $testRecords, array $invalidFields): void
     {
         $this->storing = true;
 
         try {
             try {
-                $this->appendBatch->handle($records, $bindings, $testRecords);
+                $this->appendBatch->handle($records, bindings: $bindings, testRecords: $testRecords, invalidFields: $invalidFields);
             } catch (Throwable $exception) {
                 $this->failures->record($exception, dropped: count($records));
 
