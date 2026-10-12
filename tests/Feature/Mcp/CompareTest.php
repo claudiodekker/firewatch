@@ -714,7 +714,7 @@ it('answers nothing for a window with no record, a type with none on either side
     }
 });
 
-it('is listed between actor and trend, read only, idempotent and closed, with no argument required', function () {
+it('is listed between actor and trend, read only and closed, with no argument required', function () {
     $listing = app(FirewatchServer::class, ['transport' => new FakeTransporter])->listing();
     $tools = array_column($listing['tools'], null, 'name');
     $compare = $tools['compare'];
@@ -724,7 +724,7 @@ it('is listed between actor and trend, read only, idempotent and closed, with no
         ->and(str_word_count($compare['description']))->toBeLessThanOrEqual(150)
         ->and(array_keys($compare['inputSchema']['properties']))->toBe(['type', 'group', 'split_at', 'deploy_before', 'deploy_after', 'by', 'since', 'until', 'limit', 'format'])
         ->and($compare['inputSchema'])->not->toHaveKey('required')
-        ->and($compare['annotations'])->toMatchArray(['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
+        ->and($compare['annotations'])->toMatchArray(['readOnlyHint' => true, 'openWorldHint' => false]);
 });
 
 it('says a group is new or gone with the value of the side it is on, and no change in percent', function () {

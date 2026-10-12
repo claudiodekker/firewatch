@@ -30,7 +30,6 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
-use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
@@ -41,7 +40,6 @@ use SQLite3;
 #[Name('query')]
 #[Title('Query')]
 #[IsReadOnly]
-#[IsIdempotent]
 #[IsOpenWorld(false)]
 class Query extends Tool
 {

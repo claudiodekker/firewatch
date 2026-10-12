@@ -673,5 +673,5 @@ test('the tool is listed, with its description, arguments and annotations', func
             'type' => 'object',
             'required' => ['who'],
         ])
-        ->and($tool['annotations'])->toBe(['title' => 'Actor', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false]);
+        ->and($tool['annotations'])->toBe(['title' => 'Actor', 'readOnlyHint' => true, 'openWorldHint' => false]);
 });

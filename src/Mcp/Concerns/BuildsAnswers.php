@@ -47,11 +47,11 @@ trait BuildsAnswers
      */
     protected function windowSchema(JsonSchema $schema, string $absent = 'unbounded', bool $listsForms = false): array
     {
-        $since = $listsForms ? 'since_argument' : 'since_argument_short';
+        $since = $listsForms ? 'since_argument' : "since_argument_short.{$absent}";
 
         return [
-            'since' => $schema->string()->description(__("firewatch::messages.{$since}", ['absent' => __("firewatch::messages.window_absent.{$absent}.since")])),
-            'until' => $schema->string()->description(__('firewatch::messages.until_argument', ['absent' => __("firewatch::messages.window_absent.{$absent}.until")])),
+            'since' => $schema->string()->description(__("firewatch::messages.{$since}")),
+            'until' => $schema->string()->description(__("firewatch::messages.until_argument.{$absent}")),
         ];
     }
 
@@ -63,7 +63,7 @@ trait BuildsAnswers
     protected function scopeSchema(JsonSchema $schema): array
     {
         return [
-            'scope' => $schema->string()->enum(Scope::class)->default(Scope::ALL->value),
+            'scope' => $schema->string()->enum(Scope::class)->default(Scope::ALL->value)->description(__("firewatch::messages.scope_argument.{$this->name()}")),
         ];
     }
 

@@ -37,7 +37,6 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
-use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
@@ -48,7 +47,6 @@ use SQLite3;
 #[Name('execution')]
 #[Title('Execution')]
 #[IsReadOnly]
-#[IsIdempotent]
 #[IsOpenWorld(false)]
 class Execution extends Tool
 {
