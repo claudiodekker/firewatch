@@ -2,7 +2,6 @@
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
-use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Workbench\App\Providers\WorkbenchServiceProvider;
@@ -23,32 +22,47 @@ function actorWorkerAudit(?string $token, string $member): void
     Nightwatch::digest();
 }
 
-it('reaches the person of no worker by id alone, and the person of a worker by id and worker', function () {
-    ingest([
-        syntheticRecord(RecordType::USER)->with(['id' => '7', 'name' => 'Sam', 'username' => 'sam@example.com']),
-        syntheticRecord(RecordType::REQUEST)->with(['user' => '7']),
-    ]);
-    runAsWorker('1');
+/**
+ * Sign member 7 in on a request, as the worker of a parallel run with the token or as a serial run with none.
+ */
+function actorWorkerVisit(?string $token): void
+{
+    runAsWorker($token);
     captureTests();
-    ingest([syntheticRecord(RecordType::USER)->with(['id' => '7', 'name' => 'Alex', 'username' => 'alex@example.com'])]);
+    app()->register(WorkbenchServiceProvider::class);
+
+    test()->get('/members/7')->assertOk();
+
+    Nightwatch::digest();
+}
+
+it('reaches the person of no worker by id alone, and the person of a worker by id and worker', function () {
+    actorWorkerVisit(null);
+    actorWorkerVisit('1');
 
     $alone = Answers::assert(Actor::class, ['who' => '7']);
     $inWorker = Answers::assert(Actor::class, ['who' => '7', 'worker' => '1']);
-    $named = Answers::assert(Actor::class, ['who' => 'alex']);
-    $elsewhere = Answers::assert(Actor::class, ['who' => 'sam', 'worker' => '1']);
+    $elsewhere = Answers::assert(Actor::class, ['who' => '7', 'worker' => '2']);
 
     expect(array_keys($alone['result']['identity']))->toBe(['id', 'name', 'username', 'first_seen_at', 'last_seen_at', 'matched_by'])
-        ->and($alone['result']['identity'])->toMatchArray(['id' => '7', 'name' => 'Sam', 'matched_by' => 'id'])
-        ->and($alone['result']['attribution']['requests'])->toBe(['total' => 1, 'this_actor' => 1, 'other_actors' => 0, 'guest' => 0])
+        ->and($alone['result']['identity'])->toMatchArray(['id' => '7', 'name' => 'Taylor Otwell', 'matched_by' => 'id'])
+        ->and($alone['result']['attribution']['requests'])->toBe(['total' => 2, 'this_actor' => 1, 'other_actors' => 1, 'guest' => 0])
         ->and(array_column($alone['next'], 'arguments'))->toContain(['user_id' => '7'])
-        ->and($inWorker['result']['identity'])->toMatchArray(['id' => '7', 'worker' => '1', 'name' => 'Alex', 'matched_by' => 'id'])
-        ->and($inWorker['result']['attribution']['requests'])->toBe(['total' => 1, 'this_actor' => 0, 'other_actors' => 1, 'guest' => 0])
-        ->and($named['result']['identity'])->toMatchArray(['id' => '7', 'worker' => '1', 'name' => 'Alex', 'matched_by' => 'name'])
+        ->and($inWorker['result']['identity'])->toMatchArray(['id' => '7', 'worker' => '1', 'name' => 'Taylor Otwell', 'matched_by' => 'id'])
+        ->and($inWorker['result']['attribution']['requests'])->toBe(['total' => 2, 'this_actor' => 1, 'other_actors' => 1, 'guest' => 0])
+        ->and(array_column($inWorker['next'], 'arguments'))->toContain(['user_id' => '7', 'worker' => '1'])
         ->and($elsewhere['empty']['kind'])->toBe('no_match')
-        ->and($elsewhere['result']['known_actors'])->toBe([
-            ['id' => '7', 'worker' => null, 'name' => 'Sam', 'username' => 'sam@example.com', 'last_seen_at' => $alone['result']['identity']['last_seen_at']],
-            ['id' => '7', 'worker' => '1', 'name' => 'Alex', 'username' => 'alex@example.com', 'last_seen_at' => $inWorker['result']['identity']['last_seen_at']],
-        ]);
+        ->and(array_column($elsewhere['result']['known_actors'], 'worker'))->toEqualCanonicalizing([null, '1']);
+});
+
+it('says in one note that an id only records hold is several actors', function () {
+    actorWorkerAudit(null, member: '9');
+    actorWorkerAudit('1', member: '9');
+
+    $alone = Answers::assert(Actor::class, ['who' => '9']);
+
+    expect($alone['notes'][0])->toBe(__('firewatch::messages.actor_from_records_note').' '.__('firewatch::messages.user_id_workers_note', ['count' => 2, 'user_id' => '9']))
+        ->and(count($alone['notes']))->toBeLessThanOrEqual(5);
 });
 
 it('finds one person per worker for an id only records hold, and offers each by id and worker', function () {

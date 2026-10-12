@@ -300,15 +300,11 @@ class Actor extends Tool
         $tasks = $attribution->scheduledTasks();
         $attempts = $attribution->attemptsWithoutActor();
         $requests = $attribution->requestsWithoutUser();
-        $notes = [];
+        $fromRecords = $decidedBy === MatchedBy::RECORDS ? __('firewatch::messages.actor_from_records_note') : null;
+        $identified = array_filter([$fromRecords, $severalActors], is_string(...));
 
-        if ($decidedBy === MatchedBy::RECORDS) {
-            $notes[] = __('firewatch::messages.actor_from_records_note');
-        }
-
-        if ($severalActors !== null) {
-            $notes[] = $severalActors;
-        }
+        // An answer carries five notes at most, so what is said of the id shares one.
+        $notes = $identified === [] ? [] : [implode(' ', $identified)];
 
         $notes[] = $commands + $tasks === 0
             ? __('firewatch::messages.actor_no_commands_note')
