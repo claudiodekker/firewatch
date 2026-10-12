@@ -168,7 +168,7 @@ return [
     'truncated_unknown' => 'Truncated: :section shows :shown of more (:reason). :how',
 
     'blind_spots' => [
-        'console-requests' => 'Requests are recorded only while the application serves HTTP; test runs and console processes record none. An empty request answer may mean the app was never exercised over HTTP.',
+        'console-requests' => 'Requests are recorded only while the application serves HTTP or a feature test sends them; other console processes record none. An empty request answer may mean the app was never exercised over HTTP or by a test.',
         'unanswered-outgoing-requests' => 'An outgoing request that received no response (timeout, connection failure) leaves no record.',
         'payload-on-server-error-only' => 'A request\'s payload is stored only when the response status is 500.',
         'dead-counters' => 'lazy_loads, hydrated_models, files_read and files_written are always 0 because the sensors never fill them; 0 does not mean none. A lazy load shows as one query repeated in an `execution` timeline.',
