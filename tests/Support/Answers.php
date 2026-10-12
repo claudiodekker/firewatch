@@ -199,6 +199,10 @@ class Answers
      */
     protected static function windowLine(array $window): string
     {
+        if (array_key_exists('test', $window)) {
+            return self::windowLine(array_diff_key($window, ['test' => true]))."; test: {$window['test']}";
+        }
+
         if (array_key_exists('scope', $window)) {
             return self::windowLine(array_diff_key($window, ['scope' => true]))."; scope: {$window['scope']}";
         }

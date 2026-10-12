@@ -147,6 +147,8 @@ return [
 
     'window_scoped' => ':window; scope: :scope',
 
+    'window_limited' => ':window; test: :test',
+
     'store_line' => 'Store: :store',
 
     'store_history' => 'history complete from :from (:reason); retention :age, :records records',
@@ -428,6 +430,7 @@ return [
         'grouped_type' => 'one of the types with groups',
         'holding' => 'a type that holds the group: :types',
         'scope' => 'one of the sides of a test run\'s store',
+        'test' => 'the test of a record, of at least one character',
         'scope_holding' => 'a `type` other than request, command, job-attempt and scheduled-task, or `scope` executions or all',
         'execution_group' => 'the group id of a request, command, job attempt or scheduled task',
         'within_type' => 'a `type` of the records inside executions',
@@ -1129,7 +1132,7 @@ return [
 
     'occurrences_run_summary' => 'Listed :count execution or between section of the run, oldest first.|Listed :count executions and between sections of the run, oldest first.',
 
-    'occurrences_run_accepted' => 'a call with `order` run and no selector or filter: since, until, scope, limit and cursor apply',
+    'occurrences_run_accepted' => 'a call with `order` run and no selector or filter: since, until, scope, test, limit and cursor apply',
 
     'occurrences_next_run_execution' => 'The first execution listed, in full.',
 

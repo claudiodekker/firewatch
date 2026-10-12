@@ -34,6 +34,8 @@ class ExecutionHeader
             'user_id' => Cell::blank($row['user_id']),
             'deploy' => Cell::blank($row['deploy']),
             'server' => Cell::blank($row['server']),
+            'test' => $row['test'],
+            'worker' => $row['worker'],
         ];
     }
 
