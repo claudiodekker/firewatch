@@ -478,7 +478,7 @@ The statement of a trend as rose, fell or held, from the medians of its first an
 _Avoid_: Trend verdict, slope
 
 **Bucket**:
-One of the equal slices a trend cuts its window into, half-open like the window except that the last one takes a derived until; a bucket with a value, records and no partial flag is valued, and only valued buckets decide the direction and the peak.
+One of the equal slices a trend cuts its window into, half-open like the window except that the last one takes a derived until, each edge between two buckets at a whole microsecond so that a call naming the edge reads the same instant; a bucket with a value, records and no partial flag is valued, and only valued buckets decide the direction and the peak.
 _Avoid_: Interval, bin, period
 
 **Partial bucket**:

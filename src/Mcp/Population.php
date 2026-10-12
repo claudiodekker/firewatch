@@ -114,11 +114,12 @@ class Population
     }
 
     /**
-     * Read the records and the value of the measure of each bucket of an equal grid that holds a record, keyed by bucket index; the last bucket takes every record at or past its start.
+     * Read the records and the value of the measure of each bucket between the edges that holds a record, keyed by bucket index; a record at an edge is in the bucket the edge starts, and the last bucket takes every record at or past its start.
      *
+     * @param  list<float>  $edges
      * @return array<int, array{samples: int, value: int|float|null}>
      */
-    public function buckets(SQLite3 $connection, Measure $by, float $origin, float $width, int $count): array
+    public function buckets(SQLite3 $connection, Measure $by, array $edges): array
     {
         $value = match ($by) {
             Measure::OCCURRENCES => 'count(*)',
@@ -129,11 +130,19 @@ class Population
             default => throw new LogicException("No trend states {$by->value}."),
         };
 
-        $rows = $this->query($connection, "SELECT CASE WHEN :width = 0 THEN 0 ELSE min(:last, CAST((started_at - :origin) / :width AS INTEGER)) END AS bucket, count(*) AS samples, {$value} AS value FROM base GROUP BY bucket", bindings: [
-            'origin' => $origin,
-            'width' => $width,
-            'last' => $count - 1,
-        ]);
+        $inner = array_slice($edges, 1, -1);
+        $bindings = ['last' => count($inner)];
+        $cases = '';
+
+        foreach ($inner as $index => $edge) {
+            $bindings["edge{$index}"] = $edge;
+            $bindings["bucket{$index}"] = $index;
+            $cases .= "WHEN started_at < :edge{$index} THEN :bucket{$index} ";
+        }
+
+        $bucket = $inner === [] ? ':last' : "CASE {$cases}ELSE :last END";
+
+        $rows = $this->query($connection, "SELECT {$bucket} AS bucket, count(*) AS samples, {$value} AS value FROM base GROUP BY bucket", bindings: $bindings);
 
         $buckets = [];
 
