@@ -3,6 +3,7 @@
 namespace ClaudioDekker\Firewatch\Mcp\Concerns;
 
 use Carbon\CarbonImmutable;
+use ClaudioDekker\Firewatch\Capture\Truncator;
 use ClaudioDekker\Firewatch\Mcp\Answer;
 use ClaudioDekker\Firewatch\Mcp\AnswerFormat;
 use ClaudioDekker\Firewatch\Mcp\Call;
@@ -95,6 +96,14 @@ trait BuildsAnswers
     protected function matchingArgument(JsonSchema $schema): StringType
     {
         return $schema->string()->min(1)->max(200);
+    }
+
+    /**
+     * Get the test argument.
+     */
+    protected function testArgument(JsonSchema $schema): StringType
+    {
+        return $schema->string()->min(1)->max(Truncator::FIELD_LIMIT_BYTES);
     }
 
     /**

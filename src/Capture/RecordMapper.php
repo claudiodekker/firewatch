@@ -109,7 +109,7 @@ class RecordMapper
         }
 
         if ($testRecord !== null) {
-            $columns['test'] = $testRecord->test;
+            $columns['test'] = $this->test($testRecord);
             $columns['worker'] = $testRecord->worker;
         }
 
@@ -140,6 +140,14 @@ class RecordMapper
         $columns['data'] = $this->truncator->serialize($data, exempt: $jsonFields, trace: $trace);
 
         return $columns;
+    }
+
+    /**
+     * Get the test of a record of a test run, cut to the field limit.
+     */
+    protected function test(?TestRecord $testRecord): ?string
+    {
+        return $testRecord?->test === null ? null : $this->truncator->cut($testRecord->test);
     }
 
     /**
@@ -253,7 +261,7 @@ class RecordMapper
         $columns = array_fill_keys(Schema::COLUMNS, null);
 
         $columns['type'] = $type;
-        $columns['test'] = $testRecord?->test;
+        $columns['test'] = $this->test($testRecord);
         $columns['worker'] = $testRecord?->worker;
         $columns['data'] = json_encode(['error' => $error ?? $detail], self::JSON_FLAGS);
 

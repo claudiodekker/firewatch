@@ -137,7 +137,7 @@ The identity of the deployed code a record was captured under, an unordered stri
 _Avoid_: Release, version, build
 
 **Test**:
-The test that created the application a record of a test run was captured in, stored as one string: the test case and the test as the runner prints them, joined by `::`. A Pest test keeps its description and its data set (`Tests\Feature\OrdersTest::it lists orders with dataset "admin"`), and any other PHPUnit test its class, its method and its data set. It is read once per application, from the test case on the call stack when test capture starts. Null outside a test run, and for an application created with no test case on the call stack.
+The test that created the application a record of a test run was captured in, stored as one string: the test case and the test as the runner prints them, joined by `::`. A Pest test keeps its description and its data set (`Tests\Feature\OrdersTest::it lists orders with dataset "admin"`), and any other PHPUnit test its class, its method and its data set. It is read once per application, from the test case on the call stack when test capture starts. A test longer than 65,535 bytes is cut like any other stored string, and the `test` argument takes it as stored. Null outside a test run, and for an application created with no test case on the call stack.
 _Avoid_: Test id, test file
 
 **Worker**:

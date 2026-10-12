@@ -93,7 +93,7 @@ class Rank extends Tool
             'by' => $this->measureArgument($schema, Measure::for(...))->description(__('firewatch::messages.rank_by_argument')),
             ...$this->windowSchema($schema),
             ...$this->scopeSchema($schema),
-            'test' => $schema->string(),
+            'test' => $this->testArgument($schema),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             'cursor' => $schema->string()->description(__('firewatch::messages.cursor_argument')),

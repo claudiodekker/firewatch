@@ -155,11 +155,17 @@ class Arguments
     {
         $value = $this->get('test');
 
-        if ($value === null || (is_string($value) && $value !== '')) {
+        if ($value === null) {
+            return null;
+        }
+
+        $length = $this->declaredLength('test');
+
+        if (is_string($value) && mb_strlen($value) >= $length['minimum'] && mb_strlen($value) <= $length['maximum']) {
             return $value;
         }
 
-        $test = __('firewatch::messages.argument_values.test');
+        $test = __('firewatch::messages.argument_values.test', $length);
 
         throw $this->invalid(argument: 'test', expected: $test, accepted: $test, example: $example);
     }
@@ -276,11 +282,7 @@ class Arguments
             return null;
         }
 
-        $declared = $this->declared('matching');
-        $length = [
-            'minimum' => $declared['minLength'],
-            'maximum' => $declared['maxLength'],
-        ];
+        $length = $this->declaredLength('matching');
 
         if (mb_strlen($value) >= $length['minimum'] && mb_strlen($value) <= $length['maximum']) {
             return $value;
@@ -355,6 +357,21 @@ class Arguments
         $this->schema ??= array_map(fn (Type $type) => $type->toArray(), $this->tool->schema(new JsonSchemaTypeFactory));
 
         return $this->schema[$argument];
+    }
+
+    /**
+     * Get the fewest and the most characters the tool's schema declares for an argument.
+     *
+     * @return array{minimum: int, maximum: int}
+     */
+    protected function declaredLength(string $argument): array
+    {
+        $declared = $this->declared($argument);
+
+        return [
+            'minimum' => $declared['minLength'],
+            'maximum' => $declared['maxLength'],
+        ];
     }
 
     /**
