@@ -282,6 +282,147 @@ it('keeps a request another request dispatches inside the outer request', functi
     ]);
 });
 
+it('keeps a request the application also terminates inside the outer request', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 2 as orders'));
+    Route::get('/dashboard', function () {
+        DB::select('select 1 as before');
+        $kernel = app(HttpKernel::class);
+        $orders = $kernel->handle($request = Request::create('/orders'));
+        $kernel->terminate($request, $orders);
+        DB::select('select 3 as after');
+
+        return $orders->getContent();
+    });
+    app()->terminating(fn () => DB::select('select 4 as terminating'));
+
+    $this->get('/dashboard')->assertOk();
+    DB::select('select 5 as assertion');
+    $this->get('/orders')->assertOk();
+
+    expect(storeRows('SELECT route_path, status_code, queries FROM requests ORDER BY started_at'))->toBe([
+        ['route_path' => '/dashboard', 'status_code' => 200, 'queries' => 5],
+        ['route_path' => '/orders', 'status_code' => 200, 'queries' => 2],
+    ])->and(storeRows('SELECT q.sql, q.execution_source, r.route_path FROM queries q LEFT JOIN requests r ON r.execution_id = q.execution_id ORDER BY q.started_at'))->toBe([
+        ['sql' => 'select 1 as before', 'execution_source' => 'request', 'route_path' => '/dashboard'],
+        ['sql' => 'select 2 as orders', 'execution_source' => 'request', 'route_path' => '/dashboard'],
+        ['sql' => 'select 4 as terminating', 'execution_source' => 'request', 'route_path' => '/dashboard'],
+        ['sql' => 'select 3 as after', 'execution_source' => 'request', 'route_path' => '/dashboard'],
+        ['sql' => 'select 4 as terminating', 'execution_source' => 'request', 'route_path' => '/dashboard'],
+        ['sql' => 'select 5 as assertion', 'execution_source' => 'between', 'route_path' => null],
+        ['sql' => 'select 2 as orders', 'execution_source' => 'request', 'route_path' => '/orders'],
+        ['sql' => 'select 4 as terminating', 'execution_source' => 'request', 'route_path' => '/orders'],
+    ])->and(notices())->toBe([]);
+});
+
+it('keeps every request the application terminates inside the outer request, also one it terminates twice', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 2 as orders'));
+    Route::get('/dashboard', function () {
+        $kernel = app(HttpKernel::class);
+
+        DB::select('select 1 as before');
+        $kernel->terminate($first = Request::create('/orders'), $kernel->handle($first));
+        $kernel->terminate($second = Request::create('/orders'), $orders = $kernel->handle($second));
+        $kernel->terminate($second, $orders);
+        DB::select('select 3 as after');
+
+        return 'ok';
+    });
+
+    $this->get('/dashboard')->assertOk();
+    DB::select('select 4 as assertion');
+
+    expect(storeRows('SELECT route_path, queries FROM requests'))->toBe([
+        ['route_path' => '/dashboard', 'queries' => 4],
+    ])->and(executionQueries())->toBe([
+        '/dashboard' => ['select 1 as before', 'select 2 as orders', 'select 2 as orders', 'select 3 as after'],
+    ])->and(storeRows('SELECT sql FROM queries WHERE execution_source = \'between\''))->toBe([
+        ['sql' => 'select 4 as assertion'],
+    ])->and(notices())->toBe([]);
+});
+
+it('keeps a request the application terminates inside the outer request when the test fakes every event', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 2 as orders'));
+    Route::get('/dashboard', function () {
+        $kernel = app(HttpKernel::class);
+
+        DB::select('select 1 as before');
+        $kernel->terminate($orders = Request::create('/orders'), $kernel->handle($orders));
+        DB::select('select 3 as after');
+
+        return 'ok';
+    });
+    DB::select('select 0 as setup');
+
+    Event::fake();
+    $this->get('/dashboard')->assertOk();
+    DB::select('select 4 as assertion');
+    Nightwatch::digest();
+
+    expect(storeRows("SELECT q.sql, q.execution_source, r.url LIKE '%/dashboard' AS in_dashboard FROM queries q LEFT JOIN requests r ON r.execution_id = q.execution_id ORDER BY q.started_at"))->toBe([
+        ['sql' => 'select 0 as setup', 'execution_source' => 'between', 'in_dashboard' => null],
+        ['sql' => 'select 1 as before', 'execution_source' => 'request', 'in_dashboard' => 1],
+        ['sql' => 'select 2 as orders', 'execution_source' => 'request', 'in_dashboard' => 1],
+        ['sql' => 'select 3 as after', 'execution_source' => 'request', 'in_dashboard' => 1],
+        ['sql' => 'select 4 as assertion', 'execution_source' => 'between', 'in_dashboard' => null],
+    ])->and(storeRows('SELECT count(*) AS requests FROM requests'))->toBe([['requests' => 1]]);
+});
+
+it('records the outer request once when a terminating callback terminates the application again', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 2 as orders'));
+    Route::get('/dashboard', function () {
+        $kernel = app(HttpKernel::class);
+
+        DB::select('select 1 as before');
+        $kernel->terminate($orders = Request::create('/orders'), $kernel->handle($orders));
+
+        return 'ok';
+    });
+    $terminating = false;
+    app()->terminating(function () use (&$terminating) {
+        if (! $terminating) {
+            $terminating = true;
+            app()->terminate();
+            $terminating = false;
+        }
+    });
+
+    $this->get('/dashboard')->assertOk();
+    DB::select('select 3 as assertion');
+    Nightwatch::digest();
+
+    expect(storeRows('SELECT route_path, queries FROM requests'))->toBe([
+        ['route_path' => '/dashboard', 'queries' => 2],
+    ])->and(storeRows('SELECT sql FROM queries WHERE execution_source = \'between\''))->toBe([
+        ['sql' => 'select 3 as assertion'],
+    ]);
+});
+
+it('stores nothing of a request the application chose not to sample, also when it terminates another inside it', function () {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select 2 as orders'));
+    Route::get('/dashboard', function () {
+        $kernel = app(HttpKernel::class);
+
+        Nightwatch::dontSample();
+        DB::select('select 1 as before');
+        $kernel->terminate($orders = Request::create('/orders'), $kernel->handle($orders));
+        DB::select('select 3 as after');
+
+        return 'ok';
+    });
+
+    $this->get('/orders')->assertOk();
+    $this->get('/dashboard')->assertOk();
+
+    expect(executionQueries())->toBe([
+        '/orders' => ['select 2 as orders'],
+    ])->and(storeRows('SELECT count(*) AS queries FROM queries'))->toBe([['queries' => 1]]);
+});
+
 it('records a job the test runs on the sync queue as a job attempt of its own', function (Closure $dispatch) {
     captureTests();
 

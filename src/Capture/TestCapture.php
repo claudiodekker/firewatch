@@ -13,6 +13,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
+use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
@@ -29,6 +30,7 @@ use Laravel\Nightwatch\State\RequestState;
 use ReflectionMethod;
 use ReflectionProperty;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 /**
@@ -99,6 +101,21 @@ class TestCapture
      * The outermost request of the execution that is open.
      */
     protected ?object $request = null;
+
+    /**
+     * The HTTP kernel whose lifecycle handlers end each request's execution.
+     */
+    protected ?HttpKernel $kernel = null;
+
+    /**
+     * The number of terminations followed so far.
+     */
+    protected int $terminations = 0;
+
+    /**
+     * Whether Nightwatch's sampling is off while it records a request dispatched inside the open one, so that the record is dropped.
+     */
+    protected bool $droppingInnerRequest = false;
 
     /**
      * The test that created the application and the worker that runs it, or null when they could not be read.
@@ -179,6 +196,10 @@ class TestCapture
         $this->app->rebinding('request', fn () => $this->guarded($this->startRequest(...)));
 
         $this->whenResolved(HttpKernelContract::class, $this->endRequestsOn(...));
+
+        // A test can fake the event the kernel raises when it terminates, but not this callback.
+        $this->app->terminating(fn () => $this->guarded($this->followTermination(...)));
+
         $this->whenResolved(ConsoleKernelContract::class, $this->startCommandsOn(...));
 
         $this->guarded(function () {
@@ -222,6 +243,8 @@ class TestCapture
     {
         // Registered after Nightwatch's, this handler runs once Nightwatch's has recorded the request.
         if ($kernel instanceof HttpKernel) {
+            $this->kernel = $kernel;
+
             $kernel->whenRequestLifecycleIsLongerThan(-1, fn () => $this->guarded($this->endRequest(...)));
         }
     }
@@ -267,15 +290,103 @@ class TestCapture
     protected function outermostRequest(): ?object
     {
         // Only the stack tells a request dispatched inside another from one that follows a request that threw.
-        foreach (array_reverse(debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT)) as $frame) {
-            $request = $frame['args'][0] ?? null;
+        return $this->outermostKernelCall('handle')[0] ?? null;
+    }
 
-            if (($frame['object'] ?? null) instanceof HttpKernel && $frame['function'] === 'handle' && is_object($request)) {
-                return $request;
+    /**
+     * Get the arguments of the outermost call of the method on an HTTP kernel on the call stack, or null when there is none.
+     *
+     * @return list<mixed>|null
+     */
+    protected function outermostKernelCall(string $method): ?array
+    {
+        foreach (array_reverse(debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT)) as $frame) {
+            if (($frame['object'] ?? null) instanceof HttpKernel && $frame['function'] === $method && is_object($frame['args'][0] ?? null)) {
+                return $frame['args'];
             }
         }
 
         return null;
+    }
+
+    /**
+     * Repair the termination of a request dispatched inside the open one, and of the open one after it.
+     */
+    protected function followTermination(): void
+    {
+        $this->terminations++;
+
+        $terminated = $this->outermostKernelCall('terminate');
+
+        if ($this->phase !== TestPhase::REQUEST || $this->kernel === null || $terminated === null) {
+            return;
+        }
+
+        // The kernel keeps one start for all its requests and clears it at the first termination (ADR 0014).
+        $runsHandlers = $this->kernel->requestStartedAt() !== null;
+        $inner = $this->outermostRequest() !== null;
+
+        if ($inner && $runsHandlers) {
+            $this->lastInTermination($this->dropInnerRequest(...));
+        }
+
+        if (! $inner && ! $runsHandlers) {
+            $this->lastInTermination(fn () => $this->recordRequest($terminated[0], $terminated[1] ?? null));
+        }
+    }
+
+    /**
+     * Run the step after the terminating callbacks the application has registered so far, in this termination only.
+     *
+     * @param  Closure(): void  $step
+     */
+    protected function lastInTermination(Closure $step): void
+    {
+        $termination = $this->terminations;
+
+        // The application runs every terminating callback again at each later termination.
+        $this->app->terminating(function () use ($step, $termination) {
+            if ($termination === $this->terminations) {
+                $this->guarded($step);
+            }
+        });
+    }
+
+    /**
+     * Store the open request's records, then turn Nightwatch's sampling off so that it drops the inner request it records.
+     */
+    protected function dropInnerRequest(): void
+    {
+        if (! $this->core->sampling()) {
+            return;
+        }
+
+        $this->core->finishExecution();
+        $this->core->dontSample();
+
+        $this->droppingInnerRequest = true;
+    }
+
+    /**
+     * Record the open request as Nightwatch's handler does, which the kernel no longer runs once it terminated an inner request.
+     */
+    protected function recordRequest(mixed $request, mixed $response): void
+    {
+        // A terminating callback that terminates the application again runs this step twice.
+        if ($this->phase !== TestPhase::REQUEST) {
+            return;
+        }
+
+        if (! $request instanceof Request || ! $response instanceof Response) {
+            return;
+        }
+
+        $this->core->stage(ExecutionStage::End);
+        $this->core->captureUser();
+        $this->core->request($request, $response);
+        $this->core->finishExecution();
+
+        $this->endRequest();
     }
 
     /**
@@ -284,6 +395,16 @@ class TestCapture
     protected function endRequest(): void
     {
         if ($this->phase !== TestPhase::REQUEST) {
+            return;
+        }
+
+        if ($this->droppingInnerRequest) {
+            $this->droppingInnerRequest = false;
+
+            $this->core->configureRequestSampling();
+        }
+
+        if ($this->outermostRequest() !== null) {
             return;
         }
 
