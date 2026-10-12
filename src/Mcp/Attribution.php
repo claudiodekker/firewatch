@@ -23,7 +23,7 @@ class Attribution
      * @param  list<array{type: string, direct: int, dispatch: int, can_carry_actor: bool}>  $activity  the twelve types in catalogue order
      * @param  Rows<array{started_at: float, type: string, execution_id: string, group_hash: string|null, label: string, link: string}>  $executions  newest first
      * @param  array{direct: int, dispatch: int, inside: int}  $links  the attributed executions of the window by link
-     * @param  bool  $recorded  whether a record of the window carries the person's id as its own user
+     * @param  bool  $recorded  whether a record of the window carries the actor as its own user
      */
     protected function __construct(
         public readonly array $counts,
@@ -36,11 +36,11 @@ class Attribution
     }
 
     /**
-     * Attribute the executions and records of the window to the person with the id, in the snapshot of the connection.
+     * Attribute the executions and records of the window to the actor with the id and the worker, in the snapshot of the connection.
      */
-    public static function of(SQLite3 $connection, Window $window, string $id, int $limit): self
+    public static function of(SQLite3 $connection, Window $window, string $id, ?string $worker, int $limit): self
     {
-        $bindings = self::bindings($id);
+        $bindings = self::bindings($id, $worker);
         $executionCounts = self::executionsByLink($connection, $window, $bindings);
         $recordCounts = self::recordsByLink($connection, $window, $bindings);
         $listed = self::listed($connection, $window, $bindings, $limit);
@@ -166,7 +166,7 @@ class Attribution
     /**
      * Get the SQL of the attribution link of an execution record to the person, or why it has none.
      *
-     * This is the one place that decides a link. Direct and other actor are read from the record's own user on the types that carry one; dispatch from the user of the job's dispatch, the highest store id when there are several, as the specification fixes it, and only for an attempt with no user of its own; inside from a child of a command or task that carries the person. The links are looked up over the whole store, whatever the window.
+     * This is the one place that decides a link. Direct and other actor are read from the record's own user on the types that carry one; dispatch from the user of the job's dispatch, the highest store id when there are several, as the specification fixes it, and only for an attempt with no user of its own; inside from a child of a command or task that carries the person. A user is the person only under the person's worker, so the same id under another worker is another actor. The links are looked up over the whole store, whatever the window.
      */
     protected static function linkOf(string $execution): string
     {
@@ -175,14 +175,14 @@ class Attribution
         $sources = implode(', ', array_map(fn (RecordType $type) => ':'.self::parameter($type).'_source', self::WITHOUT_USER));
 
         return "CASE
-            WHEN {$execution}.type IN ({$withUser}) AND NULLIF({$execution}.user_id, '') = :actor THEN :direct
+            WHEN {$execution}.type IN ({$withUser}) AND NULLIF({$execution}.user_id, '') = :actor AND {$execution}.worker IS :worker THEN :direct
             WHEN {$execution}.type IN ({$withUser}) AND NULLIF({$execution}.user_id, '') IS NOT NULL THEN :other_actor
             WHEN {$execution}.type = :job_attempt THEN COALESCE((
-                SELECT CASE WHEN NULLIF(d.user_id, '') = :actor THEN :dispatch WHEN NULLIF(d.user_id, '') IS NOT NULL THEN :other_actor END
+                SELECT CASE WHEN NULLIF(d.user_id, '') = :actor AND d.worker IS :worker THEN :dispatch WHEN NULLIF(d.user_id, '') IS NOT NULL THEN :other_actor END
                 FROM records d WHERE d.job_id = {$execution}.job_id AND d.type = :queued_job ORDER BY d.id DESC LIMIT 1
             ), :unattributable)
             WHEN {$execution}.type IN ({$withoutUser}) AND ({$execution}.execution_id, {$execution}.source) IN (
-                SELECT execution_id, source FROM records WHERE user_id = NULLIF(:actor, '') AND source IN ({$sources})
+                SELECT execution_id, source FROM records WHERE user_id = NULLIF(:actor, '') AND worker IS :worker AND source IN ({$sources})
             ) THEN :inside
             ELSE :unattributable
         END";
@@ -205,7 +205,7 @@ class Attribution
     /**
      * Count the executions of the window by type and link.
      *
-     * @param  array<string, string>  $bindings
+     * @param  array<string, string|null>  $bindings
      * @return array<string, array<string, int>>
      */
     protected static function executionsByLink(SQLite3 $connection, Window $window, array $bindings): array
@@ -225,7 +225,7 @@ class Attribution
      *
      * A record is direct by its own user, else someone else's by its own user, else it takes the direct or dispatch link of its execution, else it is unattributable. Its execution is itself for an execution record, else the execution record of its id and source that started last, the highest store id among those that started together, wherever it started. Such children are counted by type and execution first, so that their execution is classified once per type of child, never once per child. A command or task the person is inside of does not make its records the person's.
      *
-     * @param  array<string, string>  $bindings
+     * @param  array<string, string|null>  $bindings
      * @return list<array{type: string, link: string, own: int, records: int}>
      */
     protected static function recordsByLink(SQLite3 $connection, Window $window, array $bindings): array
@@ -244,13 +244,13 @@ class Attribution
                 GROUP BY type, execution_id, source
             )
             SELECT type, CASE
-                WHEN own_user = :actor THEN :direct
-                WHEN own_user IS NOT NULL THEN :other_actor
+                WHEN is_actor = 1 THEN :direct
+                WHEN is_actor = 0 THEN :other_actor
                 WHEN execution_link IN (:direct, :dispatch) THEN execution_link
                 ELSE :unattributable
-            END AS link, COALESCE(own_user = :actor, 0) AS own, sum(records) AS records
+            END AS link, COALESCE(is_actor, 0) AS own, sum(records) AS records
             FROM (
-                SELECT type, NULL AS own_user, (
+                SELECT type, NULL AS is_actor, (
                     SELECT {$executionLink} FROM records x WHERE x.id = (
                         SELECT y.id FROM records y
                         WHERE y.execution_id = inheriting.execution_id AND y.source = inheriting.source AND y.type IN ({$executions})
@@ -259,7 +259,7 @@ class Attribution
                 ) AS execution_link, records
                 FROM inheriting
                 UNION ALL
-                SELECT r.type, NULLIF(r.user_id, ''), CASE WHEN r.type IN ({$executions}) THEN {$ownLink} END, 1
+                SELECT r.type, CASE WHEN NULLIF(r.user_id, '') IS NOT NULL THEN r.user_id = :actor AND r.worker IS :worker END, CASE WHEN r.type IN ({$executions}) THEN {$ownLink} END, 1
                 FROM records r WHERE r.type IN ({$types}) AND {$window->condition()} AND NOT ({$inheriting})
             )
             GROUP BY 1, 2, 3", $bindings, $window);
@@ -268,7 +268,7 @@ class Attribution
     /**
      * Read the attributed executions of the window, newest first, one more than the limit.
      *
-     * @param  array<string, string>  $bindings
+     * @param  array<string, string|null>  $bindings
      * @return list<array{started_at: float, type: string, execution_id: string, group_hash: string|null, label: string, link: string}>
      */
     protected static function listed(SQLite3 $connection, Window $window, array $bindings, int $limit): array
@@ -344,13 +344,16 @@ class Attribution
     }
 
     /**
-     * Get the values every query of the attribution binds: the person, the twelve types and the links.
+     * Get the values every query of the attribution binds: the actor, the twelve types and the links.
      *
-     * @return array<string, string>
+     * @return array<string, string|null>
      */
-    protected static function bindings(string $id): array
+    protected static function bindings(string $id, ?string $worker): array
     {
-        $values = ['actor' => $id];
+        $values = [
+            'actor' => $id,
+            'worker' => $worker,
+        ];
 
         foreach (RecordType::events() as $type) {
             $values[self::parameter($type)] = $type->value;

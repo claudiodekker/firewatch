@@ -14,6 +14,7 @@ use ClaudioDekker\Firewatch\Mcp\Emptiness;
 use ClaudioDekker\Firewatch\Mcp\Identification;
 use ClaudioDekker\Firewatch\Mcp\MatchedBy;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
+use ClaudioDekker\Firewatch\Mcp\UserIdWorkers;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 use ClaudioDekker\Firewatch\Store\Cell;
@@ -106,6 +107,7 @@ class Actor extends Tool
     {
         return [
             'who' => $schema->string()->description(__('firewatch::messages.actor_who_argument'))->required(),
+            'worker' => $schema->string(),
             ...$this->windowSchema($schema),
             'limit' => $this->limitArgument($schema, maximum: self::MAXIMUM_LIMIT, default: self::DEFAULT_LIMIT),
             ...$this->formatSchema($schema),
@@ -127,19 +129,20 @@ class Actor extends Tool
     {
         $arguments = new Arguments($request, $this);
         $who = $this->who($arguments);
+        $worker = $arguments->worker('actor(who: "7", worker: "2")');
         $frame = $this->frame($now);
         $window = Window::read($request, $now, timezone: $frame->timezone, tool: $this->name());
         $limit = $arguments->limit(['who' => 'taylor']);
 
         $frame->about(RecordType::events(), $window, facts: [CallFact::ACTOR]);
 
-        $read = $frame->read(fn (SQLite3 $connection) => $this->load($connection, $who, $window, $limit));
+        $read = $frame->read(fn (SQLite3 $connection) => $this->load($connection, $who, $worker, $window, $limit));
 
         if ($read === null) {
             return $frame->empty();
         }
 
-        [$identification, $attribution] = $read;
+        [$identification, $attribution, $severalActors] = $read;
 
         if ($frame->isEmpty() && $identification->knowsNoOne()) {
             return $frame->empty();
@@ -149,23 +152,29 @@ class Actor extends Tool
             return $frame->empty(Emptiness::noExecutions($frame->facts()->records));
         }
 
-        return $frame->answer(...$this->stated($who, $identification, $attribution, $window));
+        return $frame->answer(...$this->stated($who, $identification, $attribution, $severalActors, $window));
     }
 
     /**
-     * Resolve who is meant and, for one person, attribute the window's work to them.
+     * Resolve who is meant, among the people of a worker when the call names one, and, for one person, attribute the window's work to them.
      *
-     * @return array{Identification, Attribution|null}
+     * A call that names no worker also reads the note that the person's id is several actors, when it is.
+     *
+     * @return array{Identification, Attribution|null, string|null}
      */
-    protected function load(SQLite3 $connection, string $who, Window $window, int $limit): array
+    protected function load(SQLite3 $connection, string $who, ?string $worker, Window $window, int $limit): array
     {
-        $identification = Identification::of($connection, $who);
+        $identification = Identification::of($connection, $who, $worker);
 
-        $attribution = $identification->matchedBy === null || $identification->isAmbiguous()
-            ? null
-            : Attribution::of($connection, $window, $identification->found->rows[0]['id'], $limit);
+        if ($identification->matchedBy === null || $identification->isAmbiguous()) {
+            return [$identification, null, null];
+        }
 
-        return [$identification, $attribution];
+        $person = $identification->found->rows[0];
+        $attribution = Attribution::of($connection, $window, $person['id'], $person['worker'], $limit);
+        $severalActors = $worker === null ? UserIdWorkers::note($connection, $person['id']) : null;
+
+        return [$identification, $attribution, $severalActors];
     }
 
     /**
@@ -173,7 +182,7 @@ class Actor extends Tool
      *
      * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: list<array{tool: string, arguments: array<string, mixed>, why: string}>, cuttable: list<string>|null}
      */
-    protected function stated(string $who, Identification $identification, ?Attribution $attribution, Window $window): array
+    protected function stated(string $who, Identification $identification, ?Attribution $attribution, ?string $severalActors, Window $window): array
     {
         $decidedBy = $identification->matchedBy;
 
@@ -182,8 +191,19 @@ class Actor extends Tool
         }
 
         return $attribution === null
-            ? $this->ambiguous($who, $decidedBy, $identification)
-            : $this->identified($decidedBy, $identification, $attribution, $window);
+            ? $this->ambiguous($who, $decidedBy, $identification, $window)
+            : $this->identified($decidedBy, $identification, $attribution, $severalActors, $window);
+    }
+
+    /**
+     * Get the worker of a person as a key of an answer, which only a person of a parallel test run has.
+     *
+     * @param  array{worker: string|null}  $person
+     * @return array{worker?: string}
+     */
+    protected function workerOf(array $person): array
+    {
+        return $person['worker'] === null ? [] : ['worker' => $person['worker']];
     }
 
     /**
@@ -191,7 +211,7 @@ class Actor extends Tool
      *
      * @return array{summary: string, empty: Emptiness|null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: list<array{tool: string, arguments: array<string, mixed>, why: string}>, cuttable: list<string>}
      */
-    protected function identified(MatchedBy $decidedBy, Identification $identification, Attribution $attribution, Window $window): array
+    protected function identified(MatchedBy $decidedBy, Identification $identification, Attribution $attribution, ?string $severalActors, Window $window): array
     {
         $person = $identification->found->rows[0];
         $name = Cell::blank($person['name']);
@@ -209,6 +229,7 @@ class Actor extends Tool
             'result' => [
                 'identity' => [
                     'id' => $person['id'],
+                    ...$this->workerOf($person),
                     'name' => $name,
                     'username' => Cell::blank($person['username']),
                     'first_seen_at' => $person['first_seen'],
@@ -217,9 +238,9 @@ class Actor extends Tool
                 ],
                 ...$attribution->result(),
             ],
-            'notes' => $this->notes($decidedBy, $attribution),
+            'notes' => $this->notes($decidedBy, $attribution, $severalActors),
             'truncated' => $cut === null ? [] : [$cut],
-            'next' => $this->next($person['id'], $attribution, $window),
+            'next' => $this->next($person, $attribution, $window),
             'cuttable' => ['executions'],
         ];
     }
@@ -273,17 +294,17 @@ class Actor extends Tool
      *
      * @return list<string>
      */
-    protected function notes(MatchedBy $decidedBy, Attribution $attribution): array
+    protected function notes(MatchedBy $decidedBy, Attribution $attribution, ?string $severalActors): array
     {
         $commands = $attribution->commands();
         $tasks = $attribution->scheduledTasks();
         $attempts = $attribution->attemptsWithoutActor();
         $requests = $attribution->requestsWithoutUser();
-        $notes = [];
+        $fromRecords = $decidedBy === MatchedBy::RECORDS ? __('firewatch::messages.actor_from_records_note') : null;
+        $identified = array_filter([$fromRecords, $severalActors], is_string(...));
 
-        if ($decidedBy === MatchedBy::RECORDS) {
-            $notes[] = __('firewatch::messages.actor_from_records_note');
-        }
+        // An answer carries five notes at most, so what is said of the id shares one.
+        $notes = $identified === [] ? [] : [implode(' ', $identified)];
 
         $notes[] = $commands + $tasks === 0
             ? __('firewatch::messages.actor_no_commands_note')
@@ -307,11 +328,12 @@ class Actor extends Tool
     }
 
     /**
-     * Get the calls that open the newest listed execution and its group, and list the records that carry the person's id, over the same window.
+     * Get the calls that open the newest listed execution and its group, and list the records that carry the person's id under their worker, over the same window.
      *
+     * @param  array{id: string, worker: string|null}  $person
      * @return list<array{tool: string, arguments: array<string, mixed>, why: string}>
      */
-    protected function next(string $id, Attribution $attribution, Window $window): array
+    protected function next(array $person, Attribution $attribution, Window $window): array
     {
         $newest = $attribution->executions->rows[0] ?? null;
         $calls = [];
@@ -339,7 +361,8 @@ class Actor extends Tool
             $calls[] = [
                 'tool' => 'occurrences',
                 'arguments' => [
-                    'user_id' => $id,
+                    'user_id' => $person['id'],
+                    ...$this->workerOf($person),
                     ...$window->arguments(),
                 ],
                 'why' => __('firewatch::messages.actor_next_user'),
@@ -352,13 +375,14 @@ class Actor extends Tool
     /**
      * Get what an answer states for the several people the deciding stage found, none of whom is chosen.
      *
-     * @return array{summary: string, empty: null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: array{}, cuttable: null}
+     * @return array{summary: string, empty: null, result: array<string, mixed>, notes: list<string>, truncated: list<array{section: string, shown: int, matched: int|null, reason: string, how: string}>, next: list<array{tool: string, arguments: array<string, mixed>, why: string}>, cuttable: null}
      */
-    protected function ambiguous(string $who, MatchedBy $decidedBy, Identification $identification): array
+    protected function ambiguous(string $who, MatchedBy $decidedBy, Identification $identification, Window $window): array
     {
         $candidates = $identification->found;
         $how = __('firewatch::messages.actor_candidates_how', ['listed' => count($candidates->rows)]);
         $cut = $candidates->truncation(section: 'candidates', how: $how, matched: $identification->foundCount);
+        $ofWorkers = array_values(array_filter($candidates->rows, fn (array $person) => $person['worker'] !== null));
 
         return [
             'summary' => $this->ambiguousSummary($who, $decidedBy, $identification->foundCount),
@@ -366,12 +390,33 @@ class Actor extends Tool
             'result' => [
                 'matched_by' => $decidedBy->value,
                 'candidate_count' => $identification->foundCount,
-                'candidates' => array_map($this->listed(...), $candidates->rows),
+                'candidates' => $this->people($candidates->rows),
             ],
-            'notes' => [__('firewatch::messages.actor_ambiguous_note')],
+            'notes' => $ofWorkers === []
+                ? [__('firewatch::messages.actor_ambiguous_note')]
+                : [__('firewatch::messages.actor_ambiguous_note'), __('firewatch::messages.actor_ambiguous_workers_note')],
             'truncated' => $cut === null ? [] : [$cut],
-            'next' => [],
+            'next' => array_map(fn (array $person) => $this->nextCandidate($person, $window), array_slice($ofWorkers, 0, Answer::LISTED)),
             'cuttable' => null,
+        ];
+    }
+
+    /**
+     * Get the call that reads one candidate of a worker alone, over the same window: an id no longer names one person once a worker holds it.
+     *
+     * @param  array{id: string, worker: string|null}  $person
+     * @return array{tool: string, arguments: array<string, mixed>, why: string}
+     */
+    protected function nextCandidate(array $person, Window $window): array
+    {
+        return [
+            'tool' => $this->name(),
+            'arguments' => [
+                'who' => $person['id'],
+                ...$this->workerOf($person),
+                ...$window->arguments(),
+            ],
+            'why' => __('firewatch::messages.actor_next_candidate'),
         ];
     }
 
@@ -404,7 +449,7 @@ class Actor extends Tool
             'summary' => __('firewatch::messages.actor_unknown_summary', ['who' => $who]),
             'empty' => Emptiness::unknownActor($who, $identification->knownCount),
             'result' => [
-                'known_actors' => array_map($this->listed(...), $identification->known->rows),
+                'known_actors' => $this->people($identification->known->rows),
                 'known_actor_count' => $identification->knownCount,
             ],
             'notes' => [__('firewatch::messages.actor_unknown_note')],
@@ -415,15 +460,29 @@ class Actor extends Tool
     }
 
     /**
-     * Get a person as a row of a list.
+     * Get people as the rows of a list, which all carry the worker when any of them has one, so that the rows keep one set of columns.
      *
-     * @param  array{id: string, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null}  $person
-     * @return array{id: string, name: mixed, username: mixed, last_seen_at: float|null}
+     * @param  list<array{id: string, worker: string|null, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null}>  $people
+     * @return list<array{id: string, worker?: string|null, name: mixed, username: mixed, last_seen_at: float|null}>
      */
-    protected function listed(array $person): array
+    protected function people(array $people): array
+    {
+        $anyHasWorker = array_filter($people, fn (array $person) => $person['worker'] !== null) !== [];
+
+        return array_map(fn (array $person) => $this->listed($person, $anyHasWorker), $people);
+    }
+
+    /**
+     * Get a person as a row of a list, with or without the column of the worker.
+     *
+     * @param  array{id: string, worker: string|null, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null}  $person
+     * @return array{id: string, worker?: string|null, name: mixed, username: mixed, last_seen_at: float|null}
+     */
+    protected function listed(array $person, bool $withWorker): array
     {
         return [
             'id' => $person['id'],
+            ...($withWorker ? ['worker' => $person['worker']] : []),
             'name' => Cell::blank($person['name']),
             'username' => Cell::blank($person['username']),
             'last_seen_at' => $person['last_seen'],

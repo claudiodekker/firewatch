@@ -123,7 +123,7 @@ class ErrorLogs implements Ungrouped
 
         return Stored::rows($connection, "WITH errors AS MATERIALIZED (
             SELECT id, started_at, lower(level) AS level, message_shape(message) AS shape,
-                NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id
+                NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id, worker
             FROM logs WHERE {$window->condition(RecordType::LOG)} AND lower(level) IN (SELECT value FROM json_each(:levels))
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY level, shape ORDER BY started_at DESC, id DESC) AS by_latest FROM errors

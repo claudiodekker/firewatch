@@ -122,6 +122,24 @@ test('no argument description lists the values its schema enum declares', functi
     expect($listed)->toBe([]);
 });
 
+test('only `actor` and `occurrences` take `worker`, a string with no description, right after the argument that names the person', function () {
+    $taking = [];
+
+    foreach (toolListing()['tools'] as $tool) {
+        $arguments = array_keys($tool['inputSchema']['properties']);
+        $position = array_search('worker', $arguments, true);
+
+        if ($position !== false) {
+            $taking[$tool['name']] = [$arguments[$position - 1], $tool['inputSchema']['properties']['worker']];
+        }
+    }
+
+    expect($taking)->toBe([
+        'occurrences' => ['user_id', ['type' => 'string']],
+        'actor' => ['who', ['type' => 'string']],
+    ]);
+});
+
 test('only `rank` and `occurrences` take `test`, a string with no description, right after `scope`', function () {
     $taking = [];
 

@@ -71,6 +71,14 @@ class Stored
     }
 
     /**
+     * Get the SQL of the actor of a record: its user id with its worker, which is NULL for a record with no user.
+     */
+    public static function actor(): string
+    {
+        return "CASE WHEN NULLIF(user_id, '') IS NOT NULL THEN json_array(user_id, worker) END";
+    }
+
+    /**
      * Get a stored boolean, which SQLite returns as 1 or 0, or null for one that was not recorded.
      */
     public static function flag(mixed $value): ?bool

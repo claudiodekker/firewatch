@@ -46,7 +46,7 @@ class Executions
     protected static function union(Fragment $condition, array $types): Fragment
     {
         $branches = array_map(fn (RecordType $type) => sprintf(
-            "SELECT id, execution_id, started_at, group_hash, '%s' AS type, '%s' AS source, user_id, %s AS duration, %s AS counted, %s AS peak, %s AS label FROM %s WHERE %s",
+            "SELECT id, execution_id, started_at, group_hash, '%s' AS type, '%s' AS source, user_id, worker, %s AS duration, %s AS counted, %s AS peak, %s AS label FROM %s WHERE %s",
             $type->value,
             $type->source(),
             Stored::number('duration'),

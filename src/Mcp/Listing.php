@@ -29,6 +29,7 @@ class Listing
         public readonly ?string $traceId = null,
         public readonly ?string $jobId = null,
         public readonly ?string $userId = null,
+        public readonly ?string $worker = null,
         public readonly ?string $deploy = null,
     ) {
         //
@@ -133,6 +134,7 @@ class Listing
             'trace_id' => $this->traceId,
             'job_id' => $this->jobId,
             'user_id' => $this->userId,
+            'worker' => $this->worker,
             'deploy' => $this->deploy,
             'type' => $this->type?->value,
         ];

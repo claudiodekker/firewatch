@@ -125,7 +125,7 @@ class Cache implements Detector
 
         return Stored::rows($connection, "WITH events AS (
             SELECT id, started_at, group_hash, store, \"key\", event,
-                NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
+                NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id, worker,
                 event IN ('hit', 'miss') AS read,
                 event IN ('write-failure', 'delete-failure') AS failed
             FROM cache_events WHERE {$selected->sql}

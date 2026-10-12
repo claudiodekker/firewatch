@@ -2,6 +2,7 @@
 
 namespace ClaudioDekker\Firewatch\Mcp\Detectors;
 
+use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\RecordType;
 
@@ -31,7 +32,7 @@ readonly class Fragment
     }
 
     /**
-     * Get the columns of when and to whom the records that meet a predicate happened: the first and last time they started, the signed-in actors they reached and the records without one.
+     * Get the columns of when and to whom the records that meet a predicate happened: the first and last time they started, the signed-in actors they reached and the records without one. The records are read with their `user_id` and `worker`.
      *
      * Every record counts when no predicate is given.
      */
@@ -39,9 +40,10 @@ readonly class Fragment
     {
         $filter = $predicate === null ? '' : " FILTER (WHERE {$predicate})";
         $anonymous = $predicate === null ? '' : "({$predicate}) AND ";
+        $actor = Stored::actor();
 
         return "min(started_at){$filter} AS first_seen, max(started_at){$filter} AS last_seen,
-            count(DISTINCT NULLIF(user_id, '')){$filter} AS actors,
+            count(DISTINCT {$actor}){$filter} AS actors,
             count(*) FILTER (WHERE {$anonymous}NULLIF(user_id, '') IS NULL) AS anonymous";
     }
 }
