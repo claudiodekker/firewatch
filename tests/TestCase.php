@@ -101,6 +101,8 @@ abstract class TestCase extends Orchestra
         $core = $this->app?->resolved(Core::class) ? $this->app->make(Core::class) : null;
 
         if ($core instanceof Core && $core->ingest instanceof Ingest) {
+            // Test capture would store what is left after the test deleted its store.
+            $core->ingest->flush();
             $core->ingest = new NullIngest;
         }
 

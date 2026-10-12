@@ -64,6 +64,21 @@ class TestCapture
     ];
 
     /**
+     * The capture of the last application a test created, whose trailing records wait for the next application or the end of the run.
+     */
+    protected static ?self $last = null;
+
+    /**
+     * Whether the end of the run stores the last application's trailing records.
+     */
+    protected static bool $storesAtShutdown = false;
+
+    /**
+     * Firewatch's ingest, which keeps the records a test writes after its last execution.
+     */
+    protected ?Ingest $ingest = null;
+
+    /**
      * Whether the test is between executions, in a request, or in a command.
      */
     protected TestPhase|TestCommand $phase = TestPhase::BETWEEN;
@@ -145,8 +160,11 @@ class TestCapture
         $this->whenResolved(ConsoleKernelContract::class, $this->startCommandsOn(...));
 
         if ($this->core->ingest instanceof Ingest) {
-            $this->core->ingest->recordTestRun($this->testRecord(...));
+            $this->ingest = $this->core->ingest;
+            $this->ingest->recordTestRun($this->testRecord(...));
         }
+
+        $this->followLastApplication();
 
         $events = $this->app->make('events');
         $events->listen(CommandStarting::class, fn (CommandStarting $event) => $this->guarded(fn () => $this->startCommand($event)));
@@ -302,6 +320,34 @@ class TestCapture
                 $this->core->prepareForRequest($this->app->make('request'));
             }
         }
+    }
+
+    /**
+     * Store what the previous test application wrote after its last execution, and keep this one's for the next application or the end of the run.
+     */
+    protected function followLastApplication(): void
+    {
+        // A test's application is discarded without terminating, so nothing else stores what the test ran after its last execution.
+        static::storeTrailingRecords();
+
+        static::$last = $this;
+
+        if (! static::$storesAtShutdown) {
+            static::$storesAtShutdown = true;
+
+            register_shutdown_function(static fn () => static::storeTrailingRecords());
+        }
+    }
+
+    /**
+     * Store the records the last test application wrote after its last execution.
+     */
+    protected static function storeTrailingRecords(): void
+    {
+        $last = static::$last;
+        static::$last = null;
+
+        $last?->ingest?->digest();
     }
 
     /**

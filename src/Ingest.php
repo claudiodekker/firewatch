@@ -9,6 +9,7 @@ use ClaudioDekker\Firewatch\Store\FailureKind;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Pruner;
 use Closure;
+use JsonSerializable;
 use Laravel\Nightwatch\Contracts\Ingest as IngestContract;
 use Throwable;
 
@@ -83,6 +84,13 @@ class Ingest implements IngestContract
             return;
         }
 
+        $testRecord = $this->testRecord?->__invoke();
+
+        // A test's last records are stored after its application is gone, so what runs between executions resolves its lazy fields now.
+        if ($testRecord === TestRecord::OUTSIDE_EXECUTIONS) {
+            $record = array_map(fn (mixed $value) => $value instanceof JsonSerializable ? $value->jsonSerialize() : $value, $record);
+        }
+
         if ($this->isBufferFull()) {
             array_shift($this->buffer);
             array_shift($this->bindings);
@@ -91,7 +99,7 @@ class Ingest implements IngestContract
 
         $this->buffer[] = $record;
         $this->bindings[] = $this->queryBindings->pair($record);
-        $this->testRecords[] = $this->testRecord?->__invoke();
+        $this->testRecords[] = $testRecord;
 
         if ($this->digestsWhenBufferIsFull && $this->isBufferFull()) {
             $this->digest();

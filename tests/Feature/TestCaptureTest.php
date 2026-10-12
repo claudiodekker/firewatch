@@ -236,3 +236,29 @@ it('records the command of a process that runs as testing, which Laravel raises 
     expect($process->getExitCode())->toBe(0)
         ->and(storeRows('SELECT name, queries FROM commands'))->toBe([['name' => 'members:audit', 'queries' => 1]]);
 })->group('process');
+
+it('stores what each test runs after its last execution, once PHPUnit has torn its application down', function () {
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/phpunit', '--no-configuration', '--bootstrap', 'vendor/autoload.php', 'tests/Fixtures/TestRun/TrailingRecordsTest.php'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite'],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    $executions = 'SELECT execution_id FROM requests UNION SELECT execution_id FROM commands';
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(executionQueries())->toBe([
+            '/orders' => ['select 1 as orders'],
+            'orders:prune' => ['select 2 as pruned'],
+        ])->and(storeRows("SELECT sql, execution_id IN ({$executions}) AS in_execution, execution_source, user_id FROM queries WHERE sql LIKE '%after%' OR sql LIKE '%alone%' ORDER BY started_at"))->toBe([
+            ['sql' => 'select 1 as after_request', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+            ['sql' => 'select 2 as after_command', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+            ['sql' => 'select 3 as alone', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+            ['sql' => 'select 4 as alone', 'in_execution' => 0, 'execution_source' => null, 'user_id' => null],
+        ])->and(storeRows("SELECT count(DISTINCT execution_id) AS fragments FROM queries WHERE sql LIKE '%after%' OR sql LIKE '%alone%'"))->toBe([
+            ['fragments' => 3],
+        ]);
+})->group('process');
