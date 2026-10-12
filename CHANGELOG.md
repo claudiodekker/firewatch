@@ -19,6 +19,7 @@ The first release.
 - `php artisan firewatch:clear` removes all records, or one type's with `--type`, after a confirmation. `--drop` rebuilds the store in place.
 - Twelve MCP tools: `overview`, `rank`, `detect`, `occurrences`, `execution`, `trace`, `actor`, `compare`, `trend`, `query`, `describe` and `fingerprint`.
 - `detect` runs eleven problem shapes: `failing-routes`, `n-plus-one`, `database-bound`, `memory`, `failing-jobs`, `queue-latency`, `failing-tasks`, `exception-clusters`, `error-logs`, `failing-http` and `cache`. Each answers with findings, clean or not evaluated.
+- An `n-plus-one` finding states its `pattern`: `loop` when one call site ran the read at least the threshold times in one execution, `repeated` when the runs came from several call sites, and `unknown` when only a vendor call site, or one with no file, reached the threshold, since it may stand for several application callers that Nightwatch's trace lost.
 - `query` runs one read-only SQL statement in a framework-free PHP child under a closed authorizer, with a deadline and limits on memory, output, rows and cell size. `describe` documents every object and column it can read.
 - Performance budgets per record type, judged in `execution`, `rank` and `overview`.
 - Every answer comes in markdown or JSON with its window, coverage, blind spots and closed error codes. Every next call it offers fits the tool's published input schema, which declares its allowed values, defaults and limits.

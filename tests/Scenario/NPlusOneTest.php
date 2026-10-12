@@ -6,6 +6,7 @@ use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Laravel\Nightwatch\Core;
 
 /**
  * Serve one request that runs a query with each of the bindings. A process records one execution, so one request is all a test can serve.
@@ -14,18 +15,44 @@ use Illuminate\Support\Facades\Route;
  */
 function nPlusOneRequest(array $bindings): void
 {
-    forceRequests();
-    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-
-    Route::get('/posts', function () use ($bindings) {
+    nPlusOneServe(function () use ($bindings) {
         foreach ($bindings as $binding) {
             DB::select('select ? as author', [$binding]);
         }
 
         return 'ok';
     });
+}
+
+/**
+ * Serve one request to the route.
+ *
+ * Nightwatch reads the testbench skeleton as the application, so this checkout's own vendor frames would be the call site of every query. Unless asked to keep the skeleton's layout, Nightwatch is pointed at the checkout, as an application outside a package has it.
+ */
+function nPlusOneServe(Closure $route, bool $skeleton = false): void
+{
+    forceRequests();
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+
+    if (! $skeleton) {
+        app(Core::class)->sensor->location->setBasePath(dirname(__DIR__, 2));
+    }
+
+    Route::get('/posts', $route);
 
     test()->get('/posts');
+}
+
+/**
+ * Read three avatars, each from its own line of code.
+ */
+function nPlusOneAvatars(): string
+{
+    DB::select('select ? as avatar', ['user']);
+    DB::select('select ? as avatar', ['team']);
+    DB::select('select ? as avatar', ['project']);
+
+    return 'ok';
 }
 
 it('finds the query a request ran once for each of forty posts, with forty different bindings', function () {
@@ -47,6 +74,31 @@ it('reads the same query three times with the same bindings as a redundant repea
     $evidence = Answers::assert(Detect::class, ['shape' => 'n-plus-one'])['result']['findings'][0]['evidence'];
 
     expect($evidence)->toMatchArray(['worst_runs' => 3, 'distinct_bindings' => 1]);
+});
+
+it('calls the query one line ran for each of forty posts a loop', function () {
+    nPlusOneRequest(range(1, 40));
+
+    expect(Answers::assert(Detect::class, ['shape' => 'n-plus-one'])['result']['findings'][0]['evidence']['pattern'])->toBe('loop');
+});
+
+it('tells a read that three lines of code each ran once from a loop', function () {
+    nPlusOneServe(nPlusOneAvatars(...));
+
+    $evidence = Answers::assert(Detect::class, ['shape' => 'n-plus-one'])['result']['findings'][0]['evidence'];
+
+    expect($evidence)->toMatchArray(['worst_runs' => 3, 'distinct_bindings' => 3, 'pattern' => 'repeated'])
+        ->and(array_column($evidence['call_sites'], 'runs'))->toBe([1, 1, 1]);
+});
+
+it('cannot tell a loop from a repeat when every run is attributed to the same vendor line', function () {
+    nPlusOneServe(nPlusOneAvatars(...), skeleton: true);
+
+    $evidence = Answers::assert(Detect::class, ['shape' => 'n-plus-one'])['result']['findings'][0]['evidence'];
+
+    expect($evidence)->toMatchArray(['worst_runs' => 3, 'pattern' => 'unknown'])
+        ->and($evidence['call_sites'])->toHaveCount(1)
+        ->and($evidence['call_sites'][0]['file'])->toContain(nativePath('vendor/'));
 });
 
 it('finds nothing in a request that ran a query twice, and says it looked at the request', function () {

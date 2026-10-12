@@ -32,7 +32,7 @@ Preconditions:
 
 - **Pending jobs.** Before running the queue, `app.sh mcp <run> detect '{"shape":"queue-latency","threshold":1}'` answers `queue-latency: 3 findings over 3 dispatches.` Without `threshold`, the call answers `clean over 3 dispatches` until the jobs have been pending for 5 seconds, and `3 findings` after that, each with `"pending":1` in its evidence.
 - **Run the queue.** `app.sh artisan <run> queue:work --stop-when-empty --no-interaction`.
-- **N+1.** `app.sh mcp <run> detect '{"shape":"n-plus-one","format":"json"}' | jq '.result | {verdict, total, name: .findings[0].name, runs: .findings[0].evidence.worst_runs}'` prints `findings`, `1`, `/products: select ? as product` and `25`.
+- **N+1.** `app.sh mcp <run> detect '{"shape":"n-plus-one","format":"json"}' | jq '.result | {verdict, total, name: .findings[0].name, runs: .findings[0].evidence.worst_runs}'` prints `findings`, `1`, `/products: select ? as product` and `25`. Its `evidence.pattern` is `unknown`, not `loop`, because the workbench's query locations are a vendor frame.
 - **Failing routes.** `app.sh mcp <run> detect '{"shape":"failing-routes"}'` lists `/invoices/{invoice}`.
 - **Failing jobs.** `app.sh mcp <run> detect '{"shape":"failing-jobs","format":"json"}' | jq -c '.result.findings[] | [.name, .evidence.jobs_failed, .evidence.jobs_recovered]'` prints `ChargeCard` with `1, 0` and `SyncInventory` with `0, 1`. `ShipOrder` is absent.
 - **Memory.** `app.sh mcp <run> detect '{"shape":"memory"}'` lists `/exports` and no other route.

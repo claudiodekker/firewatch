@@ -361,6 +361,50 @@ describe('a finding', function () {
         ]);
     });
 
+    it('tells a loop at one call site from a read repeated at several, and from a vendor call site that hides its callers', function (array $sites, string $pattern) {
+        ingest([
+            npoExecution('one', fields: ['queries' => array_sum(array_column($sites, 1))]),
+            ...array_merge(...array_map(
+                fn (array $site) => array_map(fn () => npoQuery('one', fields: ['file' => $site[0], 'line' => 7]), range(1, $site[1])),
+                $sites,
+            )),
+        ]);
+
+        expect(npoAnswer()['result']['findings'][0]['evidence']['pattern'])->toBe($pattern);
+    })->with([
+        'one application call site' => [[['app/Orders.php', 3]], 'loop'],
+        'three application call sites once each' => [[['app/A.php', 1], ['app/B.php', 1], ['app/C.php', 1]], 'repeated'],
+        'a loop beside a repeat' => [[['app/A.php', 3], ['app/B.php', 1]], 'loop'],
+        'one vendor call site' => [[['vendor/laravel/pennant/src/Drivers/DatabaseDriver.php', 3]], 'unknown'],
+        'a query stored without a file' => [[[null, 3]], 'unknown'],
+        'a vendor call site written on Windows' => [[['vendor\\laravel\\pennant\\src\\Drivers\\DatabaseDriver.php', 3]], 'unknown'],
+        'a vendor call site beside an application loop' => [[['vendor/laravel/pennant/src/Drivers/DatabaseDriver.php', 3], ['app/A.php', 3]], 'loop'],
+        'vendor and application call sites below the threshold' => [[['vendor/laravel/pennant/src/Drivers/DatabaseDriver.php', 2], ['app/A.php', 2]], 'repeated'],
+    ]);
+
+    it('calls it a loop when any execution of the group looped, though the worst one did not', function () {
+        ingest([
+            ...npoRun('looped', 3, execution: ['timestamp' => NPO_AT]),
+            npoExecution('repeated', fields: ['queries' => 4, 'timestamp' => NPO_AT + 5]),
+            ...array_map(fn (int $line) => npoQuery('repeated', fields: ['line' => $line]), range(1, 4)),
+        ]);
+
+        $finding = npoAnswer()['result']['findings'][0];
+
+        expect($finding['worst_execution_id'])->toBe('repeated')
+            ->and($finding['evidence']['pattern'])->toBe('loop');
+    });
+
+    it('judges a loop against the threshold it was given', function () {
+        ingest([
+            npoExecution('one', fields: ['queries' => 4]),
+            ...array_map(fn (int $line) => npoQuery('one', fields: ['line' => $line]), [1, 1, 2, 2]),
+        ]);
+
+        expect(npoAnswer(['threshold' => 2])['result']['findings'][0]['evidence']['pattern'])->toBe('loop')
+            ->and(npoAnswer(['threshold' => 3])['result']['findings'][0]['evidence']['pattern'])->toBe('repeated');
+    });
+
     it('takes as the worst execution the one with most runs, then the longest runs, then the latest', function (array $runs, string $worst) {
         ingest(array_merge(...array_map(
             fn (array $run, string $id) => npoRun($id, $run['runs'], fields: ['duration' => $run['micros']], execution: ['timestamp' => NPO_AT + $run['at']]),
