@@ -65,7 +65,7 @@ it('lists the tools as JSON with the server name and version', function () {
                     'name' => 'overview',
                     'description' => __('firewatch::messages.tools.overview'),
                     'inputSchema' => ['properties' => ['since' => ['description' => windowArgument('since', listsForms: true), 'type' => 'string'], 'until' => ['description' => windowArgument('until'), 'type' => 'string'], 'by_deploy' => ['description' => __('firewatch::messages.overview_by_deploy_argument'), 'default' => false, 'type' => 'boolean'], 'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string']], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Overview', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'rank',
@@ -82,7 +82,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'cursor' => ['description' => __('firewatch::messages.cursor_argument'), 'type' => 'string'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Rank', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'detect',
@@ -96,7 +96,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.limit_argument.detect'), 'default' => 20, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Detect', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'occurrences',
@@ -123,7 +123,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'cursor' => ['description' => __('firewatch::messages.cursor_argument'), 'type' => 'string'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Occurrences', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'execution',
@@ -134,7 +134,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.limit_argument.execution'), 'default' => 50, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Execution', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'trace',
@@ -145,7 +145,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.limit_argument.trace'), 'default' => 50, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Trace', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'actor',
@@ -157,7 +157,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.limit_argument.actor'), 'default' => 20, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object', 'required' => ['who']],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Actor', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'compare',
@@ -174,7 +174,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.limit_argument.compare'), 'default' => 20, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Compare', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'trend',
@@ -189,7 +189,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'deploy' => ['description' => __('firewatch::messages.deploy_argument'), 'type' => 'string'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Trend', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'query',
@@ -199,7 +199,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'limit' => ['description' => __('firewatch::messages.limit_argument.query'), 'default' => 50, 'minimum' => 1, 'maximum' => 500, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Query', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'describe',
@@ -208,7 +208,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'type' => ['enum' => ['request', 'command', 'job-attempt', 'scheduled-task', 'query', 'exception', 'log', 'cache-event', 'mail', 'notification', 'outgoing-request', 'queued-job', 'user'], 'type' => 'string'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object'],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Describe', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
                 [
                     'name' => 'fingerprint',
@@ -233,7 +233,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'line' => ['minimum' => 1, 'type' => 'integer'],
                         'format' => ['default' => 'markdown', 'enum' => ['markdown', 'json'], 'type' => 'string'],
                     ], 'type' => 'object', 'required' => ['type']],
-                    'annotations' => ['readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
+                    'annotations' => ['title' => 'Fingerprint', 'readOnlyHint' => true, 'idempotentHint' => true, 'openWorldHint' => false],
                 ],
             ],
         ]);
