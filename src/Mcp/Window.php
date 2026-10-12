@@ -197,6 +197,16 @@ class Window
     }
 
     /**
+     * Determine if a test ran work of its own between the bounds of the window, outside its executions.
+     */
+    public function holdsBetween(SQLite3 $connection): bool
+    {
+        $held = Stored::rows($connection, "SELECT EXISTS (SELECT 1 FROM records WHERE {$this->bounds()} AND ".Scope::BETWEEN->condition().') AS held', window: $this);
+
+        return $held[0]['held'] === 1;
+    }
+
+    /**
      * Get the window as the answer's `window` key.
      *
      * @return array<string, mixed>

@@ -92,7 +92,7 @@ class ExceptionClusters implements Detector
      */
     protected function groups(SQLite3 $connection, Window $window, ?string $group): array
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::EXCEPTION);
 
         $reach = Fragment::reach();
 
@@ -134,7 +134,7 @@ class ExceptionClusters implements Detector
     protected function traces(SQLite3 $connection, Window $window, array $hashes): array
     {
         $rows = Stored::rows($connection, "SELECT shown.value AS group_hash, (
-            SELECT trace FROM exceptions WHERE group_hash = shown.value AND {$window->condition()}
+            SELECT trace FROM exceptions WHERE group_hash = shown.value AND {$window->condition(RecordType::EXCEPTION)}
             ORDER BY trace IS NULL, started_at DESC, id DESC LIMIT 1
         ) AS trace FROM json_each(:hashes) AS shown", ['hashes' => json_encode($hashes, JSON_THROW_ON_ERROR)], $window);
 
@@ -151,7 +151,7 @@ class ExceptionClusters implements Detector
     {
         $rows = Stored::rows($connection, Executions::labels().", occurrences AS (
             SELECT execution_id, execution_source AS source, group_hash
-            FROM exceptions WHERE {$window->condition()} AND group_hash IN (SELECT value FROM json_each(:hashes))
+            FROM exceptions WHERE {$window->condition(RecordType::EXCEPTION)} AND group_hash IN (SELECT value FROM json_each(:hashes))
         ), labelled AS (
             SELECT execution_id, type, COALESCE(label, '') AS label, ROW_NUMBER() OVER (PARTITION BY execution_id ORDER BY started_at DESC, id DESC) AS position
             FROM (SELECT DISTINCT execution_id FROM occurrences WHERE execution_id IS NOT NULL) AS carried JOIN labels USING (execution_id)

@@ -30,6 +30,14 @@ enum Scope: string
     }
 
     /**
+     * Get the SQL of the side a record is on, as the value of its scope, read from the raw table or from the view of a type.
+     */
+    public static function side(?RecordType $from = null): string
+    {
+        return 'CASE WHEN '.self::BETWEEN->condition($from)." THEN '".self::BETWEEN->value."' ELSE '".self::EXECUTIONS->value."' END";
+    }
+
+    /**
      * Determine if records of the type can be in the scope, which an execution never is between executions.
      */
     public function holds(RecordType $type): bool

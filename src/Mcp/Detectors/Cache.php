@@ -89,7 +89,7 @@ class Cache implements Detector
      */
     protected function stores(SQLite3 $connection, Window $window, ?string $group): array
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::CACHE_EVENT);
 
         return Stored::rows($connection, "SELECT store, count(*) AS events,
                 count(*) FILTER (WHERE event = 'hit') AS hits,
@@ -109,7 +109,7 @@ class Cache implements Detector
      */
     protected function keys(SQLite3 $connection, Window $window, int|float $percent, ?string $group, int $limit): array
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::CACHE_EVENT);
         $whole = Percentile::PERCENT;
         $worstFirst = 'failures DESC, hit_rate IS NULL, hit_rate ASC, group_hash ASC';
 

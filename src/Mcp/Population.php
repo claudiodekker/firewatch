@@ -373,7 +373,7 @@ class Population
             'group' => $this->group,
         ];
 
-        $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->source().' WHERE '.$this->window->condition().' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
+        $sql = 'WITH base AS (SELECT '.implode(', ', $columns).' FROM '.$this->source().' WHERE '.$this->window->condition($this->type).' AND (:deploy IS NULL OR deploy = :deploy) AND (:group IS NULL OR group_hash = :group)) '.$sql;
 
         return Stored::rows($connection, $sql, [...$filters, ...$this->narrowing(), ...$bindings], $this->window);
     }

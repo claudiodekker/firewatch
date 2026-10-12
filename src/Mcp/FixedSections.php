@@ -31,13 +31,14 @@ class FixedSections
      * Create a new fixed sections instance.
      *
      * @param  array{requests: int, with_status: int, server_errors: int, server_error_pct: float|null, client_errors: int, client_error_pct: float|null}  $errorRate
-     * @param  list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null}>  $slowest  worst first
+     * @param  list<array{type: string, group: string, label: string, side: string, occurrences: int, total_ms: float|null}>  $slowest  worst first, each side of a group apart
      * @param  int  $records  the records of the window, those of no known type included
      * @param  list<array{type: string, records: int}>  $byType  the twelve types in catalogue order
      * @param  int  $userDirectory  the rows of the user directory, whatever the window
      * @param  array{executions: int, signed_in_actors: int, without_actor: int}  $actors  people and executions, never to be summed
      * @param  string|null  $latestExecution  the id of the execution of the window that finished last, or null when none finished
-     * @param  array{blocks: list<array{deploy: string|null, groups: list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>}>, matched: int}|null  $deploys  the slowest list per deploy, oldest first, or null when it was not asked for
+     * @param  array{blocks: list<array{deploy: string|null, groups: list<array{type: string, group: string, label: string, side: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>}>, matched: int}|null  $deploys  the slowest list per deploy, oldest first, or null when it was not asked for
+     * @param  array{executions: array{records: int, queries: int, query_ms: float|null}, between: array{records: int, queries: int, query_ms: float|null}}|null  $sides  the totals of each side of a window that holds a test's own work, else null
      */
     protected function __construct(
         public readonly array $errorRate,
@@ -48,6 +49,7 @@ class FixedSections
         public readonly array $actors,
         public readonly ?string $latestExecution,
         public readonly ?array $deploys = null,
+        public readonly ?array $sides = null,
     ) {
         //
     }
@@ -57,6 +59,7 @@ class FixedSections
      */
     public static function read(SQLite3 $connection, Window $window): self
     {
+        $sides = self::sides($connection, $window);
         $errorRate = self::errorRate($connection, $window);
         $leaders = self::leaders($connection, $window);
         $slowest = self::labelled($connection, $window, $leaders);
@@ -78,6 +81,7 @@ class FixedSections
             userDirectory: $userDirectory,
             actors: $actors,
             latestExecution: $latestExecution,
+            sides: $sides,
         );
     }
 
@@ -97,6 +101,7 @@ class FixedSections
             actors: $sections->actors,
             latestExecution: $sections->latestExecution,
             deploys: self::deployBlocks($connection, $window),
+            sides: $sections->sides,
         );
     }
 
@@ -107,9 +112,12 @@ class FixedSections
      */
     public function result(): array
     {
+        $sides = $this->sides === null ? [] : ['sides' => $this->sides];
+
         return [
             'error_rate' => $this->errorRate,
-            'slowest_by_total_time' => $this->deploys === null ? $this->slowest : array_map($this->block(...), $this->deploys['blocks']),
+            ...$sides,
+            'slowest_by_total_time' => $this->deploys === null ? $this->listed($this->slowest) : array_map($this->block(...), $this->deploys['blocks']),
             'records' => $this->records,
             'records_by_type' => $this->byType,
             'user_directory' => $this->userDirectory,
@@ -185,8 +193,23 @@ class FixedSections
     {
         return [
             'deploy' => $block['deploy'] ?? __('firewatch::messages.rank_no_deploy'),
-            'groups' => $block['groups'],
+            'groups' => $this->listed($block['groups']),
         ];
+    }
+
+    /**
+     * Get the rows of a slowest list as they are answered: with the side each is on only when the window holds both sides.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    protected function listed(array $rows): array
+    {
+        if ($this->sides !== null) {
+            return $rows;
+        }
+
+        return array_map(fn (array $row) => array_diff_key($row, ['side' => true]), $rows);
     }
 
     /**
@@ -217,9 +240,9 @@ class FixedSections
     }
 
     /**
-     * Read the groups of the window with the largest total duration: at most three of one type and ten in all, worst first.
+     * Read the groups of the window with the largest total duration, each side of a group apart: at most three of one type and ten in all, worst first.
      *
-     * @return list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float}>
+     * @return list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float, side: Scope}>
      */
     protected static function leaders(SQLite3 $connection, Window $window): array
     {
@@ -227,9 +250,9 @@ class FixedSections
         [$timed, $bindings] = self::timed($types, $window);
 
         $rows = Stored::rows($connection, "WITH timed AS ({$timed}),
-            totals AS (SELECT position, group_hash, count(*) AS occurrences, count(d) AS timed_records, sum(d) AS total FROM timed GROUP BY position, group_hash),
-            placed AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY position ORDER BY total DESC, occurrences DESC, group_hash) AS place FROM totals WHERE timed_records > 0)
-            SELECT position, group_hash, occurrences, total FROM placed WHERE place <= :per_type", [
+            totals AS (SELECT position, group_hash, side, count(*) AS occurrences, count(d) AS timed_records, sum(d) AS total FROM timed GROUP BY position, group_hash, side),
+            placed AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY position ORDER BY total DESC, occurrences DESC, group_hash, side DESC) AS place FROM totals WHERE timed_records > 0)
+            SELECT position, group_hash, side, occurrences, total FROM placed WHERE place <= :per_type", [
             ...$bindings,
             'per_type' => self::SLOWEST_PER_TYPE,
         ], $window);
@@ -238,9 +261,47 @@ class FixedSections
     }
 
     /**
-     * Read the groups of each of the most recent deploys of the window with the largest total duration, as the blocks of the slowest list, oldest deploy first.
+     * Read the records, queries and query time of each side of a window that holds both, or null when it is scoped to one or holds no work of a test's own.
      *
-     * @return array{blocks: list<array{deploy: string|null, groups: list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>}>, matched: int}
+     * @return array{executions: array{records: int, queries: int, query_ms: float|null}, between: array{records: int, queries: int, query_ms: float|null}}|null
+     */
+    protected static function sides(SQLite3 $connection, Window $window): ?array
+    {
+        if ($window->scope() !== Scope::ALL || ! $window->holdsBetween($connection)) {
+            return null;
+        }
+
+        $side = Scope::side();
+        $rows = Stored::rows($connection, "SELECT {$side} AS side, count(*) AS records,
+            count(*) FILTER (WHERE type = :query) AS queries, sum(duration) FILTER (WHERE type = :query) AS query_duration
+            FROM records WHERE {$window->condition()} GROUP BY 1", ['query' => RecordType::QUERY->value], $window);
+        $totals = array_column($rows, null, 'side');
+
+        return [
+            Scope::EXECUTIONS->value => self::side($totals[Scope::EXECUTIONS->value] ?? []),
+            Scope::BETWEEN->value => self::side($totals[Scope::BETWEEN->value] ?? []),
+        ];
+    }
+
+    /**
+     * Get the totals of one side, which are none for a side with no records.
+     *
+     * @param  array{records?: int, queries?: int, query_duration?: int|float|null}  $totals
+     * @return array{records: int, queries: int, query_ms: float|null}
+     */
+    protected static function side(array $totals): array
+    {
+        return [
+            'records' => $totals['records'] ?? 0,
+            'queries' => $totals['queries'] ?? 0,
+            'query_ms' => Stored::milliseconds($totals['query_duration'] ?? null),
+        ];
+    }
+
+    /**
+     * Read the groups of each of the most recent deploys of the window with the largest total duration, each side of a group apart, as the blocks of the slowest list, oldest deploy first.
+     *
+     * @return array{blocks: list<array{deploy: string|null, groups: list<array{type: string, group: string, label: string, side: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>}>, matched: int}
      */
     protected static function deployBlocks(SQLite3 $connection, Window $window): array
     {
@@ -248,11 +309,11 @@ class FixedSections
         [$timed, $bindings] = self::timed($types, $window, "NULLIF(deploy, '') AS deploy, started_at, ");
 
         $rows = Stored::rows($connection, "WITH timed AS ({$timed}),
-            totals AS (SELECT deploy, position, group_hash, count(*) AS occurrences, count(d) AS timed_records, sum(d) AS total FROM timed GROUP BY deploy, position, group_hash),
-            placed AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY deploy, position ORDER BY total DESC, occurrences DESC, group_hash) AS place FROM totals WHERE timed_records > 0),
+            totals AS (SELECT deploy, position, group_hash, side, count(*) AS occurrences, count(d) AS timed_records, sum(d) AS total FROM timed GROUP BY deploy, position, group_hash, side),
+            placed AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY deploy, position ORDER BY total DESC, occurrences DESC, group_hash, side DESC) AS place FROM totals WHERE timed_records > 0),
             seen AS (SELECT deploy, min(started_at) AS first_at, max(started_at) AS last_at FROM timed WHERE d IS NOT NULL GROUP BY deploy),
             recent AS (SELECT *, ROW_NUMBER() OVER (ORDER BY last_at DESC, deploy) AS recency, count(*) OVER () AS matched FROM seen)
-            SELECT placed.deploy, first_at, matched, position, group_hash, occurrences, timed_records, total
+            SELECT placed.deploy, first_at, matched, position, group_hash, side, occurrences, timed_records, total
             FROM placed JOIN recent ON recent.deploy IS placed.deploy
             WHERE place <= :per_type AND recency <= :deploys", [
             ...$bindings,
@@ -292,8 +353,8 @@ class FixedSections
     /**
      * Get the rows of one deploy's block: the labelled leaders, each with the mean of its timed records.
      *
-     * @param  list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float, timed: int}>  $leaders
-     * @return list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>
+     * @param  list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float, side: Scope, timed: int}>  $leaders
+     * @return list<array{type: string, group: string, label: string, side: string, occurrences: int, total_ms: float|null, avg_ms: float|null}>
      */
     protected static function deployGroups(SQLite3 $connection, Window $window, array $leaders): array
     {
@@ -314,7 +375,7 @@ class FixedSections
     }
 
     /**
-     * Get the union of the duration of every record of the types in the window, as the SQL of the table `timed`, with the bindings of its positions.
+     * Get the union of the duration and the side of every record of the types in the window, as the SQL of the table `timed`, with the bindings of its positions.
      *
      * @param  list<RecordType>  $types
      * @param  string  $columns  the columns to select beside the position, the group and the duration, each followed by a comma
@@ -326,8 +387,9 @@ class FixedSections
         $branches = [];
 
         foreach ($types as $position => $type) {
+            $side = Scope::side($type);
             $bindings["position{$position}"] = $position;
-            $branches[] = "SELECT :position{$position} AS position, {$columns}group_hash, ".Stored::duration($type)." AS d FROM {$type->view()} WHERE group_hash IS NOT NULL AND {$window->condition()}";
+            $branches[] = "SELECT :position{$position} AS position, {$columns}group_hash, {$side} AS side, ".Stored::duration($type)." AS d FROM {$type->view()} WHERE group_hash IS NOT NULL AND {$window->condition($type)}";
         }
 
         return [implode(' UNION ALL ', $branches), $bindings];
@@ -338,7 +400,7 @@ class FixedSections
      *
      * @param  list<RecordType>  $types
      * @param  array<string, mixed>  $row
-     * @return array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float}
+     * @return array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float, side: Scope}
      */
     protected static function leader(array $types, array $row): array
     {
@@ -348,13 +410,14 @@ class FixedSections
             'hash' => $row['group_hash'],
             'occurrences' => $row['occurrences'],
             'value' => $row['total'],
+            'side' => Scope::from($row['side']),
         ];
     }
 
     /**
      * Order leaders worst first and keep the ten worst.
      *
-     * @template TLeader of array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float}
+     * @template TLeader of array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float, side: Scope}
      *
      * @param  list<TLeader>  $leaders
      * @return list<TLeader>
@@ -370,8 +433,8 @@ class FixedSections
     /**
      * Read the label of each leader from its latest record in the window, and get the rows of the slowest list.
      *
-     * @param  list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float}>  $leaders
-     * @return list<array{type: string, group: string, label: string, occurrences: int, total_ms: float|null}>
+     * @param  list<array{type: RecordType, position: int, hash: string, occurrences: int, value: int|float, side: Scope}>  $leaders
+     * @return list<array{type: string, group: string, label: string, side: string, occurrences: int, total_ms: float|null}>
      */
     protected static function labelled(SQLite3 $connection, Window $window, array $leaders): array
     {
@@ -386,7 +449,7 @@ class FixedSections
             $bindings["row{$row}"] = $row;
             $bindings["group{$row}"] = $leader['hash'];
             $field = $leader['type']->labelColumn();
-            $branches[] = "SELECT :row{$row} AS row, (SELECT {$field} FROM {$leader['type']->view()} WHERE group_hash = :group{$row} AND {$window->condition()} ORDER BY started_at DESC, id DESC LIMIT 1) AS label";
+            $branches[] = "SELECT :row{$row} AS row, (SELECT {$field} FROM {$leader['type']->view()} WHERE group_hash = :group{$row} AND {$window->condition($leader['type'])} ORDER BY started_at DESC, id DESC LIMIT 1) AS label";
         }
 
         $latest = Stored::rows($connection, implode(' UNION ALL ', $branches), $bindings, $window);
@@ -396,6 +459,7 @@ class FixedSections
             'type' => $leader['type']->value,
             'group' => $leader['hash'],
             'label' => $leader['type']->groupLabel($labels[$row]),
+            'side' => $leader['side']->value,
             'occurrences' => $leader['occurrences'],
             'total_ms' => Stored::milliseconds($leader['value']),
         ], $leaders, array_keys($leaders));

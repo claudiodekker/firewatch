@@ -71,7 +71,7 @@ class FailingHttp implements Detector
      */
     protected function examined(SQLite3 $connection, Window $window, ?string $group): int
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::OUTGOING_REQUEST);
 
         [$row] = Stored::rows($connection, "SELECT count(*) AS examined FROM outgoing_requests WHERE {$selected->sql}", $selected->bindings, $window);
 
@@ -85,7 +85,7 @@ class FailingHttp implements Detector
      */
     protected function hosts(SQLite3 $connection, Window $window, int|float $status, ?string $group, int $limit): array
     {
-        $selected = Fragment::selecting($window, $group);
+        $selected = Fragment::selecting($window, $group, RecordType::OUTGOING_REQUEST);
         $labels = Executions::labels();
         $code = Stored::number('status_code');
         $listed = self::LISTED;
