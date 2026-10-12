@@ -23,6 +23,7 @@ use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\RunListing;
 use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\Stored;
+use ClaudioDekker\Firewatch\Mcp\UserIdWorkers;
 use ClaudioDekker\Firewatch\Mcp\Window;
 use ClaudioDekker\Firewatch\Mcp\WithheldReason;
 use ClaudioDekker\Firewatch\RecordType;
@@ -105,6 +106,7 @@ class Occurrences extends Tool
             'trace_id' => $schema->string()->description(__('firewatch::messages.occurrences_trace_id_argument')),
             'job_id' => $schema->string()->description(__('firewatch::messages.occurrences_job_id_argument')),
             'user_id' => $schema->string()->description(__('firewatch::messages.occurrences_user_id_argument')),
+            'worker' => $schema->string(),
             'order' => $schema->string()->enum(Order::class)->default(Order::RECENT->value)->description(__('firewatch::messages.occurrences_order_argument')),
             'method' => $schema->string()->description(__('firewatch::messages.occurrences_method_argument')),
             'status' => $schema->string()->description(__('firewatch::messages.occurrences_status_argument')),
@@ -149,6 +151,7 @@ class Occurrences extends Tool
         $group = $arguments->group('occurrences(group: "<group id>")');
         $type = $arguments->type('one of the record types', self::EXAMPLE);
         $ids = $this->ids($arguments);
+        $worker = $this->worker($arguments, $ids['user_id']);
 
         if ($group === null && $type === null && array_filter($ids) === []) {
             throw Refusal::missing(argument: 'selector', accepted: 'group, type, execution_id, trace_id, job_id or user_id', example: self::EXAMPLE);
@@ -171,7 +174,7 @@ class Occurrences extends Tool
 
         $frame->about($type === null ? RecordType::events() : [$type], $window, facts: $ids['user_id'] !== null ? [CallFact::ACTOR] : []);
 
-        $read = $frame->read(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $deploy, $filters, $limit, $selector, $continuation));
+        $read = $frame->read(fn (SQLite3 $connection) => $this->inspect($connection, $window, $order, $group, $type, $ids, $worker, $deploy, $filters, $limit, $selector, $continuation));
 
         if ($read === null) {
             return $frame->empty();
@@ -184,7 +187,7 @@ class Occurrences extends Tool
         }
 
         $hasRows = $read['listed'] !== null && $read['listed']['rows'] !== [];
-        $empty = $read['selection']->vacancy($frame, $read['inWindow'], $hasRows, [...$this->given($ids, $filters), ...$window->filters()]);
+        $empty = $read['selection']->vacancy($frame, $read['inWindow'], $hasRows, [...$this->given($ids, $worker, $filters), ...$window->filters()]);
 
         if ($empty !== null) {
             return $frame->empty($empty);
@@ -306,9 +309,9 @@ class Occurrences extends Tool
      *
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @param  Continuation<array{value: int|float, id: int}>  $continuation
-     * @return array{inWindow: int, selection: GroupSelection, baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}
+     * @return array{inWindow: int, selection: GroupSelection, baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null, severalActors: string|null}
      */
-    protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $deploy, OccurrenceFilters $filters, int $limit, string $selector, Continuation $continuation): array
+    protected function inspect(SQLite3 $connection, Window $window, Order $order, ?string $group, ?RecordType $type, array $ids, ?string $worker, ?string $deploy, OccurrenceFilters $filters, int $limit, string $selector, Continuation $continuation): array
     {
         $inWindow = $window->count($connection);
         $selection = GroupSelection::resolve($connection, $group, $type, $deploy, "occurrences(group: \"{$group}\")");
@@ -318,6 +321,7 @@ class Occurrences extends Tool
             'baseline' => null,
             'listed' => null,
             'sites' => null,
+            'severalActors' => null,
         ];
 
         if ($inWindow === 0) {
@@ -343,6 +347,7 @@ class Occurrences extends Tool
             traceId: $ids['trace_id'],
             jobId: $ids['job_id'],
             userId: $ids['user_id'],
+            worker: $worker,
             deploy: $deploy,
         );
         $baseline = $filters->atOrAbove === null ? null : [
@@ -352,12 +357,14 @@ class Occurrences extends Tool
         $threshold = $baseline['threshold'] ?? null;
         $listed = $listing->rows($connection, $limit, $threshold, $continuation->after());
         $sites = $group !== null && $resolved === RecordType::QUERY ? $listing->callSites($connection, $threshold) : null;
+        $severalActors = $ids['user_id'] !== null && $worker === null ? UserIdWorkers::note($connection, $ids['user_id']) : null;
 
         return [
             ...$nothing,
             'baseline' => $baseline,
             'listed' => $listed,
             'sites' => $sites,
+            'severalActors' => $severalActors,
         ];
     }
 
@@ -365,7 +372,7 @@ class Occurrences extends Tool
      * Put the rows, newest or worst first, in the answer.
      *
      * @param  Continuation<array{value: int|float, id: int}>  $continuation
-     * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null}  $read
+     * @param  array{baseline: array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null, listed: array{rows: list<array<string, mixed>>, keys: list<array{value: int|float, id: int}>}|null, sites: list<array{location: string|null, count: int}>|null, severalActors: string|null}  $read
      */
     protected function listing(Continuation $continuation, Frame $frame, Window $window, Order $order, ?string $group, ?string $userId, int $limit, array $read): Answer
     {
@@ -395,7 +402,7 @@ class Occurrences extends Tool
         return $frame->answer(
             summary: $summary,
             result: $result,
-            notes: $this->notes($read['baseline'], $userId),
+            notes: $this->notes($read['baseline'], $userId, $read['severalActors']),
             truncated: $truncated,
             next: $this->next($window, $group, $listed['rows'][0]['group']),
         )->namingBlindSpots();
@@ -407,7 +414,7 @@ class Occurrences extends Tool
      * @param  array{samples: int, needed: int, threshold: int|float|null, durations: list<int|float>|null, percentile: Percentile}|null  $baseline
      * @return list<string>
      */
-    protected function notes(?array $baseline, ?string $userId): array
+    protected function notes(?array $baseline, ?string $userId, ?string $severalActors): array
     {
         $notes = [];
 
@@ -421,6 +428,10 @@ class Occurrences extends Tool
 
         if ($userId !== null) {
             $notes[] = __('firewatch::messages.occurrences_user_only');
+        }
+
+        if ($severalActors !== null) {
+            $notes[] = $severalActors;
         }
 
         return $notes;
@@ -454,10 +465,11 @@ class Occurrences extends Tool
      * @param  array{execution_id: string|null, trace_id: string|null, job_id: string|null, user_id: string|null}  $ids
      * @return list<string>
      */
-    protected function given(array $ids, OccurrenceFilters $filters): array
+    protected function given(array $ids, ?string $worker, OccurrenceFilters $filters): array
     {
         $given = array_filter([
             ...$ids,
+            'worker' => $worker,
             ...$filters->given(),
         ], fn (mixed $value) => $value !== null);
 
@@ -538,6 +550,21 @@ class Occurrences extends Tool
             'job_id' => $this->id($arguments, 'job_id'),
             'user_id' => $this->id($arguments, 'user_id'),
         ];
+    }
+
+    /**
+     * Read the worker that, with the user id, names one actor, or null when none is given.
+     */
+    protected function worker(Arguments $arguments, ?string $userId): ?string
+    {
+        $example = 'occurrences(user_id: "7", worker: "2")';
+        $worker = $arguments->worker($example);
+
+        if ($worker !== null && $userId === null) {
+            throw Refusal::missing(argument: 'user_id', accepted: __('firewatch::messages.argument_values.worker_actor'), example: $example);
+        }
+
+        return $worker;
     }
 
     /**

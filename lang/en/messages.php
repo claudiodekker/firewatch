@@ -44,7 +44,7 @@ return [
         'trace' => 'One trace\'s executions in start order and each queued job\'s lineage: dispatch, attempts, wait_ms, outcome (processed, failed, retrying, pending, no_dispatch, no_attempts). Lineage joins on job id, across traces. A job on an inline connection (sync, deferred, background, null) records no dispatch; a dispatch on one shows no attempts. Give `trace_id` or `job_id`, not both. Children and exceptions: `execution`.',
         'detect' => 'Problem shapes, worst evidence first, with default thresholds: `n-plus-one`, a read query run 3+ times in one execution; `database-bound`, requests 60+ percent in queries; `failing-routes`, requests answering 400+ or failing validation; `failing-jobs`, 1+ failed or released attempts; `queue-latency`, wait or pending 5000+ ms; `failing-tasks`, failed or skipped tasks, no threshold; `exception-clusters`, 1+ occurrences; `error-logs`, error logs by message, 1+; `failing-http`, hosts answering 400+; `cache`, hit rate under 50 percent over 3+ reads, or a failed write; `memory`, 64+ MB peaks. Each states a verdict (findings, clean, not_evaluated) over what it examined, with threshold, total and caveats. Clean over few records is weak.',
         'compare' => 'Each group before against after: did my change help? One boundary: `split_at`, such as an earlier answer\'s now (work spanning it is before), or `deploy_before` with `deploy_after`, each side being that deploy\'s records. Only a time split separates an uncommitted edit. Rows order by absolute change; a rollup counts every group. Too few records is not_evaluated; an empty side is never "no regression".',
-        'actor' => 'One signed-in person and the window\'s work tied to them. `who` is tried as user id (exact), username, name, then part of a name or username; the first stage with a match decides. ASCII case is ignored; an email works only as a username. Several matches return candidates: repeat with an id. An actor exists once recorded acting. Work counts by its own user, its job\'s dispatch or inside a command or task; unlinked work is counted, never guessed. Identity reads the whole store.',
+        'actor' => 'One signed-in person and the window\'s work tied to them. `who` is tried as user id (exact), username, name, then part of either; the first stage to match decides. ASCII case is ignored; an email works only as a username. Several matches list candidates: repeat with an id, and `worker` when a parallel test run reuses the id. Work counts by its own user, its job\'s dispatch or inside a command or task; unlinked work is counted, never guessed. Identity reads the whole store.',
         'trend' => 'A measure over equal time buckets: did it rise, fall or hold, and where did it peak? An empty bucket is 0 for occurrences, null otherwise; buckets before coverage are partial. Bucket edges pass back as since/until.',
         'query' => 'Last resort: your own read-only SQL. One SELECT, WITH, VALUES or EXPLAIN over the record views, records, users, drift, meta, json_each and json_tree; other statements and functions off the allow-list are refused. Values are raw: epoch seconds, microseconds, bytes. Text cells are cut at :characters characters; read the rest with substr(). `describe` lists columns. Prefer `rank`, `occurrences`, `detect`.',
         'describe' => 'What Firewatch holds and how to query it. Without `type`: store state, counts, drift, retention, coverage, whether `query` runs and why not, deploys newest first, units, objects, the SQL allow-list and ceilings, examples. With `type`: its columns with units and recent values, group recipe, examples and blind spots.',
@@ -431,6 +431,8 @@ return [
         'holding' => 'a type that holds the group: :types',
         'scope' => 'one of the sides of a test run\'s store',
         'test' => 'the test of a record, of at least one character',
+        'worker' => 'the worker of a person, of at least one character',
+        'worker_actor' => 'the `user_id` of the actor the worker holds',
         'scope_holding' => 'a `type` other than request, command, job-attempt and scheduled-task, or `scope` executions or all',
         'execution_group' => 'the group id of a request, command, job attempt or scheduled task',
         'within_type' => 'a `type` of the records inside executions',
@@ -1033,6 +1035,14 @@ return [
     'actor_ambiguous_summary_without_who' => ':count people were found at the :stage stage; repeat with an id.',
 
     'actor_ambiguous_note' => 'Several people match; repeat with an id.',
+
+    'actor_ambiguous_workers_note' => 'Each worker of a parallel test run has its own database, so one id is a different person per worker; repeat with `worker` too.',
+
+    'actor_next_candidate' => 'Read this person alone, by id and worker.',
+
+    'user_id_workers_note' => ':count workers hold user id :user_id in the records, counting no worker as one, and each is a different actor; pass `worker` to read one.',
+
+    'user_id_workers_more_note' => ':count or more workers hold user id :user_id in the records, counting no worker as one, and each is a different actor; pass `worker` to read one.',
 
     'actor_candidates_how' => 'The :listed candidates seen most recently are listed; repeat with an id, or with more of the name or username.',
 

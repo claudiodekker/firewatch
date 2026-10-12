@@ -478,17 +478,18 @@ class FixedSections
     }
 
     /**
-     * Read the executions of the window, the distinct users recorded on them and how many have no recorded user.
+     * Read the executions of the window, the distinct actors recorded on them and how many have no recorded user.
      *
      * @return array{executions: int, signed_in_actors: int, without_actor: int}
      */
     protected static function actors(SQLite3 $connection, Window $window): array
     {
         [$types, $placeholders] = self::executionTypes();
+        $actor = Stored::actor();
 
         /** @var array{executions: int, signed_in_actors: int, without_actor: int} */
         return Stored::rows($connection, "SELECT count(*) AS executions,
-            count(DISTINCT NULLIF(user_id, '')) AS signed_in_actors,
+            count(DISTINCT {$actor}) AS signed_in_actors,
             count(*) FILTER (WHERE NULLIF(user_id, '') IS NULL) AS without_actor
             FROM records WHERE type IN ({$placeholders}) AND {$window->condition()}", $types, $window)[0];
     }

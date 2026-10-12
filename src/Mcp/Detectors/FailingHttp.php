@@ -105,7 +105,7 @@ class FailingHttp implements Detector
         return Stored::rows($connection, "{$labels}, calls AS MATERIALIZED (
             SELECT id, started_at, group_hash, host, execution_source AS source,
                 CASE WHEN instr(url, '?') > 0 THEN substr(url, 1, instr(url, '?') - 1) ELSE url END AS url,
-                NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id,
+                NULLIF(execution_id, '') AS execution_id, NULLIF(user_id, '') AS user_id, worker,
                 {$code} AS status, {$code} >= :status AS failed
             FROM outgoing_requests WHERE {$selected->sql}
         ), placed AS (

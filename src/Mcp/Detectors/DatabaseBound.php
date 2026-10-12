@@ -108,7 +108,7 @@ class DatabaseBound implements Detector
         $reach = Fragment::reach();
 
         return Stored::rows($connection, "{$requests->sql}, judged AS (
-            SELECT group_hash, id, started_at, execution_id, label AS route_path, NULLIF(user_id, '') AS user_id, duration AS duration_micros,
+            SELECT group_hash, id, started_at, execution_id, label AS route_path, NULLIF(user_id, '') AS user_id, worker, duration AS duration_micros,
                 (SELECT total(queries.duration) FROM queries WHERE queries.execution_id = executions.execution_id) AS query_micros
             FROM executions WHERE duration > 0
         ), ranked AS (
