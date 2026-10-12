@@ -35,7 +35,7 @@ it('resolves the package defaults when nothing is published or set', function ()
     expect($configuration)->toHaveProperties([
         'enabled' => true,
         'environments' => ['local', 'testing'],
-        'database' => storage_path('firewatch/firewatch-testing.sqlite'),
+        'database' => storage_path().'/firewatch/firewatch-testing.sqlite',
         'busyTimeoutMilliseconds' => 300,
         'retentionAge' => '7d',
         'retentionRecords' => 100000,
@@ -60,8 +60,8 @@ it('keys the default store by the application environment', function () {
     }
 
     expect($stores)->toBe([
-        'local' => storage_path('firewatch/firewatch-local.sqlite'),
-        'testing' => storage_path('firewatch/firewatch-testing.sqlite'),
+        'local' => storage_path().'/firewatch/firewatch-local.sqlite',
+        'testing' => storage_path().'/firewatch/firewatch-testing.sqlite',
     ]);
 });
 
