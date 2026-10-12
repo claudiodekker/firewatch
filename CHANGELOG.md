@@ -10,7 +10,7 @@ The first release.
 - Firewatch captures only in the `local` and `testing` environments by default and steps aside everywhere else. It is Off below SQLite 3.41.0 and refuses a store path under the public directory.
 - Every request, command, job attempt and scheduled task is captured with everything Nightwatch's sensors record about it, with sampling and filters overridden, and stored in a local SQLite file. Nothing is sent anywhere.
 - Each environment keeps its own store, `storage/firewatch/firewatch-{environment}.sqlite`, so an environment added to `environments` doesn't mix with local browsing.
-- Under `testing`, each request and command a feature test runs is recorded as an execution of its own, so `detect` can audit a test run. `capture.tests` turns it off.
+- Under `testing`, each request and command a feature test runs, and each job it dispatches itself on the `sync` queue, is recorded as an execution of its own, so `detect` can audit a test run. `capture.tests` turns it off.
 - A test run's setup reads apart from its endpoints: `scope` on `overview`, `rank`, `detect` and `occurrences` keeps one side, `rank` with `within` ranks the queries and cache events of one route or command, and `occurrences(order: "run")` lists the run in order.
 - `execution` opens an execution by a unique prefix of its id.
 - Redaction is off by default, with opt-in lists for payload fields and headers. Long values are cut with a truncation marker.

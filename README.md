@@ -29,6 +29,8 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 
 It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes. Tests that expect a 4xx answer one, so give `failing-routes` a `threshold` of 500 to see only server errors. The migrations and seeders the tests run are left out. What a test runs itself, such as factories and assertions, is kept apart from its requests and commands: pass `scope: "executions"` or `scope: "between"` to read one side.
 
+A job a test dispatches itself on the `sync` queue is recorded as a job attempt, so `n-plus-one` and `failing-jobs` judge it. A job a test calls through `handle()` counts as the test's own work, and a job a request or command runs on the `sync` queue stays part of that request or command.
+
 ## Requirements
 
 - PHP 8.3 or newer
@@ -138,7 +140,7 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 - A request's payload is stored only for a 500 response.
 - A failed validation is recorded only when Laravel renders a `ValidationException`. Errors a controller returns by hand, or that Livewire handles, read as any other response.
 - `lazy_loads`, `hydrated_models`, `files_read` and `files_written` are always 0, and mail and notification `failed` is always false. Zero does not mean none: use the `n-plus-one` detector.
-- Jobs on the sync connection have no attempt record.
+- Jobs on the sync connection have no attempt record, unless a test dispatched them itself.
 - Logs written straight to a named channel are not captured.
 - Work still running is absent. An execution is recorded when it finishes.
 - Anything the application opted out of (pause, ignore, reject callbacks, never-sample) and processes killed before flushing are absent.
@@ -162,7 +164,7 @@ Answers state these themselves, and `clean` means "none among what was captured"
 | `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | maximum record count |
 | `deploy` | `FIREWATCH_DEPLOY` | unset | deploy label when Nightwatch has none; with neither, the commit git HEAD points to |
 | `capture.logs` | `FIREWATCH_CAPTURE_LOGS` | `true` | capture logs |
-| `capture.tests` | `FIREWATCH_CAPTURE_TESTS` | `true` | record each request and command a test runs as an execution |
+| `capture.tests` | `FIREWATCH_CAPTURE_TESTS` | `true` | record each request and command a test runs, and each job it dispatches on the `sync` queue, as an execution |
 | `capture.request_payload` | `FIREWATCH_CAPTURE_REQUEST_PAYLOAD` | `true` | payload for 500 responses |
 | `capture.redact_payload_fields` | `FIREWATCH_REDACT_PAYLOAD_FIELDS` | empty | payload fields to redact |
 | `capture.redact_headers` | `FIREWATCH_REDACT_HEADERS` | empty | headers to redact |

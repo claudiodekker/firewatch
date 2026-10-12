@@ -467,7 +467,7 @@ class FirewatchServiceProvider extends ServiceProvider
     }
 
     /**
-     * Record each request and command a test runs as an execution of its own.
+     * Record each request and command a test runs, and each job it runs on the sync queue itself, as an execution of its own.
      */
     protected function captureTests(): void
     {

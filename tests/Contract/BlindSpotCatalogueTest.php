@@ -11,7 +11,7 @@ test('the structural blind spot catalogue pins its ids and sentences', function 
         'dead-counters' => 'lazy_loads, hydrated_models, files_read and files_written are always 0 because the sensors never fill them; 0 does not mean none. A lazy load shows as one query repeated in an `execution` timeline.',
         'failed-flag-unpopulated' => 'The failed flag on mail and notification records is always false; failures are not recorded.',
         'mail-by-notification' => 'Mail sent by a notification is recorded as a notification, not as mail.',
-        'sync-jobs-unrecorded' => 'Jobs on the sync connection run inside the dispatching execution and have no attempt record.',
+        'sync-jobs-unrecorded' => 'Jobs on the sync connection run inside the dispatching execution and have no attempt record. The exception is a job a test dispatches itself, outside its requests and commands, which is recorded as an attempt.',
         'vendor-defaults-unrecorded' => 'Vendor commands and framework cache keys on Nightwatch\'s default exclusion lists are not recorded.',
         'exceptions-unreported' => 'Exceptions the application does not report are not recorded, nor are exceptions that a scheduled task running in the scheduler\'s own process reports without throwing.',
         'named-log-channels' => 'Logs written directly to a named channel are not captured; only the default channel is.',
