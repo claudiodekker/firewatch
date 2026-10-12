@@ -10,6 +10,9 @@ use ClaudioDekker\Firewatch\Store\Sqlite;
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Events\Dispatcher;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+use ReflectionProperty;
 use SQLite3;
 
 /**
@@ -191,27 +194,69 @@ class InstallChecks
     }
 
     /**
-     * Report the order guard and the other listeners on the event the veto listens on.
+     * Report the order guard, the named listeners on the event the veto listens on, and the wildcard listeners that match it.
+     *
+     * @return list<CheckResult>
      */
-    public function nightwatchOrder(): CheckResult
+    public function nightwatchOrder(): array
     {
         if ($this->install->registeredFirst) {
-            return CheckResult::fail(
+            return [CheckResult::fail(
                 __('firewatch::messages.doctor.nightwatch-order.registered_first'),
                 __('firewatch::messages.doctor.nightwatch-order.registered_first_fix'),
-            );
+            )];
         }
 
-        $otherListeners = count($this->events->getListeners($this->install->vetoEvent()));
+        $event = $this->install->vetoEvent();
+        $results = [];
 
-        if ($otherListeners > 0) {
-            return CheckResult::warn(
-                trans_choice('firewatch::messages.doctor.nightwatch-order.listeners', $otherListeners, ['count' => $otherListeners]),
+        $namedListeners = count(Arr::wrap($this->events->getRawListeners()[$event] ?? []));
+
+        if ($namedListeners > 0) {
+            $results[] = CheckResult::warn(
+                trans_choice('firewatch::messages.doctor.nightwatch-order.listeners', $namedListeners, ['count' => $namedListeners]),
                 __('firewatch::messages.doctor.nightwatch-order.listeners_fix'),
             );
         }
 
-        return CheckResult::ok(__('firewatch::messages.doctor.nightwatch-order.ok'));
+        $wildcards = $this->matchingWildcards($event);
+
+        if ($wildcards !== []) {
+            $count = array_sum($wildcards);
+            $patterns = implode(', ', array_keys($wildcards));
+
+            $results[] = CheckResult::warn(
+                trans_choice('firewatch::messages.doctor.nightwatch-order.wildcards', $count, [
+                    'count' => $count,
+                    'patterns' => $patterns,
+                ]),
+                __('firewatch::messages.doctor.nightwatch-order.wildcards_fix', ['patterns' => $patterns]),
+            );
+        }
+
+        return $results === [] ? [CheckResult::ok(__('firewatch::messages.doctor.nightwatch-order.ok'))] : $results;
+    }
+
+    /**
+     * Get the wildcard patterns that match the event, with the number of listeners on each.
+     *
+     * @return array<string, int>
+     */
+    protected function matchingWildcards(string $event): array
+    {
+        // Laravel exposes no accessor for the patterns of wildcard listeners.
+        /** @var array<string, array<mixed>> $wildcards */
+        $wildcards = (new ReflectionProperty($this->events, 'wildcards'))->getValue($this->events);
+
+        $matching = [];
+
+        foreach ($wildcards as $pattern => $listeners) {
+            if (Str::is($pattern, $event) && $listeners !== []) {
+                $matching[$pattern] = count($listeners);
+            }
+        }
+
+        return $matching;
     }
 
     /**
