@@ -93,7 +93,7 @@ The server must share a kernel and filesystem with the application. A server on 
 
 ## Local development only
 
-- Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local,testing`). Elsewhere it registers nothing and Nightwatch is untouched.
+- Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local`). Elsewhere it registers nothing and Nightwatch is untouched. `testing` is left out because a test run records queries and exceptions without the request or command they ran in.
 - `composer install --no-dev` leaves it absent.
 - Never list `production` or `prod`. If you do, `firewatch:doctor` flags it.
 - It vetoes every Nightwatch transmit, so no hosted reporting happens from a capture environment.
@@ -104,8 +104,7 @@ The server must share a kernel and filesystem with the application. A server on 
 - Nothing is transmitted. Every Nightwatch transmit is cancelled.
 - **Firewatch never redacts URL query strings, SQL, query bindings, log messages, context and extra, exception messages, the Laravel Context or outgoing-request query strings.** For redaction, use Nightwatch's `redact*` callbacks, which always apply, and the opt-in `capture.redact_payload_fields` and `capture.redact_headers`, which are empty by default.
 - A request's payload is recorded only for a 500 response by default (`capture.request_payload`). Request headers are recorded for every request. Response headers and bodies are never recorded.
-- The store is `storage/firewatch/firewatch.sqlite`, mode `0600` inside a `0700` directory that carries its own VCS ignore file.
-- Test runs share the store. `testing` is a capture environment, so a test suite's commands and jobs write beside your browsing. `php artisan firewatch:clear` separates them.
+- The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
 - Do not commit, share or attach the store file.
 
 Locally, the value that redaction would hide is usually the answer the assistant needs.
@@ -152,8 +151,8 @@ Answers state these themselves, and `clean` means "none among what was captured"
 | Key | Env | Default | Meaning |
 |---|---|---|---|
 | `enabled` | `FIREWATCH_ENABLED` | `true` | the only on/off switch |
-| `environments` | `FIREWATCH_ENVIRONMENTS` | `local,testing` | environments where Firewatch captures |
-| `database` | `FIREWATCH_DATABASE` | `storage/firewatch/firewatch.sqlite` | store path, not under `public/` |
+| `environments` | `FIREWATCH_ENVIRONMENTS` | `local` | environments where Firewatch captures |
+| `database` | `FIREWATCH_DATABASE` | unset | store path, not under `public/`; unset, `storage/firewatch/firewatch-{environment}.sqlite` |
 | `busy_timeout` | `FIREWATCH_BUSY_TIMEOUT` | `300` | milliseconds a write waits for a lock, 0 to 5000 |
 | `retention.age` | `FIREWATCH_RETENTION_AGE` | `7d` | maximum record age (`30m`, `12h`, `7d`, `2w`) |
 | `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | maximum record count |

@@ -197,7 +197,7 @@ _Avoid_: Account, principal, customer
 ### Store
 
 **Store**:
-The single SQLite file holding all captured records, the user directory, drift counts and a few facts about the capture.
+The SQLite file holding all captured records, the user directory, drift counts and a few facts about the capture. Each environment has its own, unless the `database` setting names one file for all of them.
 _Avoid_: Database (except as the name of the `database` setting), cache, log file
 
 **Record view**:

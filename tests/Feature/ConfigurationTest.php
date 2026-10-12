@@ -29,13 +29,15 @@ it('resolves the package defaults when nothing is published or set', function ()
     config()->set('firewatch', []);
     unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
     putenv('FIREWATCH_RETENTION_AGE');
+    unset($_SERVER['FIREWATCH_ENVIRONMENTS'], $_ENV['FIREWATCH_ENVIRONMENTS']);
+    putenv('FIREWATCH_ENVIRONMENTS');
 
     $configuration = registerFirewatch();
 
     expect($configuration)->toHaveProperties([
         'enabled' => true,
-        'environments' => ['local', 'testing'],
-        'database' => storage_path('firewatch/firewatch.sqlite'),
+        'environments' => ['local'],
+        'database' => storage_path().'/firewatch/firewatch-testing.sqlite',
         'busyTimeoutMilliseconds' => 300,
         'retentionAge' => '7d',
         'retentionRecords' => 100000,
@@ -46,6 +48,31 @@ it('resolves the package defaults when nothing is published or set', function ()
         'redactHeaders' => [],
         'issues' => [],
     ])->and($configuration->budgets->isEmpty())->toBeTrue();
+});
+
+it('keys the default store by the application environment', function () {
+    $this->setStorePath(null);
+    config()->set('firewatch', []);
+
+    $stores = [];
+
+    foreach (['local', 'testing'] as $environment) {
+        app()->detectEnvironment(fn () => $environment);
+        $stores[$environment] = registerFirewatch()->database;
+    }
+
+    expect($stores)->toBe([
+        'local' => storage_path().'/firewatch/firewatch-local.sqlite',
+        'testing' => storage_path().'/firewatch/firewatch-testing.sqlite',
+    ]);
+});
+
+it('keeps an explicit store path as it is in every environment', function () {
+    $this->setStorePath($this->storeDirectory.'/store.sqlite');
+    config()->set('firewatch', []);
+    app()->detectEnvironment(fn () => 'local');
+
+    expect(registerFirewatch()->database)->toBe($this->storeDirectory.'/store.sqlite');
 });
 
 it('fills the keys a partially published file leaves out', function () {

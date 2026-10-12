@@ -204,6 +204,7 @@ class FirewatchServiceProvider extends ServiceProvider
             basePath: $this->app->basePath(),
             publicPath: $this->app->publicPath(),
             storagePath: $this->app->storagePath(),
+            environment: $this->app->environment(),
         );
 
         $configuration = $normaliser->resolve(is_array($raw) ? $raw : []);

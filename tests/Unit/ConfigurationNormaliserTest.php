@@ -6,7 +6,7 @@ use ClaudioDekker\Firewatch\Configuration\ConfigurationNormaliser;
 
 function configurationNormaliser(): ConfigurationNormaliser
 {
-    return new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage');
+    return new ConfigurationNormaliser(basePath: '/app', publicPath: '/app/public', storagePath: '/app/storage', environment: 'testing');
 }
 
 /**
@@ -212,19 +212,19 @@ it('drops an invalid environment name and keeps the rest', function (mixed $item
     'not a string' => [5, '5'],
 ]);
 
-it('uses local and testing when no environment name remains', function (mixed $value, array $lines) {
+it('uses local when no environment name remains', function (mixed $value, array $lines) {
     $configuration = configurationNormaliser()->resolve(['environments' => $value]);
 
-    expect($configuration->environments)->toBe(['local', 'testing'])
+    expect($configuration->environments)->toBe(['local'])
         ->and(configurationIssueLines($configuration))->toBe($lines);
 })->with([
-    'empty list' => [[], ['firewatch.environments: no valid environment names; using local,testing']],
-    'empty string' => ['', ['firewatch.environments: no valid environment names; using local,testing']],
+    'empty list' => [[], ['firewatch.environments: no valid environment names; using local']],
+    'empty string' => ['', ['firewatch.environments: no valid environment names; using local']],
     'every item invalid' => ['prod*', [
         'firewatch.environments: "prod*" is not an environment name (letters, digits, _ . -); dropped',
-        'firewatch.environments: no valid environment names; using local,testing',
+        'firewatch.environments: no valid environment names; using local',
     ]],
-    'not a list' => [true, ['firewatch.environments: true is not a list (an array or a comma-separated string); using local,testing']],
+    'not a list' => [true, ['firewatch.environments: true is not a list (an array or a comma-separated string); using local']],
 ]);
 
 it('resolves the store path', function (string $value, string $expected) {
@@ -244,8 +244,8 @@ it('resolves the store path', function (string $value, string $expected) {
 it('falls back to the default store path for a refused path', function (mixed $value, string $reason) {
     $configuration = configurationNormaliser()->resolve(['database' => $value]);
 
-    expect($configuration->database)->toBe('/app/storage/firewatch/firewatch.sqlite')
-        ->and(configurationIssueLines($configuration))->toBe(["firewatch.database: {$reason}; using /app/storage/firewatch/firewatch.sqlite"]);
+    expect($configuration->database)->toBe('/app/storage/firewatch/firewatch-testing.sqlite')
+        ->and(configurationIssueLines($configuration))->toBe(["firewatch.database: {$reason}; using /app/storage/firewatch/firewatch-testing.sqlite"]);
 })->with([
     'empty' => ['', '"" is not a file path'],
     'not a string' => [5, '5 is not a file path'],
@@ -259,11 +259,11 @@ it('falls back to the default store path for a refused path', function (mixed $v
 ]);
 
 it('refuses a Windows store path under the public directory whatever its case', function (string $path) {
-    $normaliser = new ConfigurationNormaliser(basePath: 'C:\\app', publicPath: 'C:\\app\\public', storagePath: 'C:\\app\\storage');
+    $normaliser = new ConfigurationNormaliser(basePath: 'C:\\app', publicPath: 'C:\\app\\public', storagePath: 'C:\\app\\storage', environment: 'testing');
 
     $configuration = $normaliser->resolve(['database' => $path]);
 
-    expect($configuration->database)->toBe('C:\\app\\storage/firewatch/firewatch.sqlite')
+    expect($configuration->database)->toBe('C:\\app\\storage/firewatch/firewatch-testing.sqlite')
         ->and(configurationIssueLines($configuration))->toHaveCount(1)
         ->and(configurationIssueLines($configuration)[0])->toContain('is under the public directory');
 })->with([

@@ -48,6 +48,10 @@ abstract class TestCase extends Orchestra
         $_SERVER['FIREWATCH_RETENTION_AGE'] = $_ENV['FIREWATCH_RETENTION_AGE'] = '36500d';
         putenv('FIREWATCH_RETENTION_AGE=36500d');
 
+        // The suite runs as testing, which Firewatch leaves out of its default environments.
+        $_SERVER['FIREWATCH_ENVIRONMENTS'] = $_ENV['FIREWATCH_ENVIRONMENTS'] = 'local,testing';
+        putenv('FIREWATCH_ENVIRONMENTS=local,testing');
+
         parent::setUp();
     }
 
@@ -61,6 +65,9 @@ abstract class TestCase extends Orchestra
 
         unset($_SERVER['FIREWATCH_RETENTION_AGE'], $_ENV['FIREWATCH_RETENTION_AGE']);
         putenv('FIREWATCH_RETENTION_AGE');
+
+        unset($_SERVER['FIREWATCH_ENVIRONMENTS'], $_ENV['FIREWATCH_ENVIRONMENTS']);
+        putenv('FIREWATCH_ENVIRONMENTS');
 
         // A reported exception holds the store's connections in its trace until the next test resolves the facade again.
         Facade::clearResolvedInstances();

@@ -26,20 +26,21 @@ return [
     |
     */
 
-    'environments' => env('FIREWATCH_ENVIRONMENTS', 'local,testing'),
+    'environments' => env('FIREWATCH_ENVIRONMENTS', 'local'),
 
     /*
     |--------------------------------------------------------------------------
     | Store Path
     |--------------------------------------------------------------------------
     |
-    | This is the path of the SQLite file that holds the telemetry. Give it
-    | its own directory, outside of the public directory. Relative paths
-    | resolve against the base path of the Laravel application in use.
+    | This is the path of the SQLite file that holds the telemetry. Unset, it
+    | is storage/firewatch/firewatch-{environment}.sqlite, one store per
+    | environment. Give a path its own directory, outside of the public
+    | directory. Relative paths resolve against the base path.
     |
     */
 
-    'database' => env('FIREWATCH_DATABASE', storage_path('firewatch/firewatch.sqlite')),
+    'database' => env('FIREWATCH_DATABASE'),
 
     /*
     |--------------------------------------------------------------------------

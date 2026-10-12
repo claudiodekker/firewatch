@@ -51,7 +51,7 @@ class ConfigurationNormaliser
     /**
      * The environments used when no valid name remains.
      */
-    protected const DEFAULT_ENVIRONMENTS = ['local', 'testing'];
+    protected const DEFAULT_ENVIRONMENTS = ['local'];
 
     /**
      * The description of a valid environment name in an issue's reason.
@@ -87,6 +87,7 @@ class ConfigurationNormaliser
         protected string $basePath,
         protected string $publicPath,
         protected string $storagePath,
+        protected string $environment,
     ) {
         //
     }
@@ -351,13 +352,12 @@ class ConfigurationNormaliser
      */
     protected function database(array $raw): string
     {
-        $default = $this->storagePath.'/firewatch/firewatch.sqlite';
+        $default = $this->storagePath.'/firewatch/firewatch-'.$this->environment.'.sqlite';
+        $value = $raw['database'] ?? null;
 
-        if (! array_key_exists('database', $raw)) {
+        if ($value === null) {
             return $default;
         }
-
-        $value = $raw['database'];
 
         if (! is_string($value)) {
             $this->issues[] = ConfigurationIssue::fallBack(key: 'database', reason: ConfigurationIssue::describe($value).' is not a file path', default: $default);
