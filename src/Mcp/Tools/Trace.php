@@ -167,7 +167,6 @@ class Trace extends Tool
                 $executions->truncation(section: 'executions', how: __('firewatch::messages.trace_executions_how'), matched: count($found->executions)),
             ]),
             next: $this->next($found, $jobId),
-            found: true,
         );
     }
 

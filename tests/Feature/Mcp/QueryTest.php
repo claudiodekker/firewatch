@@ -129,7 +129,7 @@ describe('the rows of a statement', function () {
                 ],
                 'straddling' => null,
             ],
-            'blind_spots' => Answers::briefly(BlindSpots::for([RecordType::REQUEST])),
+            'blind_spots' => BlindSpots::for([RecordType::REQUEST]),
             'notes' => [__('firewatch::messages.query_raw_values')],
             'truncated' => [],
             'next' => [],

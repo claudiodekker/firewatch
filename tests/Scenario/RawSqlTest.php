@@ -65,7 +65,7 @@ it('states the blind spots of the requests the statement read', function () {
     $structural = array_values(array_filter($answer['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'structural'));
 
     expect($answer['coverage']['types_read'])->toBe(['request'])
-        ->and($structural)->toBe(Answers::briefly(BlindSpots::for([RecordType::REQUEST])));
+        ->and($structural)->toBe(BlindSpots::for([RecordType::REQUEST]));
 })->group('process');
 
 it('learns the request columns from describe, then finds the header with the statement it offers', function () {

@@ -169,7 +169,7 @@ class Detect extends Tool
             result: $judgement->toArray(),
             truncated: $cut ? [$this->truncation($shape, $judgement)] : [],
             next: $judgement->reason === Reason::STORE_UNAVAILABLE ? [] : $this->next($window, $shape, $judgement),
-            found: Judgement::allFound($judgements),
+            found: Judgement::allFound([$judgement]),
         );
     }
 

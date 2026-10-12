@@ -134,7 +134,6 @@ class Overview extends Tool
             truncated: array_values(array_filter([$budgets->truncation(), $sections->truncation()])),
             next: $this->next($window, $sections, $judgements),
             cuttable: ['slowest_by_total_time'],
-            found: Judgement::allFound($judgements),
         );
     }
 
