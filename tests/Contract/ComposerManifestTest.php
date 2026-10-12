@@ -15,7 +15,6 @@ test('the package requires exactly what the install decision lists', function ()
         'illuminate/database' => '^12.0|^13.0',
         'illuminate/events' => '^12.0|^13.0',
         'illuminate/json-schema' => '^12.0|^13.0',
-        'illuminate/queue' => '^12.0|^13.0',
         'illuminate/support' => '^12.0|^13.0',
         'laravel/mcp' => '^1.0.2',
         'laravel/nightwatch' => '^1.30.2',
@@ -34,7 +33,6 @@ test('every Illuminate namespace and mb_ or ctype_ function family the source us
         'illuminate/database',
         'illuminate/events',
         'illuminate/json-schema',
-        'illuminate/queue',
         'illuminate/support',
     ]);
     expect(array_values(array_diff($needed, $require)))->toBe([]);

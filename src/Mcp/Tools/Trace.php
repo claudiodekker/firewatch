@@ -14,6 +14,7 @@ use ClaudioDekker\Firewatch\Mcp\Failure;
 use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\JobOutcome;
 use ClaudioDekker\Firewatch\Mcp\Lineage;
+use ClaudioDekker\Firewatch\Mcp\LineageState;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
 use ClaudioDekker\Firewatch\Mcp\Stored;
@@ -178,13 +179,14 @@ class Trace extends Tool
     protected function notes(TraceRecords $found, array $jobs): array
     {
         $outcomes = array_column($jobs, 'outcome');
+        $lineages = array_column($jobs, 'lineage');
         $notes = [];
 
         if (in_array(JobOutcome::PENDING->value, $outcomes, true)) {
             $notes[] = __('firewatch::messages.trace_partial_no_attempts');
         }
 
-        if (Lineage::lacksDispatch($found)) {
+        if (in_array(LineageState::NO_DISPATCH->value, $lineages, true)) {
             $notes[] = __('firewatch::messages.trace_partial_no_dispatch');
         }
 
