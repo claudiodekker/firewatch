@@ -413,7 +413,7 @@ it('refuses a window that does not start before it ends', function () {
     $response->assertHasErrors(['error: empty_window']);
 });
 
-it('is read only, idempotent and closed', function () {
+it('is read only and closed', function () {
     expect((new Rank(app(Configuration::class), app(Reader::class), app(Conditions::class)))->description())
         ->toBe(__('firewatch::messages.tools.rank'))
         ->and(str_word_count(__('firewatch::messages.tools.rank')))->toBeLessThanOrEqual(150);

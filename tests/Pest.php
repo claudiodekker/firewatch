@@ -254,9 +254,9 @@ function attributedActivity(array $counts = []): array
  */
 function windowArgument(string $bound, string $kind = 'unbounded', bool $listsForms = false): string
 {
-    $key = $bound === 'since' && ! $listsForms ? 'since_argument_short' : "{$bound}_argument";
+    $key = $bound === 'since' && $listsForms ? 'since_argument' : ($bound === 'since' ? "since_argument_short.{$kind}" : "until_argument.{$kind}");
 
-    return __("firewatch::messages.{$key}", ['absent' => __("firewatch::messages.window_absent.{$kind}.{$bound}")]);
+    return __("firewatch::messages.{$key}");
 }
 
 /**

@@ -27,7 +27,6 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
-use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use SQLite3;
@@ -38,7 +37,6 @@ use SQLite3;
 #[Name('trend')]
 #[Title('Trend')]
 #[IsReadOnly]
-#[IsIdempotent]
 #[IsOpenWorld(false)]
 class Trend extends Tool
 {
@@ -101,8 +99,7 @@ class Trend extends Tool
             'buckets' => $schema->integer()
                 ->min(self::FEWEST_BUCKETS)
                 ->max(self::MOST_BUCKETS)
-                ->default(self::DEFAULT_BUCKETS)
-                ->description(__('firewatch::messages.trend_buckets_argument')),
+                ->default(self::DEFAULT_BUCKETS),
             ...$this->windowSchema($schema, 'trend'),
             'deploy' => $schema->string()->description(__('firewatch::messages.deploy_argument')),
             ...$this->formatSchema($schema),
