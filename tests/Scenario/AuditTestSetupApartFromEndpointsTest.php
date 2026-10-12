@@ -473,3 +473,106 @@ it('refuses to rank within a group that is no execution\'s, or alongside what do
         __('firewatch::messages.conflicting_arguments', ['argument' => 'scope', 'with' => 'request', 'accepted' => __('firewatch::messages.argument_values.scope_holding'), 'example' => 'rank(type: "query", scope: "between")']),
     ]);
 });
+
+/**
+ * Get the rows of a run as its source, label, outcome, queries and other records, leaving out what the clock decides.
+ *
+ * @param  list<array<string, mixed>>  $rows
+ * @return list<string>
+ */
+function auditRun(array $rows): array
+{
+    return array_map(fn (array $row) => trim("{$row['source']} {$row['label']} {$row['outcome']}")." | {$row['queries']} queries, {$row['other']} other", $rows);
+}
+
+it('lists a test run in order, the work between its executions included', function () {
+    auditTestSetupAndEndpoints();
+
+    $run = Answers::assert(Occurrences::class, ['order' => 'run']);
+    $rows = $run['result']['rows'];
+
+    expect($run['result']['order'])->toBe('run')
+        ->and(auditRun($rows))->toBe([
+            'between | 3 queries, 2 other',
+            'request /orders/{order}/items 302 | 4 queries, 3 other',
+            'between | 20 queries, 0 other',
+            'request /orders/{order}/items 302 | 2 queries, 0 other',
+            'command reports:build 0 | 1 queries, 0 other',
+            'between | 2 queries, 0 other',
+        ])->and(array_keys($rows[0]))->toBe(['started_at', 'source', 'type', 'execution_id', 'label', 'outcome', 'duration_ms', 'queries', 'query_ms', 'other'])
+        ->and(array_column($rows, 'type'))->toBe([null, 'request', null, 'request', 'command', null])
+        ->and(array_map(fn (array $row) => $row['duration_ms'] === null, $rows))->toBe([true, false, true, false, false, true])
+        ->and(array_unique(array_column($rows, 'execution_id')))->toHaveCount(6)
+        ->and(array_column($rows, 'started_at'))->toBe(collect($rows)->pluck('started_at')->sort()->values()->all())
+        ->and($run['summary'])->toBe(trans_choice('firewatch::messages.occurrences_run_summary', 6, ['count' => 6]))
+        ->and($run['next'])->toBe([
+            ['tool' => 'execution', 'arguments' => ['execution_id' => $rows[1]['execution_id']], 'why' => __('firewatch::messages.occurrences_next_run_execution')],
+            ['tool' => 'occurrences', 'arguments' => ['execution_id' => $rows[0]['execution_id']], 'why' => __('firewatch::messages.occurrences_next_run_between')],
+        ])->and(auditRowsBySourceAndName(Answers::follow($run['next'][1])))->toBe([
+            'between countries' => 2,
+            'between select ? as country' => 3,
+        ]);
+});
+
+it('windows, scopes and pages a test run', function () {
+    auditTestSetupAndEndpoints();
+
+    $rows = Answers::assert(Occurrences::class, ['order' => 'run'])['result']['rows'];
+
+    $since = Answers::assert(Occurrences::class, ['order' => 'run', 'since' => Instant::epoch($rows[3]['started_at'])]);
+    $until = Answers::assert(Occurrences::class, ['order' => 'run', 'until' => Instant::epoch($rows[3]['started_at'])]);
+    $between = Answers::assert(Occurrences::class, ['order' => 'run', 'scope' => 'between']);
+    $executions = Answers::assert(Occurrences::class, ['order' => 'run', 'scope' => 'executions']);
+    $first = Answers::assert(Occurrences::class, ['order' => 'run', 'limit' => 4]);
+
+    preg_match('/cursor: "([^"]+)"/', $first['truncated'][0]['how'], $cursor);
+
+    $second = Answers::assert(Occurrences::class, ['order' => 'run', 'limit' => 4, 'cursor' => $cursor[1]]);
+
+    expect($since['result']['rows'])->toBe(array_slice($rows, 3))
+        ->and($until['result']['rows'])->toBe(array_slice($rows, 0, 3))
+        ->and($between['result']['rows'])->toBe([$rows[0], $rows[2], $rows[5]])
+        ->and($executions['result']['rows'])->toBe([$rows[1], $rows[3], $rows[4]])
+        ->and($first['result']['rows'])->toBe(array_slice($rows, 0, 4))
+        ->and($first['truncated'])->toHaveCount(1)
+        ->and($first['truncated'][0])->toMatchArray(['section' => 'rows', 'shown' => 4, 'reason' => 'limit'])
+        ->and($second['result']['rows'])->toBe(array_slice($rows, 4))
+        ->and($second['truncated'])->toBe([]);
+});
+
+it('lists only executions in the run of a test that ran nothing of its own, and nothing between them', function () {
+    auditEndpointsOnly();
+
+    $run = Answers::assert(Occurrences::class, ['order' => 'run']);
+    $between = Answers::assert(Occurrences::class, ['order' => 'run', 'scope' => 'between']);
+    $before = Answers::assert(Occurrences::class, ['order' => 'run', 'until' => Instant::epoch($run['result']['rows'][0]['started_at'])]);
+
+    expect(auditRun($run['result']['rows']))->toBe([
+        'request /orders/{order}/items 302 | 4 queries, 3 other',
+        'request /orders/{order}/items 302 | 2 queries, 0 other',
+        'command reports:build 0 | 1 queries, 0 other',
+    ])->and($between['result'])->toBe([])
+        ->and($between['empty'])->toBe([
+            'kind' => 'no_match',
+            'population' => 13,
+            'message' => __('firewatch::messages.no_match', ['population' => 13, 'filters' => 'order: run, scope: between']),
+        ])->and($before['empty'])->toBe([
+            'kind' => 'window_empty',
+            'population' => 13,
+            'message' => __('firewatch::messages.window_empty', ['population' => 13]),
+        ]);
+});
+
+it('refuses a selector or a filter on a run', function (array $arguments, string $argument) {
+    FirewatchServer::tool(Occurrences::class, ['order' => 'run', ...$arguments])->assertHasErrors([__('firewatch::messages.conflicting_arguments', [
+        'argument' => $argument,
+        'with' => 'order',
+        'accepted' => __('firewatch::messages.occurrences_run_accepted'),
+        'example' => 'occurrences(order: "run")',
+    ])]);
+})->with([
+    'a type' => [['type' => 'query'], 'type'],
+    'an execution id' => [['execution_id' => 'abc'], 'execution_id'],
+    'a filter' => [['matching' => 'orders'], 'matching'],
+    'a deploy' => [['deploy' => 'v1'], 'deploy'],
+]);

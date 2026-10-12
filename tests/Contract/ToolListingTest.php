@@ -77,7 +77,7 @@ test('every closed argument declares exactly the values it accepts as its schema
         'rank.by' => ['p95_duration', 'p50_duration', 'max_duration', 'total_duration', 'occurrences', 'p95_memory', 'max_memory', 'last_seen', 'queries'],
         'compare.by' => ['p95_duration', 'p50_duration', 'max_duration', 'total_duration', 'occurrences', 'p95_memory', 'p50_memory', 'max_memory', 'queries'],
         'trend.by' => ['occurrences', 'max_duration', 'avg_duration', 'total_duration', 'max_memory'],
-        'occurrences.order' => ['recent', 'slowest', 'memory', 'queries'],
+        'occurrences.order' => ['recent', 'slowest', 'memory', 'queries', 'run'],
         'occurrences.outcome' => ['processed', 'failed', 'released', 'skipped'],
         'occurrences.level' => ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'],
         'occurrences.at_or_above' => ['median', 'p95'],

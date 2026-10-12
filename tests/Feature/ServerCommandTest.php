@@ -111,7 +111,7 @@ it('lists the tools as JSON with the server name and version', function () {
                         'trace_id' => ['description' => __('firewatch::messages.occurrences_trace_id_argument'), 'type' => 'string'],
                         'job_id' => ['description' => __('firewatch::messages.occurrences_job_id_argument'), 'type' => 'string'],
                         'user_id' => ['description' => __('firewatch::messages.occurrences_user_id_argument'), 'type' => 'string'],
-                        'order' => ['description' => __('firewatch::messages.occurrences_order_argument'), 'default' => 'recent', 'enum' => ['recent', 'slowest', 'memory', 'queries'], 'type' => 'string'],
+                        'order' => ['description' => __('firewatch::messages.occurrences_order_argument'), 'default' => 'recent', 'enum' => ['recent', 'slowest', 'memory', 'queries', 'run'], 'type' => 'string'],
                         'method' => ['description' => __('firewatch::messages.occurrences_method_argument'), 'type' => 'string'],
                         'status' => ['description' => __('firewatch::messages.occurrences_status_argument'), 'type' => 'string'],
                         'outcome' => ['description' => __('firewatch::messages.occurrences_outcome_argument'), 'enum' => ['processed', 'failed', 'released', 'skipped'], 'type' => 'string'],

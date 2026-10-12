@@ -1096,7 +1096,7 @@ return [
 
     'occurrences_user_id_argument' => 'Records carrying that user, as recorded.',
 
-    'occurrences_order_argument' => 'Records without the measure last; memory and queries need an execution type.',
+    'occurrences_order_argument' => 'run: one row per execution or between section, oldest first, no selector. Records without the measure last; memory and queries need an execution type.',
 
     'occurrences_method_argument' => 'HTTP method, any case. Only request and outgoing-request.',
 
@@ -1113,6 +1113,14 @@ return [
     'occurrences_matching_argument' => 'Substring, ASCII case ignored, in the type\'s fields. Needs type.',
 
     'occurrences_summary' => 'Listed :count record, ordered by :order.|Listed :count records, ordered by :order.',
+
+    'occurrences_run_summary' => 'Listed :count execution or between section of the run, oldest first.|Listed :count executions and between sections of the run, oldest first.',
+
+    'occurrences_run_accepted' => 'a call with `order` run and no selector or filter: since, until, scope, limit and cursor apply',
+
+    'occurrences_next_run_execution' => 'The first execution listed, in full.',
+
+    'occurrences_next_run_between' => 'The records of the first between section listed.',
 
     'occurrences_cursor_how' => 'Call occurrences again with this cursor to see the rest: :call',
 
