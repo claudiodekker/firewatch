@@ -915,7 +915,7 @@ return [
         'user_span' => 'How long each person has been seen.',
     ],
 
-    'execution_id_argument' => 'A request\'s trace id is its execution id. Absent: the latest finished. Excludes type.',
+    'execution_id_argument' => 'A request\'s trace id is its execution id. Absent: the latest finished. Excludes type. Or a unique prefix.',
 
     'execution_type_argument' => 'The latest finished of that kind. Not with execution_id.',
 
@@ -930,6 +930,12 @@ return [
     'budget_ignored' => '; ignored_entries: :count',
 
     'execution_summary' => 'Showed the :type :id: outcome :outcome.',
+
+    'execution_prefix_matched' => '`:prefix` matched one execution by prefix: `:id`.',
+
+    'execution_prefix_ambiguous' => "error: invalid_argument\n`:prefix` starts :matched execution ids, not one: :ids.\nargument: execution_id\naccepted: a full execution id, or a prefix only one execution has\nexample: :example",
+
+    'execution_between_section' => "error: not_found\nNo execution `:id` exists in the store: that id is a between section, the work a test ran outside its executions; `occurrences(execution_id: \":id\")` lists it.\nargument: execution_id\naccepted: an execution id, not a between section's\nexample: :example",
 
     'execution_not_found_trace' => "error: not_found\nNo execution `:id` exists in the store, but that value is a trace id; `trace(trace_id: \":id\")` follows it.\nargument: :argument\naccepted: :accepted\nexample: :example",
 

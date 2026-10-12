@@ -2,6 +2,7 @@
 
 use ClaudioDekker\Firewatch\Mcp\FirewatchServer;
 use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
+use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
 use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
 use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
@@ -576,3 +577,30 @@ it('refuses a selector or a filter on a run', function (array $arguments, string
     'a filter' => [['matching' => 'orders'], 'matching'],
     'a deploy' => [['deploy' => 'v1'], 'deploy'],
 ]);
+
+it('opens an execution of the run by the start of its id, and says a between section is none', function () {
+    auditTestSetupAndEndpoints();
+
+    $rows = Answers::assert(Occurrences::class, ['order' => 'run'])['result']['rows'];
+    $request = $rows[1]['execution_id'];
+    $section = $rows[0]['execution_id'];
+
+    $full = Answers::assert(Execution::class, ['execution_id' => $request]);
+    $prefixed = Answers::assert(Execution::class, ['execution_id' => substr($request, 0, 8)]);
+
+    $refusal = fn (string $id) => __('firewatch::messages.execution_between_section', [
+        'id' => $id,
+        'example' => 'execution(execution_id: "<execution id>")',
+    ]);
+
+    expect($prefixed['result'])->toBe($full['result'])
+        ->and($prefixed['notes'])->toBe([
+            ...$full['notes'],
+            __('firewatch::messages.execution_prefix_matched', ['prefix' => substr($request, 0, 8), 'id' => $request]),
+        ]);
+
+    FirewatchServer::tool(Execution::class, ['execution_id' => $section])->assertHasErrors([$refusal($section)]);
+    FirewatchServer::tool(Execution::class, ['execution_id' => substr($section, 0, 8)])->assertHasErrors([$refusal($section)]);
+
+    expect(Answers::assert(Occurrences::class, ['execution_id' => $section])['result']['rows'])->toHaveCount(5);
+});

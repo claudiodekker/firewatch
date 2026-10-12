@@ -20,6 +20,7 @@ use ClaudioDekker\Firewatch\Mcp\Frame;
 use ClaudioDekker\Firewatch\Mcp\Markdown;
 use ClaudioDekker\Firewatch\Mcp\Refusal;
 use ClaudioDekker\Firewatch\Mcp\Rows;
+use ClaudioDekker\Firewatch\Mcp\Scope;
 use ClaudioDekker\Firewatch\Mcp\Stored;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Timeline;
@@ -64,6 +65,21 @@ class Execution extends Tool
      * The most timeline entries an answer lists.
      */
     protected const MAXIMUM_LIMIT = 100;
+
+    /**
+     * The most execution ids the refusal of a shared prefix names.
+     */
+    protected const PREFIX_MATCHES = 5;
+
+    /**
+     * The highest Unicode code point, which sorts after every character of an id and so ends the range of the ids that start with a prefix.
+     */
+    protected const LAST_CODE_POINT = 0x10FFFF;
+
+    /**
+     * The example a refusal of the execution id gives.
+     */
+    protected const EXAMPLE = 'execution(execution_id: "<execution id>")';
 
     /**
      * Create a new tool instance.
@@ -129,7 +145,7 @@ class Execution extends Tool
             return $frame->empty();
         }
 
-        [$found, $traced] = $read;
+        [$found, $traced, $prefix] = $read;
 
         $frame->about($found === null ? $searched : [RecordType::from($found['row']['type']), ...Children::types()], $window, facts: $id === null ? [CallFact::ANCHORED] : []);
 
@@ -138,7 +154,7 @@ class Execution extends Tool
         }
 
         if ($found !== null) {
-            return $this->execution($frame, $found, $limit);
+            return $this->execution($frame, $found, $limit, $prefix);
         }
 
         if ($id !== null) {
@@ -151,11 +167,11 @@ class Execution extends Tool
     }
 
     /**
-     * Put one execution in the answer.
+     * Put one execution in the answer, noting the prefix it was found by when it was.
      *
      * @param  array{row: array<string, mixed>, children: list<array<string, mixed>>}  $found
      */
-    protected function execution(Frame $frame, array $found, int $limit): Answer
+    protected function execution(Frame $frame, array $found, int $limit, ?string $prefix = null): Answer
     {
         $row = $found['row'];
         $children = $found['children'];
@@ -196,13 +212,17 @@ class Execution extends Tool
         ]);
 
         $next = $this->next($row, $children);
+        $matched = $prefix === null ? [] : [__('firewatch::messages.execution_prefix_matched', [
+            'prefix' => $prefix,
+            'id' => $row['execution_id'],
+        ])];
 
         return $frame->answer(
             summary: $summary,
             result: $result,
             truncated: $truncated,
             next: $next,
-            notes: [$budget->line()],
+            notes: [$budget->line(), ...$matched],
         );
     }
 
@@ -288,24 +308,69 @@ class Execution extends Tool
     protected function notFound(string $id, bool $traced): Refusal
     {
         $accepted = 'an execution id, not a trace id';
-        $example = 'execution(execution_id: "<execution id>")';
 
         return $traced
-            ? Refusal::traceIdNotExecution(argument: 'execution_id', id: $id, accepted: $accepted, example: $example)
-            : Refusal::notFound(argument: 'execution_id', id: $id, accepted: $accepted, example: $example);
+            ? Refusal::traceIdNotExecution(argument: 'execution_id', id: $id, accepted: $accepted, example: self::EXAMPLE)
+            : Refusal::notFound(argument: 'execution_id', id: $id, accepted: $accepted, example: self::EXAMPLE);
     }
 
     /**
-     * Find the execution, with its children, and whether the id is a trace's.
+     * Find the execution, with its children, whether the id is a trace's, and the prefix the execution was found by when the id is no execution's own.
      *
-     * @return array{array{row: array<string, mixed>, children: list<array<string, mixed>>}|null, bool}
+     * @return array{array{row: array<string, mixed>, children: list<array<string, mixed>>}|null, bool, string|null}
      */
     protected function load(SQLite3 $connection, StoreFacts $facts, ?string $id, ?ExecutionType $type): array
     {
         $found = $facts->records === 0 ? null : $this->find($connection, $id, $type);
+        $full = null;
+
+        if ($found === null && $id !== null) {
+            $full = $this->byPrefix($connection, $id);
+        }
+
+        if ($full !== null) {
+            $prefixed = $this->find($connection, $full, $type);
+
+            return [$prefixed, false, $id];
+        }
+
         $traced = $id !== null && $this->isTrace($connection, $id);
 
-        return [$found, $traced];
+        return [$found, $traced, null];
+    }
+
+    /**
+     * Get the one execution id that starts with the prefix, or null when none does, refusing a prefix that several executions share and one that names a single between section.
+     */
+    protected function byPrefix(SQLite3 $connection, string $prefix): ?string
+    {
+        $types = implode(', ', array_map(fn (ExecutionType $type) => "'{$type->value}'", ExecutionType::cases()));
+        $starting = 'execution_id >= :prefix AND execution_id < :prefix || char(:last)';
+
+        $executions = Stored::rows($connection, "SELECT execution_id, count(*) OVER () AS matched FROM (SELECT DISTINCT execution_id FROM records WHERE type IN ({$types}) AND {$starting}) ORDER BY execution_id LIMIT :listed", [
+            'prefix' => $prefix,
+            'last' => self::LAST_CODE_POINT,
+            'listed' => self::PREFIX_MATCHES,
+        ]);
+
+        if (count($executions) === 1) {
+            return $executions[0]['execution_id'];
+        }
+
+        if ($executions !== []) {
+            throw Refusal::ambiguousPrefix($prefix, array_column($executions, 'execution_id'), $executions[0]['matched'], self::EXAMPLE);
+        }
+
+        $sections = Stored::rows($connection, 'SELECT DISTINCT execution_id FROM records WHERE '.Scope::BETWEEN->condition()." AND {$starting} LIMIT 2", [
+            'prefix' => $prefix,
+            'last' => self::LAST_CODE_POINT,
+        ]);
+
+        if (count($sections) === 1) {
+            throw Refusal::betweenSection($sections[0]['execution_id'], self::EXAMPLE);
+        }
+
+        return null;
     }
 
     /**
@@ -372,7 +437,7 @@ class Execution extends Tool
             return $value;
         }
 
-        throw $arguments->invalid(argument: 'execution_id', expected: 'an execution id', accepted: 'an execution id', example: 'execution(execution_id: "<execution id>")');
+        throw $arguments->invalid(argument: 'execution_id', expected: 'an execution id', accepted: 'an execution id', example: self::EXAMPLE);
     }
 
     /**
@@ -383,7 +448,7 @@ class Execution extends Tool
         $type = $arguments->choice('type', ExecutionType::class, 'one of the four execution types', 'execution(type: "request")');
 
         if ($type !== null && $id !== null) {
-            throw Refusal::conflicting(argument: 'type', with: 'execution_id', accepted: 'a call with `execution_id` or with `type`, not both', example: 'execution(execution_id: "<execution id>")');
+            throw Refusal::conflicting(argument: 'type', with: 'execution_id', accepted: 'a call with `execution_id` or with `type`, not both', example: self::EXAMPLE);
         }
 
         return $type;
