@@ -433,7 +433,7 @@ return [
         'grouped_type' => 'one of the types with groups',
         'holding' => 'a type that holds the group: :types',
         'scope' => 'one of the sides of a test run\'s store',
-        'test' => 'the test of a record, of at least one character',
+        'test' => 'the test of a record, of :minimum to :maximum characters',
         'scope_holding' => 'a `type` other than request, command, job-attempt and scheduled-task, or `scope` executions or all',
         'execution_group' => 'the group id of a request, command, job attempt or scheduled task',
         'within_type' => 'a `type` of the records inside executions',

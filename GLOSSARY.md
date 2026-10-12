@@ -49,7 +49,7 @@ An application environment name on the allowlist in which Firewatch records tele
 _Avoid_: Enabled environment, dev mode
 
 **Test capture**:
-Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none and stamped with the source `between`, by holding Nightwatch in request mode and swapping in a command's state while it runs. Every record of the run is stamped with its test and worker. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
+Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none and stamped with the source `between`, by holding Nightwatch in request mode and swapping in a command's state while it runs. Every record of the run is stamped with its test and worker. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak. Nightwatch decides whether to sample a request once per application, so after a request that calls `Nightwatch::dontSample()` the later requests and between sections of that application are not recorded, until the test runs a command or the application calls `Nightwatch::sample()`.
 _Avoid_: Test mode, test recording
 
 **In-code opt-out**:
@@ -137,7 +137,7 @@ The identity of the deployed code a record was captured under, an unordered stri
 _Avoid_: Release, version, build
 
 **Test**:
-The test that created the application a record of a test run was captured in, stored as one string: the test case and the test as the runner prints them, joined by `::`. A Pest test keeps its description and its data set (`Tests\Feature\OrdersTest::it lists orders with dataset "admin"`), and any other PHPUnit test its class, its method and its data set. It is read once per application, from the test case on the call stack when test capture starts. Null outside a test run, and for an application created with no test case on the call stack.
+The test that created the application a record of a test run was captured in, stored as one string: the test case and the test as the runner prints them, joined by `::`. A Pest test keeps its description and its data set (`Tests\Feature\OrdersTest::it lists orders with dataset "admin"`), and any other PHPUnit test its class, its method and its data set. It is read once per application, from the test case on the call stack when test capture starts. A test longer than 65,535 bytes is cut like any other stored string, and the `test` argument takes it as stored. Null outside a test run, and for an application created with no test case on the call stack.
 _Avoid_: Test id, test file
 
 **Worker**:
@@ -690,7 +690,7 @@ The default a key takes when its value is invalid, applied to that key alone.
 _Avoid_: Recovery, coercion
 
 **Busy timeout**:
-How long the capture side waits for a busy store before dropping the batch: the configured time, or 5 seconds while a test run is recorded, whose parallel workers share the store.
+How long the capture side waits for a busy store before dropping the batch: the configured time, or 5 seconds for what a test of a test run writes, whose parallel workers share the store.
 _Avoid_: Lock timeout, write timeout
 
 ### Budgets

@@ -225,8 +225,8 @@ it('names no test and no worker in a store that holds no test run, and answers a
         ]);
 });
 
-it('refuses a test that is empty or no string', function (string $tool, array $arguments, mixed $test) {
-    $name = __('firewatch::messages.argument_values.test');
+it('refuses a test that is empty, longer than a stored one can be, or no string', function (string $tool, array $arguments, mixed $test) {
+    $name = __('firewatch::messages.argument_values.test', ['minimum' => 1, 'maximum' => 65535]);
 
     FirewatchServer::tool($tool, [...$arguments, 'test' => $test])->assertHasErrors([__('firewatch::messages.invalid_argument', [
         'argument' => 'test',
@@ -240,6 +240,8 @@ it('refuses a test that is empty or no string', function (string $tool, array $a
     'a number to occurrences' => [Occurrences::class, ['type' => 'query'], 7],
     'an empty one to a run' => [Occurrences::class, ['order' => 'run'], ''],
     'an empty one to rank' => [Rank::class, ['type' => 'query'], ''],
+    'one a character too long to occurrences' => [Occurrences::class, ['type' => 'query'], str_repeat('a', 65536)],
+    'one a character too long to rank' => [Rank::class, ['type' => 'query'], str_repeat('a', 65536)],
     'a list to rank' => [Rank::class, ['type' => 'query'], ['OrdersTest']],
 ]);
 

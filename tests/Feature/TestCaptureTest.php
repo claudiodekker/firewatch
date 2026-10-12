@@ -1,5 +1,7 @@
 <?php
 
+use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
+use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\Request;
@@ -398,6 +400,25 @@ it('stores the worker of a parallel run on every record a test writes', function
         ['type' => 'query', 'source' => 'request', 'worker' => '3'],
     ]);
 });
+
+it('cuts a test longer than a field may be, and reads its records by the test as stored', function (string $status) {
+    captureTests();
+    Route::get('/orders', fn () => DB::select('select ? as status', [$status]));
+
+    $this->get('/orders')->assertOk();
+    Nightwatch::digest();
+
+    $test = storeRows('SELECT DISTINCT test FROM records')[0]['test'];
+    $answer = Answers::assert(Occurrences::class, ['type' => 'query', 'test' => $test]);
+
+    expect(strlen($test))->toBe(65535)
+        ->and($test)->toStartWith('Tests\\Feature\\TestCaptureTest::it cuts a test longer than a field may be')
+        ->and($test)->toEndWith('... [truncated, 70133 bytes total]')
+        ->and(array_column($answer['result']['rows'], 'name'))->toBe(['select ? as status']);
+})->with([
+    // The name of the data set is part of the test Firewatch stores.
+    str_repeat('a', 70_000) => ['open'],
+]);
 
 it('stores no test and no worker outside a test run', function () {
     // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers.
