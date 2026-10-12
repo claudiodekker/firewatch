@@ -280,6 +280,8 @@ return [
             'registered_first_fix' => 'run `composer dump-autoload` or `php artisan package:discover`',
             'listeners' => '{1} :count other listener can see or veto what Nightwatch ingests|[2,*] :count other listeners can see or veto what Nightwatch ingests',
             'listeners_fix' => 'remove the application\'s own IngestingEvents listeners while Firewatch is installed',
+            'wildcards' => '{1} :count wildcard listener (:patterns) matches IngestingEvents and can see or veto what Nightwatch ingests|[2,*] :count wildcard listeners (:patterns) match IngestingEvents and can see or veto what Nightwatch ingests',
+            'wildcards_fix' => 'drop or narrow each listener registered on :patterns so it no longer matches IngestingEvents while Firewatch is installed',
         ],
 
         'config' => [

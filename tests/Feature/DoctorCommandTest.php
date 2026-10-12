@@ -360,6 +360,49 @@ describe('nightwatch-order', function () {
             ->and($report['status'])->toBe('warn')
             ->and($report['exit'])->toBe(0);
     });
+
+    it('names a catch-all listener instead of counting it as an IngestingEvents listener', function () {
+        doctorWithoutVeto();
+        Event::listen('*', fn () => null);
+
+        expect(doctorResults('nightwatch-order'))->toBe([[
+            'id' => 'nightwatch-order',
+            'status' => 'warn',
+            'message' => trans_choice('firewatch::messages.doctor.nightwatch-order.wildcards', 1, ['count' => 1, 'patterns' => '*']),
+            'fix' => __('firewatch::messages.doctor.nightwatch-order.wildcards_fix', ['patterns' => '*']),
+        ]]);
+    });
+
+    it('warns about a named listener and a matching wildcard separately', function () {
+        doctorWithoutVeto();
+        Event::listen(IngestingEvents::class, fn () => null);
+        Event::listen('Laravel\\Nightwatch\\*', fn () => null);
+
+        expect(doctorResults('nightwatch-order'))->toBe([
+            [
+                'id' => 'nightwatch-order',
+                'status' => 'warn',
+                'message' => trans_choice('firewatch::messages.doctor.nightwatch-order.listeners', 1, ['count' => 1]),
+                'fix' => __('firewatch::messages.doctor.nightwatch-order.listeners_fix'),
+            ],
+            [
+                'id' => 'nightwatch-order',
+                'status' => 'warn',
+                'message' => trans_choice('firewatch::messages.doctor.nightwatch-order.wildcards', 1, ['count' => 1, 'patterns' => 'Laravel\\Nightwatch\\*']),
+                'fix' => __('firewatch::messages.doctor.nightwatch-order.wildcards_fix', ['patterns' => 'Laravel\\Nightwatch\\*']),
+            ],
+        ]);
+    });
+
+    it('ignores a wildcard that does not match the event', function () {
+        doctorWithoutVeto();
+        Event::listen('eloquent.*', fn () => null);
+
+        expect(doctorCheck('nightwatch-order'))->toMatchArray([
+            'status' => 'ok',
+            'message' => __('firewatch::messages.doctor.nightwatch-order.ok'),
+        ]);
+    });
 });
 
 describe('config', function () {
