@@ -20,7 +20,7 @@ return [
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see; `describe` spells out a bare id). Clean means nothing was found among the captured records, over the stated examined count; clean over few records is weak. A not_evaluated verdict is never a pass. Null means unknown, not zero. Truncated means only the worst rows show: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times use the application timezone; identifiers print in full and go straight back into tools. No default window: without since and until, everything stored is used. Listed argument values match exactly; a refusal names the accepted ones. Prefer `rank`, `occurrences` and `detect` to `query`: they convert units, it does not.
 
-        What one route runs, per execution: `rank` with `within`. A test run's store marks what test bodies ran around their requests and commands (factories, seeding, assertions) as between: `scope` keeps one side; `occurrences` with `order` run lists the run in order.
+        What one route runs, per execution: `rank` with `within`. A test run names each record's `test`, limiting `rank` and `occurrences`, and marks what tests ran around their executions as between: `scope` keeps one side; `occurrences` with `order` run lists the run.
 
         Did my change help? Note `now` from an answer, change the code, exercise the application, then call `compare` with `split_at` set to that value; on a later round also pass the previous split as `since`. Did it ever run? A search that finds nothing is no proof: `fingerprint` it first.
         TEXT,
@@ -1180,7 +1180,7 @@ return [
         'occurrences' => 'As overview. between excludes execution types.',
     ],
 
-    'deploy_argument' => 'Exact deploy string: only its records count.',
+    'deploy_argument' => 'Exact deploy: only its records count.',
 
     'cursor_argument' => 'From a cut answer, same arguments.',
 

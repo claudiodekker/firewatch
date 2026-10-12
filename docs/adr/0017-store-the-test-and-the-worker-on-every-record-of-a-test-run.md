@@ -1,0 +1,13 @@
+# Store the test and the worker on every record of a test run
+
+Test capture stores two more values on every record a test run writes, inside an execution and between two: `test`, the test that created the application, and `worker`, the process of a parallel run that ran it. Without them an assistant that finds a slow between section or a failing request cannot name the test to open. It has to match timestamps against the suite's output, which a parallel run makes impossible. The run view and `execution` name both, and `rank` and `occurrences` take `test` and read one test alone. The test travels on the window, as the scope does (ADR 0015).
+
+This adds two stored values the wire never sends, beside the source `between`, so it amends ADR 0003 and the "one value" of ADR 0015. Both are null outside a test run.
+
+They are columns, not fields in `data`. Every record type has them, so a `data` field would need a contract entry per type to reach the views (ADR 0004), and the worker is a value later work joins on. A column is also what the window's condition can name for every type at once.
+
+The test is one string, the test case and the test as the runner prints them, joined by `::`: `Tests\Feature\OrdersTest::it lists orders with dataset "admin"` for a Pest test, the class, the method and the data set for any other PHPUnit test. That is the name a developer reads in the runner's output. PHPUnit's own id mangles a Pest description into a generated method name. The file and the name would need a static property of Pest's generated classes, where the printed name needs only the two methods of the Collision contract every Pest case implements. The worker is the token the runner gives each of its processes in `TEST_TOKEN`, null in a serial run.
+
+Firewatch reads the test once per application, when test capture starts listening inside the test's `setUp()`: the first PHPUnit test case on the call stack. A PHPUnit extension or a trait would be the supported way to learn the running test, but both need a change to the application's tests or its configuration, which ADR 0014 rejected. Neither PHPUnit nor Collision becomes a requirement, because both are named only in `instanceof` checks. PHPUnit's `nameWithDataSet()` and Collision's contract are both marked internal, so a release that changes either can cost the test until Firewatch follows: a failure to read it writes a notice and leaves both values null, and capture goes on.
+
+The schema version goes to 4 and the store is rebuilt, not migrated. There is no index on `test`: on a store at the 100,000-record cap, a read of one test's records takes 11.5 ms without one, and an index would be written on every record of every store to save that.
