@@ -173,11 +173,12 @@ class TestCapture
     }
 
     /**
-     * Start a request's execution, unless one is already running.
+     * Start a request's execution, unless a command is running.
      */
     protected function startRequest(): void
     {
-        if ($this->phase !== TestPhase::BETWEEN) {
+        // A request that threw out of the kernel never reached the handler that ends it, so a new one starts afresh.
+        if ($this->phase instanceof TestCommand) {
             return;
         }
 

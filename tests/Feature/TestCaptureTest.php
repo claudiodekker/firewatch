@@ -1,9 +1,11 @@
 <?php
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Laravel\Nightwatch\Facades\Nightwatch;
+use Symfony\Component\Process\Process;
 
 function captureTests(): void
 {
@@ -118,3 +120,39 @@ it('leaves the application without the switch that forces Nightwatch into reques
 
     expect(env('NIGHTWATCH_FORCE_REQUEST'))->toBeNull();
 });
+
+it('starts the next request afresh after one threw out of the kernel', function () {
+    captureTests();
+    Route::get('/orders', function () {
+        DB::select('select 1 as orders');
+
+        throw new RuntimeException('The orders could not be listed.');
+    });
+    Route::get('/invoices', fn () => DB::select('select 2 as invoices'));
+
+    expect(fn () => $this->withoutExceptionHandling()->get('/orders'))->toThrow(RuntimeException::class);
+    $this->get('/invoices')->assertOk();
+
+    expect(executionQueries())->toBe([
+        '/invoices' => ['select 2 as invoices'],
+    ]);
+});
+
+it('records the command of a process that runs as testing, which Laravel raises no command events for', function () {
+    // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers.
+    $packagesCache = 'bootstrap/cache/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/testbench', 'members:audit', '7', '--env=testing'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite', 'APP_PACKAGES_CACHE' => $packagesCache],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    (new Filesystem)->delete(base_path($packagesCache));
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(storeRows('SELECT name, queries FROM commands'))->toBe([['name' => 'members:audit', 'queries' => 1]]);
+})->group('process');
