@@ -13,7 +13,6 @@ The first release.
 - Under `testing`, each request and command a feature test runs is recorded as an execution of its own, so `detect` can audit a test run. `capture.tests` turns it off.
 - A test run's setup reads apart from its endpoints: `scope` on `overview`, `rank`, `detect` and `occurrences` keeps one side, `rank` with `within` ranks the queries and cache events of one route or command, and `occurrences(order: "run")` lists the run in order.
 - Every record of a test run carries its test, and its worker in a parallel run: `occurrences(order: "run")` and `execution` name them, and `test` limits `rank` and `occurrences` to one test.
-- A user id that several workers of a parallel test run signed in is one actor per worker: `overview` and a finding's reaches count each, `actor` lists them as candidates, and `worker` on `actor` and beside `user_id` on `occurrences` reads one. A call without it notes how many workers hold the id.
 - `execution` opens an execution by a unique prefix of its id.
 - Redaction is off by default, with opt-in lists for payload fields and headers. Long values are cut with a truncation marker.
 - The store keeps every record type in one table with a view per type, a directory of signed-in users, and a `drift` table that counts differences from Nightwatch's record contract instead of dropping data.

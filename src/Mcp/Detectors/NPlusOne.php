@@ -134,7 +134,7 @@ class NPlusOne implements Detector
         $trimmed = 'lower(ltrim(queries.sql, '.self::LEADING_WHITESPACE.'))';
 
         $sql = "{$executions->sql}, runs AS (
-            SELECT executions.execution_id, executions.group_hash AS eg, queries.group_hash AS qg, executions.id, executions.started_at, executions.user_id, executions.worker,
+            SELECT executions.execution_id, executions.group_hash AS eg, queries.group_hash AS qg, executions.id, executions.started_at, executions.user_id,
                 executions.duration, executions.type, executions.source, executions.label, count(*) AS runs, total(queries.duration) AS micros
             FROM executions JOIN queries ON queries.execution_id = executions.execution_id
             WHERE ({$trimmed} LIKE 'select%' OR {$trimmed} LIKE 'with%')

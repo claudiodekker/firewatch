@@ -101,9 +101,9 @@ class Catalogue
             'queued_job_connections' => 'SELECT connection, queue, count(*) AS dispatched FROM queued_jobs GROUP BY connection, queue',
         ],
         'user' => [
-            'user_directory' => 'SELECT id, worker, name, username, last_seen FROM users ORDER BY last_seen DESC LIMIT 10',
-            'user_requests' => 'SELECT u.name, count(*) AS requests FROM users u JOIN requests r ON r.user_id = u.id AND r.worker IS u.worker GROUP BY u.id, u.worker ORDER BY requests DESC',
-            'user_span' => 'SELECT id, worker, last_seen - first_seen AS seen_for_s FROM users ORDER BY seen_for_s DESC LIMIT 10',
+            'user_directory' => 'SELECT id, name, username, last_seen FROM users ORDER BY last_seen DESC LIMIT 10',
+            'user_requests' => 'SELECT u.name, count(*) AS requests FROM users u JOIN requests r ON r.user_id = u.id GROUP BY u.id ORDER BY requests DESC',
+            'user_span' => 'SELECT id, last_seen - first_seen AS seen_for_s FROM users ORDER BY seen_for_s DESC LIMIT 10',
         ],
     ];
 

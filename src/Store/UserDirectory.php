@@ -14,9 +14,9 @@ class UserDirectory
      * The statement that adds a user to the directory, or refreshes one it holds.
      */
     protected const UPSERT = <<<'SQL'
-        INSERT INTO users (id, worker, name, username, first_seen, last_seen)
-        VALUES (:id, :worker, :name, :username, :seen_at, :seen_at)
-        ON CONFLICT (id, coalesce(worker, '')) DO UPDATE SET
+        INSERT INTO users (id, name, username, first_seen, last_seen)
+        VALUES (:id, :name, :username, :seen_at, :seen_at)
+        ON CONFLICT (id) DO UPDATE SET
             name = excluded.name,
             username = excluded.username,
             last_seen = max(coalesce(last_seen, excluded.last_seen), coalesce(excluded.last_seen, last_seen))
@@ -25,7 +25,7 @@ class UserDirectory
     /**
      * Add the users to the directory, or refresh the ones it holds.
      *
-     * @param  list<array<string, mixed>>  $users  each with an id, worker, name, username and seen_at
+     * @param  list<array<string, mixed>>  $users  each with an id, name, username and seen_at
      */
     public static function upsert(SQLite3 $connection, array $users): void
     {
@@ -60,7 +60,7 @@ class UserDirectory
      * List the people of the directory, or those a condition on its columns keeps, newest sighting first, with how many the condition keeps in all.
      *
      * @param  array<string, string|int>  $bindings
-     * @return array{list<array{id: string, worker: string|null, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null}>, int}
+     * @return array{list<array{id: string, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null}>, int}
      */
     public static function list(SQLite3 $connection, int $limit, ?string $condition = null, array $bindings = []): array
     {
@@ -68,13 +68,12 @@ class UserDirectory
 
         $bindings['limit'] = $limit;
 
-        /** @var list<array{id: string, worker: string|null, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null, matched: int}> $rows */
-        $rows = Fetch::rows($connection, "SELECT id, worker, name, username, first_seen, last_seen, count(*) OVER () AS matched
-            FROM users {$where} ORDER BY last_seen DESC, id, worker LIMIT :limit", $bindings);
+        /** @var list<array{id: string, name: mixed, username: mixed, first_seen: float|null, last_seen: float|null, matched: int}> $rows */
+        $rows = Fetch::rows($connection, "SELECT id, name, username, first_seen, last_seen, count(*) OVER () AS matched
+            FROM users {$where} ORDER BY last_seen DESC, id LIMIT :limit", $bindings);
 
         $people = array_map(fn (array $row) => [
             'id' => $row['id'],
-            'worker' => $row['worker'],
             'name' => $row['name'],
             'username' => $row['username'],
             'first_seen' => $row['first_seen'],

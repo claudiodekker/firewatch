@@ -160,7 +160,7 @@ it('describes the users table with the people the directory holds, in full', fun
 
     $answer = Answers::assert(Describe::class, ['type' => 'user']);
 
-    expect($answer['summary'])->toBe(trans_choice('firewatch::messages.describe_type_summary', 1, ['object' => 'users', 'columns' => 6, 'records' => 1]))
+    expect($answer['summary'])->toBe(trans_choice('firewatch::messages.describe_type_summary', 1, ['object' => 'users', 'columns' => 5, 'records' => 1]))
         ->and($answer['empty'])->toBeNull()
         ->and($answer['coverage']['types_read'])->toBe(['user'])
         ->and(array_column($answer['blind_spots'], 'id'))->toContain('actor-partial')
@@ -171,7 +171,6 @@ it('describes the users table with the people the directory holds, in full', fun
             'group_recipe' => null,
             'columns' => [
                 ['column' => 'id', 'sql_type' => 'TEXT', 'wire' => 'id', 'unit' => null, 'values' => null, 'nullable' => false, 'indexed' => true, 'examples' => ['7'], 'meaning' => __('firewatch::messages.column_meanings_in.users.id')],
-                ['column' => 'worker', 'sql_type' => 'TEXT', 'wire' => null, 'unit' => null, 'values' => null, 'nullable' => true, 'indexed' => false, 'examples' => [], 'meaning' => __('firewatch::messages.column_meanings_in.users.worker')],
                 ['column' => 'name', 'sql_type' => 'TEXT', 'wire' => 'name', 'unit' => null, 'values' => null, 'nullable' => true, 'indexed' => false, 'examples' => ['Taylor'], 'meaning' => __('firewatch::messages.column_meanings_in.users.name')],
                 ['column' => 'username', 'sql_type' => 'TEXT', 'wire' => 'username', 'unit' => null, 'values' => null, 'nullable' => true, 'indexed' => false, 'examples' => ['taylor@example.com'], 'meaning' => __('firewatch::messages.column_meanings.username')],
                 ['column' => 'first_seen', 'sql_type' => 'REAL', 'wire' => null, 'unit' => 'epoch_seconds', 'values' => null, 'nullable' => true, 'indexed' => false, 'examples' => [1790776070.5], 'meaning' => __('firewatch::messages.column_meanings_in.users.first_seen')],

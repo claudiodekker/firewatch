@@ -81,7 +81,7 @@ class RecordMapper
         $this->check($wire, $type, $drift);
 
         $seenAt = $this->instant($record['timestamp'] ?? null);
-        $user = $this->user($type, $wire, seenAt: $seenAt, testRecord: $testRecord);
+        $user = $this->user($type, $wire, seenAt: $seenAt);
 
         if ($user !== null) {
             return new MappedRecord(user: $user);
@@ -146,9 +146,9 @@ class RecordMapper
      * Get the user directory entry of a user record.
      *
      * @param  array<mixed>  $wire
-     * @return array{id: string, worker: string|null, name: mixed, username: mixed, seen_at: int|float|null}|null
+     * @return array{id: string, name: mixed, username: mixed, seen_at: int|float|null}|null
      */
-    protected function user(?RecordType $type, array $wire, int|float|null $seenAt, ?TestRecord $testRecord): ?array
+    protected function user(?RecordType $type, array $wire, int|float|null $seenAt): ?array
     {
         if ($type !== RecordType::USER || ! $this->hasUsableId($wire)) {
             return null;
@@ -156,7 +156,6 @@ class RecordMapper
 
         return [
             'id' => $wire['id'],
-            'worker' => $testRecord?->worker,
             'name' => $this->flatten($wire['name'] ?? null),
             'username' => $this->flatten($wire['username'] ?? null),
             'seen_at' => $seenAt,

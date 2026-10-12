@@ -105,7 +105,7 @@ class ExceptionClusters implements Detector
         $reach = Fragment::reach();
 
         return Stored::rows($connection, "WITH occurrences AS (
-            SELECT id, execution_id, started_at, group_hash, user_id, worker, class, message, file, line, handled, trace IS NULL AS fatal
+            SELECT id, execution_id, started_at, group_hash, user_id, class, message, file, line, handled, trace IS NULL AS fatal
             FROM exceptions WHERE {$selected->sql}
         ), placed AS (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY group_hash ORDER BY started_at DESC, id DESC) AS by_latest FROM occurrences
