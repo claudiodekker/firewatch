@@ -128,7 +128,7 @@ class FailingJobs implements Detector
         $selected = Fragment::selecting($window, $group);
         $attempt = Stored::number('attempt');
         $sql = "WITH attempts AS (
-            SELECT id, execution_id, started_at, group_hash, user_id, worker, name, status, NULLIF(job_id, '') AS job, {$attempt} AS attempt,
+            SELECT id, execution_id, started_at, group_hash, user_id, name, status, NULLIF(job_id, '') AS job, {$attempt} AS attempt,
                 status = :failed AS failed, status = :released AS released, status IN (:failed, :released) AS failing
             FROM job_attempts WHERE {$selected->sql}
         )";

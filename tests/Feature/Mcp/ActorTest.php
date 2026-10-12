@@ -179,7 +179,7 @@ it('trims the whitespace of any script around who before it identifies', functio
 it('refuses an argument that is not the tool\'s, naming what it accepts', function (string $argument, string $key) {
     $text = actorRefusal(['who' => 'taylor', $argument => 'now']);
 
-    expect($text)->toBe(__("firewatch::messages.{$key}", ['argument' => $argument, 'tool' => 'actor', 'accepted' => 'who, worker, since, until, limit, format', 'example' => 'actor(format: "json")']));
+    expect($text)->toBe(__("firewatch::messages.{$key}", ['argument' => $argument, 'tool' => 'actor', 'accepted' => 'who, since, until, limit, format', 'example' => 'actor(format: "json")']));
 })->with([
     'a misspelling' => ['whom', 'unknown_argument'],
     'user_id' => ['user_id', 'inapplicable_argument'],
@@ -665,7 +665,6 @@ test('the tool is listed, with its description, arguments and annotations', func
         ->and($tool['inputSchema'])->toBe([
             'properties' => [
                 'who' => ['description' => __('firewatch::messages.actor_who_argument'), 'type' => 'string'],
-                'worker' => ['type' => 'string'],
                 'since' => ['description' => windowArgument('since'), 'type' => 'string'],
                 'until' => ['description' => windowArgument('until'), 'type' => 'string'],
                 'limit' => ['description' => __('firewatch::messages.limit_argument.actor'), 'default' => 20, 'minimum' => 1, 'maximum' => 100, 'type' => 'integer'],

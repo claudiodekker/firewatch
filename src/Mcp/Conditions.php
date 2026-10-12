@@ -29,9 +29,10 @@ class Conditions
      * Get the condition blind spots measured for a call.
      *
      * @param  list<RecordType>  $types
+     * @param  list<CallFact>  $call
      * @return list<array<string, mixed>>
      */
-    public function for(?StoreFacts $facts, array $types, Window $window): array
+    public function for(?StoreFacts $facts, array $types, Window $window, array $call): array
     {
         $timezone = $window->timezone();
         $conditions = [];
@@ -46,6 +47,7 @@ class Conditions
         if ($facts !== null) {
             array_push($conditions, ...$this->drift($facts, $types, $timezone));
             array_push($conditions, ...$this->unverified($facts));
+            array_push($conditions, ...$this->workers($facts, $call));
         }
 
         array_push($conditions, ...$this->redaction($types));
@@ -194,6 +196,25 @@ class Conditions
         ], [
             'version' => $version,
             'line' => NightwatchInstall::VERIFIED_LINE,
+        ])];
+    }
+
+    /**
+     * Get `user-ids-per-worker` for a call that reads by actor from a store that holds test runs of more than one worker.
+     *
+     * @param  list<CallFact>  $call
+     * @return list<array<string, mixed>>
+     */
+    protected function workers(StoreFacts $facts, array $call): array
+    {
+        if ($facts->workers < 2 || ! in_array(CallFact::ACTOR, $call, true)) {
+            return [];
+        }
+
+        return [$this->condition('user-ids-per-worker', [
+            'workers' => number_format($facts->workers),
+        ], [
+            'workers' => $facts->workers,
         ])];
     }
 

@@ -27,6 +27,28 @@ function executionQueries(): array
     ])->all();
 }
 
+/**
+ * Run the test as the worker of a parallel run with the token, or as a serial run with none, and restore the token afterwards.
+ */
+function runAsWorker(?string $token): void
+{
+    $previous = $_SERVER['TEST_TOKEN'] ?? null;
+
+    $_SERVER['TEST_TOKEN'] = $token;
+
+    if ($token === null) {
+        unset($_SERVER['TEST_TOKEN']);
+    }
+
+    test()->beforeApplicationDestroyed(function () use ($previous) {
+        $_SERVER['TEST_TOKEN'] = $previous;
+
+        if ($previous === null) {
+            unset($_SERVER['TEST_TOKEN']);
+        }
+    });
+}
+
 it('records each request and command a test runs as an execution of its own', function () {
     captureTests();
     Route::get('/orders', fn () => DB::select('select 1 as orders'));

@@ -24,16 +24,18 @@ class StoreFacts
         public readonly int $records = 0,
         public readonly ?float $oldest = null,
         public readonly ?float $newest = null,
+        public readonly int $workers = 0,
     ) {
         //
     }
 
     /**
-     * Read the facts of the store's markers, drift and span, in the snapshot of the connection.
+     * Read the facts of the store's markers, drift, span and workers, in the snapshot of the connection.
      */
     public static function read(SQLite3 $connection): self
     {
         $span = Stored::rows($connection, 'SELECT count(*) AS records, min(started_at) AS oldest, max(started_at) AS newest FROM records')[0];
+        $workers = Stored::rows($connection, 'SELECT count(DISTINCT worker) AS workers FROM records WHERE worker IS NOT NULL')[0]['workers'];
         $drift = DriftLedger::summary($connection);
         $typed = array_values(array_filter($drift, fn (array $row) => $row['type'] !== ''));
 
@@ -48,6 +50,7 @@ class StoreFacts
             records: is_int($span['records']) ? $span['records'] : 0,
             oldest: is_float($span['oldest']) ? $span['oldest'] : null,
             newest: is_float($span['newest']) ? $span['newest'] : null,
+            workers: is_int($workers) ? $workers : 0,
         );
     }
 

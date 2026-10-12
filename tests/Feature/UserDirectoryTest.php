@@ -37,22 +37,9 @@ it('keeps when a user was first seen and takes the rest from the latest sighting
     ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 1767225900.5, 'name' => 'Taylor Otwell', 'username' => 'taylor@laravel.com'])]);
 
     expect(storeRows('SELECT * FROM users'))->toBe([
-        ['id' => '7', 'worker' => null, 'name' => 'Taylor Otwell', 'username' => 'taylor@laravel.com', 'first_seen' => 1767225600.25, 'last_seen' => 1767225900.5],
+        ['id' => '7', 'name' => 'Taylor Otwell', 'username' => 'taylor@laravel.com', 'first_seen' => 1767225600.25, 'last_seen' => 1767225900.5],
     ]);
 });
-
-it('keeps the same id as one person per worker of a parallel run, each with the name its own worker saw', function () {
-    runFixtureSuite('MembersTest', worker: '1');
-    runFixtureSuite('MembersTest', worker: '2');
-
-    expect(storeRows('SELECT id, worker, name, username, first_seen < last_seen AS seen_twice FROM users ORDER BY worker'))->toBe([
-        ['id' => '7', 'worker' => '1', 'name' => 'Taylor Otwell', 'username' => 'taylor@example.com', 'seen_twice' => 1],
-        ['id' => '7', 'worker' => '2', 'name' => 'Taylor Swift', 'username' => 'swift@example.com', 'seen_twice' => 1],
-    ])->and(storeRows("SELECT worker, count(*) AS requests FROM requests WHERE user_id = '7' GROUP BY worker ORDER BY worker"))->toBe([
-        ['worker' => '1', 'requests' => 2],
-        ['worker' => '2', 'requests' => 2],
-    ]);
-})->group('process');
 
 it('never moves a user\'s last sighting back for a batch stored out of order', function () {
     ingest([syntheticRecord(RecordType::USER)->with(['timestamp' => 1767225900.5])]);

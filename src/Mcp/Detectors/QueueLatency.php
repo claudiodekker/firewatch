@@ -136,7 +136,7 @@ class QueueLatency implements Detector
         $selected = Fragment::selecting($window, $group, RecordType::QUEUED_JOB);
         $inline = Lineage::inlineCondition('queued.connection');
         $sql = "WITH queued AS (
-            SELECT id, execution_id, started_at, coalesce(ended_at, started_at) AS queued_at, group_hash, user_id, worker, name, connection, queue, NULLIF(job_id, '') AS job
+            SELECT id, execution_id, started_at, coalesce(ended_at, started_at) AS queued_at, group_hash, user_id, name, connection, queue, NULLIF(job_id, '') AS job
             FROM queued_jobs WHERE {$selected->sql}
         ), firsts AS (
             SELECT job_id AS job, execution_id, started_at, attempt,
@@ -152,7 +152,7 @@ class QueueLatency implements Detector
                 END AS state
             FROM queued LEFT JOIN firsts ON firsts.job = queued.job AND firsts.position = 1
         ), dispatches AS (
-            SELECT id, started_at, group_hash, user_id, worker, name, connection, queue, state, NULLIF(execution_id, '') AS dispatch_execution_id,
+            SELECT id, started_at, group_hash, user_id, name, connection, queue, state, NULLIF(execution_id, '') AS dispatch_execution_id,
                 CASE WHEN state = 'waited' THEN attempt_execution_id END AS attempt_execution_id,
                 CASE WHEN state = 'waited' THEN max(0, CAST(round((first_started_at - queued_at) * :per_second) AS INTEGER)) END AS wait,
                 CASE WHEN state = 'pending' THEN max(0, CAST(round((:now - queued_at) * :per_second) AS INTEGER)) END AS age

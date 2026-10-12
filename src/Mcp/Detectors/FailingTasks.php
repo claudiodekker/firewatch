@@ -82,7 +82,7 @@ class FailingTasks implements Detector
         $reach = Fragment::reach('failing');
 
         return Stored::rows($connection, "WITH tasks AS (
-            SELECT id, execution_id, started_at, group_hash, user_id, worker, name,
+            SELECT id, execution_id, started_at, group_hash, user_id, name,
                 status = :failed AS failed, status = :skipped AS skipped, status IN (:failed, :skipped) AS failing
             FROM scheduled_tasks WHERE {$selected->sql}
         ), placed AS (

@@ -141,7 +141,7 @@ The test that created the application a record of a test run was captured in, st
 _Avoid_: Test id, test file
 
 **Worker**:
-The process of a parallel test run that ran a record's test, stored as the token the runner gives each of its processes in `TEST_TOKEN`, on the record and on the user directory row of a user it saw. Null in a serial run and outside a test run.
+The process of a parallel test run that ran a record's test, stored as the token the runner gives each of its processes in `TEST_TOKEN`. Null in a serial run and outside a test run.
 _Avoid_: Process id, runner, shard
 
 ### Queued work
@@ -207,11 +207,11 @@ The query parameter values captured from the framework's query events and paired
 _Avoid_: Parameters, params
 
 **User directory**:
-The small table of user id, worker, name, username, first-seen and last-seen instants, never an event and never counted as a record, aged out with the records. It holds one row per user id and worker, so an id that two workers of a parallel test run each signed in is two rows, each with the name its own worker saw.
+The small table of user id, name, username, first-seen and last-seen instants, never an event and never counted as a record, aged out with the records.
 _Avoid_: Actors table, users event
 
 **Actor**:
-The person behind a user id recorded on a request, job attempt or child event, named through the user directory when a row exists. An actor is the user id together with the worker: each worker of a parallel test run has its own application database, so the same id under two workers is two actors. Outside a parallel run the worker is null and the id alone is the actor.
+The person behind a user id recorded on a request, job attempt or child event, named through the user directory when a row exists. The id alone is the actor. Each worker of a parallel test run has its own application database, so one id can be several people there: once the store holds test runs of more than one worker, the `user-ids-per-worker` condition blind spot says on every answer that reads by actor that a count of actors is a lower bound.
 _Avoid_: Account, principal, customer
 
 ### Store
@@ -328,7 +328,7 @@ A blind spot from the fixed catalogue, attached to every answer that examined th
 _Avoid_: Limitation, caveat
 
 **Condition blind spot**:
-A blind spot measured from the store at call time (pruned or cleared history, rebuild, dropped records, drift, unverified Nightwatch version, active redaction).
+A blind spot measured from the store at call time (pruned or cleared history, rebuild, dropped records, drift, unverified Nightwatch version, user ids of more than one test worker, active redaction).
 _Avoid_: Warning, alert
 
 **Call fact**:
@@ -378,11 +378,11 @@ _Avoid_: Exception, failure answer
 ### Actors and attribution
 
 **Identification**:
-Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing. When no stage finds anyone, an id that no directory row holds is identified from a record that carries it. A call that names a worker reads only the people of that worker. Any other call reads the people of no worker first at each stage, and across workers only when the stage finds none there, so an id alone reaches the person the user directory holds outside a parallel run. An id that several workers hold is several candidates, each with its worker.
+Resolving free text to one actor by ranked stages (exact id, username, name, contains), where the first stage with any row decides and several rows are never resolved by guessing. When no stage finds anyone, an id that no directory row holds is identified from a record that carries it.
 _Avoid_: Lookup, search, matching
 
 **Attribution**:
-Assigning an execution or record to an actor by a recorded user or one of the attribution links, never by inference. A recorded user is the actor only when the record's worker is the actor's too.
+Assigning an execution or record to an actor by a recorded user or one of the attribution links, never by inference.
 _Avoid_: Ownership, blame, tracking
 
 **Attribution link**:
@@ -536,7 +536,7 @@ The parts of the overview that are read before any detector runs and that no dea
 _Avoid_: Header, statistics
 
 **Selector**:
-An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id. A worker beside the user id narrows it to one actor. Without one, a user id that several workers hold selects the records of all their actors, and the answer says how many workers hold it.
+An argument that says which records a listing is about: group, type, execution id, trace id, job id or user id.
 _Avoid_: Filter (a filter narrows a selection, a selector defines it)
 
 **Scope**:
@@ -598,7 +598,7 @@ The one tunable value of a detector, with a stated unit, range and loose default
 _Avoid_: Limit, setting, budget
 
 **Reaches**:
-The pair of figures a finding states about people, the distinct signed-in actors among its records, counted by user id and worker, and the records with no actor, never added.
+The pair of figures a finding states about people, the distinct signed-in actors among its records and the records with no actor, never added.
 _Avoid_: Users affected, impact
 
 **Count mode**:

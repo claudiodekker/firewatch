@@ -165,22 +165,6 @@ class Arguments
     }
 
     /**
-     * Read the worker of the actor the call names, or null when none is given.
-     */
-    public function worker(string $example): ?string
-    {
-        $value = $this->get('worker');
-
-        if ($value === null || (is_string($value) && $value !== '')) {
-            return $value;
-        }
-
-        $worker = __('firewatch::messages.argument_values.worker');
-
-        throw $this->invalid(argument: 'worker', expected: $worker, accepted: $worker, example: $example);
-    }
-
-    /**
      * Read one of the declared cases, or the declared default when none is given.
      *
      * @template TCase of BackedEnum

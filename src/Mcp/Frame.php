@@ -253,7 +253,7 @@ class Frame
 
         return [
             ...BlindSpots::for($this->types, [...$this->facts, ...$found]),
-            ...$this->conditions->for($store, $this->types, $this->window),
+            ...$this->conditions->for($store, $this->types, $this->window, $this->facts),
         ];
     }
 }
