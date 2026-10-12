@@ -49,7 +49,7 @@ An application environment name on the allowlist in which Firewatch records tele
 _Avoid_: Enabled environment, dev mode
 
 **Test capture**:
-Recording each request and outermost command a feature test runs as an execution of its own, with what the test does between them in none and stamped with the source `between`, by holding Nightwatch in request mode and swapping in a command's state while it runs. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
+Recording each request and outermost command a feature test runs, and each job the test itself runs on the sync queue, as an execution of its own. What the test does between them is in none and stamped with the source `between`. Firewatch holds Nightwatch in request mode and swaps in a command state while a command or such a job runs. A request the application dispatches while it handles another is part of the outer request and has no record of its own, as in a served application. A job that a request, a command or another job runs on the sync queue is likewise part of that execution, so a chain is one attempt, named after its first job. A job the test calls directly through `handle()` raises no queue event, so it stays between the executions, as does a job a worker runs in a test. The migrations and seeders of the test harness are dropped, and no execution of a test run has a memory peak.
 _Avoid_: Test mode, test recording
 
 **In-code opt-out**:
@@ -614,7 +614,7 @@ A queued job with no stored attempt, aged against the store clock.
 _Avoid_: Stuck job, lost job, waiting job
 
 **Inline connection**:
-A queue connection that runs work in the dispatching process (sync, deferred, background, null), so its dispatches have no wait.
+A queue connection that runs work in the dispatching process (sync, deferred, background, null), so its dispatches have no wait. A job on one is part of the execution that dispatched it and has no attempt record. The one exception is a job a test dispatches itself on the sync connection, which test capture records as a job attempt with no dispatch.
 _Avoid_: Sync queue
 
 **Terminal failure**:
