@@ -55,6 +55,43 @@ function nPlusOneAvatars(): string
     return 'ok';
 }
 
+/**
+ * Run the reads under the skeleton's layout, so each is attributed to the same vendor line.
+ */
+function nPlusOneVendorLine(Closure $reads): void
+{
+    $location = app(Core::class)->sensor->location;
+
+    $location->setBasePath(base_path());
+    $reads();
+    $location->setBasePath(dirname(__DIR__, 2));
+}
+
+/**
+ * Read in a loop, from separate lines of code and through a vendor line, the loop the fewest times.
+ */
+function nPlusOneMixed(): string
+{
+    foreach ([1, 2, 3] as $post) {
+        DB::select('select ? as author', [$post]);
+    }
+
+    DB::select('select ? as avatar', ['user']);
+    DB::select('select ? as avatar', ['team']);
+    DB::select('select ? as avatar', ['project']);
+    DB::select('select ? as avatar', ['client']);
+
+    nPlusOneVendorLine(function () {
+        DB::select('select ? as flag', ['new-dashboard']);
+        DB::select('select ? as flag', ['beta-billing']);
+        DB::select('select ? as flag', ['dark-mode']);
+        DB::select('select ? as flag', ['exports']);
+        DB::select('select ? as flag', ['search']);
+    });
+
+    return 'ok';
+}
+
 it('finds the query a request ran once for each of forty posts, with forty different bindings', function () {
     nPlusOneRequest(range(1, 40));
 
@@ -100,6 +137,36 @@ it('cannot tell a loop from a repeat when every run is attributed to the same ve
     expect($evidence)->toMatchArray(['worst_runs' => 3, 'pattern' => 'unknown'])
         ->and($evidence['call_sites'])->toHaveCount(1)
         ->and($evidence['call_sites'][0]['file'])->toContain(nativePath('vendor/'));
+});
+
+it('lists a loop before a repeated read and lookups from a vendor line that ran more often', function () {
+    nPlusOneServe(nPlusOneMixed(...));
+
+    $findings = Answers::assert(Detect::class, ['shape' => 'n-plus-one'])['result']['findings'];
+
+    expect(array_map(fn (array $finding) => [$finding['name'], $finding['evidence']['pattern'], $finding['evidence']['worst_runs']], $findings))->toBe([
+        ['/posts: select ? as author', 'loop', 3],
+        ['/posts: select ? as avatar', 'repeated', 4],
+        ['/posts: select ? as flag', 'unknown', 5],
+    ]);
+});
+
+it('keeps the loop when the limit leaves room for one finding', function () {
+    nPlusOneServe(nPlusOneMixed(...));
+
+    $result = Answers::assert(Detect::class, ['shape' => 'n-plus-one', 'limit' => 1])['result'];
+
+    expect($result['total'])->toBe(3)
+        ->and(array_column($result['findings'], 'name'))->toBe(['/posts: select ? as author']);
+});
+
+it('names the loop as the worst finding in the overview', function () {
+    nPlusOneServe(nPlusOneMixed(...));
+
+    $row = Answers::assert(Overview::class)['result']['detectors'][0];
+
+    expect($row)->toMatchArray(['detector' => 'n-plus-one', 'total' => 3])
+        ->and($row['worst']['name'])->toBe('/posts: select ? as author');
 });
 
 it('finds nothing in a request that ran a query twice, and says it looked at the request', function () {

@@ -87,9 +87,9 @@ class NPlusOne implements Detector
             return Judgement::of($this->name(), $described, examined: $examination->examined, total: 0, findings: [], caveats: $caveats);
         }
 
-        $shown = Judgement::worst($groups, fn (array $a, array $b) => [$b['worst_runs'], $b['total_micros'], $a['eg'], $a['qg']] <=> [$a['worst_runs'], $a['total_micros'], $b['eg'], $b['qg']], $limit);
-        $details = $this->details($connection, $window, $ranked);
-        $findings = array_map(fn (array $row) => $this->finding($row, $details, $threshold), $shown);
+        $details = $this->details($connection, $window, $ranked, $threshold);
+        $shown = Judgement::worst($groups, fn (array $a, array $b) => $this->worse($a, $b, $details['patterns']), $limit);
+        $findings = array_map(fn (array $row) => $this->finding($row, $details), $shown);
 
         return Judgement::of($this->name(), $described, examined: $examination->examined, total: count($groups), findings: $findings, caveats: $caveats);
     }
@@ -110,6 +110,20 @@ class NPlusOne implements Detector
             accepted: 'the group id of an execution; a query group is a different question: rank the queries with `rank`',
             example: 'detect(shape: "n-plus-one", group: "<group id of an execution>")',
         );
+    }
+
+    /**
+     * Compare two groups, a loop first and an unknown pattern last, then the one with more runs and then more time.
+     *
+     * @param  array<string, mixed>  $a
+     * @param  array<string, mixed>  $b
+     * @param  array<string, RunPattern>  $patterns
+     */
+    protected function worse(array $a, array $b, array $patterns): int
+    {
+        $worst = fn (array $row) => [$row['worst_runs'], $row['total_micros']];
+
+        return [$patterns[$this->key($a)]->precedence(), ...$worst($b), $a['eg'], $a['qg']] <=> [$patterns[$this->key($b)]->precedence(), ...$worst($a), $b['eg'], $b['qg']];
     }
 
     /**
@@ -140,9 +154,9 @@ class NPlusOne implements Detector
     /**
      * Get the details of the findings, by the pair of groups.
      *
-     * @return array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>, patterns: array<string, array<string, mixed>>}
+     * @return array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>, patterns: array<string, RunPattern>}
      */
-    protected function details(SQLite3 $connection, Window $window, Fragment $ranked): array
+    protected function details(SQLite3 $connection, Window $window, Fragment $ranked, int|float $threshold): array
     {
         $executions = [];
         $sites = [];
@@ -182,7 +196,7 @@ class NPlusOne implements Detector
             SELECT ranked.eg, ranked.qg, count(*) AS runs, ({$file} <> '' AND {$file} NOT LIKE 'vendor/%' AND {$file} NOT LIKE '%/vendor/%') AS application
             FROM ranked JOIN queries ON queries.execution_id = ranked.execution_id AND queries.group_hash = ranked.qg
             GROUP BY ranked.execution_id, ranked.qg, queries.file, queries.line) GROUP BY eg, qg", $ranked->bindings, $window) as $row) {
-            $patterns[$this->key($row)] = $row;
+            $patterns[$this->key($row)] = RunPattern::of($row['application'], $row['vendor'], $threshold);
         }
 
         return [
@@ -197,12 +211,11 @@ class NPlusOne implements Detector
      * Get the finding of one execution group and query group.
      *
      * @param  array<string, mixed>  $row
-     * @param  array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>, patterns: array<string, array<string, mixed>>}  $details
+     * @param  array{executions: array<string, array<string, mixed>>, sites: array<string, list<array<string, mixed>>>, queries: array<string, array<string, mixed>>, patterns: array<string, RunPattern>}  $details
      */
-    protected function finding(array $row, array $details, int|float $threshold): Finding
+    protected function finding(array $row, array $details): Finding
     {
         $key = $this->key($row);
-        $pattern = RunPattern::of($details['patterns'][$key]['application'], $details['patterns'][$key]['vendor'], $threshold);
         $worst = $details['executions'][$key]['worst'];
         $latest = $details['executions'][$key]['latest'];
         $query = $details['queries'][$key];
@@ -226,7 +239,7 @@ class NPlusOne implements Detector
                 'total_ms' => Stored::milliseconds($row['total_micros']),
                 'worst_share_pct' => $share,
                 'distinct_bindings' => $query['unpaired'] > 0 ? null : $query['distinct_bindings'],
-                'pattern' => $pattern->value,
+                'pattern' => $details['patterns'][$key]->value,
                 'unit' => [
                     'source' => $worst['source'],
                     'label' => $label,

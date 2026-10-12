@@ -602,7 +602,7 @@ The queries of one query group inside one execution.
 _Avoid_: Burst, repetition
 
 **Run pattern**:
-How an n-plus-one finding's runs were made: a loop when one application call site ran the query group at least the threshold times in one execution, unknown when only a vendor call site or one with no file did, since it may stand for several application callers, and repeated otherwise.
+How an n-plus-one finding's runs were made: a loop when one application call site ran the query group at least the threshold times in one execution, unknown when only a vendor call site or one with no file did, since it may stand for several application callers, and repeated otherwise. Findings list the loops first, then the repeated, then the unknown, so a finding the detector can't call a loop never takes a loop's place.
 _Avoid_: Loop type, N+1 kind
 
 **Typical share**:

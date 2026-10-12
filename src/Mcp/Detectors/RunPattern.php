@@ -23,4 +23,16 @@ enum RunPattern: string
             default => self::REPEATED,
         };
     }
+
+    /**
+     * Get the precedence of the pattern in a list of findings, the lowest first.
+     */
+    public function precedence(): int
+    {
+        return match ($this) {
+            self::LOOP => 0,
+            self::REPEATED => 1,
+            self::UNKNOWN => 2,
+        };
+    }
 }
