@@ -4,7 +4,7 @@
 
 ## Sub-features
 
-- `detect-n-plus-one` finds the query one execution ran 3 or more times.
+- `detect-n-plus-one` finds the query one execution ran 3 or more times, the loops first.
 - `detect-failing-routes` finds the routes with a request at status 400 or above.
 - `detect-failing-jobs` finds the jobs with a failed or released attempt.
 - `detect-queue-latency` finds the jobs that waited 5 seconds or more, or are pending that long.
