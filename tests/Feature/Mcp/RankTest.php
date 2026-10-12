@@ -570,6 +570,14 @@ it('continues a cut list with the cursor, until the list is complete', function 
         ->and($second['result']['groups_ranked'])->toBe(25);
 });
 
+it('writes a bound sent as a number into the continuing call as the string its schema declares', function () {
+    rankTwentyFiveGroups();
+
+    $first = Answers::assert(Rank::class, ['type' => 'request', 'by' => 'max_duration', 'limit' => 10, 'since' => RANK_AT - 3600]);
+
+    expect($first['truncated'][0]['how'])->toContain('rank(type: "request", by: "max_duration", limit: 10, since: "'.(RANK_AT - 3600).'", cursor: ');
+});
+
 it('pages through ties and groups without the measure in the order of one unpaged list', function (array $groups, string $by) {
     ingest(array_merge(...array_map(fn (string $letter, array $milliseconds) => rankGroup(RecordType::REQUEST, $letter, $milliseconds), array_keys($groups), $groups)));
     $arguments = ['type' => 'request', 'by' => $by];
