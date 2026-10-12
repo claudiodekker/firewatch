@@ -2,6 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use ClaudioDekker\Firewatch\Configuration\Configuration;
+use ClaudioDekker\Firewatch\Mcp\CallFact;
 use ClaudioDekker\Firewatch\Mcp\Conditions;
 use ClaudioDekker\Firewatch\Mcp\StoreFacts;
 use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
@@ -30,11 +31,12 @@ function conditionsOf(array $arguments = []): array
 
 /**
  * @param  list<RecordType>  $types
+ * @param  list<CallFact>  $call
  * @return list<array<string, mixed>>
  */
-function conditionsFor(Markers $markers, array $types = [RecordType::REQUEST], ?float $since = null, ?float $until = null, array $drift = []): array
+function conditionsFor(Markers $markers, array $types = [RecordType::REQUEST], ?float $since = null, ?float $until = null, array $drift = [], int $workers = 0, array $call = []): array
 {
-    return app(Conditions::class)->for(new StoreFacts($markers, $drift), $types, Window::between($since, $until, 'UTC'));
+    return app(Conditions::class)->for(new StoreFacts($markers, $drift, workers: $workers), $types, Window::between($since, $until, 'UTC'), $call);
 }
 
 beforeEach(function () {
@@ -366,9 +368,9 @@ it('attaches the conditions after the structural blind spots, in the order of th
 
     $markers = new Markers(createdAt: 600.0, rebuiltAt: 600.0, rebuiltWhy: RebuildReason::SCHEMA, prunedThrough: 700.0, prunedReason: PruneReason::AGE, nightwatchVersion: 'v2.0.0', nightwatchVerified: false);
 
-    $conditions = conditionsFor($markers, drift: [['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen' => 5.0]]);
+    $conditions = conditionsFor($markers, drift: [['kind' => 'unknown_field', 'type' => 'request', 'count' => 1, 'last_seen' => 5.0]], workers: 2, call: [CallFact::ACTOR]);
 
-    expect(array_column($conditions, 'id'))->toBe(['history-pruned', 'store-rebuilt', 'drift', 'nightwatch-unverified', 'redaction-active']);
+    expect(array_column($conditions, 'id'))->toBe(['history-pruned', 'store-rebuilt', 'drift', 'nightwatch-unverified', 'user-ids-per-worker', 'redaction-active']);
 
     $kinds = array_column(Answers::assert(Overview::class)['blind_spots'], 'kind');
 

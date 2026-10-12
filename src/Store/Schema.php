@@ -72,6 +72,7 @@ class Schema
         'CREATE INDEX records_trace ON records (trace_id) WHERE trace_id IS NOT NULL',
         'CREATE INDEX records_job ON records (job_id) WHERE job_id IS NOT NULL',
         'CREATE INDEX records_user ON records (user_id) WHERE user_id IS NOT NULL',
+        'CREATE INDEX records_worker ON records (worker) WHERE worker IS NOT NULL',
         "CREATE INDEX records_between ON records (started_at, execution_id) WHERE source = '".TestRecord::BETWEEN_SOURCE."'",
         <<<'SQL'
             CREATE TABLE users (

@@ -211,7 +211,7 @@ The small table of user id, name, username, first-seen and last-seen instants, n
 _Avoid_: Actors table, users event
 
 **Actor**:
-The person behind a user id recorded on a request, job attempt or child event, named through the user directory when a row exists.
+The person behind a user id recorded on a request, job attempt or child event, named through the user directory when a row exists. The id alone is the actor. Each worker of a parallel test run has its own application database, so one id can be several people there: once the store holds test runs of more than one worker, the `user-ids-per-worker` condition blind spot says on every answer that reads by actor that a count of actors is a lower bound.
 _Avoid_: Account, principal, customer
 
 ### Store
@@ -328,7 +328,7 @@ A blind spot from the fixed catalogue, attached to every answer that examined th
 _Avoid_: Limitation, caveat
 
 **Condition blind spot**:
-A blind spot measured from the store at call time (pruned or cleared history, rebuild, dropped records, drift, unverified Nightwatch version, active redaction).
+A blind spot measured from the store at call time (pruned or cleared history, rebuild, dropped records, drift, unverified Nightwatch version, user ids of more than one test worker, active redaction).
 _Avoid_: Warning, alert
 
 **Call fact**:

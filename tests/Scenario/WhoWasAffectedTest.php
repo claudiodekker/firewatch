@@ -1,11 +1,16 @@
 <?php
 
 use ClaudioDekker\Firewatch\Mcp\Tools\Actor;
+use ClaudioDekker\Firewatch\Mcp\Tools\Detect;
 use ClaudioDekker\Firewatch\Mcp\Tools\Execution;
+use ClaudioDekker\Firewatch\Mcp\Tools\Occurrences;
+use ClaudioDekker\Firewatch\Mcp\Tools\Overview;
+use ClaudioDekker\Firewatch\Mcp\Tools\Rank;
 use ClaudioDekker\Firewatch\Tests\Support\Answers;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Schema;
+use Symfony\Component\Process\Process;
 use Workbench\App\Providers\WorkbenchServiceProvider;
 
 beforeEach(function () {
@@ -76,6 +81,32 @@ function whoWasAffectedCommands(string $queue, array $commands): void
 
         runArtisan($command);
     }
+}
+
+/**
+ * Run an application's feature tests into the store of the test, as one worker of a parallel run.
+ */
+function whoWasAffectedTestRun(string $worker): void
+{
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/phpunit', '--no-configuration', '--bootstrap', 'vendor/autoload.php', 'tests/Fixtures/TestRun/OrdersTest.php'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_DATABASE' => $_SERVER['FIREWATCH_DATABASE'], 'TEST_TOKEN' => $worker],
+        timeout: 30,
+    );
+
+    $process->mustRun();
+}
+
+/**
+ * Get the condition blind spots of an answer.
+ *
+ * @param  array<string, mixed>  $answer
+ * @return list<array<string, mixed>>
+ */
+function whoWasAffectedConditions(array $answer): array
+{
+    return array_values(array_filter($answer['blind_spots'], fn (array $blindSpot) => $blindSpot['kind'] === 'condition'));
 }
 
 /**
@@ -181,3 +212,27 @@ it('states what it cannot attribute once the dispatch that tied a job to the per
         ])
         ->and(array_column($answer['blind_spots'], 'id'))->toContain('actor-partial', 'history-cleared');
 });
+
+it('says a count of actors is a lower bound once the store holds a test run of more than one worker', function () {
+    whoWasAffectedRequests($this->queue, ['/members/7']);
+    whoWasAffectedTestRun(worker: '1');
+
+    $oneWorker = [Answers::assert(Overview::class), Answers::assert(Actor::class, ['who' => '7'])];
+
+    whoWasAffectedTestRun(worker: '2');
+
+    $condition = [
+        'id' => 'user-ids-per-worker',
+        'kind' => 'condition',
+        'message' => __('firewatch::messages.conditions.user-ids-per-worker', ['workers' => '2']),
+        'workers' => 2,
+    ];
+
+    expect(array_map(whoWasAffectedConditions(...), $oneWorker))->toBe([[], []])
+        ->and(whoWasAffectedConditions(Answers::assert(Overview::class)))->toBe([$condition])
+        ->and(whoWasAffectedConditions(Answers::assert(Actor::class, ['who' => '7'])))->toBe([$condition])
+        ->and(whoWasAffectedConditions(Answers::assert(Detect::class, ['shape' => 'failing-routes'])))->toBe([$condition])
+        ->and(whoWasAffectedConditions(Answers::assert(Occurrences::class, ['user_id' => '7'])))->toBe([$condition])
+        ->and(whoWasAffectedConditions(Answers::assert(Occurrences::class, ['type' => 'request'])))->toBe([])
+        ->and(whoWasAffectedConditions(Answers::assert(Rank::class, ['type' => 'request'])))->toBe([]);
+})->group('process');

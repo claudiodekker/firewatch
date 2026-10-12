@@ -202,6 +202,7 @@ return [
         'records-dropped' => ':n records were not stored between :from and :to (last reason: :reason); results may be incomplete.',
         'drift' => ':count :kind drift on :type, last :last; fields may be null or missing.',
         'nightwatch-unverified' => 'Nightwatch :version is newer than the verified line :line; records may be partly interpreted.',
+        'user-ids-per-worker' => 'The store holds test runs of :workers workers; one user id may be a different person in each, so a count of actors is a lower bound.',
         'redaction-active' => 'Some request headers or payload fields are redacted and read [N bytes redacted].',
     ],
 
