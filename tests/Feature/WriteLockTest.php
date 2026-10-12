@@ -3,11 +3,14 @@
 use ClaudioDekker\Firewatch\Configuration\Configuration;
 use ClaudioDekker\Firewatch\Store\FailureLog;
 use ClaudioDekker\Firewatch\Store\Reader;
+use ClaudioDekker\Firewatch\Store\Sqlite;
 use ClaudioDekker\Firewatch\Store\Writer;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
 use Laravel\Nightwatch\Facades\Nightwatch;
+use Symfony\Component\Process\Process;
 
 /**
  * Register Firewatch with a writer that believes it runs on the given SQLite release.
@@ -152,6 +155,27 @@ it('waits up to 5 seconds for the lock while it records a test run', function ()
     Sleep::assertSequence(array_fill(0, 1_000, Sleep::usleep(5_000)));
     expect(notices())->toBe(['Firewatch could not store a batch of 1 records: Firewatch could not lock ['.lockPath().'] within 5000 ms.']);
 });
+
+it('waits no longer than configured in a process that runs as testing without running a test', function () {
+    holdLockFile();
+
+    // A manifest the in-process tests wrote lacks this package, which only the testbench CLI discovers.
+    $packagesCache = 'bootstrap/cache/firewatch-packages-'.bin2hex(random_bytes(8)).'.php';
+
+    $process = new Process(
+        [PHP_BINARY, 'vendor/bin/testbench', 'members:audit', '7', '--env=testing'],
+        cwd: dirname(__DIR__, 2),
+        env: ['FIREWATCH_CAPTURE_TESTS' => 'true', 'FIREWATCH_BUSY_TIMEOUT' => '0', 'FIREWATCH_DATABASE' => $this->storeDirectory.'/firewatch.sqlite', 'APP_PACKAGES_CACHE' => $packagesCache],
+        timeout: 30,
+    );
+
+    $process->run();
+
+    (new Filesystem)->delete(base_path($packagesCache));
+
+    expect($process->getExitCode())->toBe(0)
+        ->and($process->getErrorOutput())->toContain('Firewatch could not lock ['.lockPath().'] within 0 ms.');
+})->group('process')->skip(fn () => ! Sqlite::hasWalResetBug((string) Sqlite::version()), 'only a SQLite release with the WAL-reset bug takes the lock file');
 
 it('writes once the lock is released within the busy timeout', function () {
     registerFirewatchOnSqlite('3.45.0');

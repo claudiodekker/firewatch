@@ -209,7 +209,7 @@ class Ingest implements IngestContract
         $this->storing = true;
 
         try {
-            if ($this->testRecord === null) {
+            if (! $this->isRunningTest()) {
                 $this->append($records, $bindings, $testRecords);
 
                 return;
@@ -219,6 +219,16 @@ class Ingest implements IngestContract
         } finally {
             $this->storing = false;
         }
+    }
+
+    /**
+     * Determine if a test is running.
+     */
+    protected function isRunningTest(): bool
+    {
+        $testRecord = $this->testRecord?->__invoke();
+
+        return $testRecord?->test !== null;
     }
 
     /**

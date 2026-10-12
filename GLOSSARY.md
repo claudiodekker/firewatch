@@ -690,7 +690,7 @@ The default a key takes when its value is invalid, applied to that key alone.
 _Avoid_: Recovery, coercion
 
 **Busy timeout**:
-How long the capture side waits for a busy store before dropping the batch: the configured time, or 5 seconds while a test run is recorded, whose parallel workers share the store.
+How long the capture side waits for a busy store before dropping the batch: the configured time, or 5 seconds for what a test of a test run writes, whose parallel workers share the store.
 _Avoid_: Lock timeout, write timeout
 
 ### Budgets
