@@ -27,7 +27,7 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 | Is this job getting slower over the week? | `trend` |
 | Which queries run most often? | `query` |
 
-It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes. Tests that expect a 4xx answer one, so give `failing-routes` a `threshold` of 500 to see only server errors. The migrations and seeders the tests run are left out.
+It's also great for auditing an app through its test suite. Run the feature tests, register `php artisan firewatch:server --env=testing` as a second server, and ask `detect` over `firewatch-testing.sqlite` for N+1s, slow queries and failing routes. Tests that expect a 4xx answer one, so give `failing-routes` a `threshold` of 500 to see only server errors. The migrations and seeders the tests run are left out. What a test runs itself, such as factories and assertions, is kept apart from its requests and commands: pass `scope: "executions"` or `scope: "between"` to read one side.
 
 ## Requirements
 

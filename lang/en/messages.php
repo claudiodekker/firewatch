@@ -20,6 +20,8 @@ return [
 
         Reading answers: empty is not clean. Every answer states the store clock, the window, coverage and blind spots (what Firewatch cannot see). Clean means nothing was found among the records captured, over the stated examined count; clean over few records is weak. A not_evaluated verdict is never a pass. Null means unknown, not zero. Truncated means only the worst rows are shown: narrow the call or use the cursor. Durations end in _ms, memory in _mb; times are in the application timezone, named on the window; identifiers print in full and go straight back into tools. There is no default window: leave since and until out and everything stored is used. Listed argument values are matched exactly, and a refusal names the accepted ones. Prefer `rank`, `occurrences` and `detect` to `query`: they convert units, it does not.
 
+        A test run's store marks what the test ran outside its requests and commands with source between: `scope` keeps one side, and `occurrences` order run lists the run.
+
         Did my change help? Note `now` from an answer, change the code, exercise the application, then call `compare` with `split_at` set to that value; on a later round also pass the previous split as `since`. Did it ever run? A search that finds nothing is no proof: `fingerprint` it first.
         TEXT,
 
@@ -744,7 +746,7 @@ return [
         'trace_id' => 'The causal chain it belongs to, shared by a request and the jobs it caused.',
         'execution_id' => 'The execution it belongs to; children join their execution on it.',
         'source' => 'The kind of execution: request, command, job or schedule.',
-        'execution_source' => 'The kind of execution it ran inside: request, command, job or schedule.',
+        'execution_source' => 'The kind of execution it ran inside: request, command, job or schedule; between for a test\'s own work.',
         'execution_stage' => 'The stage of its execution it was made in.',
         'job_id' => 'The queued job\'s id: a dispatch and its attempts join on it.',
         'user_id' => 'The signed-in user, an id into users; null when nobody was signed in.',
