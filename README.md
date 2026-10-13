@@ -93,7 +93,7 @@ The server must share a kernel and filesystem with the application. A server on 
 
 - Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local,testing`). Elsewhere it registers nothing and Nightwatch is untouched.
 - `composer install --no-dev` leaves it absent.
-- Never list `production` or `prod`. If you do, `php artisan firewatch:doctor` reports it.
+- Never list `production` or `prod`. If you do, `firewatch:doctor` flags it.
 - It vetoes every Nightwatch transmit, so no hosted reporting happens from a capture environment.
 
 ## What is captured and stored

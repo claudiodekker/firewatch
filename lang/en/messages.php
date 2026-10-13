@@ -405,7 +405,7 @@ return [
         'store' => [
             'absent' => 'no store yet',
             'busy' => 'the store stayed busy, so it was not checked',
-            'busy_fix' => 'run the doctor again',
+            'busy_fix' => 'run `php artisan firewatch:doctor` again',
             'unavailable' => 'not checked, because SQLite is below the floor (see sqlite)',
             'see_identity' => 'not checked; see store-identity',
             'see_integrity' => 'not checked; see store-integrity',

@@ -25,3 +25,12 @@ test('every changelog entry is a few sentences', function () {
 
     expect($longest)->toBeLessThanOrEqual(CHANGELOG_MAX_ENTRY_LENGTH);
 });
+
+test('the documents and the output name the doctor command, never a doctor', function () {
+    $root = __DIR__.'/../..';
+    $files = [...glob("{$root}/*.md"), ...glob("{$root}/docs/adr/*.md"), "{$root}/lang/en/messages.php"];
+
+    foreach ($files as $file) {
+        expect(preg_match('/\\b(?:the|a) doctor\\b|\\bdoctor\'s\\b/i', file_get_contents($file)))->toBe(0, basename($file).' speaks of a doctor: write `firewatch:doctor`.');
+    }
+});
