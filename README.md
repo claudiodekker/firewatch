@@ -5,6 +5,8 @@
 
 Firewatch is local telemetry for AI debugging. It captures what Laravel Nightwatch's sensors collect into a local SQLite file and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and nothing leaves your machine.
 
+Firewatch is for development only. For production monitoring, use [Laravel Nightwatch](https://nightwatch.laravel.com), the hosted service whose sensors Firewatch is built on. Firewatch stays off in production, and an application that reports to Nightwatch there keeps doing so.
+
 ## Quick start
 
 ```bash
@@ -205,7 +207,7 @@ The doctor prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-l
 
 PHP, Laravel, Nightwatch and SQLite are as in Requirements. The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. The doctor warns about a SQLite release with a known write-ahead-log reset bug and says the mitigation is active. Linux, macOS and Windows are supported. On Windows the doctor reports file modes as "not applicable". The server must run on the same host and kernel as the application.
 
-In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal. For production monitoring, use Nightwatch itself.
+In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal.
 
 ## Uninstall and upgrade
 
