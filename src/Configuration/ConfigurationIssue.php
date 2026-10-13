@@ -64,7 +64,7 @@ readonly class ConfigurationIssue
     }
 
     /**
-     * Get the issue as the one line the console report and the doctor print.
+     * Get the issue as the one line the console report and `firewatch:doctor` print.
      */
     public function line(): string
     {

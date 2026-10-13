@@ -1,9 +1,13 @@
-# Firewatch
+![Firewatch](.github/banner.jpg)
 
 [![CI](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml/badge.svg)](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml)
 [![Packagist Version](https://img.shields.io/packagist/v/claudiodekker/firewatch)](https://packagist.org/packages/claudiodekker/firewatch)
 
+## About Firewatch
+
 Firewatch is local telemetry for AI debugging. It captures what Laravel Nightwatch's sensors collect into a local SQLite file and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and nothing leaves your machine.
+
+For production monitoring, use [Laravel Nightwatch](https://nightwatch.laravel.com), the hosted service whose sensors Firewatch is built on. Firewatch stays off in production, and an application that reports to Nightwatch there keeps doing so.
 
 ## Quick start
 
@@ -12,7 +16,7 @@ composer require --dev claudiodekker/firewatch
 claude mcp add firewatch -- php artisan firewatch:server
 ```
 
-Use the app in `local`, then ask the assistant what happened. Nothing exists to ask until the app has handled a request, command, job or task, over HTTP (serve, Herd, Sail, a browser).
+Use the app in `local`, then ask the assistant what happened. There is nothing to ask until the app has handled a request, command, job or task.
 
 ## Ask your assistant
 
@@ -36,9 +40,9 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 
 ## Install
 
-Install with `composer require --dev claudiodekker/firewatch`. Nothing else is needed: no install command, migration, publish or `.env` line. The provider is auto-discovered and registers Nightwatch itself.
+`composer require --dev claudiodekker/firewatch` is the whole install. There is no install command, migration, publish step or `.env` line. The provider is auto-discovered and registers Nightwatch itself.
 
-Nightwatch arrives as a dependency of Firewatch, so it is dev-only unless your application requires `laravel/nightwatch` itself. An application that reports to the hosted service in production already does, and is unaffected. If your own `laravel/nightwatch` constraint excludes `^1.30.2`, the install fails: raise it.
+Nightwatch arrives as a dependency of Firewatch, so it is dev-only unless your application requires `laravel/nightwatch` itself. An application that reports to the hosted service in production already does, and is unaffected. If your own `laravel/nightwatch` constraint excludes `^1.30.2`, the install fails until you raise it.
 
 Publishing the configuration is optional: `php artisan vendor:publish --tag=firewatch-config`.
 
@@ -56,13 +60,7 @@ Every client runs `php artisan firewatch:server` in the application's environmen
 | Sail / Docker | the client's own file | command `vendor/bin/sail`, args `artisan firewatch:server` |
 | Herd, Valet, local PHP | the client's own file | use the project's PHP binary, so `ext-sqlite3` and the SQLite version match the application |
 
-Claude Code:
-
-```bash
-claude mcp add firewatch -- php artisan firewatch:server
-```
-
-Claude Desktop:
+Claude Code uses the command from the quick start. Claude Desktop:
 
 ```json
 {"mcpServers": {"firewatch": {"command": "/absolute/path/to/php", "args": ["/absolute/path/to/project/artisan", "firewatch:server"]}}}
@@ -113,7 +111,7 @@ Locally, the value that redaction would hide is usually the answer the assistant
 
 | Tool | Answers |
 |---|---|
-| `overview` | What is wrong right now, across everything; `by_deploy` breaks the slowest groups down per deploy |
+| `overview` | What is wrong right now, across everything; `by_deploy` breaks the slowest groups down per deploy, which locally is the git commit |
 | `rank` | Which groups are worst by a measure |
 | `detect` | Named problem shapes with evidence |
 | `occurrences` | Individual records, filtered and ordered |
@@ -156,7 +154,7 @@ Answers state these themselves, and `clean` means "none among what was captured"
 | `busy_timeout` | `FIREWATCH_BUSY_TIMEOUT` | `300` | milliseconds a write waits for a lock, 0 to 5000 |
 | `retention.age` | `FIREWATCH_RETENTION_AGE` | `7d` | maximum record age (`30m`, `12h`, `7d`, `2w`) |
 | `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | maximum record count |
-| `deploy` | `FIREWATCH_DEPLOY` | unset | deploy label when Nightwatch has none; with neither, the commit git HEAD points to |
+| `deploy` | `FIREWATCH_DEPLOY` | unset | deploy label; unset, Nightwatch's own label, then the commit git HEAD points to |
 | `capture.logs` | `FIREWATCH_CAPTURE_LOGS` | `true` | capture logs |
 | `capture.tests` | `FIREWATCH_CAPTURE_TESTS` | `true` | record each request and command a test runs as an execution |
 | `capture.request_payload` | `FIREWATCH_CAPTURE_REQUEST_PAYLOAD` | `true` | payload for 500 responses |
@@ -175,7 +173,7 @@ A specific budget beats a global one. Durations are in milliseconds and memory i
 ],
 ```
 
-Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded, and answers and the doctor state how many records were lost. The failure file keeps its newest 100 lines, so once it is full the count reads "at least". Each application instance also writes its first store failure to the PHP error log. Two stores must not share a directory.
+Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded, and answers and `firewatch:doctor` say how many records were lost. The failure file keeps its newest 100 lines, so once it is full the count reads "at least". Each application instance also writes its first store failure to the PHP error log. Two stores must not share a directory.
 
 ## Retention and clearing
 
@@ -191,19 +189,19 @@ Records are kept for 7 days and 100,000 records, with a 512 MiB size backstop. T
 | `firewatch:doctor` | `--json` | checks the install, configuration and store; `--json` for machines |
 | `firewatch:clear` | `--type`, `--drop`, `--force` | clears the store |
 
-The doctor prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-line fix for warnings and failures. It exits 1 only when a check fails and changes nothing. It does not exist when Firewatch is stepped aside, so the missing command is the signal.
+`firewatch:doctor` prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-line fix for warnings and failures. It exits 1 only when a check fails and changes nothing. The command is registered only in a capture environment, so a missing command means Firewatch is off there.
 
 | Symptom | Fix |
 |---|---|
 | `Command "firewatch:doctor" is not defined` (or any `firewatch:` command) | The environment is not in `FIREWATCH_ENVIRONMENTS` |
 | The client shows the server as failed | Run `php artisan firewatch:doctor` |
-| The assistant sees no data | Run the doctor and read `store-activity` and `mode` |
+| The assistant sees no data | Run `php artisan firewatch:doctor` and read its `store-activity` and `mode` lines |
 | Garbled or failed handshake | Application providers print output at boot: run the launch command by hand and look for output before the first message |
 | Behavior changed after upgrading | Restart the assistant session |
 
 ## Compatibility
 
-PHP, Laravel, Nightwatch and SQLite are as in Requirements. The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. The doctor warns about a SQLite release with a known write-ahead-log reset bug and says the mitigation is active. Linux, macOS and Windows are supported. On Windows the doctor reports file modes as "not applicable". The server must run on the same host and kernel as the application.
+The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. Firewatch also runs on a SQLite release that has the write-ahead-log reset bug. It takes a write lock that avoids the bug, and `firewatch:doctor` shows the release and suggests an upgrade. Linux, macOS and Windows are supported. On Windows `firewatch:doctor` shows file modes as "not applicable".
 
 In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal. For production monitoring, use Nightwatch itself.
 

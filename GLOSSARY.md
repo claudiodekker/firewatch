@@ -41,7 +41,7 @@ The mode in which Firewatch disables Nightwatch and captures nothing; every Fire
 _Avoid_: Disabled, paused
 
 **Stepped aside**:
-The mode in a disallowed environment in which Firewatch registers no listener, command, publish tag or MCP server and touches no Nightwatch setting, so Nightwatch behaves as if Firewatch were absent and even the doctor does not exist.
+The mode in a disallowed environment in which Firewatch registers no listener, command, publish tag or MCP server and touches no Nightwatch setting, so Nightwatch behaves as if Firewatch were absent and even `firewatch:doctor` does not exist.
 _Avoid_: Inactive, bypassed, no-op mode
 
 **Capture environment**:
@@ -664,7 +664,7 @@ The read-only command that runs a closed set of independent checks on the instal
 _Avoid_: Health check, diagnostics tool, status command
 
 **Doctor check**:
-One line of the doctor's report, with an id, a status, a message and, for warn and fail, a one-line fix.
+One line of the `firewatch:doctor` report, with an id, a status, a message and, for warn and fail, a one-line fix.
 _Avoid_: Test, probe, validation
 
 **Launch command**:
