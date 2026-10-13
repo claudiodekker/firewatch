@@ -3,6 +3,8 @@
 [![CI](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml/badge.svg)](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml)
 [![Packagist Version](https://img.shields.io/packagist/v/claudiodekker/firewatch)](https://packagist.org/packages/claudiodekker/firewatch)
 
+## About Firewatch
+
 Firewatch is local telemetry for AI debugging. It captures what Laravel Nightwatch's sensors collect into a local SQLite file and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and nothing leaves your machine.
 
 For production monitoring, use [Laravel Nightwatch](https://nightwatch.laravel.com), the hosted service whose sensors Firewatch is built on. Firewatch stays off in production, and an application that reports to Nightwatch there keeps doing so.
@@ -14,7 +16,7 @@ composer require --dev claudiodekker/firewatch
 claude mcp add firewatch -- php artisan firewatch:server
 ```
 
-Use the app in `local`, then ask the assistant what happened. Nothing exists to ask until the app has handled a request, command, job or task, over HTTP (serve, Herd, Sail, a browser).
+Use the app in `local`, then ask the assistant what happened. There is nothing to ask until the app has handled a request, command, job or task.
 
 ## Ask your assistant
 
@@ -38,9 +40,9 @@ Use the app in `local`, then ask the assistant what happened. Nothing exists to 
 
 ## Install
 
-Install with `composer require --dev claudiodekker/firewatch`. Nothing else is needed: no install command, migration, publish or `.env` line. The provider is auto-discovered and registers Nightwatch itself.
+`composer require --dev claudiodekker/firewatch` is the whole install. There is no install command, migration, publish step or `.env` line. The provider is auto-discovered and registers Nightwatch itself.
 
-Nightwatch arrives as a dependency of Firewatch, so it is dev-only unless your application requires `laravel/nightwatch` itself. An application that reports to the hosted service in production already does, and is unaffected. If your own `laravel/nightwatch` constraint excludes `^1.30.2`, the install fails: raise it.
+Nightwatch arrives as a dependency of Firewatch, so it is dev-only unless your application requires `laravel/nightwatch` itself. An application that reports to the hosted service in production already does, and is unaffected. If your own `laravel/nightwatch` constraint excludes `^1.30.2`, the install fails until you raise it.
 
 Publishing the configuration is optional: `php artisan vendor:publish --tag=firewatch-config`.
 
@@ -58,13 +60,7 @@ Every client runs `php artisan firewatch:server` in the application's environmen
 | Sail / Docker | the client's own file | command `vendor/bin/sail`, args `artisan firewatch:server` |
 | Herd, Valet, local PHP | the client's own file | use the project's PHP binary, so `ext-sqlite3` and the SQLite version match the application |
 
-Claude Code:
-
-```bash
-claude mcp add firewatch -- php artisan firewatch:server
-```
-
-Claude Desktop:
+Claude Code uses the command from the quick start. Claude Desktop:
 
 ```json
 {"mcpServers": {"firewatch": {"command": "/absolute/path/to/php", "args": ["/absolute/path/to/project/artisan", "firewatch:server"]}}}
@@ -103,7 +99,6 @@ The server must share a kernel and filesystem with the application. A server on 
 ## What is captured and stored
 
 - Every execution (request, command, job, scheduled task) is recorded in the capture environments. Nightwatch's sampling and filtering cost controls are overridden. In-code opt-outs (`Nightwatch::ignore()`, `pause()`, `dontSample()` and `reject*` callbacks) are honored.
-- Nothing is transmitted. Every Nightwatch transmit is cancelled.
 - **Firewatch never redacts URL query strings, SQL, query bindings, log messages, context and extra, exception messages, the Laravel Context or outgoing-request query strings.** For redaction, use Nightwatch's `redact*` callbacks, which always apply, and the opt-in `capture.redact_payload_fields` and `capture.redact_headers`, which are empty by default.
 - A request's payload is recorded only for a 500 response by default (`capture.request_payload`). Request headers are recorded for every request. Response headers and bodies are never recorded.
 - The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
@@ -134,7 +129,6 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 
 - Console processes other than a test suite record no request records.
 - An outgoing HTTP call that received no response (timeout, connection failure) leaves no record.
-- A request's payload is stored only for a 500 response.
 - `lazy_loads`, `hydrated_models`, `files_read` and `files_written` are always 0, and mail and notification `failed` is always false. Zero does not mean none: use the `n-plus-one` detector.
 - Jobs on the sync connection have no attempt record.
 - Logs written straight to a named channel are not captured.
@@ -205,7 +199,7 @@ The doctor prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-l
 
 ## Compatibility
 
-PHP, Laravel, Nightwatch and SQLite are as in Requirements. The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. The doctor warns about a SQLite release with a known write-ahead-log reset bug and says the mitigation is active. Linux, macOS and Windows are supported. On Windows the doctor reports file modes as "not applicable". The server must run on the same host and kernel as the application.
+The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. The doctor warns about a SQLite release with a known write-ahead-log reset bug and says the mitigation is active. Linux, macOS and Windows are supported. On Windows the doctor reports file modes as "not applicable".
 
 In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal.
 
