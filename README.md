@@ -93,7 +93,7 @@ The server must share a kernel and filesystem with the application. A server on 
 
 - Firewatch captures only when `APP_ENV` is in `FIREWATCH_ENVIRONMENTS` (default `local,testing`). Elsewhere it registers nothing and Nightwatch is untouched.
 - `composer install --no-dev` leaves it absent.
-- Never list `production` or `prod`. If you do, `firewatch:doctor` flags it.
+- Never list `production` or `prod`. If you do, `php artisan firewatch:doctor` reports it.
 - It vetoes every Nightwatch transmit, so no hosted reporting happens from a capture environment.
 
 ## What is captured and stored
@@ -173,7 +173,7 @@ A specific budget beats a global one. Durations are in milliseconds and memory i
 ],
 ```
 
-Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded, and answers and the doctor state how many records were lost. The failure file keeps its newest 100 lines, so once it is full the count reads "at least". Each application instance also writes its first store failure to the PHP error log. Two stores must not share a directory.
+Raise `busy_timeout` when the app and several workers write at once. Dropped batches are recorded, and answers and `firewatch:doctor` say how many records were lost. The failure file keeps its newest 100 lines, so once it is full the count reads "at least". Each application instance also writes its first store failure to the PHP error log. Two stores must not share a directory.
 
 ## Retention and clearing
 
@@ -189,19 +189,19 @@ Records are kept for 7 days and 100,000 records, with a 512 MiB size backstop. T
 | `firewatch:doctor` | `--json` | checks the install, configuration and store; `--json` for machines |
 | `firewatch:clear` | `--type`, `--drop`, `--force` | clears the store |
 
-The doctor prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-line fix for warnings and failures. It exits 1 only when a check fails and changes nothing. It does not exist when Firewatch is stepped aside, so the missing command is the signal.
+`firewatch:doctor` prints `[ok]`, `[warn]`, `[fail]` or `[info]` per check, with a one-line fix for warnings and failures. It exits 1 only when a check fails and changes nothing. The command is registered only in a capture environment, so a missing command means Firewatch is off there.
 
 | Symptom | Fix |
 |---|---|
 | `Command "firewatch:doctor" is not defined` (or any `firewatch:` command) | The environment is not in `FIREWATCH_ENVIRONMENTS` |
 | The client shows the server as failed | Run `php artisan firewatch:doctor` |
-| The assistant sees no data | Run the doctor and read `store-activity` and `mode` |
+| The assistant sees no data | Run `php artisan firewatch:doctor` and read its `store-activity` and `mode` lines |
 | Garbled or failed handshake | Application providers print output at boot: run the launch command by hand and look for output before the first message |
 | Behavior changed after upgrading | Restart the assistant session |
 
 ## Compatibility
 
-The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. The doctor warns about a SQLite release with a known write-ahead-log reset bug and says the mitigation is active. Linux, macOS and Windows are supported. On Windows the doctor reports file modes as "not applicable".
+The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. Firewatch also runs on a SQLite release that has the write-ahead-log reset bug. It takes a write lock that avoids the bug, and `firewatch:doctor` shows the release and suggests an upgrade. Linux, macOS and Windows are supported. On Windows `firewatch:doctor` shows file modes as "not applicable".
 
 In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal.
 
