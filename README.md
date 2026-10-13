@@ -99,6 +99,7 @@ The server must share a kernel and filesystem with the application. A server on 
 ## What is captured and stored
 
 - Every execution (request, command, job, scheduled task) is recorded in the capture environments. Nightwatch's sampling and filtering cost controls are overridden. In-code opt-outs (`Nightwatch::ignore()`, `pause()`, `dontSample()` and `reject*` callbacks) are honored.
+- Nothing is transmitted. Every Nightwatch transmit is cancelled.
 - **Firewatch never redacts URL query strings, SQL, query bindings, log messages, context and extra, exception messages, the Laravel Context or outgoing-request query strings.** For redaction, use Nightwatch's `redact*` callbacks, which always apply, and the opt-in `capture.redact_payload_fields` and `capture.redact_headers`, which are empty by default.
 - A request's payload is recorded only for a 500 response by default (`capture.request_payload`). Request headers are recorded for every request. Response headers and bodies are never recorded.
 - The store is `storage/firewatch/firewatch-{environment}.sqlite` (for example `firewatch-local.sqlite`), mode `0600` inside a `0700` directory that carries its own VCS ignore file. `firewatch:server`, `firewatch:doctor` and `firewatch:clear` work on the store of the environment they run in.
