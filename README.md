@@ -111,7 +111,7 @@ Locally, the value that redaction would hide is usually the answer the assistant
 
 | Tool | Answers |
 |---|---|
-| `overview` | What is wrong right now, across everything; `by_deploy` breaks the slowest groups down per deploy |
+| `overview` | What is wrong right now, across everything; `by_deploy` breaks the slowest groups down per deploy, which locally is the git commit |
 | `rank` | Which groups are worst by a measure |
 | `detect` | Named problem shapes with evidence |
 | `occurrences` | Individual records, filtered and ordered |
@@ -125,8 +125,6 @@ Locally, the value that redaction would hide is usually the answer the assistant
 | `fingerprint` | The group id of something read in source, including a `throw` by its `class`, `file` and `line` |
 
 Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `queue-latency`, `failing-tasks`, `exception-clusters`, `error-logs`, `failing-http`, `cache`, `memory`.
-
-A deploy is the code a record was captured under. Locally that is the commit git `HEAD` points to, so `by_deploy`, a `deploy` filter and `compare` read one commit against another. Uncommitted edits count towards the current commit, and a long-running worker keeps the commit it started with. In hosted Nightwatch a deploy is a release, named by `NIGHTWATCH_DEPLOY` or by the hosting platform. That name, or `FIREWATCH_DEPLOY` ahead of it, replaces the commit when set.
 
 ## When an empty answer means blind, not clean
 
