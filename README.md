@@ -203,7 +203,7 @@ Records are kept for 7 days and 100,000 records, with a 512 MiB size backstop. T
 
 The verified Nightwatch line is 1.30 (any 1.30.x). A higher minor works, and answers say it is unverified. Firewatch also runs on a SQLite release that has the write-ahead-log reset bug. It takes a write lock that avoids the bug, and `firewatch:doctor` shows the release and suggests an upgrade. Linux, macOS and Windows are supported. On Windows `firewatch:doctor` shows file modes as "not applicable".
 
-In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal.
+In a capture environment Firewatch takes over Nightwatch's registration, so hosted Nightwatch and Firewatch do not run in the same environment. In production Firewatch is absent and Nightwatch behaves as normal. For production monitoring, use Nightwatch itself.
 
 ## Uninstall and upgrade
 
