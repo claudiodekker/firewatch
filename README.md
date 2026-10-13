@@ -5,7 +5,7 @@
 
 Firewatch is local telemetry for AI debugging. It captures what Laravel Nightwatch's sensors collect into a local SQLite file and lets an AI assistant query it over the Model Context Protocol. There is no dashboard, and nothing leaves your machine.
 
-Firewatch is for development only. For production monitoring, use [Laravel Nightwatch](https://nightwatch.laravel.com), the hosted service whose sensors Firewatch is built on. Firewatch stays off in production, and an application that reports to Nightwatch there keeps doing so.
+For production monitoring, use [Laravel Nightwatch](https://nightwatch.laravel.com), the hosted service whose sensors Firewatch is built on. Firewatch stays off in production, and an application that reports to Nightwatch there keeps doing so.
 
 ## Quick start
 
