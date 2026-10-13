@@ -1,4 +1,4 @@
-![Firewatch](https://raw.githubusercontent.com/claudiodekker/firewatch/master/.github/banner.jpg)
+![Firewatch](.github/banner.jpg)
 
 [![CI](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml/badge.svg)](https://github.com/claudiodekker/firewatch/actions/workflows/ci.yml)
 [![Packagist Version](https://img.shields.io/packagist/v/claudiodekker/firewatch)](https://packagist.org/packages/claudiodekker/firewatch)
