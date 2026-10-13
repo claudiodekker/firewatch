@@ -130,6 +130,7 @@ Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `qu
 
 - Console processes other than a test suite record no request records.
 - An outgoing HTTP call that received no response (timeout, connection failure) leaves no record.
+- A request's payload is stored only for a 500 response.
 - `lazy_loads`, `hydrated_models`, `files_read` and `files_written` are always 0, and mail and notification `failed` is always false. Zero does not mean none: use the `n-plus-one` detector.
 - Jobs on the sync connection have no attempt record.
 - Logs written straight to a named channel are not captured.
