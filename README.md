@@ -126,6 +126,8 @@ Locally, the value that redaction would hide is usually the answer the assistant
 
 Detectors: `n-plus-one`, `database-bound`, `failing-routes`, `failing-jobs`, `queue-latency`, `failing-tasks`, `exception-clusters`, `error-logs`, `failing-http`, `cache`, `memory`.
 
+A deploy is the code a record was captured under. Locally that is the commit git `HEAD` points to, so `by_deploy`, a `deploy` filter and `compare` read one commit against another. Uncommitted edits count towards the current commit, and a long-running worker keeps the commit it started with. In hosted Nightwatch a deploy is a release, named by `NIGHTWATCH_DEPLOY` or by the hosting platform. That name, or `FIREWATCH_DEPLOY` ahead of it, replaces the commit when set.
+
 ## When an empty answer means blind, not clean
 
 - Console processes other than a test suite record no request records.
@@ -154,7 +156,7 @@ Answers state these themselves, and `clean` means "none among what was captured"
 | `busy_timeout` | `FIREWATCH_BUSY_TIMEOUT` | `300` | milliseconds a write waits for a lock, 0 to 5000 |
 | `retention.age` | `FIREWATCH_RETENTION_AGE` | `7d` | maximum record age (`30m`, `12h`, `7d`, `2w`) |
 | `retention.records` | `FIREWATCH_RETENTION_RECORDS` | `100000` | maximum record count |
-| `deploy` | `FIREWATCH_DEPLOY` | unset | deploy label when Nightwatch has none; with neither, the commit git HEAD points to |
+| `deploy` | `FIREWATCH_DEPLOY` | unset | deploy label; unset, Nightwatch's own label, then the commit git HEAD points to |
 | `capture.logs` | `FIREWATCH_CAPTURE_LOGS` | `true` | capture logs |
 | `capture.tests` | `FIREWATCH_CAPTURE_TESTS` | `true` | record each request and command a test runs as an execution |
 | `capture.request_payload` | `FIREWATCH_CAPTURE_REQUEST_PAYLOAD` | `true` | payload for 500 responses |
