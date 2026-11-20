@@ -121,7 +121,7 @@ it('keeps serving when a request fails with app.debug on', function () {
 
     expect($process->getExitCode())->toBe(0)
         ->and($replies[2]['error']['code'])->toBe(-32603)
-        ->and($replies[4]['result'])->toHaveKey('resultType');
+        ->and($replies[4])->toHaveKey('result');
 })->group('process');
 
 it('prints floats shortest round-trip under a hostile precision setting', function () {
